@@ -304,3 +304,15 @@ WHERE im.organization_id = @organization_id
   AND im.slack_team_id = @slack_team_id
   AND im.slack_user_id = @slack_user_id
   AND im.revoked_at IS NULL AND c.disconnected_at IS NULL;
+
+-- name: ListSlackAccountsForUser :many
+-- The person's confirmed Slack accounts in workspaces that are still connected,
+-- newest first.
+SELECT im.slack_team_id, im.slack_user_id
+FROM slack_identity_mappings im
+JOIN slack_directory_connections c ON c.organization_id = im.organization_id AND c.slack_team_id = im.slack_team_id
+WHERE im.organization_id = @organization_id
+  AND im.user_id = @user_id
+  AND im.revoked_at IS NULL
+  AND c.disconnected_at IS NULL
+ORDER BY im.created_at DESC, im.id DESC;

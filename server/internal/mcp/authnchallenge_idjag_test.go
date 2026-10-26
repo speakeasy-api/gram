@@ -301,7 +301,7 @@ func TestTokenIDJAGExchangeAppliesCurrentCIMDAdmissionBeforeConsumingAssertion(t
 	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, ds.clientID, mockidp.MockUserEmail, uuid.NewString())
 	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModePresets)
 	rejected := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, ds.clientID, assertion, resource)
-	require.Equal(t, http.StatusUnauthorized, rejected.Code, rejected.Body.String())
+	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
 	require.JSONEq(t, `{"error":"invalid_client","error_description":"this client ID metadata document URL is not permitted by the server's client policy; the server operator must allow it"}`, rejected.Body.String())
 	require.Zero(t, ds.requests.Load(), "admission must reject before fetching client metadata")
 

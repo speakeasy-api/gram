@@ -25,10 +25,17 @@ type Server struct {
 	UpdateRole                           http.Handler
 	DeleteRole                           http.Handler
 	ListDirectoryRoleMappings            http.Handler
+	ListDirectoryPeople                  http.Handler
 	SyncDirectoryGroups                  http.Handler
 	SetDirectoryRoleMapping              http.Handler
 	SetDirectoryRoleMappings             http.Handler
 	DeleteDirectoryRoleMapping           http.Handler
+	PreviewDirectoryRoleSetup            http.Handler
+	ApplyDirectoryRoleSetup              http.Handler
+	ListDirectoryReviewItems             http.Handler
+	ResolveDirectoryReviewItem           http.Handler
+	GetDirectoryReviewSettings           http.Handler
+	UpdateDirectoryReviewSettings        http.Handler
 	ListScopes                           http.Handler
 	ListMembers                          http.Handler
 	ListGrants                           http.Handler
@@ -87,10 +94,17 @@ func New(
 			{"UpdateRole", "PUT", "/rpc/access.updateRole"},
 			{"DeleteRole", "DELETE", "/rpc/access.deleteRole"},
 			{"ListDirectoryRoleMappings", "GET", "/rpc/access.listDirectoryRoleMappings"},
+			{"ListDirectoryPeople", "GET", "/rpc/access.listDirectoryPeople"},
 			{"SyncDirectoryGroups", "POST", "/rpc/access.syncDirectoryGroups"},
 			{"SetDirectoryRoleMapping", "POST", "/rpc/access.setDirectoryRoleMapping"},
 			{"SetDirectoryRoleMappings", "POST", "/rpc/access.setDirectoryRoleMappings"},
 			{"DeleteDirectoryRoleMapping", "DELETE", "/rpc/access.deleteDirectoryRoleMapping"},
+			{"PreviewDirectoryRoleSetup", "GET", "/rpc/access.previewDirectoryRoleSetup"},
+			{"ApplyDirectoryRoleSetup", "POST", "/rpc/access.applyDirectoryRoleSetup"},
+			{"ListDirectoryReviewItems", "GET", "/rpc/access.listDirectoryReviewItems"},
+			{"ResolveDirectoryReviewItem", "POST", "/rpc/access.resolveDirectoryReviewItem"},
+			{"GetDirectoryReviewSettings", "GET", "/rpc/access.getDirectoryReviewSettings"},
+			{"UpdateDirectoryReviewSettings", "POST", "/rpc/access.updateDirectoryReviewSettings"},
 			{"ListScopes", "GET", "/rpc/access.listScopes"},
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
@@ -121,10 +135,17 @@ func New(
 		UpdateRole:                           NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
 		DeleteRole:                           NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
 		ListDirectoryRoleMappings:            NewListDirectoryRoleMappingsHandler(e.ListDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
+		ListDirectoryPeople:                  NewListDirectoryPeopleHandler(e.ListDirectoryPeople, mux, decoder, encoder, errhandler, formatter),
 		SyncDirectoryGroups:                  NewSyncDirectoryGroupsHandler(e.SyncDirectoryGroups, mux, decoder, encoder, errhandler, formatter),
 		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingHandler(e.SetDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
 		SetDirectoryRoleMappings:             NewSetDirectoryRoleMappingsHandler(e.SetDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
 		DeleteDirectoryRoleMapping:           NewDeleteDirectoryRoleMappingHandler(e.DeleteDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
+		PreviewDirectoryRoleSetup:            NewPreviewDirectoryRoleSetupHandler(e.PreviewDirectoryRoleSetup, mux, decoder, encoder, errhandler, formatter),
+		ApplyDirectoryRoleSetup:              NewApplyDirectoryRoleSetupHandler(e.ApplyDirectoryRoleSetup, mux, decoder, encoder, errhandler, formatter),
+		ListDirectoryReviewItems:             NewListDirectoryReviewItemsHandler(e.ListDirectoryReviewItems, mux, decoder, encoder, errhandler, formatter),
+		ResolveDirectoryReviewItem:           NewResolveDirectoryReviewItemHandler(e.ResolveDirectoryReviewItem, mux, decoder, encoder, errhandler, formatter),
+		GetDirectoryReviewSettings:           NewGetDirectoryReviewSettingsHandler(e.GetDirectoryReviewSettings, mux, decoder, encoder, errhandler, formatter),
+		UpdateDirectoryReviewSettings:        NewUpdateDirectoryReviewSettingsHandler(e.UpdateDirectoryReviewSettings, mux, decoder, encoder, errhandler, formatter),
 		ListScopes:                           NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
 		ListMembers:                          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
 		ListGrants:                           NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
@@ -162,10 +183,17 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateRole = m(s.UpdateRole)
 	s.DeleteRole = m(s.DeleteRole)
 	s.ListDirectoryRoleMappings = m(s.ListDirectoryRoleMappings)
+	s.ListDirectoryPeople = m(s.ListDirectoryPeople)
 	s.SyncDirectoryGroups = m(s.SyncDirectoryGroups)
 	s.SetDirectoryRoleMapping = m(s.SetDirectoryRoleMapping)
 	s.SetDirectoryRoleMappings = m(s.SetDirectoryRoleMappings)
 	s.DeleteDirectoryRoleMapping = m(s.DeleteDirectoryRoleMapping)
+	s.PreviewDirectoryRoleSetup = m(s.PreviewDirectoryRoleSetup)
+	s.ApplyDirectoryRoleSetup = m(s.ApplyDirectoryRoleSetup)
+	s.ListDirectoryReviewItems = m(s.ListDirectoryReviewItems)
+	s.ResolveDirectoryReviewItem = m(s.ResolveDirectoryReviewItem)
+	s.GetDirectoryReviewSettings = m(s.GetDirectoryReviewSettings)
+	s.UpdateDirectoryReviewSettings = m(s.UpdateDirectoryReviewSettings)
 	s.ListScopes = m(s.ListScopes)
 	s.ListMembers = m(s.ListMembers)
 	s.ListGrants = m(s.ListGrants)
@@ -202,10 +230,17 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateRoleHandler(mux, h.UpdateRole)
 	MountDeleteRoleHandler(mux, h.DeleteRole)
 	MountListDirectoryRoleMappingsHandler(mux, h.ListDirectoryRoleMappings)
+	MountListDirectoryPeopleHandler(mux, h.ListDirectoryPeople)
 	MountSyncDirectoryGroupsHandler(mux, h.SyncDirectoryGroups)
 	MountSetDirectoryRoleMappingHandler(mux, h.SetDirectoryRoleMapping)
 	MountSetDirectoryRoleMappingsHandler(mux, h.SetDirectoryRoleMappings)
 	MountDeleteDirectoryRoleMappingHandler(mux, h.DeleteDirectoryRoleMapping)
+	MountPreviewDirectoryRoleSetupHandler(mux, h.PreviewDirectoryRoleSetup)
+	MountApplyDirectoryRoleSetupHandler(mux, h.ApplyDirectoryRoleSetup)
+	MountListDirectoryReviewItemsHandler(mux, h.ListDirectoryReviewItems)
+	MountResolveDirectoryReviewItemHandler(mux, h.ResolveDirectoryReviewItem)
+	MountGetDirectoryReviewSettingsHandler(mux, h.GetDirectoryReviewSettings)
+	MountUpdateDirectoryReviewSettingsHandler(mux, h.UpdateDirectoryReviewSettings)
 	MountListScopesHandler(mux, h.ListScopes)
 	MountListMembersHandler(mux, h.ListMembers)
 	MountListGrantsHandler(mux, h.ListGrants)
@@ -555,6 +590,59 @@ func NewListDirectoryRoleMappingsHandler(
 	})
 }
 
+// MountListDirectoryPeopleHandler configures the mux to serve the "access"
+// service "listDirectoryPeople" endpoint.
+func MountListDirectoryPeopleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listDirectoryPeople", f)
+}
+
+// NewListDirectoryPeopleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listDirectoryPeople" endpoint.
+func NewListDirectoryPeopleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDirectoryPeopleRequest(mux, decoder)
+		encodeResponse = EncodeListDirectoryPeopleResponse(encoder)
+		encodeError    = EncodeListDirectoryPeopleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDirectoryPeople")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountSyncDirectoryGroupsHandler configures the mux to serve the "access"
 // service "syncDirectoryGroups" endpoint.
 func MountSyncDirectoryGroupsHandler(mux goahttp.Muxer, h http.Handler) {
@@ -747,6 +835,330 @@ func NewDeleteDirectoryRoleMappingHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteDirectoryRoleMapping")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountPreviewDirectoryRoleSetupHandler configures the mux to serve the
+// "access" service "previewDirectoryRoleSetup" endpoint.
+func MountPreviewDirectoryRoleSetupHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.previewDirectoryRoleSetup", f)
+}
+
+// NewPreviewDirectoryRoleSetupHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "previewDirectoryRoleSetup"
+// endpoint.
+func NewPreviewDirectoryRoleSetupHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePreviewDirectoryRoleSetupRequest(mux, decoder)
+		encodeResponse = EncodePreviewDirectoryRoleSetupResponse(encoder)
+		encodeError    = EncodePreviewDirectoryRoleSetupError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "previewDirectoryRoleSetup")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountApplyDirectoryRoleSetupHandler configures the mux to serve the "access"
+// service "applyDirectoryRoleSetup" endpoint.
+func MountApplyDirectoryRoleSetupHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.applyDirectoryRoleSetup", f)
+}
+
+// NewApplyDirectoryRoleSetupHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "applyDirectoryRoleSetup"
+// endpoint.
+func NewApplyDirectoryRoleSetupHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeApplyDirectoryRoleSetupRequest(mux, decoder)
+		encodeResponse = EncodeApplyDirectoryRoleSetupResponse(encoder)
+		encodeError    = EncodeApplyDirectoryRoleSetupError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "applyDirectoryRoleSetup")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDirectoryReviewItemsHandler configures the mux to serve the
+// "access" service "listDirectoryReviewItems" endpoint.
+func MountListDirectoryReviewItemsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listDirectoryReviewItems", f)
+}
+
+// NewListDirectoryReviewItemsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "listDirectoryReviewItems"
+// endpoint.
+func NewListDirectoryReviewItemsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDirectoryReviewItemsRequest(mux, decoder)
+		encodeResponse = EncodeListDirectoryReviewItemsResponse(encoder)
+		encodeError    = EncodeListDirectoryReviewItemsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDirectoryReviewItems")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountResolveDirectoryReviewItemHandler configures the mux to serve the
+// "access" service "resolveDirectoryReviewItem" endpoint.
+func MountResolveDirectoryReviewItemHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.resolveDirectoryReviewItem", f)
+}
+
+// NewResolveDirectoryReviewItemHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "resolveDirectoryReviewItem"
+// endpoint.
+func NewResolveDirectoryReviewItemHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeResolveDirectoryReviewItemRequest(mux, decoder)
+		encodeResponse = EncodeResolveDirectoryReviewItemResponse(encoder)
+		encodeError    = EncodeResolveDirectoryReviewItemError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "resolveDirectoryReviewItem")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetDirectoryReviewSettingsHandler configures the mux to serve the
+// "access" service "getDirectoryReviewSettings" endpoint.
+func MountGetDirectoryReviewSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.getDirectoryReviewSettings", f)
+}
+
+// NewGetDirectoryReviewSettingsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "getDirectoryReviewSettings"
+// endpoint.
+func NewGetDirectoryReviewSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetDirectoryReviewSettingsRequest(mux, decoder)
+		encodeResponse = EncodeGetDirectoryReviewSettingsResponse(encoder)
+		encodeError    = EncodeGetDirectoryReviewSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getDirectoryReviewSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateDirectoryReviewSettingsHandler configures the mux to serve the
+// "access" service "updateDirectoryReviewSettings" endpoint.
+func MountUpdateDirectoryReviewSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.updateDirectoryReviewSettings", f)
+}
+
+// NewUpdateDirectoryReviewSettingsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "access" service
+// "updateDirectoryReviewSettings" endpoint.
+func NewUpdateDirectoryReviewSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateDirectoryReviewSettingsRequest(mux, decoder)
+		encodeResponse = EncodeUpdateDirectoryReviewSettingsResponse(encoder)
+		encodeError    = EncodeUpdateDirectoryReviewSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateDirectoryReviewSettings")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

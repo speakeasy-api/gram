@@ -11,6 +11,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
 // TestConsentPagePreview renders every shape of the consent page, asserting
@@ -34,7 +37,7 @@ func TestConsentPagePreview(t *testing.T) {
 	base := consentTemplateData{
 		ClientName:     "Claude Code",
 		MCPSlug:        "speakeasy-team-datadog",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "12b256a1-a7b9-44f7-af8b-0ce000000000",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "adam@speakeasy.com",
@@ -179,11 +182,11 @@ func TestConsentPagePreview(t *testing.T) {
 	// output directory so a plain static server resolves them.
 	fontDir := filepath.Join(outDir, "mcp", "consent-fonts")
 	require.NoError(t, os.MkdirAll(fontDir, 0o750))
-	fonts, err := consentPageFontNames()
+	fonts, err := consentpage.FontNames()
 	require.NoError(t, err)
 	for _, name := range fonts {
-		data, err := consentPageAssets.ReadFile("consent_page_assets/" + name)
-		require.NoError(t, err)
+		data, ok := consentpage.Font(name)
+		require.True(t, ok, name)
 		require.NoError(t, os.WriteFile(filepath.Join(fontDir, name), data, 0o600))
 	}
 
@@ -201,7 +204,7 @@ func TestConsentPagePreview(t *testing.T) {
 
 	for _, v := range variants {
 		data := v.data
-		data.Styles = consentPageStyles
+		data.Styles = consentpage.Styles
 		var page bytes.Buffer
 		require.NoError(t, consentTemplate.Execute(&page, data), v.name)
 		require.NoError(t, os.WriteFile(filepath.Join(outDir, v.name+".html"), page.Bytes(), 0o600))

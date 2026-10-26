@@ -129,9 +129,9 @@ WHERE project_id = @project_id::uuid
 -- credential kind, plus the pre-column row. A rerun that dropped or
 -- duplicated any of them would leave the badges telling a different story
 -- than the one they were seeded to tell.
--- One issuer per Connections credential story (acme-partner-gateway), three
--- project MCP issuers, and the organization-wide workforce issuer used by
--- GitHub.
+-- Two upstream MCP issuers, two independent gateway issuers, one
+-- Connections issuer, and the approvals server's issuer; GitHub uses the
+-- organization workforce issuer.
 -- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
@@ -216,6 +216,47 @@ SELECT count(*) FROM remote_protected_resources
 WHERE project_id = @project_id::uuid AND deleted IS FALSE
   AND resource_identifier = 'https://mcp.linear.app/mcp'
   AND scope_override = ARRAY['read'];
+
+-- name: PostflightIDServerClientAssociations :one
+SELECT count(*) FROM mcp_server_remote_session_clients
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- Check both the total and the expected credential/server/client tuples so
+-- eight misassigned choices cannot satisfy postflight.
+-- name: PostflightIDUpstreamClientChoices :one
+WITH live AS (
+  SELECT * FROM upstream_client_selections
+  WHERE project_id = @project_id::uuid AND deleted IS FALSE
+)
+SELECT count(*) FROM live
+WHERE (SELECT count(*) FROM live) = 8
+  AND credential_kind = 'user_session'
+  AND (
+    (credential_id = ANY(@linear_session_ids::uuid[])
+     AND mcp_server_id = @linear_server_id::uuid
+     AND remote_session_client_id = @linear_client_id::uuid
+     AND no_auth IS FALSE)
+    OR
+    (credential_id = ANY(@slack_session_ids::uuid[])
+     AND mcp_server_id = @slack_server_id::uuid
+     AND remote_session_client_id IS NULL
+     AND client_attachment_scope IS NULL
+     AND no_auth IS TRUE)
+  );
+
+-- Live choices that are not the intended ones: Linear through its main
+-- client, Slack with no upstream authentication, each on a seeded session.
+-- name: PostflightIDMisassignedUpstreamClientChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND NOT (
+    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
+    AND (
+      (u.mcp_server_id = @linear_server_id::uuid AND u.remote_session_client_id = @linear_client_id::uuid)
+      OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)
+    )
+  );
 
 -- name: PostflightIDServiceAccountHeaders :one
 SELECT count(*)
@@ -414,6 +455,21 @@ WHERE organization_id = @org_id::text AND status NOT IN ('approved', 'blocked');
 SELECT count(*) FROM directory_role_mappings
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
+-- name: PostflightIDPendingDirectoryReviewItems :one
+SELECT count(*) FROM directory_review_items
+WHERE organization_id = @org_id::text AND state = 'pending';
+
+-- name: PostflightIDDirectoryReviewEmailsEnabled :one
+SELECT count(*) FROM directory_review_org_states
+WHERE organization_id = @org_id::text AND emails_disabled_at IS NULL;
+
+-- name: PostflightIDDeletedGroupMappings :one
+SELECT count(*) FROM directory_role_mappings drm
+JOIN directory_groups dg ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = @org_id::text AND drm.deleted IS FALSE
+  AND dg.workos_deleted IS TRUE;
+
 -- name: PostflightIDInfraGroupMappedRoles :one
 SELECT count(DISTINCT drm.role_urn) FROM directory_role_mappings drm
 JOIN directory_groups dg ON dg.id = drm.directory_group_id
@@ -513,3 +569,42 @@ LEFT JOIN sigint_custom_signals cs
 WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
   AND (s.id IS NULL OR s.deleted IS TRUE
     OR cs.id IS NULL OR cs.deleted IS TRUE);
+
+-- name: PostflightIDGatewayIssuers :one
+SELECT count(DISTINCT user_session_issuer_id)::bigint
+FROM meta_mcp_servers
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- Only the dedicated workload and its owner may receive inference grants.
+-- name: PostflightIDInferenceGrants :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = @org_id::text AND scope = 'inference:execute';
+
+-- Verify admission, assignment, active agent and both explicit grant ceilings
+-- together, rather than accepting unrelated rows that happen to meet counts.
+-- name: PostflightIDInferenceWorkload :one
+SELECT count(*)
+FROM workload_issuers i
+JOIN workload_identity_admissions a
+  ON a.organization_id = i.organization_id AND a.workload_issuer_id = i.id
+JOIN workload_agent_assignments w
+  ON w.organization_id = a.organization_id AND w.workload_issuer_id = a.workload_issuer_id
+  AND w.subject = a.subject AND w.match_kind = a.match_kind
+JOIN agents ag ON ag.organization_id = w.organization_id AND ag.id = w.agent_id
+JOIN principal_grants agent_grant
+  ON agent_grant.organization_id = ag.organization_id AND agent_grant.principal_urn = 'agent:' || ag.id::text
+JOIN principal_grants owner_grant
+  ON owner_grant.organization_id = ag.organization_id AND owner_grant.principal_urn = 'user:' || ag.owner_user_id
+WHERE i.organization_id = @org_id::text AND i.id = @issuer_id::uuid
+  AND i.deleted IS FALSE AND i.project_id IS NULL
+  AND i.issuer = 'https://inference.example.com'
+  AND i.jwks_uri = 'https://inference.example.com/.well-known/jwks.json'
+  AND i.allow_wildcard_admission IS FALSE
+  AND a.deleted IS FALSE AND a.project_id = @project_id::uuid
+  AND a.subject = 'service:acme:summary-worker' AND a.match_kind = 'exact'
+  AND w.deleted IS FALSE AND ag.id = @agent_id::uuid
+  AND ag.project_id = @project_id::uuid AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
+  AND agent_grant.scope = 'inference:execute' AND owner_grant.scope = agent_grant.scope
+  AND agent_grant.selectors = jsonb_build_object(
+    'resource_kind', 'inference', 'resource_id', '*', 'project_id', ag.project_id::text)
+  AND owner_grant.selectors = agent_grant.selectors;

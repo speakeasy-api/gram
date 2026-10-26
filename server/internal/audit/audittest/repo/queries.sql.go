@@ -124,6 +124,78 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 	return i, err
 }
 
+const getLatestAuditLogByActionAndSubject = `-- name: GetLatestAuditLogByActionAndSubject :one
+SELECT
+  action,
+  organization_id,
+  project_id,
+  actor_id,
+  actor_type,
+  actor_display_name,
+  actor_slug,
+  subject_id,
+  subject_type,
+  subject_display_name,
+  subject_slug,
+  metadata,
+  before_snapshot,
+  after_snapshot,
+  acting_surface,
+  acting_client_id
+FROM audit_logs
+WHERE action = $1 AND subject_id = $2
+ORDER BY seq DESC
+LIMIT 1
+`
+
+type GetLatestAuditLogByActionAndSubjectParams struct {
+	Action    string
+	SubjectID string
+}
+
+type GetLatestAuditLogByActionAndSubjectRow struct {
+	Action             string
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	ActorID            string
+	ActorType          string
+	ActorDisplayName   pgtype.Text
+	ActorSlug          pgtype.Text
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName pgtype.Text
+	SubjectSlug        pgtype.Text
+	Metadata           []byte
+	BeforeSnapshot     []byte
+	AfterSnapshot      []byte
+	ActingSurface      pgtype.Text
+	ActingClientID     pgtype.Text
+}
+
+func (q *Queries) GetLatestAuditLogByActionAndSubject(ctx context.Context, arg GetLatestAuditLogByActionAndSubjectParams) (GetLatestAuditLogByActionAndSubjectRow, error) {
+	row := q.db.QueryRow(ctx, getLatestAuditLogByActionAndSubject, arg.Action, arg.SubjectID)
+	var i GetLatestAuditLogByActionAndSubjectRow
+	err := row.Scan(
+		&i.Action,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ActorID,
+		&i.ActorType,
+		&i.ActorDisplayName,
+		&i.ActorSlug,
+		&i.SubjectID,
+		&i.SubjectType,
+		&i.SubjectDisplayName,
+		&i.SubjectSlug,
+		&i.Metadata,
+		&i.BeforeSnapshot,
+		&i.AfterSnapshot,
+		&i.ActingSurface,
+		&i.ActingClientID,
+	)
+	return i, err
+}
+
 const getLatestOutboxPayloadByOrg = `-- name: GetLatestOutboxPayloadByOrg :one
 SELECT message
 FROM publish_outbox

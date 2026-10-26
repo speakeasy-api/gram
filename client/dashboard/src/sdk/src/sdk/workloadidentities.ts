@@ -149,7 +149,7 @@ export class WorkloadIdentities extends ClientSDK {
    * listPlatforms workloadIdentities
    *
    * @remarks
-   * List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.
+   * List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.
    */
   async listPlatforms(
     request?: ListWorkloadPlatformsRequest | undefined,
@@ -223,7 +223,7 @@ export class WorkloadIdentities extends ClientSDK {
    * updateIssuer workloadIdentities
    *
    * @remarks
-   * Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+   * Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
    */
   async updateIssuer(
     request: UpdateWorkloadIssuerRequest,

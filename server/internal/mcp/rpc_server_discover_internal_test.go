@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -131,8 +133,12 @@ func TestHostedServerDiscoverStoredInstructionsAndCachePrivacy(t *testing.T) {
 			require.NoError(t, err)
 			metadata := metadatarepo.New(conn)
 			const instructions = "Search the example catalog before choosing a tool."
-			_, err = metadata.UpsertMetadata(ctx, metadatarepo.UpsertMetadataParams{
-				ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: project.ID,
+			_, err = testrepo.New(conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+				ID: toolset.ID, ProjectID: project.ID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
+			})
+			require.NoError(t, err)
+			_, err = metadata.UpsertMetadataByMcpServerID(ctx, metadatarepo.UpsertMetadataByMcpServerIDParams{
+				McpServerID: toolset.ID, ProjectID: project.ID,
 				Instructions: conv.ToPGText(instructions),
 			})
 			require.NoError(t, err)

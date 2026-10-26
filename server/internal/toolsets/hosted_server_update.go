@@ -71,8 +71,6 @@ func (s *Service) writeHostedServer(ctx context.Context, update mcpservers.Hoste
 		finalizeNetworkAccess = finalize
 	}
 
-	// Resolved before the transaction so flag latency never holds its locks.
-	serverKey := s.hostedServerKeyWrites(ctx, authCtx)
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -139,7 +137,7 @@ func (s *Service) writeHostedServer(ctx context.Context, update mcpservers.Hoste
 	if enabled && (!existing.McpSlug.Valid || existing.McpSlug.String == "") {
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeInvalid, nil, "hosted MCP server has no address to serve").LogWarn(ctx, logger)
 	}
-	if public != existing.McpIsPublic && (existing.ExternalOauthServerID.Valid || existing.OauthProxyServerID.Valid) {
+	if public != existing.McpIsPublic && existing.ExternalOauthServerID.Valid {
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeInvalid, nil, "remove the toolset's external OAuth server before changing public visibility").LogWarn(ctx, logger)
 	}
 
@@ -190,7 +188,7 @@ func (s *Service) writeHostedServer(ctx context.Context, update mcpservers.Hoste
 
 	pluginCreated := false
 	if !existing.McpEnabled && updated.McpEnabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated.ID, updated.Name, serverKey)
+		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated.ID, updated.Name)
 		if err != nil {
 			return mcpserversrepo.McpServer{}, err
 		}

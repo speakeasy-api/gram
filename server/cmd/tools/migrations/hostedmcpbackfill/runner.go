@@ -1,6 +1,6 @@
 // Package hostedmcpbackfill gives legacy hosted toolsets their canonical
-// mcp_servers wrapper and endpoint through hostedmcp.Sync, then moves their
-// toolset-keyed dependents onto it; see HOSTED_MCP_WRAPPERS_MIGRATION.md.
+// mcp_servers wrapper and endpoint through hostedmcp.Sync; see
+// HOSTED_MCP_WRAPPERS_MIGRATION.md.
 package hostedmcpbackfill
 
 import (
@@ -10,7 +10,6 @@ import (
 	"io"
 	"net"
 	"reflect"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -31,16 +30,10 @@ import (
 // ActorComponent is the system principal (system:<ActorComponent>) the backfill's audit entries carry.
 const ActorComponent = "hosted-mcp-wrapper-backfill"
 
-const (
-	phaseWrappers   = "wrappers"
-	phaseDependents = "dependents"
-)
+const phaseWrappers = "wrappers"
 
 // defaultPageSize bounds each candidate page; rows are processed one transaction at a time regardless.
 const defaultPageSize = 100
-
-// defaultLockTimeout bounds each dependent move's lock waits; a timeout stops the run as transient.
-const defaultLockTimeout = 5 * time.Second
 
 // Outcome classifies what the run did, or would do, for one toolset.
 type Outcome string
@@ -57,19 +50,6 @@ const (
 	OutcomeBlockedCanonicalConflict Outcome = "blocked_canonical_conflict"
 	OutcomeBlockedSyncRejected      Outcome = "blocked_sync_rejected"
 	OutcomeSkipped                  Outcome = "skipped"
-
-	OutcomeWouldMove        Outcome = "would_move"
-	OutcomeMoved            Outcome = "moved"
-	OutcomeBlockedTwin      Outcome = "blocked_twin"
-	OutcomeBlockedNoWrapper Outcome = "blocked_no_wrapper"
-	// OutcomeWouldMoveCollapsingTwin predicts removing the server-keyed twin before moving the toolset-keyed row; OutcomeMovedCollapsedTwin reports that completed move.
-	OutcomeWouldMoveCollapsingTwin Outcome = "would_move_collapsing_twin"
-	OutcomeMovedCollapsedTwin      Outcome = "moved_collapsed_twin"
-	// OutcomeCommitUnknown is a move whose commit errored after the server may have committed it.
-	OutcomeCommitUnknown Outcome = "commit_unknown"
-	// OutcomeBlockedUnattachable is an assistant attachment the assistants reader does not dial (toolset MCP off or no mcp slug).
-	OutcomeBlockedUnattachable Outcome = "blocked_unattachable"
-	OutcomeOrphaned            Outcome = "orphaned"
 )
 
 // Options controls one run.
@@ -88,24 +68,11 @@ type Options struct {
 
 	// Apply commits writes; otherwise every candidate transaction rolls back.
 	Apply bool
-
-	// MoveDependents re-keys toolset-keyed dependents onto the canonical wrapper instead of syncing wrappers.
-	MoveDependents bool
-
-	// Journal receives each dependent move before and after its commit; required to apply MoveDependents.
-	Journal Journal
-
-	// LockTimeout bounds each dependent move's lock waits; 0 selects defaultLockTimeout.
-	LockTimeout time.Duration
 }
 
 // RowReport carries ids and slugs only, never names or emails.
 type RowReport struct {
 	ToolsetID uuid.UUID `json:"toolset_id"`
-
-	// Table and RowID name the dependent row in a -move-dependents run.
-	Table string     `json:"table,omitempty"`
-	RowID *uuid.UUID `json:"row_id,omitempty"`
 
 	ProjectID uuid.UUID `json:"project_id"`
 
@@ -129,9 +96,6 @@ type RowReport struct {
 
 	// DomainsToReconcile are custom domains whose root the sync cleared; they need a domain reconcile.
 	DomainsToReconcile []uuid.UUID `json:"domains_to_reconcile,omitempty"`
-
-	// CollapsedTwin is the server-keyed row a dependent move removed, as rollback needs it.
-	CollapsedTwin *CollapsedTwin `json:"collapsed_twin,omitempty"`
 }
 
 // Report summarizes a run.
@@ -147,7 +111,7 @@ type Report struct {
 
 	Outcomes map[Outcome]int `json:"outcomes"`
 
-	// Writes counts transactions that committed (apply) or would commit (dry run): one per toolset, or per dependent row.
+	// Writes counts toolset transactions that committed (apply) or would commit (dry run).
 	Writes int `json:"writes"`
 
 	// FreshIDServersPresent counts toolsets that also back fresh-id servers.
@@ -170,9 +134,6 @@ func NewRunner(pool *pgxpool.Pool, options Options) *Runner {
 	if options.PageSize <= 0 {
 		options.PageSize = defaultPageSize
 	}
-	if options.LockTimeout <= 0 {
-		options.LockTimeout = defaultLockTimeout
-	}
 	return &Runner{pool: pool, audit: audit.NewLogger(audit.WithoutOutbox()), options: options}
 }
 
@@ -180,7 +141,7 @@ func NewRunner(pool *pgxpool.Pool, options Options) *Runner {
 func (r *Runner) Run(ctx context.Context) (Report, error) {
 	report := Report{
 		Mode:                  conv.Ternary(r.options.Apply, "apply", "dry-run"),
-		Phase:                 conv.Ternary(r.options.MoveDependents, phaseDependents, phaseWrappers),
+		Phase:                 phaseWrappers,
 		Scanned:               0,
 		Toolsets:              0,
 		Outcomes:              map[Outcome]int{},
@@ -188,9 +149,6 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 		FreshIDServersPresent: 0,
 		LastCursor:            r.options.Cursor,
 		Rows:                  nil,
-	}
-	if r.options.MoveDependents {
-		return r.runDependents(ctx, report)
 	}
 	after := r.options.Cursor
 	for {
@@ -253,8 +211,8 @@ func loadCanonical(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset)
 
 func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsetsRow) (RowReport, error) {
 	row := RowReport{
-		ToolsetID: candidate.ID, Table: "", RowID: nil, ProjectID: candidate.ProjectID, McpSlug: "", CustomDomainID: nil, Outcome: "", Reason: "",
-		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil,
+		ToolsetID: candidate.ID, ProjectID: candidate.ProjectID, McpSlug: "", CustomDomainID: nil, Outcome: "", Reason: "",
+		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil,
 	}
 
 	tx, err := r.pool.Begin(ctx)

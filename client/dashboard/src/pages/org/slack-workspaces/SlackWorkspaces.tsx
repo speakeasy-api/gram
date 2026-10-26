@@ -1,4 +1,8 @@
 import { syncInProgress } from "./syncView";
+import {
+  APPROVAL_DM_SCOPE,
+  workspacesNeedingReinstall,
+} from "./approvalReadiness";
 import { Link, useSearchParams } from "react-router";
 import { SlackDirectory } from "./SlackDirectory";
 import { SlackSyncButton, SlackSyncStatus } from "./SlackSyncStatus";
@@ -9,6 +13,8 @@ import { Hash, Plus, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { useOrganization } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
@@ -115,13 +121,25 @@ function SlackWorkspacesContent(): JSX.Element {
     (connection) => connection.status !== "disconnected",
   );
   const configured = query.data?.authorizationConfigured === true;
+  // Approval DMs are behind the tool approvals rollout, so only orgs that can
+  // use them are asked to reinstall.
+  const toolApprovals =
+    useFeatureFlag(FEATURE_FLAGS.toolApprovals).status === "enabled";
+  const needsReinstall = toolApprovals
+    ? workspacesNeedingReinstall(connections)
+    : [];
   // Connecting a workspace that is already listed reauthorizes it in place.
-  const start = () => {
+  // Passing its connection preselects that workspace in Slack.
+  const start = (connectionId?: string) => {
     if (isDemo) return;
     setRedirectError(null);
     begin.mutate(
       {
-        request: { beginSlackDirectoryConnectionRequestBody: {} },
+        request: {
+          beginSlackDirectoryConnectionRequestBody: connectionId
+            ? { connectionId }
+            : {},
+        },
         security: SESSION_SECURITY,
       },
       {
@@ -202,6 +220,31 @@ function SlackWorkspacesContent(): JSX.Element {
         <Alert variant="info" dismissible={false}>
           Slack workspaces are read-only in the demo organization. Switch to
           your organization to connect a workspace.
+        </Alert>
+      )}
+      {needsReinstall.length > 0 && !isDemo && (
+        <Alert variant="warning" dismissible={false}>
+          <div className="space-y-3">
+            <p>
+              Reinstall the Slack app so approvers get tool approval requests as
+              Slack messages. These workspaces granted access before Speakeasy
+              could send messages ({APPROVAL_DM_SCOPE}). Until you reinstall,
+              approvers decide in Speakeasy.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {needsReinstall.map((connection) => (
+                <Button
+                  key={connection.id}
+                  variant="secondary"
+                  size="sm"
+                  disabled={!configured || begin.isPending}
+                  onClick={() => start(connection.id)}
+                >
+                  {`Reinstall in ${connection.workspaceName || connection.workspaceId}`}
+                </Button>
+              ))}
+            </div>
+          </div>
         </Alert>
       )}
       {query.data && !configured && !isDemo && (
@@ -291,7 +334,8 @@ function SlackWorkspacesContent(): JSX.Element {
       )}
       <p className="text-muted-foreground max-w-2xl text-sm">
         Slack access is limited to reading workspace members and their email
-        addresses.
+        addresses, and to sending tool approval requests to approvers as direct
+        messages.
       </p>
       <ConfirmDialog
         open={selected !== null}

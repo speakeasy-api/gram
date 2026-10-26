@@ -236,6 +236,8 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 // FilterExternalTools applies caller-specific discovery policy to an already
 // composed tools/list result. This is only a discovery filter: exact resource
 // checks remain in each handler and run again when a listed tool is called.
+// A client with a tool allowlist (see clientToolAllowlist) sees only those
+// tools, intersected with what its grants make discoverable.
 func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal, tools []*mcp.Tool) []*mcp.Tool {
 	if r == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return []*mcp.Tool{}
@@ -247,10 +249,11 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
+	allowlist := clientToolAllowlist(principal.ClientID)
 	visible := make([]*mcp.Tool, 0, len(tools))
 	for _, tool := range tools {
 		descriptor, ok := descriptors[tool.Name]
-		if !ok || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
+		if !ok || (allowlist != nil && !slices.Contains(allowlist, tool.Name)) || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
 			continue
 		}
 		visible = append(visible, tool)
@@ -596,6 +599,7 @@ var wireTypeSchemas = map[reflect.Type]*jsonschema.Schema{
 			string(MCPBackendRemote),
 			string(MCPBackendTunneled),
 			string(MCPBackendUnproxied),
+			string(MCPBackendBuiltin),
 			string(MCPBackendLegacy),
 		},
 	},

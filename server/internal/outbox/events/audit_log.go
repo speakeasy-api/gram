@@ -17,6 +17,7 @@ var AuditLogCreated = outbox.NewEventDef[AuditLogCreatedPayloadV1](
 )
 
 var (
+	CatalogPromotionV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.catalog_promotion_event_v1", "Emitted when staff curate catalogue promotion candidates or retry setup documentation")
 	AccessChallengeV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_challenge_event_v1", "Emitted when changes to access challenges are made")
 	AIIntegrationV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_integration_event_v1", "Emitted when changes to AI integration configs are made")
 	AccessMemberV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_member_event_v1", "Emitted when changes to org members are made")
@@ -37,6 +38,8 @@ var (
 	AiScanTargetV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_agent_ai_scan_target_event_v1", "Emitted when an organization changes the Shadow AI scan targets its device agents probe for")
 	AIToolDecisionV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_tool_decision_event_v1", "Emitted when an organization decides whether a detected AI tool may reach its MCP gateway")
 	DeviceIntegrationV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
+	DirectoryReviewItemV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_review_item_event_v1", "Emitted when an admin approves, dismisses or opts out of a directory review decision")
+	DirectoryReviewSettingsV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_review_settings_event_v1", "Emitted when an admin turns directory review emails on or off")
 	DirectoryRoleMappingV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_role_mapping_event_v1", "Emitted when changes to directory role mappings are made")
 	DeploymentV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.deployment_event_v1", "Emitted when changes to deployments are made")
 	EnvironmentV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.environment_event_v1", "Emitted when changes to environments are made")
@@ -81,6 +84,7 @@ var (
 	DashboardV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.dashboard_event_v1", "Emitted when changes to dashboards are made")
 	RemoteMcpServerV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_event_v1", "Emitted when changes to remote MCP servers are made")
 	RemoteMcpServerHeaderV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_header_event_v1", "Emitted when changes to remote MCP server headers are made")
+	AuthClientV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.auth_client_event_v1", "Emitted when changes to MCP auth clients or the servers offering them are made")
 	RemoteSessionClientV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_client_event_v1", "Emitted when changes to remote session clients are made")
 	RemoteSessionV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_event_v1", "Emitted when changes to remote sessions are made")
 	RemoteSessionIssuerV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_issuer_event_v1", "Emitted when changes to remote session issuers are made")

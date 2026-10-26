@@ -79,7 +79,7 @@ vi.mock("@/routes", () => ({
     home: { href: () => "/projects/request-project" },
     logs: { href: () => "/projects/request-project/logs" },
     mcp: {
-      x: {
+      details: {
         overview: {
           href: (slug: string) => `/projects/request-project/mcp/${slug}`,
         },

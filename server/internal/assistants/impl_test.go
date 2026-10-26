@@ -23,6 +23,7 @@ import (
 	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsRepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -278,6 +279,7 @@ func TestServiceAttachingRequiresMCPConnect(t *testing.T) {
 		McpEnabled:     true,
 	})
 	require.NoError(t, err)
+	syncCanonicalWrapper(t, conn, ts)
 	toolsets := []*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}
 
 	writerCtx := authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
@@ -328,6 +330,7 @@ func newMCPEnableFixture(t *testing.T, dbName string) (mcpEnableFixture, context
 		McpEnabled:     true,
 	})
 	require.NoError(t, err)
+	syncCanonicalWrapper(t, conn, enabled)
 	return mcpEnableFixture{svc: svc, projectID: projectID, conn: conn, disabled: disabled, enabled: enabled}, ctx
 }
 
@@ -343,7 +346,7 @@ func (f mcpEnableFixture) writerCtx(t *testing.T, ctx context.Context, toolsetID
 
 func (f mcpEnableFixture) disable(t *testing.T, toolsetID uuid.UUID) {
 	t.Helper()
-	require.NoError(t, toolsetsRepo.New(f.conn).SetToolsetMCPEnabledByID(t.Context(), toolsetsRepo.SetToolsetMCPEnabledByIDParams{McpEnabled: false, ID: toolsetID, ProjectID: f.projectID}))
+	require.NoError(t, testrepo.New(f.conn).SetToolsetMCPEnabledByID(t.Context(), testrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: false, ID: toolsetID, ProjectID: f.projectID}))
 }
 
 func (f mcpEnableFixture) requireMCPEnabled(t *testing.T, toolsetID uuid.UUID, want bool) {

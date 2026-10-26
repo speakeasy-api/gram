@@ -41,6 +41,7 @@ func AttachAHP(mux goahttp.Muxer, s *Service) error {
 
 func (s *Service) ahpHandler() (http.Handler, error) {
 	h, err := ahpserver.NewHandler(ahpserver.Handlers{
+		Configuration: ahp.ConfigurationFunc(s.ahpResolveConfiguration),
 		Intercept: ahpserver.InterceptHandlers{ //nolint:exhaustruct // unhandled events are rejected as unsupported
 			ToolBefore: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ToolBeforeEvent, ahp.ToolBeforeCapabilities]) (ahpserver.ToolBeforeReply, error) {
 				var reply ahpserver.ToolBeforeReply
@@ -423,6 +424,7 @@ func ahpToolPermissionPayload(e *ahp.ToolPermissionRequestEvent) *gen.IngestPayl
 func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, eventType string, session ahp.Optional[*ahp.Session], turnID string) *gen.IngestPayload {
 	payload := &gen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    hookIngestSchemaV1,

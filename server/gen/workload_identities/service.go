@@ -25,8 +25,10 @@ type Service interface {
 	// workload:read.
 	List(context.Context, *ListPayload) (res *WorkloadIdentityPolicy, err error)
 	// List the platforms the catalog offers to trust without looking anything up,
-	// each with the guided setup that connects it. The same for every
-	// organization. Requires workload:read.
+	// each with the policy that trusting it writes: the issuer and signing keys it
+	// is recognised by, the values the operator supplies, and the access rule it
+	// produces. How the setup is explained belongs to the dashboard. The same for
+	// every organization. Requires workload:read.
 	ListPlatforms(context.Context, *ListPlatformsPayload) (res *WorkloadPlatformCatalog, err error)
 	// Get the forms for trusting a platform the catalog does not list and allowing
 	// its workloads: registering and editing a trusted platform, and allowing and
@@ -41,10 +43,11 @@ type Service interface {
 	// Returns the whole policy, so a caller replaces its view rather than merging
 	// into it.
 	RegisterIssuer(context.Context, *RegisterIssuerPayload) (res *WorkloadIdentityPolicy, err error)
-	// Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields
-	// are left unchanged. The issuer URL and the wildcard admission setting are
-	// fixed at registration. Requires workload:write. Returns the whole policy, so
-	// a caller replaces its view rather than merging into it.
+	// Edit a trusted issuer's name, description, tags, JWKS URI, or assertion
+	// reuse setting. Omitted fields are left unchanged. The issuer URL and the
+	// wildcard admission setting are fixed at registration. Requires
+	// workload:write. Returns the whole policy, so a caller replaces its view
+	// rather than merging into it.
 	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *WorkloadIdentityPolicy, err error)
 	// Stop trusting an issuer. Every subject admitted under it is withdrawn in the
 	// same transaction, so no admission can outlive the issuer it names. Requires
@@ -132,8 +135,9 @@ type AdmitSubjectPayload struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID string
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool
 }
 
@@ -209,6 +213,10 @@ type RegisterIssuerPayload struct {
 	// Where the issuer publishes the keys its assertions are signed with. Must be
 	// an https URL on a fully qualified domain name.
 	JwksURI string
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Checked when a wildcard rule is admitted and again on
 	// every lookup, so clearing it makes wildcard rules already written inert
@@ -222,8 +230,9 @@ type RegisterIssuerPayload struct {
 	// tags of at most 64 characters each.
 	Tags []string
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool
 }
 
@@ -247,6 +256,11 @@ type UpdateIssuerPayload struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Omit to preserve the current setting; false
+	// disables this opt-in. Tokens without replay identifiers retain existing
+	// exact-token compatibility.
+	AllowAssertionReuse *bool
 }
 
 // UpdateSubjectPayload is the payload type of the workloadIdentities service
@@ -388,8 +402,9 @@ type WorkloadIdentityPolicy struct {
 	Admissions []*types.WorkloadAdmission
 }
 
-// A platform the catalog offers to trust, with what the operator supplies and
-// the guided setup that connects it.
+// A platform the catalog offers to trust, with what the operator supplies to
+// connect it. How the setup is explained belongs to the dashboard, not to this
+// policy.
 type WorkloadPlatform struct {
 	// Identifies the entry permanently.
 	Key string
@@ -410,36 +425,6 @@ type WorkloadPlatform struct {
 	Variables []*WorkloadPlatformVariable
 	// The access rule it produces.
 	Subject *WorkloadPlatformSubject
-	// The guided setup. Empty for a platform without one, which is listed as
-	// coming soon and cannot be opened.
-	Steps []*WorkloadPlatformStep
-}
-
-// One piece of a guided setup step. Which fields are set depends on type; the
-// rest are empty.
-type WorkloadPlatformBlock struct {
-	// The kind of content.
-	Type string
-	// A text block's Markdown, or what a checklist item without a value asks the
-	// operator to do. Raw HTML in it must not be rendered.
-	Markdown string
-	// An image's path on the dashboard's origin.
-	Src string
-	// An image's alternative text.
-	Alt string
-	// Shown under an image.
-	Caption string
-	// A link's https target.
-	Href string
-	// A link's or computed value's label, or the console field or control a
-	// checklist item names.
-	Label string
-	// The variable key a field collects.
-	Variable string
-	// The value a computed block or checklist item shows.
-	Value string
-	// Shown under a computed value or checklist item.
-	Help string
 }
 
 // WorkloadPlatformCatalog is the result type of the workloadIdentities service
@@ -455,19 +440,6 @@ type WorkloadPlatformConstant struct {
 	Value string
 	// Whether the operator sees the value.
 	Visibility string
-}
-
-// One screen of a guided setup.
-type WorkloadPlatformStep struct {
-	// Stable within the platform; used in the dashboard URL.
-	ID string
-	// Heads the step.
-	Title string
-	// collect steps gather values, the create step writes the rows, connect steps
-	// describe the platform's side.
-	Phase string
-	// Rendered in order.
-	Blocks []*WorkloadPlatformBlock
 }
 
 // The access rule a catalog platform produces.

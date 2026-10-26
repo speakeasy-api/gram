@@ -6,14 +6,18 @@ const (
 	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
 	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
 
-	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
-	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
-	FlagAssistants               Flag = "assistants"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
 	// dashboard gates the matching UI behind the same key.
 	FlagPromptPolicies Flag = "gram-prompt-policies"
+	// FlagToolApprovals gates creating require_approval risk policies (tool
+	// approvals) and the dashboard's approval wizard and Tool approvals tab.
+	// Evaluated server-side on policy create and update and in the dashboard;
+	// targeted by PostHog organization group (org slug). Fails closed. Existing
+	// approval policies keep enforcing and their requests stay decidable when
+	// the flag is off. Removed once tool approvals are GA.
+	FlagToolApprovals Flag = "risk-tool-approvals"
 	// FlagBudgets gates the Budgets (spend control) rollout end to end with
 	// one key: the dashboard hides the Budgets tab on the Costs page behind
 	// it, and the background spend-rule evaluator skips organizations
@@ -22,7 +26,7 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
 	// truncation limit globally. Evaluated server-side with no targeting. The
@@ -39,12 +43,6 @@ const (
 	// Targeted by PostHog organization group (org slug), like FlagBudgets.
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
-
-	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
-	// FlagRiskFindingsClickHouseCutover means the organization is on the ClickHouse findings path:
-	// batch judges run in the analysis handlers, and finding reads and webhooks use ClickHouse.
-	// Server-side org-group targeting fails closed to the Postgres path.
-	FlagRiskFindingsClickHouseCutover Flag = "risk-findings-clickhouse-cutover"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
@@ -72,16 +70,6 @@ const (
 	// like FlagBudgets. Evaluated server-side only; removed once the toolset
 	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
-	// FlagHostedMCPServerKeyWrites switches hosted MCP writers (plugin entries,
-	// install page metadata, assistant attachments) to the canonical MCP server
-	// key (AIM-16 phase B). Evaluated server-side; targeted by PostHog
-	// organization group (org slug), rolled out to everyone once no phase A pods
-	// remain. Fails closed to the toolset key. Removed once the AIM-507 move ships.
-	FlagHostedMCPServerKeyWrites Flag = "hosted-mcp-server-key-writes"
-	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
-	// Key matches the dashboard's page-level flag so a single PostHog flag
-	// controls both the UI and the API surface.
-	FlagRiskWatchdog Flag = "gram-risk-watchdog"
 	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
 	// matches the dashboard's page-level flag so one PostHog flag controls
 	// both surfaces; targeted by organization group (org slug), like
@@ -202,6 +190,44 @@ const (
 	// keeps serving. Server-evaluated; target everyone to pause the platform,
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
+
+	// FlagAuthClientResolver makes the typed auth client resolver
+	// authoritative for an organization's direct proxied servers. Off, the
+	// upstream client choice keeps serving and is the rollback.
+	//
+	// Precondition: the organization's backfill is complete and its choices
+	// are mapped onto auth clients (AIM-595), including the ones issuance
+	// writes. Until then an OAuth choice with no auth client falls back to the
+	// upstream client choice, so the flag only takes effect for mapped
+	// choices. Evaluated
+	// locally with the organization id as the distinct id, so the PostHog flag
+	// must be person-aggregated and match distinct_id in a list of
+	// organization ids.
+	FlagAuthClientResolver Flag = "auth-client-resolver"
+
+	// FlagAuthClientResolverShadow runs the typed auth client resolver beside
+	// the upstream client choice, without acquiring credentials or writing,
+	// and logs where they disagree. Ignored while FlagAuthClientResolver is on.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagAuthClientResolverShadow Flag = "auth-client-resolver-shadow"
+
+	// FlagMandatoryAuthzShadow evaluates the mandatory server and auth client
+	// check beside today's decision for an organization's MCP requests and
+	// records where they disagree, without changing any response. Auth clients
+	// are only evaluated where FlagAuthClientResolver or its shadow is on.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
+
+	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
+	// whose selector names upstream_client: such grants, connection owner
+	// blocks, agent keys copying them and the attachment backfill. Replicas
+	// older than the dimension drop these restrictions and their policy edits
+	// do not protect owner blocks, so enable it only once every replica reads
+	// them; that release is then the rollback floor. Off, unavailable or
+	// failing, no such grant is written; reading and enforcing existing ones,
+	// and protecting existing blocks, never depend on it. Targeted the same
+	// way as FlagAuthClientResolver.
+	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

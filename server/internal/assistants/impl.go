@@ -28,6 +28,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -235,6 +236,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		payload.MaxConcurrency,
 		payload.Status,
 		canEnableMCP,
+		runtimeSelectionChange{Version: payload.RuntimeVersion, ExpectedVersion: payload.ExpectedRuntimeVersion},
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "update assistant")
@@ -572,6 +574,12 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		}
 	}
 	switch {
+	case errors.Is(err, errRuntimeSwitchBusy):
+		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchBusy.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errRuntimeSwitchConflict):
+		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchConflict.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errRuntimeSwitchUnavailable):
+		return oops.E(oops.CodeConflict, err, "%s", errRuntimeSwitchUnavailable.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, assistantidentity.ErrNotFound):
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrInvalidIdentity):
@@ -582,6 +590,8 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, errMCPEnableForbidden):
 		return oops.E(oops.CodeForbidden, err, "%s", errMCPEnableForbidden.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errToolsetNoMCPServer):
+		return oops.E(oops.CodeBadRequest, err, "%s", hostedmcp.NoServerMessage).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
 		return oops.E(oops.CodeBadRequest, err, "%s", message).LogError(ctx, logger)
 	default:

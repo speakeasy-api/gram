@@ -7,10 +7,13 @@ WITH project AS (
  SELECT @organization_id, id, 'Preserved plugin', @slug FROM project RETURNING id, project_id
 ), toolset AS (
  INSERT INTO toolsets (organization_id, project_id, name, slug)
- SELECT @organization_id, project_id, 'Preserved toolset', @slug FROM plugin RETURNING id
+ SELECT @organization_id, project_id, 'Preserved toolset', @slug FROM plugin RETURNING id, project_id
+), wrapper AS (
+ INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
+ SELECT id, project_id, id, 'private' FROM toolset RETURNING id
 ), server AS (
- INSERT INTO plugin_servers (plugin_id, toolset_id, display_name)
- SELECT plugin.id, toolset.id, 'Preserved content' FROM plugin, toolset
+ INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+ SELECT plugin.id, wrapper.id, 'Preserved content' FROM plugin, wrapper
 ), skill AS (
  INSERT INTO skills (project_id, name, display_name)
  SELECT project_id, 'retained', 'Retained' FROM plugin RETURNING id

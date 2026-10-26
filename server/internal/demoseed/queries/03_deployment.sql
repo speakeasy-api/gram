@@ -74,7 +74,7 @@ INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VAL
 
 -- name: DeployInsertUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
-VALUES (@id, @project_id::uuid, @organization_id::text, 'acme-partner-gateway', 'interactive', interval '30 days');
+VALUES (@id, @project_id::uuid, @organization_id::text, 'acme-partner-gateway', 'interactive', make_interval(secs => 30 * 24 * 60 * 60));
 
 -- name: DeployAttachUserSessionIssuer :exec
 UPDATE toolsets SET user_session_issuer_id = @user_session_issuer_id::uuid WHERE id = @toolset_id;
@@ -177,10 +177,10 @@ VALUES
 -- name: DeployInsertOrgWorkloadIssuer :exec
 INSERT INTO workload_issuers
   (id, organization_id, project_id, name, description, tags, issuer, jwks_uri,
-   allow_wildcard_admission)
+   allow_wildcard_admission, allow_assertion_reuse)
 VALUES
   (@id, @organization_id::text, NULL, @name, @description::text, @tags::text[], @issuer, @jwks_uri,
-   @allow_wildcard_admission);
+   @allow_wildcard_admission, @allow_assertion_reuse::boolean);
 
 -- name: DeployInsertWorkloadAdmission :exec
 INSERT INTO workload_identity_admissions
@@ -219,7 +219,7 @@ VALUES
 
 -- name: DeployInsertAgent :exec
 INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
-VALUES (@id, @organization_id::text, @project_id::uuid, @owner_user_id, 'Identity-bound assistant agent');
+VALUES (@id, @organization_id::text, @project_id::uuid, @owner_user_id, @name::text);
 
 -- name: DeployInsertPrincipalGrant :exec
 INSERT INTO principal_grants

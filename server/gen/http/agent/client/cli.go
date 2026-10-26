@@ -18,11 +18,17 @@ import (
 
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
 // from CLI flags.
-func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string, agentGetPluginsEnvironment string) (*agent.GetPluginsPayload, error) {
+func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsDeviceAgentToken string, agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string, agentGetPluginsEnvironment string) (*agent.GetPluginsPayload, error) {
 	var legacyEmail *string
 	{
 		if agentGetPluginsLegacyEmail != "" {
 			legacyEmail = &agentGetPluginsLegacyEmail
+		}
+	}
+	var deviceAgentToken *string
+	{
+		if agentGetPluginsDeviceAgentToken != "" {
+			deviceAgentToken = &agentGetPluginsDeviceAgentToken
 		}
 	}
 	var apikeyToken *string
@@ -57,11 +63,34 @@ func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsAp
 	}
 	v := &agent.GetPluginsPayload{}
 	v.LegacyEmail = legacyEmail
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
 	v.Environment = environment
+
+	return v, nil
+}
+
+// BuildGetMyConnectionsPayload builds the payload for the agent
+// getMyConnections endpoint from CLI flags.
+func BuildGetMyConnectionsPayload(agentGetMyConnectionsApikeyToken string, agentGetMyConnectionsEmail string) (*agent.GetMyConnectionsPayload, error) {
+	var apikeyToken *string
+	{
+		if agentGetMyConnectionsApikeyToken != "" {
+			apikeyToken = &agentGetMyConnectionsApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentGetMyConnectionsEmail != "" {
+			email = &agentGetMyConnectionsEmail
+		}
+	}
+	v := &agent.GetMyConnectionsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
 
 	return v, nil
 }

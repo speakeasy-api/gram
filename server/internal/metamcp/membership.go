@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -25,6 +24,7 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 )
 
 // The refusals a gateway write can return. Each caller maps them to its own
@@ -37,6 +37,7 @@ var (
 	ErrMemberServerNotInProject      = errors.New("mcp_server_id does not reference a live server in this project")
 	ErrMemberServerHasNoSlug         = errors.New("mcp server has no slug; update the server to generate one before attaching it")
 	ErrMemberServerUnproxied         = errors.New("unproxied mcp servers cannot be meta mcp members")
+	ErrMemberServerBuiltin           = errors.New("a server Speakeasy serves itself, such as the approvals server, cannot be a meta mcp member")
 	ErrMemberServerIsHostedToolset   = errors.New("a hosted toolset's own mcp server cannot be a meta mcp member; add a separate server for the toolset")
 	ErrMemberSharesBackend           = errors.New("another member of this meta mcp server already fronts the same backend")
 	ErrMemberAlreadyPresent          = errors.New("mcp server is already a member of this meta mcp server")
@@ -96,7 +97,7 @@ func (w GatewayWriter) CreateGateway(ctx context.Context, tx pgx.Tx, actor Actor
 		// A gateway without sign-in serves everyone anonymously, which hides
 		// every private member and can hold no member credentials — a trap,
 		// not a use case. Mint a dedicated issuer when the caller supplies none.
-		minted, err := mcpservers.MintServerUserSessionIssuer(ctx, tx, actor.OrganizationID, actor.ProjectID, input.Name)
+		minted, err := serverissuer.Mint(ctx, tx, actor.OrganizationID, actor.ProjectID, input.Name)
 		if err != nil {
 			return repo.MetaMcpServer{}, fmt.Errorf("mint meta mcp issuer: %w", err)
 		}
@@ -154,10 +155,6 @@ func (w GatewayWriter) LockGateway(ctx context.Context, tx pgx.Tx, actor Actor, 
 type AddedMember struct {
 	Member repo.MetaMcpServerMember
 	Server mcpserversrepo.McpServer
-	// IssuerWired is true when the member's provider client binding was
-	// considered for the gateway's issuer, which AfterMembershipCommit must
-	// then resync.
-	IssuerWired bool
 }
 
 // AddMember adds one server to a gateway the caller locked with LockGateway.
@@ -185,6 +182,11 @@ func (w GatewayWriter) AddMember(ctx context.Context, tx pgx.Tx, actor Actor, me
 	}
 	if server.UnproxiedMcpServerID.Valid {
 		return AddedMember{}, ErrMemberServerUnproxied
+	}
+	// The gateway serves first-party backends in-process, not through the
+	// member dispatch a meta server uses.
+	if server.BuiltinBackend.Valid {
+		return AddedMember{}, ErrMemberServerBuiltin
 	}
 	// A toolset's own hosted server keeps its identity; members are separate servers.
 	if server.ToolsetID.Valid && server.ID == server.ToolsetID.UUID {
@@ -238,7 +240,6 @@ func (w GatewayWriter) AddMember(ctx context.Context, tx pgx.Tx, actor Actor, me
 	// the gateway an issuer, the member a stamped upstream AS with a client —
 	// bind that client to the gateway's issuer so consent offers the member's
 	// provider without a manual attach ceremony.
-	wired := false
 	if meta.UserSessionIssuerID.Valid && server.RemoteSessionIssuerID.Valid && server.UserSessionIssuerID.Valid {
 		// No DB constraint enforces one client per (issuer, upstream); every
 		// client-binding writer serializes on this advisory lock instead.
@@ -266,31 +267,28 @@ func (w GatewayWriter) AddMember(ctx context.Context, tx pgx.Tx, actor Actor, me
 				attr.SlogMetaMcpServerID(meta.ID.String()),
 				attr.SlogMcpServerID(server.ID.String()))
 		}
-		wired = true
 	}
 
 	if err := w.Audit.LogMetaMcpMemberAdd(ctx, tx, memberAuditEvent(actor, meta, member)); err != nil {
 		return AddedMember{}, fmt.Errorf("log meta mcp member addition: %w", err)
 	}
-	return AddedMember{Member: member, Server: server, IssuerWired: wired}, nil
+	return AddedMember{Member: member, Server: server}, nil
 }
 
-// RemoveMember removes one membership of a gateway. It reports whether the
-// gateway's issuer bindings changed, which AfterMembershipCommit must then
-// resync.
-func (w GatewayWriter) RemoveMember(ctx context.Context, tx pgx.Tx, actor Actor, meta repo.MetaMcpServer, memberID uuid.UUID) (repo.MetaMcpServerMember, bool, error) {
+// RemoveMember removes one membership of a gateway.
+func (w GatewayWriter) RemoveMember(ctx context.Context, tx pgx.Tx, actor Actor, meta repo.MetaMcpServer, memberID uuid.UUID) (repo.MetaMcpServerMember, error) {
 	txRepo := repo.New(tx)
 	existing, err := txRepo.LockMetaMCPMember(ctx, repo.LockMetaMCPMemberParams{ID: memberID, ProjectID: actor.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) || err == nil && existing.MetaMcpServerID != meta.ID {
-		return repo.MetaMcpServerMember{}, false, ErrMembershipNotFound
+		return repo.MetaMcpServerMember{}, ErrMembershipNotFound
 	}
 	if err != nil {
-		return repo.MetaMcpServerMember{}, false, fmt.Errorf("lock meta mcp membership: %w", err)
+		return repo.MetaMcpServerMember{}, fmt.Errorf("lock meta mcp membership: %w", err)
 	}
 
 	deleted, err := txRepo.DeleteMetaMCPMember(ctx, repo.DeleteMetaMCPMemberParams{ID: memberID, ProjectID: actor.ProjectID})
 	if err != nil {
-		return repo.MetaMcpServerMember{}, false, fmt.Errorf("remove meta mcp member: %w", err)
+		return repo.MetaMcpServerMember{}, fmt.Errorf("remove meta mcp member: %w", err)
 	}
 
 	// Reverse the add-side auto-attach: when no other live member of this
@@ -298,7 +296,6 @@ func (w GatewayWriter) RemoveMember(ctx context.Context, tx pgx.Tx, actor Actor,
 	// client from the gateway issuer so it stops appearing on the consent
 	// screen. The member row is already soft-deleted above, so the detach's
 	// "last member" guard sees the post-removal set.
-	wired := false
 	if meta.UserSessionIssuerID.Valid {
 		server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 			ID:        deleted.McpServerID,
@@ -309,10 +306,10 @@ func (w GatewayWriter) RemoveMember(ctx context.Context, tx pgx.Tx, actor Actor,
 			// The member's server is itself gone (e.g. removed as part of a
 			// server deletion); its binding is cleaned up on that path.
 		case err != nil:
-			return repo.MetaMcpServerMember{}, false, fmt.Errorf("load removed member server: %w", err)
+			return repo.MetaMcpServerMember{}, fmt.Errorf("load removed member server: %w", err)
 		case server.RemoteSessionIssuerID.Valid:
 			if err := remotesessionsrepo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, server.RemoteSessionIssuerID.UUID); err != nil {
-				return repo.MetaMcpServerMember{}, false, fmt.Errorf("lock remote session issuer for client binding: %w", err)
+				return repo.MetaMcpServerMember{}, fmt.Errorf("lock remote session issuer for client binding: %w", err)
 			}
 			detached, err := txRepo.AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
 				GatewayIssuerID: meta.UserSessionIssuerID.UUID,
@@ -320,21 +317,20 @@ func (w GatewayWriter) RemoveMember(ctx context.Context, tx pgx.Tx, actor Actor,
 				ProjectID:       actor.ProjectID,
 			})
 			if err != nil {
-				return repo.MetaMcpServerMember{}, false, fmt.Errorf("detach member provider client: %w", err)
+				return repo.MetaMcpServerMember{}, fmt.Errorf("detach member provider client: %w", err)
 			}
 			if detached > 0 {
 				w.Logger.InfoContext(ctx, "detached member provider client from meta mcp issuer",
 					attr.SlogMetaMcpServerID(meta.ID.String()),
 					attr.SlogMcpServerID(server.ID.String()))
 			}
-			wired = true
 		}
 	}
 
 	if err := w.Audit.LogMetaMcpMemberRemove(ctx, tx, memberAuditEvent(actor, meta, deleted)); err != nil {
-		return repo.MetaMcpServerMember{}, false, fmt.Errorf("log meta mcp member removal: %w", err)
+		return repo.MetaMcpServerMember{}, fmt.Errorf("log meta mcp member removal: %w", err)
 	}
-	return deleted, wired, nil
+	return deleted, nil
 }
 
 // SetMemberSortOrder moves one membership of a gateway to a new position.
@@ -390,14 +386,16 @@ func memberAuditEvent(actor Actor, meta repo.MetaMcpServer, member repo.MetaMcpS
 }
 
 // AfterMembershipCommit is the best-effort follow-up every committed
-// membership change owes: resync the denormalized issuer column when a
-// provider binding changed, then ask plugins carrying the gateway to
-// republish.
-func AfterMembershipCommit(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, publisher plugins.PluginPublishSignaler, actor Actor, meta repo.MetaMcpServer, issuerWired bool) {
+// membership change owes: resync the denormalized issuer column and the
+// members' upstream client associations, then ask plugins carrying the
+// gateway to republish.
+func AfterMembershipCommit(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, publisher plugins.PluginPublishSignaler, actor Actor, meta repo.MetaMcpServer) {
 	// Every client-binding writer follows its commit with this resync so the
 	// denormalized mcp_servers.remote_session_issuer_id cannot go stale when
-	// the gateway issuer is shared with a server row.
-	if issuerWired && meta.UserSessionIssuerID.Valid {
+	// the gateway issuer is shared with a server row. A member joining or
+	// leaving also gains or loses its association with a client the gateway's
+	// issuer binds, whether or not a binding changed.
+	if meta.UserSessionIssuerID.Valid {
 		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, db, actor.OrganizationID, actor.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 	SignalGatewayPluginPublish(ctx, logger, db, publisher, actor.ProjectID, actor.UserID, meta.ID, false)

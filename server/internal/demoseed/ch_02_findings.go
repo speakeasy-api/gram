@@ -1008,8 +1008,16 @@ func (s *seeder) chfGatewayHooks(ctx context.Context, ch driver.Conn) error {
 			`,"gen_ai.tool.call.result":"ok"` +
 			`,"gen_ai.tool.call.id":"call_demo_gw_` + strconv.Itoa(i) + `"` +
 			`,"gen_ai.conversation.id":"` + chatID + `"` +
-			`,"gram.project.id":"` + s.projectID().String() + `"` +
-			`,"user.email":"` + email + `"}`
+			`,"gram.project.id":"` + s.projectID().String() + `"`
+		// Agent-key hooks carry the authenticated actor and no self-reported
+		// person, while the other hook rows keep their human attribution.
+		if n%4 == 0 {
+			agentID := s.det("managed-agent-" + strconv.Itoa(1+i%3)).String()
+			attrs += `,"gram.authorization.actor.type":"agent","gram.authorization.actor.id":"` + agentID + `"`
+		} else {
+			attrs += `,"user.email":"` + email + `"`
+		}
+		attrs += "}"
 		ts := s.chfNoFuture(s.chfDay(n % 12).
 			Add(time.Duration(8+hash64("gwhh", n)%11) * time.Hour).
 			Add(time.Duration(hash64("gwhm", n)%60) * time.Minute))

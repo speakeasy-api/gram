@@ -23,9 +23,10 @@ const mocks = vi.hoisted(() => {
     fetchRemoteSessionIssuerMetadata: vi.fn().mockResolvedValue({}),
     createRemoteSessionIssuer: vi.fn().mockResolvedValue({ id: "rsi-1" }),
     createRemoteSessionClient: vi.fn().mockResolvedValue({ id: "rsc-1" }),
-    setToolsetUserSessionIssuer: vi.fn().mockResolvedValue(undefined),
+    linkToolsetUserSessionIssuer: vi.fn().mockResolvedValue(undefined),
     capture: vi.fn(),
     invalidateAllToolset: vi.fn(),
+    invalidateAllMcpServers: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
     invalidateAllListEnvironments: vi.fn(),
     isFeatureEnabled: vi.fn(() => false),
@@ -37,6 +38,9 @@ vi.mock("@gram/client/react-query/toolset.js", () => ({
   invalidateAllToolset: mocks.invalidateAllToolset,
 }));
 
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  invalidateAllMcpServers: mocks.invalidateAllMcpServers,
+}));
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   invalidateAllGetMcpMetadata: mocks.invalidateAllGetMcpMetadata,
 }));
@@ -91,11 +95,8 @@ vi.mock("@gram/client/react-query/createRemoteSessionClient.js", () => ({
   }),
 }));
 
-vi.mock("@gram/client/react-query/setToolsetUserSessionIssuer.js", () => ({
-  buildSetToolsetUserSessionIssuerMutation: () => ({
-    mutationKey: [],
-    mutationFn: mocks.setToolsetUserSessionIssuer,
-  }),
+vi.mock("@/lib/linkUserSessionIssuer", () => ({
+  linkToolsetUserSessionIssuer: mocks.linkToolsetUserSessionIssuer,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -167,6 +168,7 @@ import { ConnectOAuthModal } from "./OAuthWizard";
 // ---------------------------------------------------------------------------
 
 const toolset = {
+  id: "toolset-1",
   name: "MyToolset",
   slug: "mytoolset",
   mcpSlug: "mytoolset",
@@ -381,6 +383,7 @@ describe("OAuthWizard — existing external OAuth config", () => {
       expect(mocks.updateExternalOAuth).toHaveBeenCalledTimes(1),
     );
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
+    expect(mocks.invalidateAllMcpServers).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
   });
 
@@ -668,8 +671,15 @@ describe("OAuthWizard — happy proxy create", () => {
       tokenEndpointAuthMethodsSupported: [],
     });
     expect(mocks.createRemoteSessionClient).toHaveBeenCalledTimes(1);
-    expect(mocks.setToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
+    expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
+    expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: "toolset-1", slug: "mytoolset" },
+      "usi-1",
+      expect.objectContaining({ fetchOptions: expect.anything() }),
+    );
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
+    expect(mocks.invalidateAllMcpServers).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
     expect(mocks.invalidateAllListEnvironments).toHaveBeenCalled();
     expect(mocks.capture).toHaveBeenCalledWith(
@@ -764,6 +774,6 @@ describe("OAuthWizard — provisioning failure", () => {
     });
 
     expect(mocks.createUserSessionIssuer).toHaveBeenCalledTimes(1);
-    expect(mocks.setToolsetUserSessionIssuer).not.toHaveBeenCalled();
+    expect(mocks.linkToolsetUserSessionIssuer).not.toHaveBeenCalled();
   });
 });

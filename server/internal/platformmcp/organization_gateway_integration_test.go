@@ -15,6 +15,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -34,6 +35,13 @@ func newOrganizationGatewayFixture(t *testing.T) (context.Context, *pgxpool.Pool
 		WorkosID:    pgtype.Text{},
 		Whitelisted: pgtype.Bool{},
 	})
+	require.NoError(t, err)
+
+	settings := featuresrepo.New(conn)
+	flag := featuresrepo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureOrganizationGatewayDisabled)}
+	_, err = settings.EnableFeature(ctx, flag)
+	require.NoError(t, err)
+	_, err = settings.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(flag))
 	require.NoError(t, err)
 
 	serverURL, err := url.Parse("https://app.example.test")
@@ -64,6 +72,10 @@ func TestOrganizationGatewayAvailableWithOneOrganizationIssuer(t *testing.T) {
 	require.True(t, output.Available)
 	require.Equal(t, "https://app.example.test/mcp/gateway/"+slug, output.URL)
 	require.Empty(t, output.UnavailableReason)
+	// Each discovery mode gets its own first step; only Progressive has list_servers.
+	require.Contains(t, output.NextAction, "Progressive: call list_servers")
+	require.Contains(t, output.NextAction, "Direct: call the server--tool tools")
+	require.Contains(t, output.NextAction, "Code Mode: run Python with the execute tool")
 }
 
 func TestOrganizationGatewayUnavailableWithoutOrganizationIssuer(t *testing.T) {
@@ -108,5 +120,23 @@ func TestOrganizationGatewayUnavailableWhenTurnedOff(t *testing.T) {
 	require.False(t, output.Available)
 	require.Empty(t, output.URL)
 	require.Equal(t, "turned_off", output.UnavailableReason)
-	require.Contains(t, output.NextAction, "turn it on")
+	require.Contains(t, output.NextAction, "review MCP Assignments")
+}
+
+// The gateway URL uses the platform host stored as the organization's default
+// host, where the dashboard serves the organization, even when the request
+// arrived on another platform host.
+func TestOrganizationGatewayFollowsOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+	ctx, conn, service, principal, slug := newOrganizationGatewayFixture(t)
+	createOrganizationIssuerForGateway(t, ctx, conn, principal.OrganizationID)
+	require.NoError(t, organizationsrepo.New(conn).SetOrganizationDefaultHostForTest(ctx, organizationsrepo.SetOrganizationDefaultHostForTestParams{ID: principal.OrganizationID, DefaultHost: pgtype.Text{String: testExtraHostBaseURL, Valid: true}}))
+	service = service.WithOrganizationHosts(testOrganizationHosts(t))
+	ctx = requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: testCanonicalBaseURL, OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
+
+	output, err := service.Get(ctx, principal)
+
+	require.NoError(t, err)
+	require.True(t, output.Available)
+	require.Equal(t, testExtraHostBaseURL+"/mcp/gateway/"+slug, output.URL)
 }

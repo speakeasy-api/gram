@@ -15,6 +15,7 @@ import (
 
 const (
 	ActionRemoteSessionClientCreate                  Action = "remote-session-client:create"
+	ActionRemoteSessionClientDuplicate               Action = "remote-session-client:duplicate"
 	ActionRemoteSessionClientUpdate                  Action = "remote-session-client:update"
 	ActionRemoteSessionClientDelete                  Action = "remote-session-client:delete"
 	ActionRemoteSessionClientDetachMcpServer         Action = "remote-session-client:detach-mcp-server"
@@ -73,6 +74,91 @@ func (l *Logger) LogRemoteSessionClientCreate(ctx context.Context, dbtx repo.DBT
 		BeforeSnapshot: nil,
 		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
+}
+
+// RemoteSessionClientDuplicateRegistration names where a duplicated client's
+// upstream credentials came from.
+type RemoteSessionClientDuplicateRegistration string
+
+const (
+	// RemoteSessionClientDuplicateRegistrationCopied: the copy reuses the
+	// source's client_id and stored secret.
+	RemoteSessionClientDuplicateRegistrationCopied RemoteSessionClientDuplicateRegistration = "copied"
+
+	// RemoteSessionClientDuplicateRegistrationRegistered: the caller supplied a
+	// fresh upstream registration for the copy.
+	RemoteSessionClientDuplicateRegistrationRegistered RemoteSessionClientDuplicateRegistration = "registered"
+
+	// RemoteSessionClientDuplicateRegistrationMetadataDocument: the copy is a
+	// client metadata document client with its own hosted document.
+	RemoteSessionClientDuplicateRegistrationMetadataDocument RemoteSessionClientDuplicateRegistration = "metadata_document"
+)
+
+type LogRemoteSessionClientDuplicateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	// RemoteSessionClientURN is the new client.
+	RemoteSessionClientURN urn.RemoteSessionClient
+
+	// ClientID is the new client's upstream client_id.
+	ClientID string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+
+	// SourceRemoteSessionClientURN is the client the configuration was copied
+	// from, which is left unchanged.
+	SourceRemoteSessionClientURN urn.RemoteSessionClient
+
+	// Registration records where the new client's upstream credentials came from.
+	Registration RemoteSessionClientDuplicateRegistration
+
+	// SnapshotAfter is the created client.
+	SnapshotAfter *types.RemoteSessionClient
+}
+
+// LogRemoteSessionClientDuplicate records a client created as a copy of
+// another. The subject is the new client; the source is captured in metadata.
+func (l *Logger) LogRemoteSessionClientDuplicate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDuplicateEvent) error {
+	action := ActionRemoteSessionClientDuplicate
+
+	afterSnapshot, err := marshalAuditPayload(event.SnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"source_remote_session_client_id": event.SourceRemoteSessionClientURN.ID.String(),
+		"registration":                    string(event.Registration),
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RemoteSessionClientURN.ID.String(),
+		SubjectType:        string(subjectTypeRemoteSessionClient),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ClientID),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
@@ -182,10 +268,11 @@ type LogRemoteSessionClientDetachMcpServerEvent struct {
 	McpServerName          string
 }
 
-// LogRemoteSessionClientDetachMcpServer records that an organization admin
-// detached a remote_session_client from an MCP server (clearing that server's
-// user_session_issuer link). The affected MCP server is captured in metadata so
-// the audit trail names the server whose authentication changed.
+// LogRemoteSessionClientDetachMcpServer records that a remote_session_client
+// was detached from an MCP server, either by an organization admin removing
+// the binding from the server's user session issuer or by removing the
+// server's own client association. The affected MCP server is captured in
+// metadata so the audit trail names the server whose authentication changed.
 func (l *Logger) LogRemoteSessionClientDetachMcpServer(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDetachMcpServerEvent) error {
 	action := ActionRemoteSessionClientDetachMcpServer
 

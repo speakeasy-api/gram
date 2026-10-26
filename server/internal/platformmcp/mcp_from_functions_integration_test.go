@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -36,6 +35,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -303,9 +303,6 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	t.Parallel()
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_first_server")
 	ctx = fixture.createFromFunctionsContext(ctx)
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, true)
-	fixture.service.WithFeatureProvider(flags)
 	// Leave the organization with no enabled server, so the next is its first.
 	disableFixtureServer(t, ctx, fixture)
 
@@ -357,7 +354,7 @@ func disableFixtureServer(t *testing.T, ctx context.Context, fixture toolExposur
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := toolsetsrepo.New(tx)
-	require.NoError(t, q.SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+	require.NoError(t, testrepo.New(tx).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
 		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
 	}))
 	toolset, err := q.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: fixture.toolsetID, ProjectID: fixture.project.ID})
@@ -628,34 +625,4 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	})
 	require.Contains(t, refusal, "Creating an MCP server from a project's functions")
-}
-
-// With the server-key rollout off, the Default plugin entry keeps the toolset key phase A pods write.
-func TestCreateMCPFromFunctionsDefaultPluginEntryFlagOffKeepsToolsetKey(t *testing.T) {
-	t.Parallel()
-	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_flag_off")
-	ctx = fixture.createFromFunctionsContext(ctx)
-	off := &feature.InMemory{}
-	off.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, false)
-	fixture.service.WithFeatureProvider(off)
-	disableFixtureServer(t, ctx, fixture)
-
-	input := fixture.createInput("First Desk", fixture.tools[0])
-	input.Confirmed = true
-	created, err := fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, input)
-	require.NoError(t, err)
-	require.True(t, created.AddedToDefaultPlugin)
-
-	defaultPlugin, err := pluginsrepo.New(fixture.conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{
-		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID,
-	})
-	require.NoError(t, err)
-	members, err := pluginsrepo.New(fixture.conn).ListPluginServers(ctx, defaultPlugin.ID)
-	require.NoError(t, err)
-	toolsetID := uuid.MustParse(created.Exposure.ToolsetID)
-	joined := false
-	for _, member := range members {
-		joined = joined || member.ToolsetID == uuid.NullUUID{UUID: toolsetID, Valid: true}
-	}
-	require.True(t, joined, "the new tool list is in the Default plugin under its toolset")
 }

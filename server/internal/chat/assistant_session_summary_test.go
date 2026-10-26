@@ -91,6 +91,25 @@ func TestGetAssistantSessionSummary_RangeAndAssistantScoped(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Runtime warmup is infrastructure, not a session. Keep it out of both
+	// the PostgreSQL aggregate and the chat IDs used for telemetry summaries.
+	warmupChatID := seedChat(t, ctx, ti, "", "", "New Chat")
+	_, err = assistantsrepo.New(ti.conn).UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     ti.projectID,
+		CorrelationID: "runtime-warmup",
+		ChatID:        warmupChatID,
+		SourceKind:    "warmup",
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+	_, err = queries.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    warmupChatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: now, InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+
 	chatRows, err := queries.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
 		AssistantID:        assistantID,
 		ProjectID:          ti.projectID,

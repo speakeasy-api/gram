@@ -10,7 +10,7 @@ import (
 // --- Service ---
 
 var _ = Service("agent", func() {
-	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.")
+	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. A headless device enrolled as a workload may call getPlugins with a device-agent token instead. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.")
 	Security(security.ByKey, func() {
 		Scope("agent_user")
 	})
@@ -24,11 +24,16 @@ var _ = Service("agent", func() {
 		// owner and the org derives from the key. An org `agent` install key also
 		// passes (it implies `agent_user`; see auth.Authorize); the MDM profile
 		// then vouches the enrolled user's email via the Gram-User-Email header.
+		//
+		// A headless device presents a device-agent token instead, tried first so a
+		// request without one falls through to the API key and keeps its errors.
+		Security(security.DeviceAgentToken)
 		Security(security.ByKey, func() {
 			Scope("agent_user")
 		})
 
 		Payload(func() {
+			security.DeviceAgentTokenPayload()
 			security.ByKeyPayload()
 			// Authoritative when authenticating with an org install key (`agent`
 			// scope): that key's owner is an admin, not the enrolled developer, so
@@ -85,6 +90,7 @@ var _ = Service("agent", func() {
 
 		HTTP(func() {
 			GET("/rpc/agent.getPlugins")
+			security.DeviceAgentTokenHeader()
 			security.ByKeyHeader()
 			// Headers rather than query params: all three identify a person or
 			// a machine, and the request logger records URLs but not headers.
@@ -101,6 +107,40 @@ var _ = Service("agent", func() {
 		Meta("openapi:operationId", "getAgentPlugins")
 		Meta("openapi:extension:x-speakeasy-name-override", "getPlugins")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentPlugins"}`)
+	})
+
+	Method("getMyConnections", func() {
+		Description("Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.")
+
+		// The org install key is accepted with a vouched email, unlike
+		// getSessionMeta: this exposes only whether a member has signed in to
+		// each server and whether they may connect to it (getPlugins already
+		// reveals mcp:read through dashboard links), never a credential or any
+		// content. MDM fleets that cannot mint per-user keys would otherwise
+		// show no sign-in state.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+		})
+
+		Result(GetMyConnectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.getMyConnections")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getAgentMyConnections")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMyConnections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentMyConnections"}`)
 	})
 
 	Method("listSyncedUsers", func() {
@@ -428,8 +468,8 @@ var _ = Service("agent", func() {
 // --- Types ---
 
 var GetPluginsResult = Type("GetPluginsResult", func() {
-	Required("etag", "marketplaces", "plugins")
-	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.")
+	Required("etag", "marketplaces", "plugins", "mcp_servers")
+	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.")
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
 	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.")
 	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")
@@ -437,6 +477,19 @@ var GetPluginsResult = Type("GetPluginsResult", func() {
 		Format(FormatURI)
 	})
 	Attribute("principal", AgentPollingPrincipalModel, "The non-human principal the plugin set was resolved for. Present only when the caller authenticated with an agent API key.")
+	Attribute("mcp_servers", ArrayOf(AgentMCPServerModel), "Speakeasy-hosted MCP servers the agent registers directly in each managed tool's configuration, authorized by the device's own mcp:connect credential. Populated only when the caller polls as an agent (an agent API key, or a workload acting for its assigned agent), from the MCP servers in the plugins assigned to that agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.")
+})
+
+var AgentMCPServerModel = Type("AgentMCPServer", func() {
+	Required("name", "url")
+	Attribute("name", String, "Stable key the agent writes the server under in each tool's MCP configuration: `speakeasy-` followed by the server's slug, using only lowercase letters, digits and `-`. Unique within the response; a second server with the same name gets a numeric suffix such as `speakeasy-linear-2`.", func() {
+		Pattern(`^speakeasy-[a-z0-9-]+$`)
+	})
+	Attribute("url", String, "The server's streamable-HTTP URL.")
+	Attribute("tools", ArrayOf(String), "Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.")
+	Attribute("token_endpoint", String, "Token endpoint where a workload exchanges an identity assertion (RFC 7523 JWT bearer grant) for a session that reaches this server. Absent when the server's authorization server offers no workload grant, so the server cannot be reached without a person.")
+	Attribute("audience", String, "The exact `aud` the identity assertion must carry for token_endpoint. Present exactly when token_endpoint is.")
+	Attribute("resource", String, "Resource indicator (RFC 8707) to send with the grant. Present only when token_endpoint mints sessions for this one server; absent when it mints one session for every server of its issuer.")
 })
 
 var AgentPollingPrincipalModel = Type("AgentPollingPrincipal", func() {
@@ -476,6 +529,21 @@ var AgentPluginModel = Type("AgentPlugin", func() {
 	})
 	Attribute("name", String, "Display name of the plugin. Absent for the synthesized observability plugin.")
 	Attribute("description", String, "Short description of the plugin, when one is set.")
+	// omitzero rather than Goa's default omitempty: an empty list must reach
+	// the agent, which shows "No servers" for it, while the observability
+	// plugin leaves the field out entirely.
+	Attribute("servers", ArrayOf(AgentPluginServerModel), "MCP servers the plugin contains, in display order, possibly none. Display-only: the agent installs the plugin, not these entries. Absent for the synthesized observability plugin, which carries hooks rather than servers.", func() {
+		Meta("struct:tag:json", "servers,omitzero")
+	})
+})
+
+var AgentPluginServerModel = Type("AgentPluginServer", func() {
+	Required("name")
+	Attribute("id", String, "Stable identifier of the server, the same in every plugin that contains it. Matches the id getMyConnections reports the server's sign-in state under. Absent from servers predating the field.")
+	Attribute("name", String, "Display name of the server within its plugin.")
+	Attribute("dashboard_url", String, "Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.", func() {
+		Format(FormatURI)
+	})
 })
 
 var SyncedAgentUserModel = Type("SyncedAgentUser", func() {
@@ -633,5 +701,25 @@ var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {
 	Attribute("expires_at", String, func() {
 		Description("When the link stops being served regardless of reads.")
 		Format(FormatDateTime)
+	})
+})
+
+var GetMyConnectionsResult = Type("GetMyConnectionsResult", func() {
+	Required("servers")
+	Attribute("servers", ArrayOf(AgentServerConnectionModel), "One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user can neither read nor connect to are omitted; a server the user can read but not connect to is reported as no_access.")
+})
+
+var AgentServerConnectionModel = Type("AgentServerConnection", func() {
+	Required("id", "state")
+	Attribute("id", String, "The server's id, as getPlugins reports it on each plugin server.")
+	Attribute("state", String, func() {
+		Description("`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can't be determined, for example for a gateway.")
+		Enum("connected", "not_connected", "reauthorization_required", "not_required", "setup_required", "no_access", "unknown")
+	})
+	Attribute("connect_url", String, "Page that signs the user in to this server in the browser. Present when state is not_connected or reauthorization_required.", func() {
+		Format(FormatURI)
+	})
+	Attribute("request_access_url", String, "Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.", func() {
+		Format(FormatURI)
 	})
 })

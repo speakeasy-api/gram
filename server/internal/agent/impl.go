@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -28,13 +30,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -43,7 +48,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -69,6 +76,31 @@ type Service struct {
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
+	// workloadTokens resolves where a workload obtains a session for each
+	// polled MCP server. Nil leaves the token fields of every entry empty.
+	workloadTokens WorkloadTokenTargets
+
+	// deviceAgentTokens authenticates headless devices that present a
+	// device-agent token instead of an agent API key. Nil refuses them.
+	deviceAgentTokens *deviceagenttoken.Issuer
+
+	// agentVersions records each polling agent's speakeasyd version for the
+	// staff fleet view. Nil skips recording.
+	agentVersions *deviceagentversions.Store
+
+	// connectionStatuses reads members' MCP server sign-in state for
+	// getMyConnections. Nil reports every server as unknown.
+	connectionStatuses MemberConnectionStatuses
+
+	// connectionsLimiter bounds getMyConnections reads per member. Nil leaves
+	// it unlimited.
+	connectionsLimiter *ratelimit.Limiter
+}
+
+// WorkloadTokenTargets resolves where a workload exchanges an identity
+// assertion for a session that reaches the MCP server at a URL.
+type WorkloadTokenTargets interface {
+	WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (mcp.WorkloadTokenTarget, bool, error)
 }
 
 var (
@@ -90,39 +122,59 @@ func NewService(
 	blobStore assets.BlobStore,
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
+	deviceAgentTokens *deviceagenttoken.Issuer,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:          logger,
-		db:              db,
-		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
-		audit:           auditLogger,
-		productFeatures: productFeatures,
-		serverURL:       serverURL,
-		orgHosts:        orgHosts,
-		blobStore:       blobStore,
-		telemetry:       telemetryLogger,
-		growth:          growthEmitter,
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:             logger,
+		db:                 db,
+		repo:               repo.New(db),
+		auth:               auth.New(logger, db, sessions, authzEngine),
+		authz:              authzEngine,
+		audit:              auditLogger,
+		productFeatures:    productFeatures,
+		serverURL:          serverURL,
+		orgHosts:           orgHosts,
+		blobStore:          blobStore,
+		telemetry:          telemetryLogger,
+		growth:             growthEmitter,
+		workloadTokens:     nil,
+		deviceAgentTokens:  deviceAgentTokens,
+		agentVersions:      nil,
+		connectionStatuses: nil,
+		connectionsLimiter: nil,
 	}
+}
+
+// WithWorkloadTokenTargets sets the resolver that fills each polled MCP
+// server's token endpoint.
+func (s *Service) WithWorkloadTokenTargets(targets WorkloadTokenTargets) *Service {
+	s.workloadTokens = targets
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	// Only getPlugins accepts device-agent tokens.
+	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
+	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
 	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// A refused device-agent token is the better answer than a missing key
+	// for a device that sent no key.
+	if key == "" {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+	}
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, err
@@ -143,6 +195,43 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 		return ctx, fmt.Errorf("authorize agent device sync: %w", err)
 	}
 	return ctx, nil
+}
+
+// JWTAuth authenticates a headless device's device-agent token, admitting the
+// workload through its agent's live policy; like an agent key it needs the
+// device-sync grant. Without a token the context passes to the API key scheme.
+func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
+	if token == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if !deviceagenttoken.IsToken(token) {
+		// A bearer is presented but is not a device-agent token.
+		deviceagenttoken.MarkInvalidToken(ctx)
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if s.deviceAgentTokens == nil {
+		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
+		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
+	}
+	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	if err != nil {
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	authCtx, ok := contextvalues.GetAuthContext(admitted)
+	if !ok || authCtx == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(admitted, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		err = fmt.Errorf("authorize workload device sync: %w", err)
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	// The workload stays the actor; getPlugins reads the agent it acts for
+	// through deviceagenttoken.EffectiveAgent.
+	return admitted, nil
 }
 
 // GetPlugins returns every plugin assigned to the device user's resolved
@@ -177,37 +266,27 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// An agent-principal key is itself the identity; APIKeyAuth already
-	// required its device-sync grant.
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
-		return s.getAgentPlugins(ctx, authCtx, actor)
+	// An agent-principal key, or a workload acting for its assigned agent, polls
+	// as that agent; the auth step already required the device-sync grant.
+	if agent, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		s.recordAgentVersion(ctx, authCtx.ActiveOrganizationID, agentPrincipalMachine(payload, agent.String()))
+		return s.getAgentPlugins(ctx, authCtx, agent)
 	}
 
 	// Resolve the polling identity by credential type. An org install key carries
 	// the `agent` scope; a per-user key carries only `agent_user` (agent implies
 	// agent_user, never the reverse — see auth.effectiveScopes), so the presence
 	// of `agent` distinguishes them.
-	isInstallKey := slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String())
-
-	var email string
-	if isInstallKey {
-		// Org key: the owner is an admin, not the developer, so we must be vouched
-		// an email — the MDM profile supplies it via the Gram-User-Email header,
-		// or the deprecated `?email=` param on agents predating it.
-		vouched := conv.PtrValOr(payload.Email, "")
-		if vouched == "" {
-			vouched = conv.PtrValOr(payload.LegacyEmail, "")
-		}
-		email = conv.NormalizeEmail(vouched)
-		if email == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "a vouched email is required when authenticating with an org-scoped agent install key; send it in the Gram-User-Email header")
-		}
-	} else if authCtx.Email != nil {
-		// Per-user key: the owner is the enrolled developer, bound to the token.
-		email = conv.NormalizeEmail(*authCtx.Email)
+	// Org key: the owner is an admin, not the developer, so the MDM profile
+	// vouches the email via the Gram-User-Email header, or the deprecated
+	// `?email=` param on agents predating it.
+	vouched := conv.PtrValOr(payload.Email, "")
+	if vouched == "" {
+		vouched = conv.PtrValOr(payload.LegacyEmail, "")
 	}
-	if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid email")
+	email, err := pollingEmail(authCtx, vouched)
+	if err != nil {
+		return nil, err
 	}
 
 	// Best-effort: record that this user's device agent polled, so the dashboard
@@ -279,6 +358,8 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		}
 	}
 
+	s.recordAgentVersion(ctx, authCtx.ActiveOrganizationID, agentMachine(payload, email, environment))
+
 	// Resolve the reported email through current organization membership before
 	// adding user:<id>, user:all, or role principals. Agent keys can outlive their
 	// owner's membership, so the authenticated user id is not trusted directly.
@@ -287,7 +368,30 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}
 
-	return s.pluginSetFor(ctx, authCtx, principals)
+	result, _, err := s.pluginSetFor(ctx, authCtx, principals)
+	return result, err
+}
+
+// pollingEmail resolves the enrolled user's email by credential type. An org
+// install key carries the `agent` scope; a per-user key carries only
+// `agent_user` (agent implies agent_user, never the reverse — see
+// auth.effectiveScopes), so the presence of `agent` distinguishes them. The
+// org key's owner is an admin, so the email it is vouched is required; a
+// per-user key's owner is the enrolled user and any vouched email is ignored.
+func pollingEmail(authCtx *contextvalues.AuthContext, vouched string) (string, error) {
+	var email string
+	if slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String()) {
+		email = conv.NormalizeEmail(vouched)
+		if email == "" {
+			return "", oops.E(oops.CodeBadRequest, nil, "a vouched email is required when authenticating with an org-scoped agent install key; send it in the Gram-User-Email header")
+		}
+	} else if authCtx.Email != nil {
+		email = conv.NormalizeEmail(*authCtx.Email)
+	}
+	if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email); err != nil {
+		return "", oops.E(oops.CodeBadRequest, err, "invalid email")
+	}
+	return email, nil
 }
 
 // getAgentPlugins resolves plugins for an agent-principal key: the agent, the
@@ -312,16 +416,108 @@ func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.Au
 	}
 	principals := append([]string{canonical.String(), urn.PrincipalWildcard}, rolePrincipals...)
 
-	result, err := s.pluginSetFor(ctx, authCtx, principals)
+	result, rows, err := s.pluginSetFor(ctx, authCtx, principals)
 	if err != nil {
 		return nil, err
 	}
+	servers, err := s.agentMCPServers(ctx, rows)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent MCP servers").LogError(ctx, s.logger)
+	}
+	mv.AttachAgentMCPServers(result, servers)
 	mv.AttachAgentPrincipal(result, &gen.AgentPollingPrincipal{Urn: canonical.String(), DisplayName: agent.Name})
 	return result, nil
 }
 
+// agentMCPServers lists the Speakeasy-hosted servers in the plugins delivered to
+// an agent, once each. `available` plugins are skipped: nobody on an agent's
+// machine can turn them on.
+func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPluginSetRow) ([]*gen.AgentMCPServer, error) {
+	var projectIDs []uuid.UUID
+	pluginsByProject := make(map[uuid.UUID][]uuid.UUID)
+	for _, row := range mv.DeliveredAgentPluginRows(rows) {
+		if installmode.FromStored(row.PluginInstallMode) == installmode.Available {
+			continue
+		}
+		if _, seen := pluginsByProject[row.ProjectID]; !seen {
+			projectIDs = append(projectIDs, row.ProjectID)
+		}
+		pluginsByProject[row.ProjectID] = append(pluginsByProject[row.ProjectID], row.PluginID.UUID)
+	}
+
+	var candidates []plugins.DeviceMCPServer
+	listedURLs := make(map[string]bool)
+	for _, projectID := range projectIDs {
+		projectServers, err := plugins.ListDeviceMCPServers(ctx, s.logger, s.db, s.serverURL, projectID, pluginsByProject[projectID])
+		if err != nil {
+			return nil, fmt.Errorf("list plugin MCP servers: %w", err)
+		}
+		for _, server := range projectServers {
+			if !listedURLs[server.URL] {
+				listedURLs[server.URL] = true
+				candidates = append(candidates, server)
+			}
+		}
+	}
+
+	// The device keys ownership by name, so suffixes are assigned in name and
+	// URL order: a server keeps its name however plugins and projects are
+	// arranged, and only a new server sharing its name can renumber it.
+	slices.SortFunc(candidates, func(a, b plugins.DeviceMCPServer) int {
+		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.URL, b.URL))
+	})
+	// Every natural name is reserved up front, so a suffix never claims a name
+	// another server already has on its own (`speakeasy-linear-2`).
+	naturalNames := make(map[string]bool, len(candidates))
+	for _, server := range candidates {
+		naturalNames[server.Name] = true
+	}
+	servers := make([]*gen.AgentMCPServer, 0, len(candidates))
+	takenNames := make(map[string]bool, len(candidates))
+	for _, server := range candidates {
+		name := server.Name
+		for suffix := 2; takenNames[name]; suffix++ {
+			candidate := fmt.Sprintf("%s-%d", server.Name, suffix)
+			if !naturalNames[candidate] {
+				name = candidate
+			}
+		}
+		takenNames[name] = true
+		entry := &gen.AgentMCPServer{Name: name, URL: server.URL, Tools: nil, TokenEndpoint: nil, Audience: nil, Resource: nil}
+		if err := s.attachWorkloadTokenTarget(ctx, entry); err != nil {
+			return nil, err
+		}
+		servers = append(servers, entry)
+	}
+	return servers, nil
+}
+
+// attachWorkloadTokenTarget fills the entry's token fields. Servers no workload
+// grant reaches stay listed so the device can remove entries it wrote before.
+func (s *Service) attachWorkloadTokenTarget(ctx context.Context, entry *gen.AgentMCPServer) error {
+	if s.workloadTokens == nil {
+		return nil
+	}
+	target, ok, err := s.workloadTokens.WorkloadTokenTargetFor(ctx, entry.URL)
+	if err != nil {
+		return fmt.Errorf("resolve workload token target: %w", err)
+	}
+	if !ok {
+		s.logger.DebugContext(ctx, "plugin MCP server offers no workload grant; a workload cannot reach it headless",
+			attr.SlogURL(entry.URL),
+		)
+		return nil
+	}
+	entry.TokenEndpoint = &target.TokenEndpoint
+	entry.Audience = &target.Audience
+	if target.Resource != "" {
+		entry.Resource = &target.Resource
+	}
+	return nil
+}
+
 // pluginSetFor builds the poll response for an already-resolved principal set.
-func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, error) {
+func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, []repo.GetAgentPluginSetRow, error) {
 	var (
 		rows                   []repo.GetAgentPluginSetRow
 		configurationRow       repo.DeviceAgentConfiguration
@@ -371,7 +567,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		return nil
 	})
 	if err := group.Wait(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent policy").LogError(ctx, s.logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "error resolving agent policy").LogError(ctx, s.logger)
 	}
 
 	base := strings.TrimRight(s.serverURL, "/")
@@ -379,12 +575,21 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		return base + marketplace.RoutePrefix + token + ".git"
 	}
 
-	result := mv.BuildAgentPluginsView(rows, marketplaceURL)
+	// Server lists are display metadata: trouble reading them must not block
+	// plugin delivery. A nil map leaves every plugin's list off, which the
+	// agent renders as it did before plugins listed their servers.
+	servers, err := s.pluginServers(ctx, authCtx.ActiveOrganizationID, principals, rows)
+	if err != nil {
+		s.logger.WarnContext(ctx, "plugin servers unavailable; plugin poll omits server lists", attr.SlogError(err))
+		servers = nil
+	}
+
+	result := mv.BuildAgentPluginsView(rows, marketplaceURL, servers)
 	configuration := defaultDeviceAgentConfigurationView()
 	if hasConfiguration {
 		built, err := buildDeviceAgentConfigurationView(configurationRow)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error decoding agent configuration").LogError(ctx, s.logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "error decoding agent configuration").LogError(ctx, s.logger)
 		}
 		configuration = built
 	}
@@ -399,7 +604,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	attachDeviceAgentConfiguration(result, configuration)
 	attachOrganizationGatewayURL(result, organizationGatewayURL)
 
-	return result, nil
+	return result, rows, nil
 }
 
 // optionalOrganizationGatewayURL keeps this additive display metadata from

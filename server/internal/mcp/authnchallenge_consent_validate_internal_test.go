@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -48,7 +49,7 @@ func TestClassifyProbe(t *testing.T) {
 		if tc.expired {
 			ctx = expired
 		}
-		rt := &memberRoundTripper{build: nil, deadline: time.Time{}, closeFloor: 0, mu: sync.Mutex{}, rejected: tc.rejected, lastStatus: tc.lastStatus}
+		rt := &memberRoundTripper{memberAttempt: &memberAttempt{build: nil, mu: sync.Mutex{}, rejected: tc.rejected, lastStatus: tc.lastStatus, lastErr: nil, refused: false, sentCall: false}, deadline: time.Time{}, closeFloor: 0, sessionMu: sync.Mutex{}, initialSessionID: "", deleteAttempted: false}
 		outcome, reason := classifyProbe(ctx, rt, tc.err, "linear")
 		require.Equal(t, tc.outcome, outcome, tc.name)
 		require.Equal(t, tc.reason, reason, tc.name)
@@ -196,7 +197,7 @@ func renderValidationCard(t *testing.T, card remoteSessionCard) string {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:         "Speakeasy",
 		MCPSlug:            "example",
-		MCPRouteBase:       "mcp",
+		MCPRouteBase:       mcproute.MCP,
 		State:              "state",
 		CSRFToken:          "csrf",
 		SubjectDisplay:     "user@example.com",

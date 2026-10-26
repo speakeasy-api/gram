@@ -29,6 +29,7 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -393,7 +394,7 @@ func TestHandleAuthorize_InvalidClientID_ReturnsError(t *testing.T) {
 	err := ti.service.HandleAuthorize(w, req)
 	require.NoError(t, err) // error written to response body, not returned
 
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, http.StatusBadRequest, w.Code)
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Equal(t, "invalid_client", body["error"])
@@ -506,7 +507,7 @@ func serveConsentMCPRequest(
 ) *httptest.ResponseRecorder {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, "/"+endpoint.RouteBase+"/"+endpoint.Slug+"/connect/mcp", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/"+endpoint.RouteBase.String()+"/"+endpoint.Slug+"/connect/mcp", strings.NewReader(body))
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Gram-Consent-State", stateID)
@@ -1101,7 +1102,7 @@ func TestHandleIDPCallback_UsesBaseURLFromCachedState(t *testing.T) {
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 			BaseURL:        customDomainBaseURL,
-			RouteBase:      "mcp",
+			RouteBase:      mcproute.MCP,
 		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
@@ -1405,48 +1406,62 @@ func TestHandleIDPCallback_MissingCode_ReturnsError(t *testing.T) {
 	require.Contains(t, err.Error(), "code is required")
 }
 
-func TestHandleIDPCallback_ExchangeFailure_ReturnsUnauthorized(t *testing.T) {
+func TestHandleIDPCallback_ExchangeErrors(t *testing.T) {
 	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		err  error
+		code oops.Code
+	}{
+		{name: "outage", err: fmt.Errorf("IDP token exchange failed"), code: oops.CodeUnavailable},
+		{name: "rejected", err: fmt.Errorf("invalid code: %w", identity.ErrCodeRejected), code: oops.CodeBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	mock := &mockIdentityResolver{
-		exchangeErr: fmt.Errorf("IDP token exchange failed"),
+			mock := &mockIdentityResolver{
+				exchangeErr: tc.err,
+			}
+
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+			toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+			challengeID := uuid.NewString()
+			err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+				ID:                  challengeID,
+				UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+				Endpoint: mcp.EndpointRef{
+					McpSlug:        toolset.McpSlug.String,
+					CustomDomainID: toolset.CustomDomainID,
+				},
+				ClientID:            "test-client",
+				RedirectURI:         "http://localhost:3000/callback",
+				CodeChallenge:       "abc",
+				CodeChallengeMethod: "S256",
+				CSRFToken:           "csrf-token",
+				CreatedAt:           time.Now(),
+			})
+			require.NoError(t, err)
+
+			mcpSlug := toolset.McpSlug.String
+			q := url.Values{
+				"state": {challengeID},
+				"code":  {"bad-code"},
+			}
+			req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/idp_callback?"+q.Encode(), nil)
+
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("mcpSlug", mcpSlug)
+			req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+			w := httptest.NewRecorder()
+			err = ti.service.HandleIDPCallback(w, req)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "failed to exchange IDP code")
+			requireOopsCode(t, err, tc.code)
+			require.Empty(t, w.Header().Get("WWW-Authenticate"))
+		})
 	}
-
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-
-	challengeID := uuid.NewString()
-	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
-		ID:                  challengeID,
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
-		},
-		ClientID:            "test-client",
-		RedirectURI:         "http://localhost:3000/callback",
-		CodeChallenge:       "abc",
-		CodeChallengeMethod: "S256",
-		CSRFToken:           "csrf-token",
-		CreatedAt:           time.Now(),
-	})
-	require.NoError(t, err)
-
-	mcpSlug := toolset.McpSlug.String
-	q := url.Values{
-		"state": {challengeID},
-		"code":  {"bad-code"},
-	}
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/idp_callback?"+q.Encode(), nil)
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", mcpSlug)
-	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
-
-	w := httptest.NewRecorder()
-	err = ti.service.HandleIDPCallback(w, req)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to exchange IDP code")
 }
 
 // dcrPublicClientBody is a minimal RFC 7591 registration request for a
@@ -1619,7 +1634,7 @@ func seedModernConsentChallenge(
 		ID:                  stateID,
 		UserSessionIssuerID: issuerID,
 		Endpoint: mcp.EndpointRef{
-			RouteBase:   "mcp",
+			RouteBase:   mcproute.MCP,
 			McpSlug:     endpointSlug,
 			McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
 		},

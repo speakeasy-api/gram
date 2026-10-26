@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ShadowMCPDispositionPicker } from "@/components/shadow-mcp/ShadowMCPDispositionPicker";
@@ -85,6 +86,7 @@ import {
 } from "./PolicyStart";
 import {
   clearPolicyStartSession,
+  supportsPolicyEditing,
   invalidEmailDomains,
   draftMCPScopeValue,
   type PolicyDraft,
@@ -108,6 +110,7 @@ import {
   type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
+import { ApprovalPolicyEditor } from "./ApprovalPolicyEditor";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
@@ -150,6 +153,7 @@ import {
   allCategories,
   categoriesToPayload,
   categoryLevelDetectors,
+  detectionPolicyAction,
   mcpCompatibleAction,
   normalizeCategoriesForMode,
   parseApprovedEmailDomains,
@@ -259,6 +263,7 @@ const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
   warn: "Warn",
   block: "Block",
   quarantine: "Quarantine",
+  require_approval: "Require approval",
 };
 
 // Mock title summarization from the guardrail prompt (a real impl would use the
@@ -283,7 +288,48 @@ export default function PolicyDetail(): JSX.Element {
 
 /** The editor a stored policy opens in. Shadow AI is a presentation of the
  *  blocking Shadow MCP policy, so that policy opens the Shadow AI editor. */
-function PolicyEditorFor({ policy }: { policy: RiskPolicy }): JSX.Element {
+export function PolicyEditorFor({
+  policy,
+}: {
+  policy: RiskPolicy;
+}): JSX.Element {
+  if (policy.action === "require_approval") {
+    return <ApprovalPolicyEditor policy={policy} />;
+  }
+  if (!supportsPolicyEditing(policy))
+    return (
+      <Stack gap={6}>
+        <Page.Section.Title>{policy.name}</Page.Section.Title>
+        {policy.prompt && (
+          <Text className="whitespace-pre-wrap">{policy.prompt}</Text>
+        )}
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <dt className="text-eyebrow">Action</dt>
+            <dd>
+              {enumPresentation(POLICY_ACTION_LABEL, policy.action, "Unknown")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-eyebrow">Status</dt>
+            <dd>{policy.enabled ? "Enabled" : "Disabled"}</dd>
+          </div>
+        </dl>
+        <Alert>
+          <AlertDescription>
+            This policy uses settings this dashboard cannot safely edit. Refresh
+            the page to check for an update.
+          </AlertDescription>
+        </Alert>
+        <Button
+          variant="secondary"
+          className="self-start"
+          onClick={() => window.location.reload()}
+        >
+          <Button.Text>Refresh page</Button.Text>
+        </Button>
+      </Stack>
+    );
   if (policy.policyType === "prompt_based") {
     return <PromptPolicyEditor policy={policy} />;
   }
@@ -346,6 +392,7 @@ function NewPolicyFrame({ children }: { children: ReactNode }): JSX.Element {
 
 function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
+  const toolApprovals = useFeatureFlag(FEATURE_FLAGS.toolApprovals).status;
   const [category] = useQueryState("category");
   const location = useLocation();
   const draft = readPolicyDraft(location.state);
@@ -380,6 +427,17 @@ function PolicyNewContent(): JSX.Element {
     return (
       <NewPolicyFrame>
         <ShadowAIPolicyEditor policy={null} />
+      </NewPolicyFrame>
+    );
+  }
+  // With the flag off, a stale link to the approval editor opens the chooser.
+  if (
+    kind === "approval" &&
+    (toolApprovals === "enabled" || toolApprovals === "loading")
+  ) {
+    return (
+      <NewPolicyFrame>
+        <ApprovalPolicyEditor policy={null} />
       </NewPolicyFrame>
     );
   }
@@ -427,7 +485,9 @@ function PromptPolicyEditor({
     policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [action, setAction] = useState<PolicyAction>(() => {
-    const initial = policy?.action ?? draft?.action ?? "flag";
+    const initial = detectionPolicyAction(
+      policy?.action ?? draft?.action ?? "flag",
+    );
     return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
   });
   const updateMCPScope = (next: PolicyMCPScopeValue) => {
@@ -1630,7 +1690,7 @@ export const LLM_ANALYZER_NOTICE =
 
 function LlmAnalyzerNotice(): JSX.Element {
   return (
-    <Alert variant="info" alignTop>
+    <Alert variant="info">
       <AlertDescription>{LLM_ANALYZER_NOTICE}</AlertDescription>
     </Alert>
   );

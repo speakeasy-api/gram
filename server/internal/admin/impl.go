@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -62,6 +64,7 @@ import (
 )
 
 type Service struct {
+	catalogPromotion     *catalogpromotion.Service
 	registry             *mcpregistry.Service
 	remoteSessions       *remotesessions.Service
 	assets               *assets.Service
@@ -110,9 +113,14 @@ type Service struct {
 	supportCoverage SupportCoverageReader
 	mcpServerHealth MCPServerHealthReader
 	hookClients     HookClientsReader
-	// hookClientsCache keeps the fleet-wide grids for an hour, since each
+	// deviceAgentVersions feeds the device agent grid on the same page.
+	deviceAgentVersions DeviceAgentVersionsReader
+	// hookClientsCache keeps the fleet-wide grids for a day, since each
 	// read scans weeks of telemetry.
 	hookClientsCache cache.TypedCacheObject[hookClientsSnapshot]
+	// hookClientsRefreshing holds the windows with a background refresh in
+	// flight on this replica.
+	hookClientsRefreshing *sync.Map
 
 	// externalMCPMigrator lists and migrates external-MCP-backed servers. Nil
 	// leaves those methods unavailable.
@@ -245,7 +253,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{catalogPromotion: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -270,11 +278,13 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:           trialNotifier,
-		billing:         billing,
-		supportCoverage: supportCoverage,
-		mcpServerHealth: mcpServerHealth,
-		hookClients:     nil,
+		trial:                 trialNotifier,
+		billing:               billing,
+		supportCoverage:       supportCoverage,
+		mcpServerHealth:       mcpServerHealth,
+		hookClients:           nil,
+		deviceAgentVersions:   nil,
+		hookClientsRefreshing: &sync.Map{},
 		hookClientsCache: cache.NewTypedObjectCache[hookClientsSnapshot](
 			logger.With(attr.SlogCacheNamespace("admin_hook_clients")),
 			adminCache,
@@ -310,7 +320,7 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled,
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
 		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
-		DeviceAgent: snapshot.DeviceAgent,
+		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
 	}
 }
 
@@ -487,6 +497,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
 	server.ListRegistryEntries = service.preauthorizeAdmin(server.ListRegistryEntries)
 	server.GetRegistryEntry = service.preauthorizeAdmin(server.GetRegistryEntry)
+	server.ListRegistryPromotionCandidates = service.preauthorizeAdmin(server.ListRegistryPromotionCandidates)
+	server.GetRegistryPromotionCandidate = service.strictAdminJSON(server.GetRegistryPromotionCandidate, func() any { return new(adminserver.GetRegistryPromotionCandidateRequestBody) })
+	server.RetryRegistryPromotionDocs = service.strictAdminJSON(server.RetryRegistryPromotionDocs, func() any { return new(adminserver.RetryRegistryPromotionDocsRequestBody) })
+	server.CurateRegistryPromotionCandidate = service.strictAdminJSON(server.CurateRegistryPromotionCandidate, func() any { return new(adminserver.CurateRegistryPromotionCandidateRequestBody) })
+	server.PromoteRegistryCandidate = service.strictAdminJSON(server.PromoteRegistryCandidate, func() any { return new(adminserver.PromoteRegistryCandidateRequestBody) })
 	server.CreateRegistryEntry = service.strictAdminJSONLimit(server.CreateRegistryEntry, func() any { return new(adminserver.CreateRegistryEntryRequestBody) }, 16<<20)
 	server.SaveRegistryEntry = service.strictAdminJSONLimit(server.SaveRegistryEntry, func() any { return new(adminserver.SaveRegistryEntryRequestBody) }, 16<<20)
 	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
@@ -494,6 +509,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
 	server.CreateSignupOffer = service.strictAdminJSON(server.CreateSignupOffer, func() any { return new(adminserver.CreateSignupOfferRequestBody) })
 	server.UpdateSignupOffer = service.strictAdminJSON(server.UpdateSignupOffer, func() any { return new(adminserver.UpdateSignupOfferRequestBody) })
+	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
+	server.GetUpstreamOAuthMigrationStatus = service.preauthorizeAdmin(server.GetUpstreamOAuthMigrationStatus)
+	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
+	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
+	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
 	adminserver.Mount(mux, server)
 
 }
@@ -1599,6 +1619,9 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision organization access defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
+	}
+	if err := authz.SeedPersonalAuthClientDefaultTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision auth client defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {

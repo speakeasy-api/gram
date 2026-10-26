@@ -15,10 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 )
 
-// EnrichViews fills each view's toolset summary, primary endpoint and platform
-// endpoint slug in two queries, whatever the number of servers. views[i] must
-// be servers[i]'s view. A failed query is logged and leaves its fields empty;
-// endpointsResolved reports whether the endpoint fields could be read.
+// EnrichViews fills each view's toolset summary, primary endpoint, platform
+// endpoint slug and has_endpoint in up to four queries, whatever the number of
+// servers. views[i] must be servers[i]'s view. A failed query is logged and
+// leaves its fields empty; endpointsResolved reports whether the primary and
+// platform endpoint fields could be read.
 func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, organizationID string, servers []repo.McpServer, views []*types.McpServer) (endpointsResolved bool) {
 	if len(servers) == 0 {
 		return true
@@ -60,6 +61,26 @@ func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ser
 			summaries[row.ID] = mv.BuildMcpServerToolsetSummaryView(row)
 		}
 	}
+	if len(summaries) > 0 {
+		toolsetIDs := make([]uuid.UUID, 0, len(summaries))
+		for id := range summaries {
+			toolsetIDs = append(toolsetIDs, id)
+		}
+		// Kept apart from the summary query so a failed endpoint read never drops a summary.
+		hosts, err := repo.New(db).ListToolsetHostingMCPServerIDs(ctx, repo.ListToolsetHostingMCPServerIDsParams{
+			OrganizationID: organizationID,
+			ToolsetIds:     toolsetIDs,
+			ProjectIds:     projectIDs,
+		})
+		if err != nil {
+			logger.WarnContext(ctx, "list toolset hosting mcp servers", attr.SlogError(err))
+		}
+		for _, host := range hosts {
+			if summary, ok := summaries[host.ToolsetID]; ok {
+				summary.HostingMcpServerID = new(host.McpServerID.String())
+			}
+		}
+	}
 
 	base := ""
 	if serverURL != nil {
@@ -69,10 +90,26 @@ func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ser
 	if err != nil {
 		logger.WarnContext(ctx, "list mcp server primary endpoints", attr.SlogError(err))
 	}
+	withEndpoints, endpointsErr := repo.New(db).ListMCPServerIDsWithEndpoints(ctx, repo.ListMCPServerIDsWithEndpointsParams{
+		OrganizationID: organizationID,
+		ProjectIds:     projectIDs,
+		McpServerIds:   serverIDs,
+	})
+	if endpointsErr != nil {
+		logger.WarnContext(ctx, "list mcp servers with endpoints", attr.SlogError(endpointsErr))
+	}
+	hasEndpoint := make(map[uuid.UUID]struct{}, len(withEndpoints))
+	for _, id := range withEndpoints {
+		hasEndpoint[id] = struct{}{}
+	}
 
 	for i, server := range servers {
 		if server.ToolsetID.Valid {
 			views[i].Toolset = summaries[server.ToolsetID.UUID]
+		}
+		if endpointsErr == nil {
+			_, has := hasEndpoint[server.ID]
+			views[i].HasEndpoint = new(has)
 		}
 		primary, ok := primaries[server.ID]
 		if !ok {

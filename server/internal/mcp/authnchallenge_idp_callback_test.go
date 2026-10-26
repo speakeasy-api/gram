@@ -129,8 +129,45 @@ func TestHandleIDPCallback_WorkOSRejectedOnPerClientPath(t *testing.T) {
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
 	require.Empty(t, mock.calls, "no code exchange on a per-client path")
 	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+challengeID)
 	require.NoError(t, err, "a mismatched route does not consume the challenge")
+}
+
+// A challenge cached on the retired /x/mcp surface is refused before any code exchange.
+func TestHandleIDPCallback_RetiredRouteBaseRejected(t *testing.T) {
+	t.Parallel()
+
+	mock := memberMock()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	challengeID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  challengeID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+			RouteBase:      "x/mcp",
+		},
+		ClientID:            "test-client",
+		RedirectURI:         "http://localhost:3000/callback",
+		State:               "client-state",
+		CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
+		CreatedAt:           time.Now(),
+	}))
+
+	q := url.Values{"state": {challengeID}, "code": {"idp-auth-code"}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?"+q.Encode(), nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	err := ti.service.HandleIDPCallback(w, req)
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.Empty(t, mock.calls, "no code exchange for a retired route")
+	require.Empty(t, w.Header().Get("Location"))
 }

@@ -404,3 +404,7 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING id;
+
+-- name: GetCustomDomainByDomainAndOrganization :one
+SELECT * FROM custom_domains
+WHERE domain = @domain AND organization_id = @organization_id AND deleted IS FALSE;

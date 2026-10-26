@@ -26,8 +26,8 @@ import {
 import { useMemo, useState, type JSX, type ReactNode } from "react";
 
 import {
-  DISPOSITION_COPY,
   DISPOSITIONS,
+  dispositionCopy,
   fuzzyMatch,
   indexServers,
   serverHandle,
@@ -419,9 +419,11 @@ function toolLimitText(limit: ToolLimit): string {
         ? "1 tool"
         : `${limit.tools.length} tools`;
     case "annotations": {
-      const labels = DISPOSITIONS.filter((d) =>
-        limit.dispositions.includes(d),
-      ).map((d) => DISPOSITION_COPY[d].label);
+      const selected = new Set(limit.dispositions);
+      const ordered = DISPOSITIONS.filter((value) => selected.delete(value));
+      const labels = [...ordered, ...selected].map(
+        (d) => dispositionCopy(d).label,
+      );
       if (labels.length === 0) return "No tools";
       return `${labels.join(", ")} tools`;
     }
@@ -736,7 +738,7 @@ function McpMatrix({
       )}
 
       {inventory.isError && (
-        <Alert variant="error" alignTop className="m-4 text-sm">
+        <Alert variant="error" className="m-4 text-sm">
           <span className="flex flex-wrap items-center gap-2">
             Could not load this organization&rsquo;s MCP servers.
             <Button variant="tertiary" size="xs" onClick={inventory.refetch}>
@@ -963,7 +965,7 @@ function describeOtherRule(
   const parts = [where];
   if (s.tool) parts.push(`the ${s.tool} tool`);
   if (s.disposition) {
-    parts.push(`${DISPOSITION_COPY[s.disposition].label.toLowerCase()} tools`);
+    parts.push(`${dispositionCopy(s.disposition).label.toLowerCase()} tools`);
   }
   if (s.serverUrl) parts.push(s.serverUrl);
   const verb = rule.blocked ? "Blocks" : "Allows";
@@ -1226,6 +1228,7 @@ function PlatformMatrix({
                 <AppliesTo
                   grants={grants}
                   defs={[scope]}
+                  permissionLabel={copy.label}
                   resourceType={area.resourceType}
                   projects={projects}
                   onEditRule={onEditRule}
@@ -1246,6 +1249,7 @@ function PlatformMatrix({
  * own remove button, since the Blocked column only blocks everywhere.
  */
 function AppliesTo({
+  permissionLabel,
   grants,
   defs,
   resourceType,
@@ -1253,6 +1257,7 @@ function AppliesTo({
   onEditRule,
   onRemoveRule,
 }: {
+  permissionLabel?: string;
   grants: Grants;
   defs: (ScopeDefinition | undefined)[];
   resourceType: ScopeDefinition["resourceType"];
@@ -1268,7 +1273,7 @@ function AppliesTo({
       scope: def.slug as Scope,
       index,
       blocked: rule.effect === "deny",
-      level: position === 0 ? "View" : "Manage",
+      level: permissionLabel ?? (position === 0 ? "View" : "Manage"),
       label: computeRuleLabel(rule.selectors, type, projects),
       everywhere: rule.selectors === null,
     }));

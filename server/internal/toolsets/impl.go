@@ -33,7 +33,6 @@ import (
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -76,7 +75,6 @@ type Service struct {
 	pluginsGitHubEnabled     bool
 	networkAccessEligibility networkaccess.EligibilityChecker
 	publicationRequests      plugins.PublicationRequests
-	features                 feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -116,23 +114,7 @@ func NewService(
 		pluginsGitHubEnabled:     pluginsGitHubEnabled,
 		networkAccessEligibility: networkaccess.DenyAllChecker{},
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
-		features:                 nil,
 	}
-}
-
-// WithFeatureProvider sets the provider for hosted MCP write rollout gates; without one, writes keep the toolset key.
-func (s *Service) WithFeatureProvider(provider feature.Provider) *Service {
-	s.features = provider
-	return s
-}
-
-// hostedServerKeyWrites reports whether this organization's hosted writes use the canonical server key; errors keep the toolset key.
-func (s *Service) hostedServerKeyWrites(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-	}
-	return enabled
 }
 
 func (s *Service) WithNetworkAccessEligibility(checker networkaccess.EligibilityChecker) *Service {
@@ -171,8 +153,6 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	logger := s.logger
 
-	// Resolved before the transaction so flag latency never holds its locks.
-	serverKey := s.hostedServerKeyWrites(ctx, authCtx)
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing toolsets").LogError(ctx, logger)
@@ -199,7 +179,6 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		OriginRegistrySpecifier: originRegistrySpecifier,
 		ToolURNs:                payload.ToolUrns,
 		ResourceURNs:            payload.ResourceUrns,
-		HostedServerKey:         serverKey,
 	})
 	if err != nil {
 		return nil, err
@@ -223,8 +202,8 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	return toolsetDetails, nil
 }
 
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string, serverKey bool) (bool, error) {
-	return attachToDefaultPluginInTransaction(ctx, dbtx, s.logger, s.audit, authCtx, toolsetID, displayName, serverKey)
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
+	return attachToDefaultPluginInTransaction(ctx, dbtx, s.logger, s.audit, authCtx, toolsetID, displayName)
 }
 
 // triggerPluginPublish enqueues the marketplace publish for the project whose
@@ -481,8 +460,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
-	// Resolved before the transaction so flag latency never holds its locks.
-	serverKey := s.hostedServerKeyWrites(ctx, authCtx)
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing toolsets").LogError(ctx, logger)
@@ -561,7 +538,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 	updateParams.McpSlug, updateParams.CustomDomainID = mcpSlug, customDomainID
 	if payload.McpIsPublic != nil {
-		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid || existingToolset.OauthProxyServerID.Valid
+		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid
 		if (existingToolset.McpIsPublic != *payload.McpIsPublic) && oAuthIsAttached {
 			_, err := tr.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
 				ProjectID: existingToolset.ProjectID,
@@ -624,7 +601,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	var pluginCreated bool
 	if !existingToolset.McpEnabled && updatedToolset.McpEnabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name, serverKey)
+		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -766,21 +743,10 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset").LogError(ctx, logger)
 	}
 
-	if err := tr.DeleteAssistantToolsetsByToolset(ctx, repo.DeleteAssistantToolsetsByToolsetParams{
-		ToolsetID: deleted.ID,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to detach assistant toolsets").LogError(ctx, logger)
-	}
 	hostedDeleted, err := s.deleteHostedServer(ctx, dbtx, authCtx, toDelete)
 	if err != nil {
 		return err
 	}
-	detached, err := detachToolsetPluginServers(ctx, dbtx, s.audit, authCtx, deleted.ID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to detach toolset plugin servers").LogError(ctx, logger)
-	}
-	carried = carried || (toDelete.McpEnabled && detached > 0)
 	if carried {
 		if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, logger)

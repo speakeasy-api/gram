@@ -20,6 +20,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -40,7 +41,7 @@ func seedCanonicalHostedServer(t *testing.T, ctx context.Context, conn *pgxpool.
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, toolsetsrepo.New(conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
+	require.NoError(t, testrepo.New(conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
 		CustomDomainID: customDomainID,
 		Slug:           slug,
 		ProjectID:      projectID,

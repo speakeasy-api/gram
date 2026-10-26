@@ -168,6 +168,7 @@ export function delegableGrantKey(form: AgentPolicyGrantForm): string {
   // treats a shared key as one grant — the duplicate check, the diff, and the
   // per-candidate editor state.
   return JSON.stringify([
+    form.effect,
     form.scope,
     Object.keys(selector)
       .filter((key) => selector[key] !== undefined)

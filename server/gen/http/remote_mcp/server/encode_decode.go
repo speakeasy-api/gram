@@ -3768,10 +3768,12 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		ToolsetID:             v.ToolsetID,
 		UnproxiedMcpServerID:  v.UnproxiedMcpServerID,
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
+		BuiltinBackend:        v.BuiltinBackend,
 		Visibility:            string(v.Visibility),
 		NetworkAccessMode:     string(v.NetworkAccessMode),
 		PrimaryEndpointID:     v.PrimaryEndpointID,
 		PrimaryEndpointURL:    v.PrimaryEndpointURL,
+		HasEndpoint:           v.HasEndpoint,
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,
 	}
@@ -3793,11 +3795,13 @@ func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v 
 		ID:                    v.ID,
 		Slug:                  v.Slug,
 		Name:                  v.Name,
+		Description:           v.Description,
 		ToolCount:             v.ToolCount,
 		ToolSelectionMode:     v.ToolSelectionMode,
 		ExternalMcpProxyOnly:  v.ExternalMcpProxyOnly,
 		ExternalOauthServerID: v.ExternalOauthServerID,
 		RegistrySpecifier:     v.RegistrySpecifier,
+		HostingMcpServerID:    v.HostingMcpServerID,
 	}
 	if v.ExternalMcpSlugs != nil {
 		res.ExternalMcpSlugs = make([]string, len(v.ExternalMcpSlugs))
