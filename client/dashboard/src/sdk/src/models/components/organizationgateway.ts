@@ -11,6 +11,21 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * The discovery mode the gateway serves connections that do not choose one at sign-in. Set whether or not the gateway is available.
+ */
+export const OrganizationGatewayDiscoveryMode = {
+  Progressive: "progressive",
+  Direct: "direct",
+  CodeMode: "code_mode",
+} as const;
+/**
+ * The discovery mode the gateway serves connections that do not choose one at sign-in. Set whether or not the gateway is available.
+ */
+export type OrganizationGatewayDiscoveryMode = OpenEnum<
+  typeof OrganizationGatewayDiscoveryMode
+>;
+
+/**
  * Why the gateway is not served. Set only when not available.
  */
 export const OrganizationGatewayUnavailableReason = {
@@ -36,6 +51,14 @@ export type OrganizationGateway = {
    */
   available: boolean;
   /**
+   * Whether the organization can select Code Mode now: the code runtime is available and the organization has Code Mode. While false, a code_mode default serves Progressive.
+   */
+  codeModeEnabled: boolean;
+  /**
+   * The discovery mode the gateway serves connections that do not choose one at sign-in. Set whether or not the gateway is available.
+   */
+  discoveryMode: OrganizationGatewayDiscoveryMode;
+  /**
    * Why the gateway is not served. Set only when not available.
    */
   unavailableReason?: OrganizationGatewayUnavailableReason | undefined;
@@ -44,6 +67,12 @@ export type OrganizationGateway = {
    */
   url?: string | undefined;
 };
+
+/** @internal */
+export const OrganizationGatewayDiscoveryMode$inboundSchema: z.ZodMiniType<
+  OrganizationGatewayDiscoveryMode,
+  unknown
+> = openEnums.inboundSchema(OrganizationGatewayDiscoveryMode);
 
 /** @internal */
 export const OrganizationGatewayUnavailableReason$inboundSchema: z.ZodMiniType<
@@ -58,6 +87,8 @@ export const OrganizationGateway$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     available: z.boolean(),
+    code_mode_enabled: z.boolean(),
+    discovery_mode: OrganizationGatewayDiscoveryMode$inboundSchema,
     unavailable_reason: z.optional(
       OrganizationGatewayUnavailableReason$inboundSchema,
     ),
@@ -65,6 +96,8 @@ export const OrganizationGateway$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "code_mode_enabled": "codeModeEnabled",
+      "discovery_mode": "discoveryMode",
       "unavailable_reason": "unavailableReason",
     });
   }),

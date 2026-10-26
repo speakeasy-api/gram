@@ -492,6 +492,7 @@ trackedFiles:
   src/funcs/organizationsRevokeMemberSignIns.ts: {}
   src/funcs/organizationsSendEnterpriseAdminOnboardingEmail.ts: {}
   src/funcs/organizationsSendInvite.ts: {}
+  src/funcs/organizationsSetGatewayDiscoveryMode.ts: {}
   src/funcs/organizationsSubmitOnboardingSurvey.ts: {}
   src/funcs/organizationsUpdateInviteRole.ts: {}
   src/funcs/organizationsUpdateSetupTask.ts: {}
@@ -1845,6 +1846,7 @@ trackedFiles:
   src/models/components/setdirectoryrolemappingsform.ts: {}
   src/models/components/setemaprovidersrequestbody.ts: {}
   src/models/components/setenabledrequestbody.ts: {}
+  src/models/components/setgatewaydiscoverymoderequestbody.ts: {}
   src/models/components/setidentityproviderconnectionsetupmethodrequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
@@ -2859,6 +2861,7 @@ trackedFiles:
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
   src/models/operations/setmcpserverupstreamauthrequirement.ts: {}
   src/models/operations/setmodelproviderkeyenabled.ts: {}
+  src/models/operations/setorganizationgatewaydiscoverymode.ts: {}
   src/models/operations/setorganizationremotesessionissueremaproviders.ts: {}
   src/models/operations/setorganizationusersessionissuerauthenticationhost.ts: {}
   src/models/operations/setorganizationwhitelist.ts: {}
@@ -3948,6 +3951,7 @@ trackedFiles:
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setMcpServerUpstreamAuthRequirement.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
+  src/react-query/setOrganizationGatewayDiscoveryMode.ts: {}
   src/react-query/setOrganizationRemoteSessionIssuerEMAProviders.ts: {}
   src/react-query/setOrganizationUserSessionIssuerAuthenticationHost.ts: {}
   src/react-query/setPluginAssignments.ts: {}
@@ -7791,7 +7795,7 @@ examples:
     speakeasy-default-get-organization-gateway:
       responses:
         "200":
-          application/json: {"available": false}
+          application/json: {"available": false, "code_mode_enabled": false, "discovery_mode": "direct"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -12673,6 +12677,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setOrganizationGatewayDiscoveryMode:
+    speakeasy-default-set-organization-gateway-discovery-mode:
+      requestBody:
+        application/json: {"discovery_mode": "code_mode"}
+      responses:
+        "200":
+          application/json: {"available": false, "code_mode_enabled": false, "discovery_mode": "progressive"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   setOrganizationRemoteSessionIssuerEMAProviders:
     speakeasy-default-set-organization-remote-session-issuer-EMA-providers:
       requestBody:

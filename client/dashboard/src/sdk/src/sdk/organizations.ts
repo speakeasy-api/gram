@@ -17,6 +17,7 @@ import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js
 import { organizationsRevokeMemberSignIns } from "../funcs/organizationsRevokeMemberSignIns.js";
 import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
+import { organizationsSetGatewayDiscoveryMode } from "../funcs/organizationsSetGatewayDiscoveryMode.js";
 import { organizationsSubmitOnboardingSurvey } from "../funcs/organizationsSubmitOnboardingSurvey.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
 import { organizationsUpdateSetupTask } from "../funcs/organizationsUpdateSetupTask.js";
@@ -95,6 +96,10 @@ import {
   SendInviteRequest,
   SendInviteSecurity,
 } from "../models/operations/sendinvite.js";
+import {
+  SetOrganizationGatewayDiscoveryModeRequest,
+  SetOrganizationGatewayDiscoveryModeSecurity,
+} from "../models/operations/setorganizationgatewaydiscoverymode.js";
 import {
   SubmitOnboardingSurveyRequest,
   SubmitOnboardingSurveySecurity,
@@ -213,7 +218,7 @@ export class Organizations extends ClientSDK {
    * getGateway organizations
    *
    * @remarks
-   * Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.
+   * Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer, and the discovery mode it serves connections that do not choose one. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.
    */
   async getGateway(
     request?: GetOrganizationGatewayRequest | undefined,
@@ -392,6 +397,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OrganizationInvitation> {
     return unwrapAsync(organizationsSendInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setGatewayDiscoveryMode organizations
+   *
+   * @remarks
+   * Set the discovery mode the active organization's gateway serves connections that do not choose one at sign-in: progressive, direct, or code_mode. It applies to new connections; existing connections keep their mode until they reconnect. code_mode requires the organization's Code Mode entitlement and an available code runtime. Requires org:admin.
+   */
+  async setGatewayDiscoveryMode(
+    request: SetOrganizationGatewayDiscoveryModeRequest,
+    security?: SetOrganizationGatewayDiscoveryModeSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationGateway> {
+    return unwrapAsync(organizationsSetGatewayDiscoveryMode(
       this,
       request,
       security,
