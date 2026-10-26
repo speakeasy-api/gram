@@ -43,6 +43,13 @@ func isAgentActor(ctx context.Context) bool {
 	return ok
 }
 
+// isAgentKeyActor reports whether an agent principal itself authenticated the
+// request, as with an agent API key, rather than a workload acting for one.
+func isAgentKeyActor(ctx context.Context) bool {
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	return ok && actor.Type == urn.PrincipalTypeAgent
+}
+
 // actingAgentID returns the id of the agent the request acts for, for stamping
 // onto the session's chat row. It reads the server-set actor rather than
 // anything the batch reports, because a client that could name its own agent

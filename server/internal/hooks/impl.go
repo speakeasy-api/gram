@@ -131,6 +131,7 @@ func (s *Service) now() time.Time {
 
 type authorizer interface {
 	Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
+	AuthorizeWithHandlerProjectAccess(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint.
@@ -356,30 +357,49 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 		return s.authorizeWorkloadProject(ctx, key, schema)
 	}
 
+	if schema.Name == constants.ProjectSlugSecuritySchema {
+		// Every method an agent key reaches pairs the key with this scheme, so
+		// the project-scoped hooks check runs here, once the project resolves.
+		authorized, err := s.authorizeHooksProject(ctx, key, schema)
+		if err != nil {
+			return authorized, fmt.Errorf("authorize hooks project: %w", err)
+		}
+		return authorized, nil
+	}
+
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
 	}
-	if !isAgentActor(ctx) {
-		return ctx, nil
-	}
-
-	switch schema.Name {
-	case constants.KeySecurityScheme:
+	if schema.Name == constants.KeySecurityScheme && isAgentActor(ctx) {
 		// Agent-principal keys may only reach the ingestion methods.
 		switch method, _ := ctx.Value(goa.MethodKey).(string); method {
 		case "cursor", "codex", "logs", "metrics":
 		default:
 			return ctx, oops.C(oops.CodeForbidden)
 		}
-	case constants.ProjectSlugSecuritySchema:
-		// Every method an agent key reaches pairs the key with this scheme, so
-		// the project-scoped hooks check runs here, once the project resolves.
-		if err := s.requireAgentHooksIngest(ctx); err != nil {
-			return ctx, err
-		}
 	}
 	return ctx, nil
+}
+
+// authorizeHooksProject resolves Gram-Project for a request whose key has
+// already authenticated. An agent key is held to org:hooks_ingest on the
+// resolved project in place of the project:read gate, which a hooks-only agent
+// does not hold; every other caller keeps the project:read gate.
+func (s *Service) authorizeHooksProject(ctx context.Context, projectSlug string, schema *security.APIKeyScheme) (context.Context, error) {
+	authorize := s.auth.Authorize
+	if isAgentKeyActor(ctx) {
+		authorize = s.auth.AuthorizeWithHandlerProjectAccess
+	}
+	authorized, err := authorize(ctx, projectSlug, schema)
+	if err != nil {
+		return authorized, fmt.Errorf("authorize project: %w", err)
+	}
+	// For an agent key this is the only check binding it to the project.
+	if err := s.requireAgentHooksIngest(authorized); err != nil {
+		return authorized, err
+	}
+	return authorized, nil
 }
 
 // JWTAuth admits a device-agent token on the ingestion methods; the project step
