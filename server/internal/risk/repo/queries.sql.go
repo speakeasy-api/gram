@@ -353,24 +353,6 @@ func (q *Queries) CleanupExpiredMCPFindingEvidenceBatch(ctx context.Context, bat
 	return result.RowsAffected(), nil
 }
 
-const countAllFindings = `-- name: CountAllFindings :one
-SELECT COUNT(*)::BIGINT
-FROM risk_results rr
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND rr.skill_version_id IS NULL
-`
-
-// Project-wide total_count reported with the chat-scoped ListRiskResults
-// page. Skill-anchored rows have no chat, so that listing never returns them.
-func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countAllFindings, projectID)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const countEnabledRegexExclusionsInScope = `-- name: CountEnabledRegexExclusionsInScope :one
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
@@ -393,22 +375,6 @@ type CountEnabledRegexExclusionsInScopeParams struct {
 // optionally excluding the row currently being updated.
 func (q *Queries) CountEnabledRegexExclusionsInScope(ctx context.Context, arg CountEnabledRegexExclusionsInScopeParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countEnabledRegexExclusionsInScope, arg.ProjectID, arg.RiskPolicyID, arg.ExcludeID)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const countFalsePositiveRiskResults = `-- name: CountFalsePositiveRiskResults :one
-SELECT COUNT(*)::BIGINT
-FROM risk_results
-WHERE project_id = $1
-  AND false_positive_at IS NOT NULL
-  AND skill_version_id IS NULL
-`
-
-// Total for ListFalsePositiveRiskResults, which drops skill-anchored rows.
-func (q *Queries) CountFalsePositiveRiskResults(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countFalsePositiveRiskResults, projectID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -2406,25 +2372,6 @@ func (q *Queries) GetRiskPolicyNameIncludingDeleted(ctx context.Context, arg Get
 	return name, err
 }
 
-const getRiskResultFalsePositiveForTest = `-- name: GetRiskResultFalsePositiveForTest :one
-SELECT false_positive_at
-FROM risk_results
-WHERE project_id = $1
-  AND id = $2
-`
-
-type GetRiskResultFalsePositiveForTestParams struct {
-	ProjectID uuid.UUID
-	ID        uuid.UUID
-}
-
-func (q *Queries) GetRiskResultFalsePositiveForTest(ctx context.Context, arg GetRiskResultFalsePositiveForTestParams) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, getRiskResultFalsePositiveForTest, arg.ProjectID, arg.ID)
-	var false_positive_at pgtype.Timestamptz
-	err := row.Scan(&false_positive_at)
-	return false_positive_at, err
-}
-
 const getRiskResultsByIDs = `-- name: GetRiskResultsByIDs :many
 
 SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
@@ -3273,112 +3220,6 @@ func (q *Queries) ListEnabledUnscopedRiskPoliciesByProject(ctx context.Context, 
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listFalsePositiveRiskResults = `-- name: ListFalsePositiveRiskResults :many
-SELECT
-    rr.id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id,
-    rr.source, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
-    rr.confidence, rr.tags, rr.spans, rr.created_at,
-    rr.false_positive_at, rr.false_positive_reason,
-    COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
-    c.title AS chat_title, c.external_user_id AS chat_user_id
-FROM risk_results rr
-LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
-LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-WHERE rr.project_id = $1
-  AND rr.false_positive_at IS NOT NULL
-  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
-  -- fail the non-null scan. They need their own read path, not this one.
-  AND rr.skill_version_id IS NULL
-  AND (
-    $2::timestamptz IS NULL
-    OR (rr.false_positive_at, rr.id) < ($2::timestamptz, $3::uuid)
-  )
-ORDER BY rr.false_positive_at DESC, rr.id DESC
-LIMIT $4
-`
-
-type ListFalsePositiveRiskResultsParams struct {
-	ProjectID             uuid.UUID
-	CursorFalsePositiveAt pgtype.Timestamptz
-	CursorID              uuid.NullUUID
-	PageLimit             int32
-}
-
-type ListFalsePositiveRiskResultsRow struct {
-	ID                  uuid.UUID
-	RiskPolicyID        uuid.UUID
-	RiskPolicyVersion   int64
-	ChatMessageID       uuid.NullUUID
-	Source              string
-	RuleID              pgtype.Text
-	Description         pgtype.Text
-	Match               pgtype.Text
-	StartPos            pgtype.Int4
-	EndPos              pgtype.Int4
-	Confidence          pgtype.Float8
-	Tags                []string
-	Spans               []byte
-	CreatedAt           pgtype.Timestamptz
-	FalsePositiveAt     pgtype.Timestamptz
-	FalsePositiveReason pgtype.Text
-	ChatID              uuid.UUID
-	ChatTitle           pgtype.Text
-	ChatUserID          pgtype.Text
-}
-
-// Powers the Dismissed tab: every result manually marked as a false positive
-// in this project, newest dismissal first. Cursor is (false_positive_at, id)
-// for stable pagination. block_id is always the nil UUID (foundRowToResult maps that to
-// a nil pointer) since the Dismissed tab doesn't need durable tool-call-block
-// links. LEFT JOINs both anchor tables (a result is anchored to exactly one,
-// per risk_results_anchor_check) so content-part-anchored dismissals are not
-// silently dropped.
-func (q *Queries) ListFalsePositiveRiskResults(ctx context.Context, arg ListFalsePositiveRiskResultsParams) ([]ListFalsePositiveRiskResultsRow, error) {
-	rows, err := q.db.Query(ctx, listFalsePositiveRiskResults,
-		arg.ProjectID,
-		arg.CursorFalsePositiveAt,
-		arg.CursorID,
-		arg.PageLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListFalsePositiveRiskResultsRow
-	for rows.Next() {
-		var i ListFalsePositiveRiskResultsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.RiskPolicyID,
-			&i.RiskPolicyVersion,
-			&i.ChatMessageID,
-			&i.Source,
-			&i.RuleID,
-			&i.Description,
-			&i.Match,
-			&i.StartPos,
-			&i.EndPos,
-			&i.Confidence,
-			&i.Tags,
-			&i.Spans,
-			&i.CreatedAt,
-			&i.FalsePositiveAt,
-			&i.FalsePositiveReason,
-			&i.ChatID,
-			&i.ChatTitle,
-			&i.ChatUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -4303,130 +4144,6 @@ func (q *Queries) ListRiskPolicyMCPScopeServerIDs(ctx context.Context, arg ListR
 	return items, nil
 }
 
-const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.skill_version_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, COALESCE(NULLIF(cm.external_user_id, ''), c.external_user_id) AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
-FROM risk_results rr
-LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
-LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-LEFT JOIN LATERAL (
-  SELECT tcb.id AS block_id FROM tool_call_blocks tcb
-  WHERE tcb.project_id = rr.project_id
-    AND tcb.chat_message_id = rr.chat_message_id
-    AND tcb.deleted IS FALSE
-  ORDER BY tcb.created_at DESC LIMIT 1
-) blk ON TRUE
-WHERE COALESCE(cm.chat_id, ccp.chat_id) = $1
-  AND rr.project_id = $2
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND (
-    $3::timestamptz IS NULL
-    OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < ($3::timestamptz, $4::uuid)
-  )
-ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
-LIMIT $5
-`
-
-type ListRiskResultsByChatFoundParams struct {
-	ChatID                 uuid.UUID
-	ProjectID              uuid.UUID
-	CursorMessageCreatedAt pgtype.Timestamptz
-	CursorID               uuid.NullUUID
-	PageLimit              int32
-}
-
-type ListRiskResultsByChatFoundRow struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	OrganizationID      string
-	RiskPolicyID        uuid.UUID
-	RiskPolicyVersion   int64
-	ChatMessageID       uuid.NullUUID
-	ChatContentPartID   uuid.NullUUID
-	SkillVersionID      uuid.NullUUID
-	Source              string
-	Found               bool
-	RuleID              pgtype.Text
-	Description         pgtype.Text
-	Match               pgtype.Text
-	StartPos            pgtype.Int4
-	EndPos              pgtype.Int4
-	Confidence          pgtype.Float8
-	Tags                []string
-	Spans               []byte
-	DeadLetterReason    pgtype.Text
-	ExcludedAt          pgtype.Timestamptz
-	ExcludedExclusionID uuid.NullUUID
-	FalsePositiveAt     pgtype.Timestamptz
-	FalsePositiveReason pgtype.Text
-	CreatedAt           pgtype.Timestamptz
-	ChatID              uuid.UUID
-	MessageCreatedAt    pgtype.Timestamptz
-	ChatTitle           pgtype.Text
-	ChatUserID          pgtype.Text
-	BlockID             uuid.UUID
-}
-
-// chat_user_id resolves the message's own external identity first and falls
-// back to the chat's, matching the ClickHouse listing's ingest-time
-// attribution so a pager sees the same identity on either store.
-func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskResultsByChatFoundParams) ([]ListRiskResultsByChatFoundRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByChatFound,
-		arg.ChatID,
-		arg.ProjectID,
-		arg.CursorMessageCreatedAt,
-		arg.CursorID,
-		arg.PageLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRiskResultsByChatFoundRow
-	for rows.Next() {
-		var i ListRiskResultsByChatFoundRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.RiskPolicyID,
-			&i.RiskPolicyVersion,
-			&i.ChatMessageID,
-			&i.ChatContentPartID,
-			&i.SkillVersionID,
-			&i.Source,
-			&i.Found,
-			&i.RuleID,
-			&i.Description,
-			&i.Match,
-			&i.StartPos,
-			&i.EndPos,
-			&i.Confidence,
-			&i.Tags,
-			&i.Spans,
-			&i.DeadLetterReason,
-			&i.ExcludedAt,
-			&i.ExcludedExclusionID,
-			&i.FalsePositiveAt,
-			&i.FalsePositiveReason,
-			&i.CreatedAt,
-			&i.ChatID,
-			&i.MessageCreatedAt,
-			&i.ChatTitle,
-			&i.ChatUserID,
-			&i.BlockID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
 SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.skill_version_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
@@ -4540,70 +4257,6 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.ChatTitle,
 			&i.ChatUserID,
 			&i.BlockID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRiskResultsGroupedByChat = `-- name: ListRiskResultsGroupedByChat :many
-SELECT
-    COALESCE(cm.chat_id, ccp.chat_id)::uuid AS chat_id
-  , c.title AS chat_title
-  , c.external_user_id AS chat_user_id
-  , COUNT(*)::BIGINT AS findings_count
-  , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
-FROM risk_results rr
-LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
-LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND COALESCE(cm.chat_id, ccp.chat_id) IS NOT NULL
-  AND ($2::uuid IS NULL OR COALESCE(cm.chat_id, ccp.chat_id) <= $2::uuid)
-GROUP BY COALESCE(cm.chat_id, ccp.chat_id), c.title, c.external_user_id
-ORDER BY COALESCE(cm.chat_id, ccp.chat_id) DESC
-LIMIT $3
-`
-
-type ListRiskResultsGroupedByChatParams struct {
-	ProjectID uuid.UUID
-	Cursor    uuid.NullUUID
-	PageLimit int32
-}
-
-type ListRiskResultsGroupedByChatRow struct {
-	ChatID         uuid.UUID
-	ChatTitle      pgtype.Text
-	ChatUserID     pgtype.Text
-	FindingsCount  int64
-	LatestDetected pgtype.Timestamptz
-}
-
-// A finding is anchored to either a chat message or a chat content part
-// (attachment), so both anchors resolve the chat; skill-anchored findings
-// have neither and are excluded by the non-null chat check.
-func (q *Queries) ListRiskResultsGroupedByChat(ctx context.Context, arg ListRiskResultsGroupedByChatParams) ([]ListRiskResultsGroupedByChatRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsGroupedByChat, arg.ProjectID, arg.Cursor, arg.PageLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRiskResultsGroupedByChatRow
-	for rows.Next() {
-		var i ListRiskResultsGroupedByChatRow
-		if err := rows.Scan(
-			&i.ChatID,
-			&i.ChatTitle,
-			&i.ChatUserID,
-			&i.FindingsCount,
-			&i.LatestDetected,
 		); err != nil {
 			return nil, err
 		}
@@ -5090,9 +4743,8 @@ type MarkRiskResultsFalsePositiveParams struct {
 	Ids       []uuid.UUID
 }
 
-// Returns the full rows the UPDATE actually changed for audit logging.
-// ClickHouse copies are selected independently by requested id so a retry can
-// repair a successful append followed by a failed Postgres commit.
+// Sets the dismissal columns on risk_results rows. Dismissals are recorded in
+// ClickHouse; only tests that seed dismissed Postgres rows call this.
 func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRiskResultsFalsePositiveParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, markRiskResultsFalsePositive, arg.Reason, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -5633,66 +5285,6 @@ func (q *Queries) SoftDeleteRiskPolicyEvalReview(ctx context.Context, arg SoftDe
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const unmarkRiskResultsFalsePositive = `-- name: UnmarkRiskResultsFalsePositive :many
-UPDATE risk_results
-SET false_positive_at = NULL
-  , false_positive_reason = NULL
-WHERE project_id = $1
-  AND id = ANY($2::uuid[])
-  AND false_positive_at IS NOT NULL
-RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
-`
-
-type UnmarkRiskResultsFalsePositiveParams struct {
-	ProjectID uuid.UUID
-	Ids       []uuid.UUID
-}
-
-func (q *Queries) UnmarkRiskResultsFalsePositive(ctx context.Context, arg UnmarkRiskResultsFalsePositiveParams) ([]RiskResult, error) {
-	rows, err := q.db.Query(ctx, unmarkRiskResultsFalsePositive, arg.ProjectID, arg.Ids)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RiskResult
-	for rows.Next() {
-		var i RiskResult
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.RiskPolicyID,
-			&i.RiskPolicyVersion,
-			&i.ChatMessageID,
-			&i.ChatContentPartID,
-			&i.SkillVersionID,
-			&i.Source,
-			&i.Found,
-			&i.RuleID,
-			&i.Description,
-			&i.Match,
-			&i.StartPos,
-			&i.EndPos,
-			&i.Confidence,
-			&i.Tags,
-			&i.Spans,
-			&i.DeadLetterReason,
-			&i.ExcludedAt,
-			&i.ExcludedExclusionID,
-			&i.FalsePositiveAt,
-			&i.FalsePositiveReason,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const updateCustomDetectionRule = `-- name: UpdateCustomDetectionRule :one
