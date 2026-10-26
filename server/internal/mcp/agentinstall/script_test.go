@@ -103,7 +103,7 @@ func TestScriptQuotesInterpolatedValues(t *testing.T) {
 	script := renderScript(t, p)
 	require.Contains(t, script, `SPEAKEASY_AGENT_KEY='key'\''; touch pwned #$(touch pwned)`+"`touch pwned`'")
 	require.Contains(t, script, `GRAM_AGENT_URL='https://app.example.test/agent-mcp/x'\''; touch pwned #'`)
-	require.Contains(t, script, `OPENCLAW_MCP_SERVER='{"url":"https://app.example.test/agent-mcp/x'\''; touch pwned #"`)
+	require.Contains(t, script, `OPENCLAW_MCP_CONFIG='[{"path":"mcp.servers.speakeasy","value":{"url":"https://app.example.test/agent-mcp/x'\''; touch pwned #"`)
 	require.NotContains(t, script, "\ntouch pwned")
 
 	// Run it for real: whatever a client stub sees, nothing may execute.
@@ -145,7 +145,7 @@ func TestScriptEmbedsTheAgentsOpenClawPlugin(t *testing.T) {
 }
 
 // baseTools are the system tools the script and the stubs call.
-var baseTools = []string{"base64", "bash", "cat", "chmod", "cp", "dirname", "grep", "mkdir", "mktemp", "rm", "sed", "tail", "tr"}
+var baseTools = []string{"base64", "bash", "cat", "chmod", "cp", "dirname", "grep", "mkdir", "mktemp", "rm", "sed", "tail", "touch", "tr"}
 
 // Fallbacks the script reaches for when the installed plugin is not where it
 // expects, to test the archive's own copy.
@@ -195,6 +195,9 @@ type openClawHarness struct {
 
 	// optionalTools are the fallbacks on the script's PATH.
 	optionalTools []string
+
+	// env selects isolated profile and failure scenarios for the stub.
+	env []string
 }
 
 const (
@@ -208,6 +211,16 @@ const (
 // stub bootstrapper in place of the real one.
 const stubOpenClaw = `#!/bin/sh
 printf '%s\n' "$*" >>"$STUB_DIR/openclaw.log"
+if [ "$1 $2" = "config set" ]; then
+  if [ "$3" = "--help" ]; then
+    [ "${STUB_NO_BATCH:-}" = "1" ] || echo --batch-file
+    exit 0
+  fi
+  if [ "$3" = "--batch-file" ]; then
+    [ "${STUB_GATEWAY_FAIL:-}" = "1" ] && exit 1
+    cp "$4" "$STUB_DIR/mcp-config.json"
+  fi
+fi
 if [ "$1 $2" = "plugins install" ]; then
   case " $* " in
     *" --help "*) printf '%s' "$STUB_INSTALL_HELP"; exit 0 ;;
@@ -215,7 +228,7 @@ if [ "$1 $2" = "plugins install" ]; then
   for archive in "$@"; do :; done
   cp "$archive" "$STUB_DIR/installed.zip"
   [ -n "$STUB_SKIP_LAYOUT" ] && exit 0
-  plugin="$OPENCLAW_STATE_DIR/extensions/speakeasy-observability"
+  plugin="${STUB_PLUGIN_DIR:-$OPENCLAW_STATE_DIR/extensions/speakeasy-observability}"
   mkdir -p "$plugin/hooks"
   printf '{}\n' >"$plugin/speakeasy.json"
   chmod 644 "$plugin/speakeasy.json"
@@ -267,6 +280,13 @@ func newOpenClawHarness(t *testing.T, help, reply string) *openClawHarness {
 // PATH, so no real claude, codex, openclaw or curl is reachable.
 func (h *openClawHarness) run(t *testing.T, script string) string {
 	t.Helper()
+	out, err := h.runResult(t, script)
+	require.NoError(t, err, "install script failed: %s", out)
+	return out
+}
+
+func (h *openClawHarness) runResult(t *testing.T, script string) (string, error) {
+	t.Helper()
 	skipLayout := ""
 	if h.skipLayout {
 		skipLayout = "1"
@@ -287,9 +307,9 @@ func (h *openClawHarness) run(t *testing.T, script string) string {
 		"SPEAKEASY_AI_HOOKS_API_KEY=key-from-the-shell",
 		"SPEAKEASY_AI_HOOKS_FAIL_OPEN=1",
 	}
+	cmd.Env = append(cmd.Env, h.env...)
 	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "install script failed: %s", out)
-	return string(out)
+	return string(out), err
 }
 
 func (h *openClawHarness) calls(t *testing.T) []string {
@@ -323,12 +343,17 @@ func TestScriptConfiguresOpenClawAndPassesTheSelfCheck(t *testing.T) {
 	require.NotContains(t, out, "FAIL")
 	require.Contains(t, out, "Next: restart the OpenClaw Gateway.")
 
-	mcpServer := `{"url":"` + testGatewayURL + `","transport":"streamable-http","headers":{"Authorization":"Bearer ` + testKey + `"}}`
 	calls := h.calls(t)
 	require.Len(t, calls, 6, "openclaw calls: %v", calls)
-	require.Equal(t, "mcp unset gram", calls[0])
-	require.Equal(t, "mcp unset speakeasy", calls[1])
-	require.Equal(t, "mcp set speakeasy "+mcpServer, calls[2])
+	require.Equal(t, "config set --help", calls[0])
+	require.True(t, strings.HasPrefix(calls[1], "config set --batch-file "), calls[1])
+	require.Equal(t, "mcp unset gram", calls[2])
+	require.NotContains(t, strings.Join(calls, "\n"), testKey, "no client argv may carry the key")
+	config := h.stubFile(t, "mcp-config.json")
+	require.JSONEq(t, `[{"path":"mcp.servers.speakeasy","value":{"url":"`+testGatewayURL+`","transport":"streamable-http","headers":{"Authorization":"Bearer `+testKey+`"}}}]`, config)
+	info, err := os.Stat(filepath.Join(h.stubDir, "mcp-config.json"))
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 	require.Equal(t, "plugins install --help", calls[3])
 	require.True(t, strings.HasPrefix(calls[4], "plugins install --force --accept-capabilities "), calls[4])
 	require.True(t, strings.HasSuffix(calls[4], ".zip"), calls[4])
@@ -346,7 +371,7 @@ func TestScriptConfiguresOpenClawAndPassesTheSelfCheck(t *testing.T) {
 	// The installed copy of the key is owner-only, whatever mode the
 	// installer gave it.
 	plugin := filepath.Join(h.stateDir, "extensions", "speakeasy-observability")
-	info, err := os.Stat(filepath.Join(plugin, "speakeasy.json"))
+	info, err = os.Stat(filepath.Join(plugin, "speakeasy.json"))
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
@@ -455,7 +480,7 @@ func TestScriptWithoutAProjectConfiguresOpenClawWithoutHooks(t *testing.T) {
 
 	calls := h.calls(t)
 	require.Len(t, calls, 3, "openclaw calls: %v", calls)
-	require.True(t, strings.HasPrefix(calls[2], "mcp set speakeasy "), calls[2])
+	require.True(t, strings.HasPrefix(calls[1], "config set --batch-file "), calls[1])
 }
 
 func TestScriptWithNoClientsExplainsManualSetup(t *testing.T) {
@@ -469,4 +494,83 @@ func TestScriptWithNoClientsExplainsManualSetup(t *testing.T) {
 	require.Equal(t, 1, exitErr.ExitCode())
 	require.Contains(t, string(out), "No supported MCP client (Claude Code, Codex, OpenClaw) found on PATH.")
 	require.Contains(t, string(out), testGatewayURL)
+}
+
+func TestScriptRejectsUnsafeCredentialOrigins(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{"http://example.test", "ftp://example.test", "https:///missing-host", "https://user:pass@example.test", "/relative", ":bad"} {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			p := testParams()
+			p.GatewayURL = raw
+			script, err := Script(p)
+			require.ErrorContains(t, err, "gateway URL must use HTTPS")
+			require.Empty(t, script)
+			p = testParams()
+			p.ServerURL = raw
+			script, err = Script(p)
+			require.ErrorContains(t, err, "hooks server URL must use HTTPS")
+			require.Empty(t, script)
+		})
+	}
+}
+
+func TestScriptKeepsPreviousGatewayWhenConfigIsRejected(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	h.env = []string{"STUB_GATEWAY_FAIL=1"}
+	out, err := h.runResult(t, renderScript(t, testParams()))
+	require.Error(t, err)
+	require.Contains(t, out, "Previous gateway entries were kept")
+	require.Contains(t, out, "Speakeasy hooks: PASS")
+	require.Contains(t, out, "Supported clients were found, but no gateway was configured")
+	require.NotContains(t, out, "No supported MCP client")
+	require.NotContains(t, strings.Join(h.calls(t), "\n"), "mcp unset")
+}
+
+func TestScriptExplainsUnsupportedSafeConfiguration(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	h.env = []string{"STUB_NO_BATCH=1"}
+	out, err := h.runResult(t, renderScript(t, testParams()))
+	require.Error(t, err)
+	require.Contains(t, out, "update OpenClaw")
+	require.Contains(t, out, "Speakeasy hooks: PASS")
+	require.NotContains(t, strings.Join(h.calls(t), "\n"), "mcp unset")
+}
+
+func TestScriptContinuesAfterClaudeFailsWithoutLeakingKeyInArguments(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$STUB_DIR/claude.log\"\nexit 1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(h.stubDir, "claude"), []byte(stub), 0o700))
+	out := h.run(t, renderScript(t, testParams()))
+	require.Contains(t, out, "Could not configure Claude Code")
+	require.Contains(t, out, "Configured OpenClaw")
+	args := h.stubFile(t, "claude.log")
+	require.NotContains(t, args, testKey)
+	require.Contains(t, args, "Authorization: Bearer ${SPEAKEASY_AGENT_KEY}")
+}
+
+func TestScriptProtectsAndTestsTheNamedProfilesInstalledPlugin(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	plugin := filepath.Join(h.home, ".openclaw-testing", "extensions", "speakeasy-observability")
+	h.env = []string{"OPENCLAW_STATE_DIR=", "OPENCLAW_PROFILE=testing", "STUB_PLUGIN_DIR=" + plugin}
+	out := h.run(t, renderScript(t, testParams()))
+	require.Contains(t, out, "Speakeasy hooks: PASS")
+	info, err := os.Stat(filepath.Join(plugin, "speakeasy.json"))
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	require.Contains(t, h.stubFile(t, "bootstrap.args"), "--config="+plugin+"/speakeasy.json")
+}
+
+func TestScriptOmitsUnsupportedPluginFlags(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, "Usage: openclaw plugins install [path]", `{"seq":1}`)
+	out := h.run(t, renderScript(t, testParams()))
+	require.Contains(t, out, "Speakeasy hooks: PASS")
+	calls := h.calls(t)
+	require.NotContains(t, calls[4], "--force")
+	require.NotContains(t, calls[4], "--accept-capabilities")
 }

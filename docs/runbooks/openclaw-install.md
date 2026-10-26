@@ -139,40 +139,50 @@ Per-user attribution on shared gateways is tracked separately in DNO-971.
 ## Install for an agent (one command)
 
 An agent's page in the dashboard issues a single-use install command,
-`curl -fsSL <server>/agent-mcp/install/<code> | sh`, and a message to paste
-into OpenClaw's chat so OpenClaw runs it in its own shell. When `openclaw` is
-on `PATH` the script:
+`curl -fsSL <server>/agent-mcp/install/<code> | sh`. Run it yourself in a
+trusted shell on the OpenClaw machine. Until redeemed or expired after 15
+minutes, the code can retrieve the key: do not paste the command into chat.
+The separate follow-up message contains no code or credential.
 
-1. Saves the agent gateway as the `speakeasy` MCP server
-   (`openclaw mcp set`), replacing any `gram` or `speakeasy` entry.
-2. If the agent has a project, installs this observability plugin with the
-   agent's key and project baked into `speakeasy.json`, so its sessions are
-   recorded under the agent. It passes `--force`, plus `--accept-capabilities`
-   when `openclaw plugins install --help` lists it (2026.8.1 and later). An
-   agent with no project, or whose project was deleted, gets the gateway only:
-   the script skips steps 2 to 4 and prints `Speakeasy hooks: FAIL` saying its
-   sessions are not recorded. Move the agent into a project and run a new
-   command to add hooks.
+When `openclaw` is on `PATH` the script:
+
+1. Saves the agent gateway as the `speakeasy` MCP server using
+   `openclaw config set --batch-file` and a temporary owner-only file. It
+   removes the older `gram` entry only after the replacement is accepted.
+   Releases without `--batch-file` get update guidance, while hooks setup
+   continues. A failed gateway update leaves existing entries in place.
+2. If the agent has a live project, installs the observability plugin with
+   the agent's key and project in `speakeasy.json`. It uses `--force` and
+   `--accept-capabilities` only when the installed CLI advertises each flag.
+   An agent with no project or a deleted project gets the gateway only and
+   an explanation that its sessions cannot be recorded.
 3. Sets `allowConversationAccess`.
-4. Sends one `before_tool_call` frame through the plugin's hooks binary and
-   prints `Speakeasy hooks: PASS` or `Speakeasy hooks: FAIL: <reason>`. A
-   `permission denied` reason means the agent lacks `org:hooks_ingest` on its
-   project or `project:read`. When the installed plugin is not where the
-   script expects it, the script tests the archive's own copy instead, which
-   needs `unzip` or `python3`.
-5. Prints `Next: restart the OpenClaw Gateway`. The script does not restart
-   it: when OpenClaw runs the script, a restart would end the turn before it
-   reports back. Until the restart the plugin is not loaded.
+4. Sends one `before_tool_call` frame through the hooks binary and prints
+   `Speakeasy hooks: PASS` or `FAIL: <reason>`. A permission denial can mean
+   the agent lacks `org:hooks_ingest` on its project or `project:read`.
+   PASS tests the embedded key; it does not prove runtime attribution:
+   Gateway-level `SPEAKEASY_AI_HOOKS_API_KEY` or a cached sign-in for this org
+   can take precedence. Remove those overrides to use the agent credential.
+   If the installed plugin cannot be located, the check tests the archive
+   copy instead, requiring `unzip` or `python3`.
+5. Prints a reminder to restart the OpenClaw Gateway. Until restart the
+   plugin is not loaded. The installer never restarts a running Gateway.
 
-The agent key ends up in plaintext in two files, both owner-only: the
-plugin's `speakeasy.json` (the script sets it to `0600` after install) and
-the `mcp.servers.speakeasy` entry in OpenClaw's config. Neither is a secret
-store. Newer OpenClaw releases accept a SecretRef for MCP headers, but every
-ref source (the Gateway's environment, or a file, exec or store provider)
-needs setup the script cannot do on every supported release, and plugin
-config has no SecretRef. To move the header to a SecretRef by hand, replace it
-with a ref and keep `speakeasy.json` owner-only. Revoking the agent key
-invalidates both copies.
+The key is stored in plaintext in the plugin's `speakeasy.json` and in
+OpenClaw's MCP configuration. Plugin ZIPs mark the key file `0600`; the
+installer also protects the installed file when found, including named
+profiles and explicit state/config paths. A failure to protect it is reported.
+OpenClaw writes its own config permissions; keep the config owner-only.
+Neither file is a secret store. Revoking the key invalidates both copies.
+
+OpenClaw 2026.10.6 accepts scalar MCP headers, not structured SecretRefs.
+The proposed [MCP SecretRef support](https://github.com/openclaw/openclaw/pull/69417)
+was closed without merging; do not put a SecretRef object in these headers.
+For supported credential surfaces, see the upstream
+[SecretRef contract](https://docs.openclaw.ai/gateway/secrets/secretref-contract).
+The installer uses the CLI's private batch-file input to keep the key out of
+process arguments. Claude Code and Codex use `SPEAKEASY_AGENT_KEY` from their
+launch environment; export the saved key when starting either client.
 
 The coverage caveat in [Before you start](#before-you-start) applies: models
 routed through the Claude CLI harness bypass these hooks, so the PASS line

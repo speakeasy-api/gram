@@ -124,8 +124,8 @@ function recipes(url: string, key: string, secret: string | null): Recipe[] {
 
 /**
  * Exchanges the key for a single-use install code. The key never goes into the
- * command that way: a one-liner ends up in shell history and pasted into
- * threads, and a code that dies on first use is worthless there.
+ * command that way. Until redeemed or expired, the code can retrieve the
+ * key and must stay out of chat and shared transcripts.
  */
 async function mintInstallCommand(
   gatewayURL: string,
@@ -172,15 +172,16 @@ export function AgentGatewayInstall({
 
   // The clipboard can refuse (permissions, an insecure context), and the key
   // and install code are shown once, so a refusal has to be visible.
-  const copy = (id: string, text: string) => {
+  const copy = async (id: string, text: string) => {
     setCopyFailed(null);
-    navigator.clipboard.writeText(text).then(
-      () => setCopied(id),
-      () => {
-        setCopied(null);
-        setCopyFailed(id);
-      },
-    );
+    setCopied(null);
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+      setCopied(id);
+    } catch {
+      setCopyFailed(id);
+    }
   };
   const copyLabel = (id: string) =>
     copied === id ? "Copied" : copyFailed === id ? "Copy failed" : "Copy";
@@ -222,7 +223,7 @@ export function AgentGatewayInstall({
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => copy("command", command)}
+                onClick={() => void copy("command", command)}
               >
                 {copyLabel("command")}
               </Button>
@@ -251,11 +252,12 @@ export function AgentGatewayInstall({
           </Button>
           <Text muted small>
             Connects Claude Code, Codex and OpenClaw on a machine in one step.
-            On OpenClaw it also installs Speakeasy hooks, so this agent&apos;s
-            sessions appear in Agent Sessions under its name. Models OpenClaw
-            routes through the Claude CLI bypass those hooks and are recorded
-            only if Claude Code hooks are installed too. The command carries a
-            single-use code, not the key, and the code expires in 15 minutes.
+            On OpenClaw it also installs Speakeasy hooks when this agent has a
+            project. Session attribution depends on the active hooks credential.
+            Models OpenClaw routes through the Claude CLI bypass those hooks and
+            are recorded only if Claude Code hooks are installed too. The
+            command carries a single-use code that can retrieve the key for 15
+            minutes. Run it in a trusted shell; do not paste it into chat.
           </Text>
           {command && (
             <Text muted small>
@@ -272,27 +274,25 @@ export function AgentGatewayInstall({
           {command && (
             <>
               <Text small className="font-medium">
-                Or paste into OpenClaw
+                After installation, ask OpenClaw to check
               </Text>
               <div className="border-border flex items-start gap-2 border p-3">
                 <pre className="min-w-0 flex-1 whitespace-pre-wrap break-all text-xs">
-                  {openClawInstallMessage(command)}
+                  {openClawInstallMessage()}
                 </pre>
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={() =>
-                    copy("openclaw", openClawInstallMessage(command))
+                    void copy("openclaw", openClawInstallMessage())
                   }
                 >
                   {copyLabel("openclaw")}
                 </Button>
               </div>
               <Text muted small>
-                OpenClaw runs the command in its own shell and reports whether
-                its hooks passed the check. Restart the OpenClaw Gateway
-                afterwards: it loads the plugin only at startup. Use this or the
-                command above, not both: the code works once.
+                Run the command yourself and restart the OpenClaw Gateway before
+                sending this message. It contains no install code or key.
               </Text>
             </>
           )}
@@ -309,7 +309,7 @@ export function AgentGatewayInstall({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => copy("secret", secret)}
+              onClick={() => void copy("secret", secret)}
             >
               {copyLabel("secret")}
             </Button>
@@ -349,7 +349,7 @@ export function AgentGatewayInstall({
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => copy(recipe.id, recipe.body)}
+                  onClick={() => void copy(recipe.id, recipe.body)}
                 >
                   {copyLabel(recipe.id)}
                 </Button>

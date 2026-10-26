@@ -433,7 +433,8 @@ OpenClaw has no marketplace track: the observability package is the only OpenCla
 }
 ```
 
-`onCapabilities: ["hook"]` is what selects a hook-only plugin at Gateway startup on OpenClaw 2026.9.3 and later.
+`onStartup: true` loads the plugin when the Gateway starts.
+`onCapabilities: ["hook"]` declares its hook capability for OpenClaw 2026.9.3 and later.
 
 `index.js` is plain JavaScript, not TypeScript: OpenClaw package installs reject a build step. It subscribes the typed plugin hooks and proxies each frame to `agenthooks serve --provider=openclaw`, returning the reply verbatim as the hook handler's return value so `before_tool_call` denials reach OpenClaw intact.
 
