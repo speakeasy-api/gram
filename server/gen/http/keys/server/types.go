@@ -1309,8 +1309,8 @@ type AgentPolicySelectorResponseBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
-	// scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -1429,8 +1429,8 @@ type AgentPolicySelectorRequestBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
-	// scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -2738,8 +2738,8 @@ func ValidateAgentPolicySelectorRequestBody(body *AgentPolicySelectorRequestBody
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "inference" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "mcp_auth_client", "*"}))
 		}
 	}
 	if body.ClientType != nil {

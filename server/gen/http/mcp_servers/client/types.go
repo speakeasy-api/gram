@@ -146,6 +146,10 @@ type CreateMcpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -201,6 +205,10 @@ type GetMcpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -268,6 +276,10 @@ type UpdateMcpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -2897,6 +2909,10 @@ type McpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -3100,6 +3116,7 @@ func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.Mcp
 		ToolsetID:             body.ToolsetID,
 		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		BuiltinBackend:        body.BuiltinBackend,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
 		PrimaryEndpointID:     body.PrimaryEndpointID,
@@ -3296,6 +3313,7 @@ func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer
 		ToolsetID:             body.ToolsetID,
 		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		BuiltinBackend:        body.BuiltinBackend,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
 		PrimaryEndpointID:     body.PrimaryEndpointID,
@@ -3854,6 +3872,7 @@ func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.Mcp
 		ToolsetID:             body.ToolsetID,
 		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		BuiltinBackend:        body.BuiltinBackend,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
 		PrimaryEndpointID:     body.PrimaryEndpointID,
@@ -5334,6 +5353,11 @@ func ValidateCreateMcpServerResponseBody(body *CreateMcpServerResponseBody) (err
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
+	if body.BuiltinBackend != nil {
+		if !(*body.BuiltinBackend == "approvals") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.builtin_backend", *body.BuiltinBackend, []any{"approvals"}))
+		}
+	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
@@ -5408,6 +5432,11 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 	}
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
+	}
+	if body.BuiltinBackend != nil {
+		if !(*body.BuiltinBackend == "approvals") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.builtin_backend", *body.BuiltinBackend, []any{"approvals"}))
+		}
 	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
@@ -5515,6 +5544,11 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 	}
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
+	}
+	if body.BuiltinBackend != nil {
+		if !(*body.BuiltinBackend == "approvals") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.builtin_backend", *body.BuiltinBackend, []any{"approvals"}))
+		}
 	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
@@ -8907,6 +8941,11 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	}
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
+	}
+	if body.BuiltinBackend != nil {
+		if !(*body.BuiltinBackend == "approvals") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.builtin_backend", *body.BuiltinBackend, []any{"approvals"}))
+		}
 	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {

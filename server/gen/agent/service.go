@@ -30,6 +30,12 @@ type Service interface {
 	// developer tools it manages. Organization configuration is delivered on this
 	// existing poll so agents do not need a second control-plane request.
 	GetPlugins(context.Context, *GetPluginsPayload) (res *GetPluginsResult, err error)
+	// Report the enrolled user's sign-in state for each MCP server in the plugins
+	// delivered to them, with the page that signs in to each. Sign-in belongs to
+	// the server, so one sign-in covers every plugin that contains it. Accepts a
+	// per-user key, or an org install key with the user's email vouched in the
+	// Gram-User-Email header, the same way getPlugins resolves the polling user.
+	GetMyConnections(context.Context, *GetMyConnectionsPayload) (res *GetMyConnectionsResult, err error)
 	// List users in the current organization who are actively running the
 	// Speakeasy device agent, attributed by the email each agent reports on sync.
 	// Dashboard-only; requires an org admin session.
@@ -129,7 +135,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
+var MethodNames = [12]string{"getPlugins", "getMyConnections", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -208,6 +214,10 @@ type AgentPlugin struct {
 }
 
 type AgentPluginServer struct {
+	// Stable identifier of the server, the same in every plugin that contains it.
+	// Matches the id getMyConnections reports the server's sign-in state under.
+	// Absent from servers predating the field.
+	ID *string
 	// Display name of the server within its plugin.
 	Name string
 	// Link to the server's page in the Speakeasy dashboard. Present only when the
@@ -221,6 +231,25 @@ type AgentPollingPrincipal struct {
 	Urn string
 	// Human-readable name of the agent identity.
 	DisplayName string
+}
+
+type AgentServerConnection struct {
+	// The server's id, as getPlugins reports it on each plugin server.
+	ID string
+	// `connected`: the user is signed in. `not_connected`: the user has not signed
+	// in. `reauthorization_required`: a sign-in exists but must be renewed.
+	// `not_required`: the server needs no sign-in from the user. `setup_required`:
+	// an administrator must finish the server's sign-in setup first. `no_access`:
+	// the user lacks permission to connect to the server. `unknown`: the state
+	// can't be determined, for example for a gateway.
+	State string
+	// Page that signs the user in to this server in the browser. Present when
+	// state is not_connected or reauthorization_required.
+	ConnectURL *string
+	// Page where the user can ask an administrator for access to this server.
+	// Present only when state is no_access and the organization accepts access
+	// requests.
+	RequestAccessURL *string
 }
 
 type AgentSessionMeta struct {
@@ -388,6 +417,25 @@ type DeviceAgentConfiguration struct {
 // getConfiguration method.
 type GetConfigurationPayload struct {
 	SessionToken *string
+}
+
+// GetMyConnectionsPayload is the payload type of the agent service
+// getMyConnections method.
+type GetMyConnectionsPayload struct {
+	ApikeyToken *string
+	// Email address of the enrolled user, sent in the Gram-User-Email header.
+	// Required when authenticating with an org-scoped agent install key; ignored
+	// for a per-user key, whose owner is the enrolled user.
+	Email *string
+}
+
+// GetMyConnectionsResult is the result type of the agent service
+// getMyConnections method.
+type GetMyConnectionsResult struct {
+	// One entry per distinct MCP server in the plugins delivered to the user, in
+	// plugin order. Servers the user can neither read nor connect to are omitted;
+	// a server the user can read but not connect to is reported as no_access.
+	Servers []*AgentServerConnection
 }
 
 // GetPluginsPayload is the payload type of the agent service getPlugins method.

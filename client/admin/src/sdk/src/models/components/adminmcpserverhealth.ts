@@ -17,6 +17,10 @@ import {
   AdminMcpServerHealthServer$inboundSchema,
 } from "./adminmcpserverhealthserver.js";
 import {
+  AdminMcpServerHealthUpstreamAuth,
+  AdminMcpServerHealthUpstreamAuth$inboundSchema,
+} from "./adminmcpserverhealthupstreamauth.js";
+import {
   AdminMcpServerHealthUserSessionIssuer,
   AdminMcpServerHealthUserSessionIssuer$inboundSchema,
 } from "./adminmcpserverhealthusersessionissuer.js";
@@ -26,7 +30,6 @@ import {
  */
 export const LegacyAuth = {
   ExternalOauth: "external_oauth",
-  OauthProxy: "oauth_proxy",
   GramPrivate: "gram_private",
 } as const;
 /**
@@ -51,6 +54,10 @@ export type AdminMcpServerHealth = {
    */
   server: AdminMcpServerHealthServer;
   /**
+   * Whether the server's upstream needs authentication and the auth clients it offers.
+   */
+  upstreamAuth?: AdminMcpServerHealthUpstreamAuth | undefined;
+  /**
    * The user session issuer that authenticates the server's users.
    */
   userSessionIssuer?: AdminMcpServerHealthUserSessionIssuer | undefined;
@@ -69,6 +76,7 @@ export const AdminMcpServerHealth$inboundSchema: z.ZodMiniType<
     correlation: AdminMcpServerHealthCorrelation$inboundSchema,
     legacy_auth: z.optional(LegacyAuth$inboundSchema),
     server: AdminMcpServerHealthServer$inboundSchema,
+    upstream_auth: z.optional(AdminMcpServerHealthUpstreamAuth$inboundSchema),
     user_session_issuer: z.optional(
       AdminMcpServerHealthUserSessionIssuer$inboundSchema,
     ),
@@ -76,6 +84,7 @@ export const AdminMcpServerHealth$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "legacy_auth": "legacyAuth",
+      "upstream_auth": "upstreamAuth",
       "user_session_issuer": "userSessionIssuer",
     });
   }),

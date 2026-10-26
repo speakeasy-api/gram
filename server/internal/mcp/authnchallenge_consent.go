@@ -115,6 +115,12 @@ type consentApprovalError struct {
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
+	// GatewayDefaultMode labels the gateway default when choosing discovery.
+	GatewayDefaultMode string
+	// CodeModeUnavailable explains a stored code choice that is currently served as Progressive.
+	CodeModeUnavailable bool
+	// ShowCodeMode exposes Python execution when the runtime accepts new selections.
+	ShowCodeMode bool
 	// ShowDiscoveryMode exposes optional gateway connection settings.
 	ShowDiscoveryMode bool
 	// PrefillDiscoveryMode is the mode this subject chose on its previous
@@ -809,7 +815,42 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		prefillDiscoveryMode = s.consentDiscoveryModePrefill(ctx, endpoint, *challengeState.Subject, clientRowID)
 	}
 
+	gatewayDefaultMode := ""
+	codeModeAvailable := showDiscoveryMode && s.CodeModeAvailable(ctx, endpoint.OrganizationID)
+	codeModeUnavailable := prefillDiscoveryMode == metamcp.DiscoveryModeCode && !codeModeAvailable
+	if codeModeUnavailable {
+		prefillDiscoveryMode = metamcp.DiscoveryModeProgressive
+	}
+	if endpoint.IsOrganizationGateway() && focusServer == "" {
+		// The organization gateway has no stored default.
+		gatewayDefaultMode = "Progressive"
+	} else if endpoint.MetaMcpServerID.Valid && focusServer == "" {
+		metaServer, readErr := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+			ID: endpoint.MetaMcpServerID.UUID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
+		})
+		// Display only: an unreadable default leaves the page without it.
+		if readErr != nil {
+			logger.WarnContext(ctx, "read gateway discovery mode", attr.SlogError(readErr))
+		}
+		switch {
+		case readErr != nil:
+		case metaServer.DiscoveryMode == "code_mode":
+			gatewayDefaultMode = "Code Mode"
+			// admitMetaGate serves Code Mode gateways as Progressive while the
+			// runtime is off or the organization is not entitled to Code Mode.
+			if !s.CodeModeAvailable(ctx, endpoint.OrganizationID) {
+				gatewayDefaultMode = "Progressive"
+				codeModeUnavailable = true
+			}
+		case metaServer.DiscoveryMode == "direct":
+			gatewayDefaultMode = "Direct"
+		default:
+			gatewayDefaultMode = "Progressive"
+		}
+	}
 	data := consentTemplateData{
+		GatewayDefaultMode:      gatewayDefaultMode,
+		CodeModeUnavailable:     codeModeUnavailable,
 		ClientName:              clientName,
 		MCPSlug:                 endpoint.Slug,
 		MCPRouteBase:            endpoint.RouteBase,
@@ -834,6 +875,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		GatewayInventory:        gatewayInventory,
 		ShowDiscoveryMode:       showDiscoveryMode,
 		PrefillDiscoveryMode:    prefillDiscoveryMode,
+		ShowCodeMode:            codeModeAvailable,
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,

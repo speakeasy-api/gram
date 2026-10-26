@@ -20,6 +20,7 @@ export interface SetupValues {
   /** The selected issuer's id, or "" when there is none to select. */
   selectedEndpointId: string;
   onEndpointChange: (id: string) => void;
+  refreshAndSelect: (id: string) => Promise<void>;
 }
 
 const ORGANIZATION_GROUP = "Organization";
@@ -69,13 +70,18 @@ export function groupTokenEndpoints(
  * server metadata publishes, and are never assembled here: a second derivation
  * would drift from what a client discovers and show values that fail.
  */
-export function useSetupValues(): SetupValues {
+export function useSetupValues(targetProjectId?: string): SetupValues {
   const query = useWorkloadTokenEndpoints(undefined, undefined, {
     throwOnError: false,
   });
   const [chosenId, setChosenId] = useState("");
 
-  const endpoints = query.data?.items ?? [];
+  const endpoints = (query.data?.items ?? []).filter(
+    (endpoint) =>
+      targetProjectId === undefined ||
+      endpoint.projectId === "" ||
+      endpoint.projectId === targetProjectId,
+  );
   const selected =
     endpoints.find((e) => e.userSessionIssuerId === chosenId) ?? endpoints[0];
 
@@ -92,10 +98,26 @@ export function useSetupValues(): SetupValues {
       query.isPending,
       query.isError,
       endpoints.length,
+      targetProjectId,
     ),
     endpointGroups: groupTokenEndpoints(endpoints),
     selectedEndpointId: selected?.userSessionIssuerId ?? "",
     onEndpointChange: setChosenId,
+    refreshAndSelect: async (id) => {
+      const refreshed = await query.refetch({ throwOnError: true });
+      const match = refreshed.data?.items.find(
+        (endpoint) =>
+          endpoint.userSessionIssuerId === id &&
+          (targetProjectId === undefined ||
+            endpoint.projectId === "" ||
+            endpoint.projectId === targetProjectId),
+      );
+      if (!match)
+        throw new Error(
+          "The shared authorization server was created, but its exchange endpoint is not available yet. Retry loading the exchange server.",
+        );
+      setChosenId(id);
+    },
   };
 }
 
@@ -103,9 +125,13 @@ function unavailableReason(
   isPending: boolean,
   isError: boolean,
   count: number,
+  targetProjectId?: string,
 ): string | null {
   if (isPending) return "Loading token endpoints…";
   if (isError) return "Speakeasy couldn't load its token endpoints. Try again.";
+  if (count === 0 && targetProjectId !== undefined) {
+    return "No shared Speakeasy authorization server is available for this project or organization.";
+  }
   if (count === 0) {
     return "No user session issuer serves a shared token endpoint yet. Ask your Speakeasy contact to enable one for your organization or a project.";
   }
