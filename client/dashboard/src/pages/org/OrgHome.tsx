@@ -30,6 +30,7 @@ import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useProjectFavorites } from "@/hooks/useProjectFavorites";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { dateTimeFormatters } from "@/lib/dates";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
@@ -1121,6 +1122,23 @@ function RecentChallengesCompact() {
     [data?.buckets],
   );
 
+  // Named agents for the rows. The challenge carries only the urn, and an id
+  // off a challenge is not permission to open the agent, so the roster is the
+  // name and the decision to link.
+  const agents = useReadableAgents(
+    buckets.some((bucket) => bucket.principalType === "agent"),
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
+
   if (isLoading) return null;
 
   return (
@@ -1145,7 +1163,7 @@ function RecentChallengesCompact() {
         <ol className="divide-border max-h-72 divide-y overflow-y-auto">
           {buckets.map((bucket) => (
             <li key={bucket.id}>
-              <CompactChallengeRow bucket={bucket} />
+              <CompactChallengeRow bucket={bucket} agentsById={agentsById} />
             </li>
           ))}
         </ol>
@@ -1164,14 +1182,22 @@ function shortenPrincipal(bucket: ChallengeBucket): string {
   return bucket.principalUrn;
 }
 
-function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
+function CompactChallengeRow({
+  bucket,
+  agentsById,
+}: {
+  bucket: ChallengeBucket;
+  agentsById: Map<string, { name: string }>;
+}) {
   const orgRoutes = useOrgRoutes();
   const isApiKey = bucket.principalType === "api_key";
   const isAgent = bucket.principalType === "agent";
   const agentId = isAgent ? bucket.principalUrn.replace(/^agent:/, "") : null;
-  // An agent label uses the shared text helper for consistent naming.
+  // An agent label uses the shared text helper for consistent naming, with the
+  // resolved name when available (falling back to the id otherwise).
+  const agent = agentId ? agentsById.get(agentId) : undefined;
   const label = agentId
-    ? actingPrincipalText({ id: agentId })
+    ? actingPrincipalText({ id: agentId, name: agent?.name })
     : shortenPrincipal(bucket);
   const lastSeen = new Date(bucket.lastSeen);
   const count = Number(bucket.challengeCount);
