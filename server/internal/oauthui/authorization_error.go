@@ -94,6 +94,8 @@ const (
 	ReasonInvalidClient Reason = "invalid-client"
 	// ReasonInvalidLink identifies invalid authorization parameters.
 	ReasonInvalidLink Reason = "invalid-link"
+	// ReasonUnavailable identifies a dependency failure independently of HTTP status.
+	ReasonUnavailable Reason = "unavailable"
 )
 
 // errorKind groups OAuth error codes by who can act on them, which is what

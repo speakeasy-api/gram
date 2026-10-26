@@ -190,8 +190,12 @@ func (s *StaffProposalApproval) show(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 	p, err := s.store.GetForSubject(r.Context(), id, urn.NewUserSubject(staff.OIDCSubject).String())
-	if err != nil || p.Status != ProposalPendingApproval || !time.Now().Before(p.ExpiresAt) {
+	if err != nil || p.Status != ProposalPendingApproval {
 		writeApprovalError(w, r, http.StatusNotFound, "404 page not found", oauthui.ReasonDefault)
+		return
+	}
+	if !time.Now().Before(p.ExpiresAt) {
+		writeApprovalError(w, r, http.StatusNotFound, "404 page not found", oauthui.ReasonExpired)
 		return
 	}
 	operation := s.operations[p.Operation]

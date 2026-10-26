@@ -402,6 +402,8 @@ func TestOAuthCIMD_UnregisteredRedirectURIRejected(t *testing.T) {
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/other-path", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+	require.Contains(t, w.Body.String(), "or its return address")
+	require.NotContains(t, w.Body.String(), "started sign-in in a way")
 }
 
 // TestOAuthCIMD_NonLoopbackPortVarianceRejected: the loopback variable-port

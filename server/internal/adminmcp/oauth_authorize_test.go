@@ -15,9 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -399,4 +401,44 @@ func TestStaffAuthorizationStateExpires(t *testing.T) {
 	require.Zero(t, store.calls)
 	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest).Code)
 	require.Contains(t, response.Body.String(), "link expired or was already used")
+}
+
+func TestStaffAuthorizationStateFailureExplanations(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		for _, tc := range []struct {
+			name, resource, explanation string
+			age                         time.Duration
+			missing, unavailable        bool
+		}{
+			{name: "expired", resource: staffAudience, age: time.Hour, explanation: "This connection link expired or was already used"},
+			{name: "wrong resource", resource: "https://other.example.test/admin-mcp", explanation: "This connection link is incomplete or invalid"},
+			{name: "missing state", missing: true, explanation: "This connection link is incomplete or invalid"},
+			{name: "cache outage", unavailable: true, explanation: "This is a problem on our side"},
+		} {
+			t.Run(method+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service, store, _, _ := staffAuthorizationFixture(t)
+				if !tc.missing {
+					challenge := staffChallenge{ID: "challenge", ResourceURI: tc.resource, CreatedAt: time.Now().Add(-tc.age)}
+					require.NoError(t, service.cache.Store(t.Context(), challenge))
+				}
+				if tc.unavailable {
+					service.cache = cache.NewTypedObjectCache[staffChallenge](testenv.NewLogger(t), nil, cache.SuffixNone)
+				}
+				request := httptest.NewRequest(method, Path+"/connect?state=challenge", strings.NewReader("state=challenge"))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				response := httptest.NewRecorder()
+				service.ConnectHandler().ServeHTTP(response, request)
+				body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest)
+				require.Equal(t, oautherr.CodeInvalidRequest, body.Code)
+				require.Equal(t, "authorization state is invalid or expired", body.Description)
+				require.Contains(t, response.Body.String(), tc.explanation)
+				if tc.name != "expired" {
+					require.NotContains(t, response.Body.String(), "This connection link expired or was already used")
+				}
+				require.Zero(t, store.calls)
+			})
+		}
+	}
 }

@@ -1397,7 +1397,12 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 		return
 	}
 	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
-		writeBrowserOAuthError(ctx, w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description, oauthui.ReasonDefault)
+		reason := oauthui.ReasonDefault
+		switch oauthErr.Code {
+		case oautherr.CodeInvalidClient, oautherr.CodeInvalidClientMetadata, oautherr.CodeInvalidRedirectURI:
+			reason = oauthui.ReasonInvalidClient
+		}
+		writeBrowserOAuthError(ctx, w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description, reason)
 		return
 	}
 	if errors.Is(err, errCIMDFetchFailed) {

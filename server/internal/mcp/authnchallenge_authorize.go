@@ -151,6 +151,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	page = authorizationErrorPage(client, req.ClientID, endpoint.Slug)
 	if !redirectURIMatches(client, req.RedirectURI) {
+		page.Reason = oauthui.ReasonInvalidClient
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, "invalid_request", "redirect_uri is not registered for this client")
 	}
 

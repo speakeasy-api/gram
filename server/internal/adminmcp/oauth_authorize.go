@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"goa.design/goa/v3/security"
 
@@ -173,8 +174,8 @@ func (s *StaffOAuthAuthorization) ConnectHandler() http.Handler {
 
 func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Request) {
 	challenge, err := s.cache.Get(r.Context(), staffChallengePrefix+r.URL.Query().Get("state"))
-	if err != nil || challenge.ID == "" || time.Since(challenge.CreatedAt) >= staffCodeLifetime || challenge.ResourceURI != s.resource {
-		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired", oauthui.ReasonExpired)
+	if reason := staffChallengeErrorReason(challenge, err, s.resource); reason != oauthui.ReasonDefault {
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired", reason)
 		return
 	}
 	if !staffBrowserProofMatches(r, challenge) {
@@ -278,8 +279,8 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 		return
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), staffChallengePrefix+r.PostForm.Get("state"))
-	if err != nil || challenge.ID == "" || time.Since(challenge.CreatedAt) >= staffCodeLifetime || challenge.ResourceURI != s.resource {
-		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired", oauthui.ReasonExpired)
+	if reason := staffChallengeErrorReason(challenge, err, s.resource); reason != oauthui.ReasonDefault {
+		staffBrowserError(w, r, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired", reason)
 		return
 	}
 	if !staffBrowserProofMatches(r, challenge) {
@@ -383,6 +384,21 @@ func (s *StaffOAuthAuthorization) staffSession(r *http.Request) (*contextvalues.
 
 func (s *StaffOAuthAuthorization) ready() bool {
 	return s != nil && s.clients != nil && s.store != nil && s.verifier != nil && s.cipher != nil && s.resource != ""
+}
+
+// staffChallengeErrorReason distinguishes proven expiry from invalid links and
+// cache outages without changing the authorization failure's wire contract.
+func staffChallengeErrorReason(challenge staffChallenge, err error, resource string) oauthui.Reason {
+	switch {
+	case err != nil && !errors.Is(err, redisCache.ErrCacheMiss):
+		return oauthui.ReasonUnavailable
+	case err != nil || challenge.ID == "" || challenge.ResourceURI != resource:
+		return oauthui.ReasonInvalidLink
+	case time.Since(challenge.CreatedAt) >= staffCodeLifetime:
+		return oauthui.ReasonExpired
+	default:
+		return oauthui.ReasonDefault
+	}
 }
 
 func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, client staffOAuthClient, redirectURI, state string, err error) {

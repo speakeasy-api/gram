@@ -166,6 +166,7 @@ func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
 	}{
 		{"blocked", oauthui.ReasonOrganizationBlocked, false, "Your organization doesn't allow"},
 		{"expired", oauthui.ReasonExpired, false, "link expired or was already used"},
+		{"unavailable", oauthui.ReasonUnavailable, false, "This is a problem on our side"},
 		{"session", oauthui.ReasonSessionChanged, false, "current browser or sign-in session"},
 		{"approval-expired", oauthui.ReasonExpired, true, "This approval link expired"},
 		{"approval-session", oauthui.ReasonSessionChanged, true, "Your staff sign-in session changed"},
