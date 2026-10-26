@@ -13,6 +13,7 @@ import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQ
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -29,6 +30,7 @@ import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useProjectFavorites } from "@/hooks/useProjectFavorites";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { dateTimeFormatters } from "@/lib/dates";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
@@ -56,6 +58,7 @@ import {
 } from "@/components/ui/Dropdown";
 import { type IconName } from "@/components/ui/Icon/names";
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -170,6 +173,10 @@ function OrgHomeInner() {
   // of active actors per project — all from one network call.
   const { data: auditData } = useAuditLogs();
   const auditLogs = useMemo(() => auditData?.result.logs ?? [], [auditData]);
+  // Resolved once for the whole page. Every project row names an actor, and
+  // each resolving its own put a second pair of query observers on the page
+  // per project and rebuilt the same two maps for each of them.
+  const identities = useAuditPrincipals(auditLogs);
 
   const { data: membersData } = useMembers();
   const memberById = useMemo(() => {
@@ -291,6 +298,7 @@ function OrgHomeInner() {
     const props = {
       project,
       latestLog: latestActionByProjectSlug.get(project.slug),
+      identities,
       facepile: getFacepileMembers(project.slug),
       isFavorite: isFavorite(project.id),
       onToggleFavorite: () => toggleFavorite(project.id),
@@ -439,7 +447,7 @@ function OrgHomeInner() {
 
           <aside className="flex flex-col gap-8 xl:sticky xl:top-[calc(var(--page-sticky-top,0px)+1rem)] xl:self-start">
             <RecentChallengesCompact />
-            <RecentActivityCompact logs={auditLogs} />
+            <RecentActivityCompact logs={auditLogs} identities={identities} />
           </aside>
         </div>
       </div>
@@ -609,12 +617,14 @@ function ViewModeButton({
 function ProjectRow({
   project,
   latestLog,
+  identities,
   facepile,
   isFavorite,
   onToggleFavorite,
 }: {
   project: OrgProject;
   latestLog: AuditLog | undefined;
+  identities: AuditIdentities;
   facepile: AccessMember[];
   isFavorite: boolean;
   onToggleFavorite: () => void;
@@ -656,7 +666,7 @@ function ProjectRow({
             </div>
 
             <div className="min-w-0 flex-1">
-              <RecentActionBlock log={latestLog} />
+              <RecentActionBlock log={latestLog} identities={identities} />
             </div>
           </div>
         </div>
@@ -696,12 +706,14 @@ function ProjectRow({
 function ProjectCard({
   project,
   latestLog,
+  identities,
   facepile,
   isFavorite,
   onToggleFavorite,
 }: {
   project: OrgProject;
   latestLog: AuditLog | undefined;
+  identities: AuditIdentities;
   facepile: AccessMember[];
   isFavorite: boolean;
   onToggleFavorite: () => void;
@@ -736,7 +748,7 @@ function ProjectCard({
         </div>
 
         <div className="pointer-events-none min-w-0 flex-1">
-          <RecentActionBlock log={latestLog} />
+          <RecentActionBlock log={latestLog} identities={identities} />
         </div>
 
         <div className="flex items-center justify-between gap-2">
@@ -902,7 +914,19 @@ function ProjectRowActions({
   );
 }
 
-function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
+/** The agent and member inventories, resolved once per page. */
+type AuditIdentities = ReturnType<typeof useAuditPrincipals>;
+
+function RecentActionBlock({
+  log,
+  // Handed in rather than resolved here: this renders once per visible
+  // project, and the page already holds the inventory the whole audit feed
+  // was resolved against.
+  identities,
+}: {
+  log: AuditLog | undefined;
+  identities: AuditIdentities;
+}) {
   if (!log) {
     return (
       <Text small muted className="truncate text-xs whitespace-nowrap">
@@ -910,7 +934,6 @@ function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
       </Text>
     );
   }
-  const actor = getActorLabel(log);
   const verb = renderVerb(log);
 
   return (
@@ -929,7 +952,11 @@ function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
                 includeTime: false,
               })}
               <span className="mx-1 opacity-60">·</span>
-              {actor}
+              <AuditPrincipalLink
+                principal={auditActorPrincipal(log)}
+                identities={identities}
+                fallback={getActorLabel(log)}
+              />
             </span>
           </span>
         </TooltipTrigger>
@@ -985,10 +1012,15 @@ function TimestampDetail({ date }: { date: Date }) {
   );
 }
 
-function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
+function RecentActivityCompact({
+  logs,
+  identities,
+}: {
+  logs: AuditLog[];
+  identities: AuditIdentities;
+}) {
   const orgRoutes = useOrgRoutes();
   const preview = useMemo(() => logs.slice(0, AUDIT_PREVIEW_LIMIT), [logs]);
-  const identities = useAuditPrincipals(preview);
 
   return (
     <Card.Dashboard
@@ -1090,6 +1122,23 @@ function RecentChallengesCompact() {
     [data?.buckets],
   );
 
+  // Named agents for the rows. The challenge carries only the urn, and an id
+  // off a challenge is not permission to open the agent, so the roster is the
+  // name and the decision to link.
+  const agents = useReadableAgents(
+    buckets.some((bucket) => bucket.principalType === "agent"),
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
+
   if (isLoading) return null;
 
   return (
@@ -1114,7 +1163,7 @@ function RecentChallengesCompact() {
         <ol className="divide-border max-h-72 divide-y overflow-y-auto">
           {buckets.map((bucket) => (
             <li key={bucket.id}>
-              <CompactChallengeRow bucket={bucket} />
+              <CompactChallengeRow bucket={bucket} agentsById={agentsById} />
             </li>
           ))}
         </ol>
@@ -1133,31 +1182,55 @@ function shortenPrincipal(bucket: ChallengeBucket): string {
   return bucket.principalUrn;
 }
 
-function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
+function CompactChallengeRow({
+  bucket,
+  agentsById,
+}: {
+  bucket: ChallengeBucket;
+  agentsById: Map<string, { name: string }>;
+}) {
   const orgRoutes = useOrgRoutes();
-  const label = shortenPrincipal(bucket);
   const isApiKey = bucket.principalType === "api_key";
+  const isAgent = bucket.principalType === "agent";
+  const agentId = isAgent ? bucket.principalUrn.replace(/^agent:/, "") : null;
+  // An agent label uses the shared text helper for consistent naming, with the
+  // resolved name when available (falling back to the id otherwise).
+  const agent = agentId ? agentsById.get(agentId) : undefined;
+  const label = agentId
+    ? actingPrincipalText({ id: agentId, name: agent?.name })
+    : shortenPrincipal(bucket);
   const lastSeen = new Date(bucket.lastSeen);
   const count = Number(bucket.challengeCount);
 
   return (
     <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-3 px-6 py-3 text-xs no-underline transition-colors hover:no-underline">
       {/* Sized to match the ActionIconTile in Recent activity below, so the two
-          rail cards line up row for row. */}
-      <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
-        {isApiKey || !bucket.userEmail ? (
-          <KeyRound className="size-4" />
-        ) : (
-          <Avatar className="size-8">
-            {bucket.photoUrl ? (
-              <AvatarImage src={bucket.photoUrl} alt={label} />
-            ) : null}
-            <AvatarFallback className="bg-muted text-muted-foreground text-[11px] font-medium">
-              {getInitials(bucket.userEmail)}
-            </AvatarFallback>
-          </Avatar>
-        )}
-      </div>
+          rail cards line up row for row. Agents render a square face to
+          distinguish them from round user avatars. */}
+      {isAgent ? (
+        <span
+          role="img"
+          aria-label="Agent"
+          className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center"
+        >
+          <Bot aria-hidden="true" className="size-4" />
+        </span>
+      ) : (
+        <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
+          {isApiKey || !bucket.userEmail ? (
+            <KeyRound className="size-4" />
+          ) : (
+            <Avatar className="size-8">
+              {bucket.photoUrl ? (
+                <AvatarImage src={bucket.photoUrl} alt={label} />
+              ) : null}
+              <AvatarFallback className="bg-muted text-muted-foreground text-[11px] font-medium">
+                {getInitials(bucket.userEmail)}
+              </AvatarFallback>
+            </Avatar>
+          )}
+        </div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Text small className="truncate leading-snug">
           <span className="text-destructive mr-1.5 font-mono text-[10px] font-medium uppercase">

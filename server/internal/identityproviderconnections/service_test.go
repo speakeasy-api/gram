@@ -899,7 +899,7 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fullOrgURL, normalized)
 
-	for _, raw := range []string{"https://sub.example.okta.mil", "https://dev-1.oktapreview.com", "https://x.okta-emea.com"} {
+	for _, raw := range []string{"https://sub.example.okta.mil", "https://dev-1.oktapreview.com", "https://x.okta-emea.com", "https://agency.okta-gov.com", "https://oin-test.trexcloud.com"} {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.NoError(t, err, raw)
 	}
@@ -908,6 +908,7 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 		"https://acme-admin.oktapreview.com/":            "https://acme.oktapreview.com",
 		"https://acme-admin.okta-emea.com/admin":         "https://acme.okta-emea.com",
 		"https://acme-admin.okta.mil/admin/home":         "https://acme.okta.mil",
+		"https://acme-admin.okta-gov.com/admin":          "https://acme.okta-gov.com",
 		"https://Dev-1-Admin.okta.com/admin/apps/active": "https://dev-1.okta.com",
 		"https://myadmin-co.okta.com":                    "https://myadmin-co.okta.com",
 		"https://admin-team.okta.com":                    "https://admin-team.okta.com",

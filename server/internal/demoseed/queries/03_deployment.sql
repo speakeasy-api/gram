@@ -177,10 +177,10 @@ VALUES
 -- name: DeployInsertOrgWorkloadIssuer :exec
 INSERT INTO workload_issuers
   (id, organization_id, project_id, name, description, tags, issuer, jwks_uri,
-   allow_wildcard_admission)
+   allow_wildcard_admission, allow_assertion_reuse)
 VALUES
   (@id, @organization_id::text, NULL, @name, @description::text, @tags::text[], @issuer, @jwks_uri,
-   @allow_wildcard_admission);
+   @allow_wildcard_admission, @allow_assertion_reuse::boolean);
 
 -- name: DeployInsertWorkloadAdmission :exec
 INSERT INTO workload_identity_admissions
@@ -219,7 +219,7 @@ VALUES
 
 -- name: DeployInsertAgent :exec
 INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
-VALUES (@id, @organization_id::text, @project_id::uuid, @owner_user_id, 'Identity-bound assistant agent');
+VALUES (@id, @organization_id::text, @project_id::uuid, @owner_user_id, @name::text);
 
 -- name: DeployInsertPrincipalGrant :exec
 INSERT INTO principal_grants

@@ -282,7 +282,7 @@ export class WorkloadIdentities extends ClientSDK {
    * revokeDeviceJoinToken workloadIdentities
    *
    * @remarks
-   * Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; revoking stops future enrollments only and leaves a device the token already enrolled in place. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token's agent or agent:authorize on it, as creating one does.
+   * Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; withdraw the enrolled device instead when a token was redeemed. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token's agent or agent:authorize on it, as creating one does.
    */
   async revokeDeviceJoinToken(
     request: RevokeWorkloadDeviceJoinTokenRequest,
@@ -301,7 +301,7 @@ export class WorkloadIdentities extends ClientSDK {
    * updateIssuer workloadIdentities
    *
    * @remarks
-   * Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+   * Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
    */
   async updateIssuer(
     request: UpdateWorkloadIssuerRequest,

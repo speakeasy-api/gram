@@ -1422,9 +1422,9 @@ type orgProvisionOptions struct {
 }
 
 // provisionOrgForUser creates an organization and attaches a user to it as the
-// first member. Shared by the three paths that create orgs: self-serve register,
-// signup with a company name carried through login, and assistants
-// auto-provisioning.
+// first member. Shared by the four paths that create orgs: self-serve register,
+// signup with a company name carried through login, assistants
+// auto-provisioning, and a Platform MCP workspace named during OAuth.
 //
 // Session mutation is deliberately left to the caller. Register updates an
 // already-stored session; the callback-side callers assign
@@ -1574,7 +1574,9 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *auth
 // persistProvisionedOrganization writes the Speakeasy-side records for an
 // organization that already exists in WorkOS, and returns the row as it stood
 // before any trial arming. A trial armed under opts.ProvisionTrial joins the
-// same transaction, so a failure leaves neither behind.
+// same transaction, so a failure leaves neither behind. A newly inserted
+// organization also gets its user-session issuer and creation audit atomically;
+// adopting metadata already written by identity sync does not backfill an issuer.
 func (s *Service) persistProvisionedOrganization(
 	ctx context.Context,
 	provisionedOrg identity.ProvisionedOrganization,
@@ -1600,7 +1602,7 @@ func (s *Service) persistProvisionedOrganization(
 		}
 	}
 
-	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	org, created, err := queries.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          provisionedOrg.GramOrganizationID,
 		Name:        orgName,
 		Slug:        slug,
@@ -1613,6 +1615,15 @@ func (s *Service) persistProvisionedOrganization(
 	})
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)
+	}
+
+	// Partner signup inserted through the create-only primitive above. Other
+	// flows may adopt metadata already written by identity synchronization;
+	// never backfill or alter issuers for those existing organizations.
+	if created || opts.StripePromotionCodeID != "" {
+		if err := s.createOrganizationIssuerTx(ctx, tx, org.ID, userID, opts.ActorEmail); err != nil {
+			return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization sign-in issuer: %w", err)
+		}
 	}
 
 	if _, err := queries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{

@@ -7,7 +7,7 @@ import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
-import { formatRemoteMcpDisplay } from "@/lib/sources";
+import { formatRemoteMcpDisplay, mcpServerRouteParam } from "@/lib/sources";
 import type { OrganizationMcpServer } from "@gram/client/models/components/organizationmcpserver.js";
 import {
   invalidateAllOrganizationRemoteSessionClientMcpServers,
@@ -36,8 +36,7 @@ function mcpServerHref(
   server: OrganizationMcpServer,
 ): string | null {
   if (!orgSlug || !server.projectSlug) return null;
-  const param = server.slug?.trim() || server.id;
-  return `/${orgSlug}/projects/${server.projectSlug}/mcp/x/${param}/overview`;
+  return `/${orgSlug}/projects/${server.projectSlug}/mcp/${mcpServerRouteParam(server)}/overview`;
 }
 
 export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {

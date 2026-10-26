@@ -7,6 +7,7 @@ import {
   deviceEnrollmentPolicyGrants,
   managedConfig,
   redeemedToken,
+  watchedTokensFinished,
 } from "./device-enrollment";
 
 function grant(
@@ -85,6 +86,35 @@ describe("reading an agent's policy", () => {
     expect(acceptsHooks(policy, "org_one", "project_one")).toBe(true);
     expect(acceptsHooks(policy, "org_one", "project_two")).toBe(false);
     expect(allowsDeviceSync([], "org_one")).toBe(false);
+    expect(allowsDeviceSync(policy, "org_two")).toBe(false);
+    expect(acceptsHooks(policy, "org_two", "project_one")).toBe(false);
+  });
+
+  it("recognizes wildcard organization and project grants", () => {
+    expect(
+      allowsDeviceSync(
+        [
+          grant("org:device_agent_sync", {
+            resourceKind: "org",
+            resourceId: "*",
+          }),
+        ],
+        "org_one",
+      ),
+    ).toBe(true);
+    expect(
+      acceptsHooks(
+        [
+          grant("org:hooks_ingest", {
+            resourceKind: "org",
+            resourceId: "*",
+            projectId: "*",
+          }),
+        ],
+        "org_one",
+        "project_two",
+      ),
+    ).toBe(true);
   });
 
   it("reads an organization-wide hooks grant as covering every project", () => {
@@ -114,6 +144,21 @@ describe("managedConfig", () => {
     });
   });
 
+  it.each([
+    "http://example.test",
+    "http://localhost:8080",
+    "invalid",
+    "https://user:password@example.test",
+  ])("refuses unsafe control plane %s", (controlPlaneURL) => {
+    expect(() =>
+      managedConfig({
+        joinToken: "example",
+        hooksProjectSlug: "default",
+        controlPlaneURL,
+      }),
+    ).toThrow(/HTTPS/);
+  });
+
   it("names any other control plane", () => {
     const parsed = JSON.parse(
       managedConfig({
@@ -137,16 +182,52 @@ describe("redeemedToken", () => {
     expect(redeemedToken(tokens, [{ id: "token_two" }])).toBeUndefined();
   });
 
-  it("matches a manually created token by its expiry, to the second", () => {
-    const tokens = [token({ status: "redeemed" })];
+  it("does not confuse two tokens with the same expiry", () => {
     expect(
-      redeemedToken(tokens, [
-        { expiresAt: new Date("2026-10-20T11:00:00.400Z") },
-      ]),
-    ).toBeDefined();
+      redeemedToken(
+        [token({ id: "other_token", status: "redeemed" })],
+        [{ id: "token_one" }],
+      ),
+    ).toBeUndefined();
   });
 
   it("ignores a watched token that is still active", () => {
     expect(redeemedToken([token({})], [{ id: "token_one" }])).toBeUndefined();
+  });
+});
+
+describe("watchedTokensFinished", () => {
+  it.each(["expired", "revoked"] as const)("stops on %s tokens", (status) => {
+    expect(
+      watchedTokensFinished([token({ status })], [{ id: "token_one" }]),
+    ).toBe(true);
+  });
+  it("stops at the issued expiry even if the token is not in the response", () => {
+    expect(
+      watchedTokensFinished(
+        [],
+        [{ id: "token_one", expiresAt: new Date(1000) }],
+        1000,
+      ),
+    ).toBe(true);
+    expect(
+      watchedTokensFinished(
+        [],
+        [{ id: "token_one", expiresAt: new Date(1000) }],
+        999,
+      ),
+    ).toBe(false);
+  });
+  it("keeps polling while any watched token is active", () => {
+    expect(
+      watchedTokensFinished(
+        [
+          token({ status: "expired" }),
+          token({ id: "token_two", expiresAt: new Date(2000) }),
+        ],
+        [{ id: "token_one" }, { id: "token_two" }],
+        1000,
+      ),
+    ).toBe(false);
   });
 });

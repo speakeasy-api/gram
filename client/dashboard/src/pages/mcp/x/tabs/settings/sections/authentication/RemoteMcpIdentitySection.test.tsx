@@ -69,12 +69,12 @@ vi.mock("sonner", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
-      x: {
-        overview: { href: (slug: string) => `/mcp/x/${slug}` },
-        inspect: { href: (slug: string) => `/mcp/x/${slug}/inspect` },
-        teamAccess: { href: (slug: string) => `/mcp/x/${slug}/team-access` },
-        sessions: { href: (slug: string) => `/mcp/x/${slug}/sessions` },
-        settings: { href: (slug: string) => `/mcp/x/${slug}/settings` },
+      details: {
+        overview: { href: (slug: string) => `/mcp/${slug}` },
+        inspect: { href: (slug: string) => `/mcp/${slug}/inspect` },
+        teamAccess: { href: (slug: string) => `/mcp/${slug}/team-access` },
+        sessions: { href: (slug: string) => `/mcp/${slug}/sessions` },
+        settings: { href: (slug: string) => `/mcp/${slug}/settings` },
       },
     },
     remoteIdentityProviders: {
@@ -1611,7 +1611,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
       const alert = await screen.findByRole("alert");
       expect(alert.querySelector("code")?.textContent).toBe(message);
-      expect(alert.textContent).toBe(message);
+      // The severity eyebrow every alert now carries, and then the message
+      // itself — the point of the assertion is that nothing else is added,
+      // not that the alert is unlabelled.
+      expect(alert.textContent).toBe(`Error${message}`);
       expect(within(alert).queryByRole("heading")).toBeNull();
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
       expect(screen.queryByText(/PRIVATE RESPONSE BODY/)).toBeNull();

@@ -24,6 +24,10 @@ type RegisterIssuerRequestBody struct {
 	// Where the issuer publishes the keys its assertions are signed with. Must be
 	// an https URL on a fully qualified domain name.
 	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Checked when a wildcard rule is admitted and again on
 	// every lookup, so clearing it makes wildcard rules already written inert
@@ -37,8 +41,9 @@ type RegisterIssuerRequestBody struct {
 	// tags of at most 64 characters each.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
@@ -59,6 +64,11 @@ type UpdateIssuerRequestBody struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Omit to preserve the current setting; false
+	// disables this opt-in. Tokens without replay identifiers retain existing
+	// exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 }
 
 // AdmitSubjectRequestBody is the type of the "workloadIdentities" service
@@ -85,8 +95,9 @@ type AdmitSubjectRequestBody struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
@@ -237,6 +248,8 @@ type WithdrawSubjectResponseBody struct {
 // CreateDeviceJoinTokenResponseBody is the type of the "workloadIdentities"
 // service "createDeviceJoinToken" endpoint HTTP response body.
 type CreateDeviceJoinTokenResponseBody struct {
+	// The unique token id used to track or revoke this issuance without its secret.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The join token. Shown once; only its hash is stored.
 	Token *string `form:"token,omitempty" json:"token,omitempty" xml:"token,omitempty"`
 	// When the token stops being redeemable.
@@ -3151,6 +3164,10 @@ type WorkloadIssuerResponseBody struct {
 	// What the platform is and what runs on it. Empty rather than absent where
 	// none is set.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
 	// Free-form labels for grouping and filtering trusted platforms. Empty rather
@@ -3365,6 +3382,7 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 		Name:                   p.Name,
 		Issuer:                 p.Issuer,
 		JwksURI:                p.JwksURI,
+		AllowAssertionReuse:    p.AllowAssertionReuse,
 		AllowWildcardAdmission: p.AllowWildcardAdmission,
 		Description:            p.Description,
 		ProjectScoped:          p.ProjectScoped,
@@ -3388,10 +3406,11 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 // the "updateIssuer" endpoint of the "workloadIdentities" service.
 func NewUpdateIssuerRequestBody(p *workloadidentities.UpdateIssuerPayload) *UpdateIssuerRequestBody {
 	body := &UpdateIssuerRequestBody{
-		ID:          p.ID,
-		Name:        p.Name,
-		JwksURI:     p.JwksURI,
-		Description: p.Description,
+		ID:                  p.ID,
+		Name:                p.Name,
+		JwksURI:             p.JwksURI,
+		Description:         p.Description,
+		AllowAssertionReuse: p.AllowAssertionReuse,
 	}
 	if p.Tags != nil {
 		body.Tags = make([]string, len(p.Tags))
@@ -3474,7 +3493,7 @@ func NewCreateDeviceJoinTokenRequestBody(p *workloadidentities.CreateDeviceJoinT
 func NewCreateDeviceInstallCommandRequestBody(p *workloadidentities.CreateDeviceInstallCommandPayload) *CreateDeviceInstallCommandRequestBody {
 	body := &CreateDeviceInstallCommandRequestBody{
 		AgentID:          p.AgentID,
-		HooksProjectSlug: p.HooksProjectSlug,
+		HooksProjectSlug: string(p.HooksProjectSlug),
 		ExpiresInSeconds: p.ExpiresInSeconds,
 	}
 	{
@@ -5222,6 +5241,7 @@ func NewWithdrawSubjectGatewayError(body *WithdrawSubjectGatewayErrorResponseBod
 // HTTP "OK" response.
 func NewCreateDeviceJoinTokenWorkloadDeviceJoinTokenOK(body *CreateDeviceJoinTokenResponseBody) *workloadidentities.WorkloadDeviceJoinToken {
 	v := &workloadidentities.WorkloadDeviceJoinToken{
+		ID:        *body.ID,
 		Token:     *body.Token,
 		ExpiresAt: *body.ExpiresAt,
 	}
@@ -6299,11 +6319,17 @@ func ValidateWithdrawSubjectResponseBody(body *WithdrawSubjectResponseBody) (err
 // ValidateCreateDeviceJoinTokenResponseBody runs the validations defined on
 // CreateDeviceJoinTokenResponseBody
 func ValidateCreateDeviceJoinTokenResponseBody(body *CreateDeviceJoinTokenResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
 	if body.Token == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
 	}
 	if body.ExpiresAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.ExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
@@ -10055,6 +10081,9 @@ func ValidateWorkloadIssuerResponseBody(body *WorkloadIssuerResponseBody) (err e
 	}
 	if body.AllowWildcardAdmission == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("allow_wildcard_admission", "body"))
+	}
+	if body.AllowAssertionReuse == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("allow_assertion_reuse", "body"))
 	}
 	if body.Tags == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))

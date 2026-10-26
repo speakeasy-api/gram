@@ -5,7 +5,7 @@ import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
 import {
-  AgentIdentityPanel,
+  AgentIdentityFacts,
   AgentLifecycle,
   RenameAgentButton,
 } from "@/pages/agents/agent-admin";
@@ -18,7 +18,42 @@ import {
   AgentIdentityAudit,
   AgentIdentityChallenges,
 } from "./AgentIdentityActivity";
+import { AgentIdentityUsage } from "./AgentIdentityUsage";
+import { IdentityPanel } from "./IdentityPanel";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { IdentitySection } from "./IdentitySection";
+
+/**
+ * Edit and rename, for the page header: they act on the agent itself, not on
+ * any one section, so they sit with its name rather than under a tab.
+ */
+export function AgentHeaderActions({
+  agent,
+  refresh,
+}: {
+  agent: ManagedAgent;
+  refresh: () => void;
+}): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <div className="-ml-2 flex items-center gap-1">
+      {/* Changing what the agent reaches is the same set of questions it
+          was registered with, so it is the same flow. */}
+      {/* Same gate as rename: saving the edit flow needs write access. */}
+      {agent.permissions.write && (
+        <Button asChild variant="tertiary" size="xs">
+          <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
+        </Button>
+      )}
+      <RenameAgentButton
+        agent={agent}
+        refresh={refresh}
+        variant="tertiary"
+        size="xs"
+      />
+    </div>
+  );
+}
 
 /** Agent data is keyed by its principal, never by its human owner's identifiers. */
 export function AgentIdentityProfile({
@@ -117,9 +152,6 @@ export function AgentIdentityProfile({
           </IdentitySection>
         );
       }
-      // An agent holds keys, not provider logins and not machines. The
-      // managed-device panel that sat here could only ever say so.
-      //
       // The gateway endpoint is not repeated here: the wizard hands it over
       // while connecting the runtime, and a second copy under the keys read
       // as a second thing to configure.
@@ -130,8 +162,8 @@ export function AgentIdentityProfile({
             !credentialKnown
               ? "How this agent signs in"
               : federated
-                ? "The platforms that sign in as this agent, and the keys it holds"
-                : "The keys this agent holds, and the platforms that sign in as it"
+                ? "The platforms, devices, and keys that sign in as this agent"
+                : "The keys, devices, and platforms that sign in as this agent"
           }
         >
           {/* Issuing is a flow of its own, so the button puts this section
@@ -193,25 +225,31 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Overview"
-          meta="What this identity is, and who answers for it"
-          action={
-            <div className="flex items-center gap-2">
-              {/* Changing what the agent reaches is the same set of
-                  questions it was registered with, so it is the same flow. */}
-              <Button asChild variant="secondary">
-                <Link to={routes.identities.agents.edit.href(agent.id)}>
-                  Edit
-                </Link>
-              </Button>
-              <RenameAgentButton agent={agent} refresh={refresh} />
-            </div>
-          }
+          meta="What this agent has been doing, and who answers for it"
         >
-          {/* Name, principal, owner, scope and lifecycle — the durable
-              facts, from the one component that states them. */}
-          <AgentIdentityPanel agent={agent} />
-          <AgentIdentityPermissions agent={agent} />
-          <AgentIdentityChallenges agent={agent} />
+          {/* Who answers for it and whether it may act, as one line. The
+              rest of what this card used to hold is said by the header above
+              or by the Permissions section, and was read twice. */}
+          <AgentIdentityFacts agent={agent} />
+          {/* What the agent has actually been doing, before what it is
+              allowed to do: an overview is opened to find out whether
+              something is wrong, and the policy is where you look next. */}
+          <AgentIdentityUsage agent={agent} />
+          {/* Who is signed in as it right now, capped. The Sessions section
+              owns the full list and the revoking; this says whether anything
+              is live without making the reader go and look. */}
+          <IdentityPanel
+            title="Sessions"
+            handoffLabel="all sessions"
+            // Carries the query across: the date range lives in the URL, so a
+            // bare path silently put the reader back on the default window
+            // when they came back to the overview.
+            handoffHref={`${routes.identities.detail.sessions.href(
+              encodeIdentityUrn(`agent:${agent.id}`),
+            )}${params.toString() ? `?${params}` : ""}`}
+          >
+            <ManagedAgentSessions agent={agent} variant="panel" limit={3} />
+          </IdentityPanel>
           <AgentIdentityAudit agent={agent} subject />
         </IdentitySection>
       );

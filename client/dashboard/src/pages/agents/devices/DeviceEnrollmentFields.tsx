@@ -62,9 +62,9 @@ export function DeviceEnrollmentFields({
         {hooksNote}
       </div>
       <div className="space-y-2">
-        <Label id="device-token-lifetime">Bootstrap token expires after</Label>
+        <Label>Bootstrap token expires after</Label>
         <SegmentedControl
-          ariaLabel="Bootstrap token lifetime"
+          ariaLabel="Bootstrap token expires after"
           value={String(lifetimeSeconds)}
           onChange={(value) => onLifetimeChange(Number(value))}
           disabled={disabled}

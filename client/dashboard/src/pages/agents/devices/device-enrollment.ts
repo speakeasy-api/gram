@@ -149,16 +149,21 @@ export function managedConfig({
     },
     join_token: joinToken,
   };
-  const origin = originOf(controlPlaneURL);
-  if (origin !== null && origin !== DEFAULT_CONTROL_PLANE_URL) {
+  const origin = secureControlPlaneOrigin(controlPlaneURL);
+  if (origin === null)
+    throw new Error("Device enrollment requires an HTTPS control plane.");
+  if (origin !== DEFAULT_CONTROL_PLANE_URL) {
     config["_control_plane_url"] = origin;
   }
   return JSON.stringify(config, null, 2);
 }
 
-function originOf(url: string): string | null {
+export function secureControlPlaneOrigin(url: string): string | null {
   try {
-    return new URL(url).origin;
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password)
+      return null;
+    return parsed.origin;
   } catch {
     return null;
   }
@@ -172,23 +177,31 @@ export function isDeviceAdmission(admission: WorkloadAdmission): boolean {
   );
 }
 
-/**
- * A token this page created and is waiting on. The install command returns
- * the token's id; creating one by hand returns only its expiry, which is
- * stamped by the server and so identifies it in the list just as well.
- */
-export type WatchedToken = { id: string } | { expiresAt: Date };
+/** A token issued by this flow, identified by its server-generated ID. */
+export type WatchedToken = { id: string; expiresAt?: Date };
 
 function findWatchedToken(
   tokens: WorkloadDeviceJoinTokenSummary[],
   watched: WatchedToken,
 ): WorkloadDeviceJoinTokenSummary | undefined {
-  return tokens.find((token) =>
-    "id" in watched
-      ? token.id === watched.id
-      : // Both are written to the second, so compare at that precision.
-        Math.floor(token.expiresAt.getTime() / 1000) ===
-        Math.floor(watched.expiresAt.getTime() / 1000),
+  return tokens.find((token) => token.id === watched.id);
+}
+
+export function watchedTokensFinished(
+  tokens: WorkloadDeviceJoinTokenSummary[],
+  watched: WatchedToken[],
+  now = Date.now(),
+): boolean {
+  return (
+    watched.length > 0 &&
+    watched.every((entry) => {
+      const token = findWatchedToken(tokens, entry);
+      if (token?.status === "redeemed") return true;
+      if (token?.status === "expired" || token?.status === "revoked")
+        return true;
+      const expiresAt = token?.expiresAt ?? entry.expiresAt;
+      return expiresAt !== undefined && expiresAt.getTime() <= now;
+    })
   );
 }
 

@@ -47,6 +47,8 @@ const (
 
 var errAHPEvidenceSize = errors.New("AHP prompt and attachment text exceeds the 1 MiB limit")
 
+var errAHPAttachmentUnavailable = errors.New("AHP staged attachment unavailable")
+
 // ahpStagedUpload is the verified upload body kept until an event resolves it.
 type ahpStagedUpload struct {
 	Content []byte `json:"content"`
@@ -144,13 +146,10 @@ func (s *Service) serveAHPUpload(w http.ResponseWriter, r *http.Request) {
 // endpoint in the authenticated project resolve. Binary bodies are staged but
 // excluded from text prompt ingestion.
 func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageInboundEvent) ([]*gen.HookPromptAttachmentEntry, error) {
-	if e == nil || s.cache == nil {
+	if e == nil {
 		return nil, nil
 	}
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, nil
-	}
+	authCtx, authenticated := contextvalues.GetAuthContext(ctx)
 	var attachments []*gen.HookPromptAttachmentEntry
 	evidenceBytes := 0
 	for _, message := range e.Message.Messages {
@@ -163,8 +162,14 @@ func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageIn
 			}
 			body := part.AttachmentBodyPart.Value
 			id, ok := strings.CutPrefix(body.Body.Ref, ahpUploadRefPrefix)
-			if !ok || id == "" {
+			if !ok {
 				continue
+			}
+			// A receipt promises staged evidence. Never turn an expired, evicted,
+			// cross-project, or unreadable reference into a successful partial scan.
+			// The SDK reports this error under the subscription's failure policy.
+			if id == "" || s.cache == nil || !authenticated || authCtx == nil || authCtx.ProjectID == nil {
+				return nil, errAHPAttachmentUnavailable
 			}
 			var staged ahpStagedUpload
 			if err := s.cache.Get(ctx, ahpUploadCacheKey(*authCtx.ProjectID, id), &staged); err != nil {
@@ -174,7 +179,7 @@ func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageIn
 						attr.SlogProjectID(authCtx.ProjectID.String()),
 					)
 				}
-				continue
+				return nil, errAHPAttachmentUnavailable
 			}
 			if !ahpIsText(staged.Content) {
 				continue

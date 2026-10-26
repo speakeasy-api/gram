@@ -3,7 +3,7 @@ import type { Toolset } from "@/lib/toolTypes";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
-import { PageSection } from "./MCPDetails";
+import { PageSection } from "./PageSection";
 import { ConnectOAuthModal } from "./oauth-wizard";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";
 import { AuthenticationSectionBody } from "./x/tabs/settings/sections/authentication/AuthenticationSection";

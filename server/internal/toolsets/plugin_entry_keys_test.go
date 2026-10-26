@@ -1,6 +1,7 @@
 package toolsets_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func updateToolsetPayload(slug types.Slug) *gen.UpdateToolsetPayload {
@@ -42,13 +42,13 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 	require.True(t, *created.McpEnabled)
 	toolsetID := uuid.MustParse(created.ID)
 
-	// A legacy toolset-keyed entry in another plugin, as left before the dependent move.
+	// An entry in another plugin, keyed by the canonical server.
 	other, err := plugins.CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, Name: "Other", Slug: "other-" + uuid.NewString()[:8], Description: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	_, err = testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
-		PluginID: other.ID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+	_, err = plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID: other.ID, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
 		DisplayName: "Hosted Toolset", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
@@ -70,11 +70,10 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, pluginID := range []uuid.UUID{defaultPlugin.ID, other.ID} {
-		servers, err := plugins.ListPluginServers(ctx, pluginID)
-		require.NoError(t, err)
-		require.Contains(t, displayNames(servers), "Renamed Toolset", "a toolset rename reaches its entries")
+		names := displayNames(t, ctx, plugins, pluginID)
+		require.Contains(t, names, "Renamed Toolset", "a toolset rename reaches its entries")
 		if pluginID == other.ID {
-			require.Contains(t, displayNames(servers), "Bystander", "renaming one toolset leaves other server names unchanged")
+			require.Contains(t, names, "Bystander", "renaming one toolset leaves other server names unchanged")
 		}
 	}
 
@@ -82,9 +81,7 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: created.Slug}))
 
-	defaultServers, err := plugins.ListPluginServers(ctx, defaultPlugin.ID)
-	require.NoError(t, err)
-	require.NotContains(t, displayNames(defaultServers), "Renamed Toolset", "deleting the toolset detaches its entries")
+	require.NotContains(t, displayNames(t, ctx, plugins, defaultPlugin.ID), "Renamed Toolset", "deleting the toolset detaches its entries")
 	otherServers, err := plugins.ListPluginServers(ctx, other.ID)
 	require.NoError(t, err)
 	require.Len(t, otherServers, 1, "another server's entry stays")
@@ -94,7 +91,7 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 	require.Equal(t, beforeRemovals+2, afterRemovals)
 }
 
-func TestToolsetsService_ReenableDoesNotTwinLegacyEntry(t *testing.T) {
+func TestToolsetsService_ReenableDoesNotTwinExistingEntry(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
@@ -116,8 +113,8 @@ func TestToolsetsService_ReenableDoesNotTwinLegacyEntry(t *testing.T) {
 	_, err = ti.service.UpdateToolset(ctx, disable)
 	require.NoError(t, err)
 	require.NoError(t, plugins.SoftDeletePluginServers(ctx, defaultPlugin.ID))
-	_, err = testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
-		PluginID: defaultPlugin.ID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+	_, err = plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID: defaultPlugin.ID, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
 		DisplayName: "Legacy Entry", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
@@ -129,11 +126,14 @@ func TestToolsetsService_ReenableDoesNotTwinLegacyEntry(t *testing.T) {
 
 	servers, err := plugins.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
-	require.Len(t, servers, 1, "the toolset-keyed entry already covers the canonical server")
-	require.Equal(t, toolsetID, servers[0].ToolsetID.UUID)
+	require.Len(t, servers, 1, "the existing entry already covers the canonical server")
+	require.Equal(t, toolsetID, servers[0].McpServerID.UUID)
 }
 
-func displayNames(servers []pluginsrepo.PluginServer) []string {
+func displayNames(t *testing.T, ctx context.Context, q *pluginsrepo.Queries, pluginID uuid.UUID) []string {
+	t.Helper()
+	servers, err := q.ListPluginServers(ctx, pluginID)
+	require.NoError(t, err)
 	names := make([]string, 0, len(servers))
 	for _, server := range servers {
 		names = append(names, server.DisplayName)

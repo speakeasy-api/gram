@@ -7,12 +7,15 @@ import {
   within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { invalidateAllWorkloadDeviceJoinTokens } from "@gram/client/react-query/workloadDeviceJoinTokens.js";
+import { invalidateAllWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import type { WorkloadDeviceJoinTokenSummary } from "@gram/client/models/components/workloaddevicejointokensummary.js";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WorkloadPlatformPicker } from "../provision/StepWorkload";
+import { CredentialPicker } from "../credentials/CredentialPicker";
 import { AgentBootstrapTokens } from "./AgentBootstrapTokens";
 import { DeviceSetupPanel, ManualSetup } from "./DeviceSetupPanel";
 import { InstallCommandUnavailable } from "./device-install-command";
@@ -25,6 +28,27 @@ const mocks = vi.hoisted(() => ({
   revoke: vi.fn(),
   withdraw: vi.fn(),
   canRead: true,
+  canWrite: true,
+  tokensError: false,
+  refetchTokens: vi.fn(),
+  membersReady: true,
+  serverURL: "https://app.getgram.ai",
+  installFlag: "missing",
+  createInstallCommand: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueries: () => [
+    {
+      data: { result: { items: mocks.tokens } },
+      isError: mocks.tokensError,
+      refetch: mocks.refetchTokens,
+    },
+  ],
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -41,12 +65,15 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/lib/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/utils")>()),
-  getServerURL: () => "https://app.getgram.ai",
+  getServerURL: () => mocks.serverURL,
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasAllScopes: () => mocks.canRead,
-    hasAnyScope: () => mocks.canRead,
+    hasAnyScope: (scopes: string[]) =>
+      scopes.some((scope) =>
+        scope === "workload:write" ? mocks.canWrite : mocks.canRead,
+      ),
     isLoading: false,
   }),
 }));
@@ -61,17 +88,20 @@ vi.mock("@gram/client/react-query/createWorkloadDeviceJoinToken.js", () => ({
   }),
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: "missing" }),
+  useFeatureFlag: () => ({ status: mocks.installFlag }),
 }));
 vi.mock(
   "@gram/client/react-query/createWorkloadDeviceInstallCommand.js",
   () => ({
     useCreateWorkloadDeviceInstallCommandMutation: () => ({
-      mutateAsync: vi.fn(),
+      mutateAsync: mocks.createInstallCommand,
     }),
   }),
 );
 vi.mock("@gram/client/react-query/workloadDeviceJoinTokens.js", () => ({
+  buildWorkloadDeviceJoinTokensQuery: (_client: unknown, request: unknown) => ({
+    queryKey: ["tokens", request],
+  }),
   useWorkloadDeviceJoinTokens: () => ({
     data: { result: { items: mocks.tokens } },
     isPending: false,
@@ -114,9 +144,13 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({
-    data: {
-      members: [{ id: "user_other", name: "Pat Example", email: "p@e.test" }],
-    },
+    data: mocks.membersReady
+      ? {
+          members: [
+            { id: "user_other", name: "Pat Example", email: "p@e.test" },
+          ],
+        }
+      : undefined,
   }),
 }));
 vi.mock("@gram/client/react-query/agentsListPolicyGrants.js", () => ({
@@ -158,19 +192,27 @@ beforeEach(() => {
   mocks.tokens = [];
   mocks.admissions = [];
   mocks.canRead = true;
+  mocks.canWrite = true;
+  mocks.tokensError = false;
+  mocks.membersReady = true;
+  mocks.installFlag = "missing";
+  mocks.serverURL = "https://app.getgram.ai";
 });
 
 describe("the workload picker", () => {
   const picker = (showHeadlessDevice: boolean) =>
     render(
-      <WorkloadPlatformPicker
+      <CredentialPicker
         entries={[]}
         isPending={false}
         isError={false}
         onRetry={vi.fn<() => void>()}
-        selectedKey={null}
-        showHeadlessDevice={showHeadlessDevice}
-        onSelect={vi.fn<(key: string) => void>()}
+        credential="workload"
+        platformKey={null}
+        disabled={false}
+        canFederate={showHeadlessDevice}
+        onChoosePlatform={vi.fn<(key: string) => void>()}
+        onChooseApiKey={vi.fn<() => void>()}
       />,
     );
 
@@ -191,7 +233,11 @@ describe("setting a box up manually", () => {
     const expiresAt = new Date(Date.now() + 3600_000);
     mocks.createToken.mockImplementation(
       (_vars, options: { onSuccess: (r: object) => void }) =>
-        options.onSuccess({ token: "gram_dj_example", expiresAt }),
+        options.onSuccess({
+          id: "token_one",
+          token: "gram_dj_example",
+          expiresAt,
+        }),
     );
     wrap(
       <ManualSetup
@@ -216,7 +262,7 @@ describe("setting a box up manually", () => {
         },
       },
     });
-    expect(onTokenCreated).toHaveBeenCalledWith({ expiresAt });
+    expect(onTokenCreated).toHaveBeenCalledWith({ id: "token_one", expiresAt });
     // Highlighting fills the block in after the first render.
     const block = screen.getByLabelText("/etc/speakeasy/managed.json");
     await waitFor(() =>
@@ -241,9 +287,9 @@ describe("the install command", () => {
     const onTokenCreated = vi.fn<(watched: object) => void>();
     const create = vi.fn().mockResolvedValue({
       command:
-        "curl -fsSL 'https://example.test/v1/install/device/code' | sudo sh",
+        '(umask 077; script=$(mktemp) && curl -fsSL https://example.test/v1/install/device/code -o "$script" && sudo sh "$script")',
       downloadCommand:
-        "curl -o speakeasy-device-install.sh\nsudo sh speakeasy-device-install.sh",
+        '(umask 077; script=$(mktemp) && curl -fsSL https://example.test/v1/install/device/code -o "$script" && mv "$script" ./speakeasy-install.sh && sudo sh ./speakeasy-install.sh)',
       codeExpiresAt: new Date(Date.now() + 15 * 60_000),
       joinTokenId: "token_from_command",
       tokenExpiresAt: new Date(Date.now() + 3600_000),
@@ -258,14 +304,26 @@ describe("the install command", () => {
       />,
     );
     const block = await screen.findByLabelText("install command");
-    await waitFor(() => expect(block.textContent).toContain("| sudo sh"));
+    await waitFor(() =>
+      expect(block.textContent).toContain('&& sudo sh "$script")'),
+    );
+    expect(block.closest("[data-demo-secret]")).not.toBeNull();
+    expect(
+      screen.getByLabelText("download, then run").closest("[data-demo-secret]"),
+    ).not.toBeNull();
+    expect(screen.getByText('sudo sh "$script" --user <account>')).toBeTruthy();
+    expect(screen.getByText("Download and run from a file")).toBeTruthy();
+    expect(screen.queryByText(/\| sudo sh -s/)).toBeNull();
     expect(create).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledWith({
       agentId: "agent_one",
       hooksProjectSlug: "p1",
       expiresInSeconds: 3600,
     });
-    expect(onTokenCreated).toHaveBeenCalledWith({ id: "token_from_command" });
+    expect(onTokenCreated).toHaveBeenCalledWith({
+      id: "token_from_command",
+      expiresAt: expect.any(Date),
+    });
     // Manual setup is still there, folded away.
     expect(screen.getByText("Set up manually")).toBeTruthy();
   });
@@ -378,6 +436,160 @@ describe("the agent's bootstrap tokens", () => {
   it("says so instead of listing anything without permission to read", () => {
     mocks.canRead = false;
     wrap(<AgentBootstrapTokens agent={agent} />);
+    expect(
+      screen.getByText(/You need permission to view workload identities/),
+    ).toBeTruthy();
     expect(screen.queryByText("Bootstrap tokens")).toBeNull();
+  });
+});
+
+describe("enrollment repair states", () => {
+  const project = { id: "project_one", name: "Project one", slug: "p1" };
+  const panel = () => (
+    <DeviceSetupPanel
+      agentId="agent_one"
+      hooksProject={project}
+      lifetimeSeconds={3600}
+      onTokenCreated={vi.fn<(token: object) => void>()}
+    />
+  );
+  const notFound = (message: string) =>
+    new GramError(message, {
+      response: new Response(null, { status: 404 }),
+      request: new Request("https://example.test/rpc"),
+      body: JSON.stringify({ message }),
+    });
+
+  it("preserves a selected headless tile for a read-only user", () => {
+    wrap(
+      <CredentialPicker
+        entries={[]}
+        isPending={false}
+        isError={false}
+        onRetry={vi.fn<() => void>()}
+        credential="workload"
+        platformKey="headless-device"
+        canFederate={false}
+        disabled
+        onChoosePlatform={vi.fn<(key: string) => void>()}
+        onChooseApiKey={vi.fn<() => void>()}
+      />,
+    );
+    expect(
+      screen
+        .getByRole("radio", { name: /Headless device/ })
+        .getAttribute("data-state"),
+    ).toBe("checked");
+  });
+
+  it("falls back through the real hook when the feature flag is disabled", () => {
+    mocks.installFlag = "disabled";
+    wrap(panel());
+    expect(
+      screen.getByRole("button", { name: "Create bootstrap token" }),
+    ).toBeTruthy();
+    expect(mocks.createInstallCommand).not.toHaveBeenCalled();
+  });
+
+  it("falls back only on the flag-disabled 404", async () => {
+    mocks.createInstallCommand.mockRejectedValue(
+      notFound(
+        "device install commands are not available for this organization",
+      ),
+    );
+    wrap(panel());
+    await waitFor(() =>
+      expect(screen.queryByText(/Run it on Linux/)).toBeNull(),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("surfaces a missing-agent 404 instead of silently falling back", async () => {
+    mocks.createInstallCommand.mockRejectedValue(notFound("agent not found"));
+    wrap(panel());
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Could not prepare the install command",
+    );
+  });
+
+  it("refuses manual token creation on an insecure control plane", () => {
+    mocks.serverURL = "http://example.test";
+    wrap(
+      <ManualSetup
+        agentId="agent_one"
+        hooksProject={project}
+        lifetimeSeconds={3600}
+        onTokenCreated={vi.fn<(token: object) => void>()}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain("HTTPS");
+    expect(mocks.createToken).not.toHaveBeenCalled();
+  });
+
+  it("offers a replacement for an expired manual token", () => {
+    mocks.createToken.mockImplementation(
+      (_vars, options: { onSuccess: (r: object) => void }) =>
+        options.onSuccess({
+          id: "expired_token",
+          token: "example",
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+    );
+    wrap(
+      <ManualSetup
+        agentId="agent_one"
+        hooksProject={project}
+        lifetimeSeconds={3600}
+        onTokenCreated={vi.fn<(token: object) => void>()}
+        defaultOpen
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create bootstrap token" }),
+    );
+    expect(screen.getByText(/expired/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create a new token" }));
+    expect(mocks.createToken).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows and retries a verification failure", () => {
+    mocks.tokensError = true;
+    wrap(<DeviceVerify agentId="agent_one" watched={[{ id: "token_one" }]} />);
+    expect(screen.getByText("Could not check device enrollment")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.refetchTokens).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a terminal state for an expired token", () => {
+    mocks.tokens = [token({ status: "expired" })];
+    wrap(<DeviceVerify agentId="agent_one" watched={[{ id: "token_one" }]} />);
+    expect(screen.getByText("Bootstrap token no longer active")).toBeTruthy();
+    expect(screen.queryByText("Waiting for the box to enroll")).toBeNull();
+  });
+
+  it("refreshes tokens and enrolled devices when the issue sheet closes", async () => {
+    wrap(<AgentBootstrapTokens agent={agent} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Issue bootstrap token" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(invalidateAllWorkloadDeviceJoinTokens).toHaveBeenCalled();
+    expect(invalidateAllWorkloadIdentities).toHaveBeenCalled();
+  });
+
+  it("does not call an unknown creator a former member", () => {
+    mocks.membersReady = false;
+    mocks.tokens = [token()];
+    wrap(<AgentBootstrapTokens agent={agent} />);
+    expect(screen.queryByText("Former member")).toBeNull();
+  });
+
+  it("distinguishes a missing enrolled device from an unnamed one", () => {
+    mocks.tokens = [
+      token({ status: "redeemed", consumedBySubject: "device:removed" }),
+    ];
+    wrap(<AgentBootstrapTokens agent={agent} />);
+    expect(screen.getByText("Device unavailable")).toBeTruthy();
+    expect(screen.queryByText("Unnamed device")).toBeNull();
   });
 });

@@ -16,7 +16,11 @@ import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useOrganizationHostMove } from "@/hooks/useOrganizationHostMove";
 import { useTrialNow } from "@/hooks/useTrialNow";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
-import { organizationHostRedirectTarget } from "@/lib/organization-host";
+import {
+  organizationHostRedirectTarget,
+  recordOrganizationSwitch,
+  switchedRecently,
+} from "@/lib/organization-host";
 import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -224,6 +228,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
       ? organizationHostRedirectTarget(
           session.activeOrganizationDashboardUrl,
           window.location,
+          switchedRecently(session.activeOrganizationId),
         )
       : undefined;
   const movingHost = useOrganizationHostMove(
@@ -485,6 +490,7 @@ function OrganizationScopeSwitch({
 
     void request.promise
       .then(() => {
+        recordOrganizationSwitch(organizationId);
         if (cancelled) {
           clearOrganizationScopeSwitchAttempt(attempt);
           return;

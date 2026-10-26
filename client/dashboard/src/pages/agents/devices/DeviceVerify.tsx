@@ -1,13 +1,24 @@
+import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { useWorkloadDeviceJoinTokens } from "@gram/client/react-query/workloadDeviceJoinTokens.js";
-import type { JSX } from "react";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import {
+  buildWorkloadDeviceJoinTokensQuery,
+  type WorkloadDeviceJoinTokensQueryData,
+} from "@gram/client/react-query/workloadDeviceJoinTokens.js";
+import {
+  queryOptions,
+  useQueries,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useEffect, useState, type JSX } from "react";
 import { useAgentAdmissions } from "../agentAdmissions";
-import { WizardStepHeader } from "../provision/WizardChrome";
+import { WizardStepHeader } from "../credentials/WizardChrome";
 import {
   controlPlaneURL,
   redeemedToken,
+  watchedTokensFinished,
   type WatchedToken,
 } from "./device-enrollment";
 
@@ -28,15 +39,61 @@ export function DeviceVerify({
   watched: WatchedToken[];
   pollMs?: number;
 }): JSX.Element {
-  const tokens = useWorkloadDeviceJoinTokens({ agentId }, undefined, {
-    enabled: watched.length > 0,
-    throwOnError: false,
-    refetchInterval: (query) =>
-      redeemedToken(query.state.data?.result.items ?? [], watched)
-        ? false
-        : pollMs,
+  const client = useGramContext();
+  const queryClient = useQueryClient();
+  const [now, setNow] = useState(() => Date.now());
+  const definitions = watched.map((entry) => ({
+    entry,
+    options: buildWorkloadDeviceJoinTokensQuery(client, {
+      agentId,
+      tokenId: entry.id,
+    }),
+  }));
+  const queries = useQueries({
+    queries: definitions.map(({ entry, options }) =>
+      queryOptions({
+        ...options,
+        throwOnError: false,
+        refetchInterval: (query) => {
+          const cached = definitions.flatMap(
+            ({ options }) =>
+              queryClient.getQueryData<WorkloadDeviceJoinTokensQueryData>(
+                options.queryKey,
+              )?.result.items ?? [],
+          );
+          if (redeemedToken(cached, watched)) return false;
+          return watchedTokensFinished(query.state.data?.result.items ?? [], [
+            entry,
+          ])
+            ? false
+            : pollMs;
+        },
+      }),
+    ),
   });
-  const redeemed = redeemedToken(tokens.data?.result.items ?? [], watched);
+  const items = queries.flatMap((query) => query.data?.result.items ?? []);
+  const redeemed = redeemedToken(items, watched);
+  const finished = watchedTokensFinished(items, watched, now);
+  const isError = queries.some((query) => query.isError);
+  useEffect(() => {
+    if (redeemed || finished || watched.length === 0) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [redeemed, finished, watched.length]);
+  let title = "Waiting for the box to enroll";
+  let description = "This updates once the box redeems its bootstrap token.";
+  if (watched.length === 0)
+    description =
+      "Create an install command or a bootstrap token on the previous step, then run it on the box.";
+  if (finished) {
+    title = "Bootstrap token no longer active";
+    description =
+      "The token expired or was revoked. Return to the previous step to create a new one.";
+  }
+  if (isError) {
+    title = "Could not check device enrollment";
+    description = "Try again to see whether the box enrolled.";
+  }
   // The device's admission carries the hostname it reported, which is what a
   // reader recognizes it by.
   const admissions = useAgentAdmissions(redeemed ? agentId : "");
@@ -45,6 +102,14 @@ export function DeviceVerify({
         (admission) => admission.subject === redeemed.consumedBySubject,
       )
     : undefined;
+
+  if (redeemed) {
+    title = "Device enrolled";
+    const enrolledAt = redeemed.consumedAt
+      ? dateTimeFormatters.humanize(redeemed.consumedAt)
+      : "just now";
+    description = `${device?.name || "A device"} enrolled ${enrolledAt}. It acts as this agent from now on.`;
+  }
 
   return (
     <div className="space-y-5">
@@ -57,22 +122,25 @@ export function DeviceVerify({
           aria-hidden="true"
           className={cn(
             "mt-1.5 size-2 shrink-0 rounded-full",
-            redeemed
-              ? "bg-default-success"
-              : "bg-warning-default animate-pulse",
+            redeemed ? "bg-default-success" : "bg-warning-default",
           )}
         />
         <div className="min-w-0 space-y-1">
-          <Text className="font-medium">
-            {redeemed ? "Device enrolled" : "Waiting for the box to enroll"}
-          </Text>
+          <Text className="font-medium">{title}</Text>
           <Text muted small>
-            {redeemed
-              ? `${device?.name || "A device"} enrolled ${redeemed.consumedAt ? dateTimeFormatters.humanize(redeemed.consumedAt) : "just now"}. It acts as this agent from now on.`
-              : watched.length === 0
-                ? "Create an install command or a bootstrap token on the previous step, then run it on the box."
-                : "This updates once the box redeems its bootstrap token."}
+            {description}
           </Text>
+          {isError && !redeemed && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                void Promise.all(queries.map((query) => query.refetch()))
+              }
+            >
+              Try again
+            </Button>
+          )}
           {redeemed?.consumedBySubject && (
             <details>
               <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-xs">
@@ -85,7 +153,7 @@ export function DeviceVerify({
           )}
         </div>
       </div>
-      {!redeemed && (
+      {!redeemed && !finished && !isError && (
         <div className="space-y-2">
           <span className="text-eyebrow">If nothing arrives</span>
           <ul className="space-y-1 text-sm">

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,12 +22,12 @@ export const WorkloadDeviceJoinTokenSummaryStatus = {
 /**
  * Derived in this order: revoked when revoked_at is set, redeemed when consumed_at is set, expired when expires_at has passed, otherwise active. Only an active token can enroll a device.
  */
-export type WorkloadDeviceJoinTokenSummaryStatus = ClosedEnum<
+export type WorkloadDeviceJoinTokenSummaryStatus = OpenEnum<
   typeof WorkloadDeviceJoinTokenSummaryStatus
 >;
 
 /**
- * A device join token as an administrator sees it after creation. The token and its hash are never included.
+ * A device join token's management metadata. The token and its hash are never included.
  */
 export type WorkloadDeviceJoinTokenSummary = {
   /**
@@ -65,9 +66,10 @@ export type WorkloadDeviceJoinTokenSummary = {
 };
 
 /** @internal */
-export const WorkloadDeviceJoinTokenSummaryStatus$inboundSchema: z.ZodMiniEnum<
-  typeof WorkloadDeviceJoinTokenSummaryStatus
-> = z.enum(WorkloadDeviceJoinTokenSummaryStatus);
+export const WorkloadDeviceJoinTokenSummaryStatus$inboundSchema: z.ZodMiniType<
+  WorkloadDeviceJoinTokenSummaryStatus,
+  unknown
+> = openEnums.inboundSchema(WorkloadDeviceJoinTokenSummaryStatus);
 
 /** @internal */
 export const WorkloadDeviceJoinTokenSummary$inboundSchema: z.ZodMiniType<

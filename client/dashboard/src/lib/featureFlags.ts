@@ -1,24 +1,18 @@
 export const FEATURE_FLAGS = {
+  // UI-only visibility; saved runtime selection and backend authorization are independent.
+  assistantKitRuntime: "assistant-kit-runtime",
   budgets: "gram-budgets",
-  deploymentsPage: "gram-deployments-page",
-  deviceAgent: "gram-device-agent",
-  // The one-command install for a headless device. The server enforces it
-  // too: with it off, createDeviceInstallCommand answers 404.
+  // Temporary UI rollout; the server also enforces organization eligibility.
   deviceBootstrapInstall: "device-bootstrap-install",
-  deviceIntegrations: "gram-device-integrations",
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",
-  experimentalChat: "gram-experimental-chat",
   explore: "gram-explore",
-  functions: "gram-functions",
-  gatewayEndpoints: "gram-gateway-endpoints",
   headlessModeSwitcher: "headless-mode-switcher",
   killswitches: "gram-killswitches",
   mcpResearch: "gram-mcp-research",
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.
   mcpScopedPolicies: "gram-mcp-scoped-policies",
-  newCostsPage: "gram-new-costs-page",
   oktaConnections: "okta-connections",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
@@ -27,12 +21,12 @@ export const FEATURE_FLAGS = {
   // read is true for every variant, `off` included. `useDetectorMode` maps it
   // to the policy editor mode.
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
-  riskWatchdog: "gram-risk-watchdog",
-  tunneledMcp: "gram-tunneled-mcp",
+  // Creating tool approval policies and the Tool approvals tab. The server
+  // enforces the same key on policy create and update.
+  toolApprovals: "risk-tool-approvals",
   // UI-only rollout gate for the organization's Speakeasy authorization
   // servers page; the APIs behind it are not gated.
   userSessionIssuerDashboard: "gram-user-session-issuer-dashboard",
-  userSessionsDashboard: "user-sessions-dashboard",
 } as const;
 
 export type FeatureFlag = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];

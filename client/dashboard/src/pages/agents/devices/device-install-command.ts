@@ -13,9 +13,9 @@ import { useCallback } from "react";
  */
 
 export interface DeviceInstallCommand {
-  /** Pipes the install script to a shell. */
+  /** Downloads successfully to a temporary file before running the script. */
   command: string;
-  /** Saves the script to a file, then runs it: two lines. */
+  /** Downloads successfully, keeps the script file, and then runs it. */
   downloadCommand: string;
   /** When the download code stops working. */
   codeExpiresAt: Date;
@@ -82,7 +82,12 @@ export function useCreateDeviceInstallCommand(): CreateDeviceInstallCommand | nu
           tokenExpiresAt: result.tokenExpiresAt,
         };
       } catch (failure) {
-        if (failure instanceof GramError && failure.statusCode === 404) {
+        if (
+          failure instanceof GramError &&
+          failure.statusCode === 404 &&
+          failure.message ===
+            "device install commands are not available for this organization"
+        ) {
           throw new InstallCommandUnavailable();
         }
         throw failure;

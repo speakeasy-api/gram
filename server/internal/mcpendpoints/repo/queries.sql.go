@@ -354,7 +354,8 @@ type ListAddressableMCPEndpointsByMCPServerIDsRow struct {
 }
 
 // Custom-domain endpoints count only on a verified, activated domain, the
-// same gate the custom-domain middleware applies before serving.
+// same gate the custom-domain middleware applies before serving. Mirrored in
+// assistants LoadAssistantMcpServers and ResolveMcpServersForWrite.
 func (q *Queries) ListAddressableMCPEndpointsByMCPServerIDs(ctx context.Context, arg ListAddressableMCPEndpointsByMCPServerIDsParams) ([]ListAddressableMCPEndpointsByMCPServerIDsRow, error) {
 	rows, err := q.db.Query(ctx, listAddressableMCPEndpointsByMCPServerIDs, arg.OrganizationID, arg.ProjectIds, arg.McpServerIds)
 	if err != nil {

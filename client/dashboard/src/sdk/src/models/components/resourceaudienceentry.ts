@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const ResourceAudienceEntryAppliesTo = {
 /**
  * Whether the rule names this resource or every resource of its kind.
  */
-export type ResourceAudienceEntryAppliesTo = ClosedEnum<
+export type ResourceAudienceEntryAppliesTo = OpenEnum<
   typeof ResourceAudienceEntryAppliesTo
 >;
 
@@ -29,7 +30,7 @@ export const ResourceAudienceEntryDispositions = {
   Idempotent: "idempotent",
   OpenWorld: "open_world",
 } as const;
-export type ResourceAudienceEntryDispositions = ClosedEnum<
+export type ResourceAudienceEntryDispositions = OpenEnum<
   typeof ResourceAudienceEntryDispositions
 >;
 
@@ -48,7 +49,7 @@ export const ResourceAudienceEntryKind = {
 /**
  * What the principal identifies.
  */
-export type ResourceAudienceEntryKind = ClosedEnum<
+export type ResourceAudienceEntryKind = OpenEnum<
   typeof ResourceAudienceEntryKind
 >;
 
@@ -66,7 +67,7 @@ export const ResourceAudienceEntryLevel = {
 /**
  * Access this principal has on the resource, or the access a rule takes away.
  */
-export type ResourceAudienceEntryLevel = ClosedEnum<
+export type ResourceAudienceEntryLevel = OpenEnum<
   typeof ResourceAudienceEntryLevel
 >;
 
@@ -118,24 +119,28 @@ export type ResourceAudienceEntry = {
 };
 
 /** @internal */
-export const ResourceAudienceEntryAppliesTo$inboundSchema: z.ZodMiniEnum<
-  typeof ResourceAudienceEntryAppliesTo
-> = z.enum(ResourceAudienceEntryAppliesTo);
+export const ResourceAudienceEntryAppliesTo$inboundSchema: z.ZodMiniType<
+  ResourceAudienceEntryAppliesTo,
+  unknown
+> = openEnums.inboundSchema(ResourceAudienceEntryAppliesTo);
 
 /** @internal */
-export const ResourceAudienceEntryDispositions$inboundSchema: z.ZodMiniEnum<
-  typeof ResourceAudienceEntryDispositions
-> = z.enum(ResourceAudienceEntryDispositions);
+export const ResourceAudienceEntryDispositions$inboundSchema: z.ZodMiniType<
+  ResourceAudienceEntryDispositions,
+  unknown
+> = openEnums.inboundSchema(ResourceAudienceEntryDispositions);
 
 /** @internal */
-export const ResourceAudienceEntryKind$inboundSchema: z.ZodMiniEnum<
-  typeof ResourceAudienceEntryKind
-> = z.enum(ResourceAudienceEntryKind);
+export const ResourceAudienceEntryKind$inboundSchema: z.ZodMiniType<
+  ResourceAudienceEntryKind,
+  unknown
+> = openEnums.inboundSchema(ResourceAudienceEntryKind);
 
 /** @internal */
-export const ResourceAudienceEntryLevel$inboundSchema: z.ZodMiniEnum<
-  typeof ResourceAudienceEntryLevel
-> = z.enum(ResourceAudienceEntryLevel);
+export const ResourceAudienceEntryLevel$inboundSchema: z.ZodMiniType<
+  ResourceAudienceEntryLevel,
+  unknown
+> = openEnums.inboundSchema(ResourceAudienceEntryLevel);
 
 /** @internal */
 export const ResourceAudienceEntry$inboundSchema: z.ZodMiniType<

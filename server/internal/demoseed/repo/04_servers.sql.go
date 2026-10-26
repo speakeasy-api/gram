@@ -150,6 +150,182 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 	return err
 }
 
+const serversInsertAuthClient = `-- name: ServersInsertAuthClient :exec
+INSERT INTO mcp_auth_clients
+  (id, organization_id, project_id, client_type, source, name,
+   remote_session_client_id, client_attachment_scope)
+SELECT $1::uuid, $2::text, $3::uuid, $4::text,
+       'backfill', $5::text, c.id, c.attachment_scope
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = $6::uuid
+`
+
+type ServersInsertAuthClientParams struct {
+	ID                    uuid.UUID
+	OrgID                 string
+	ProjectID             uuid.UUID
+	ClientType            string
+	Name                  string
+	RemoteSessionClientID uuid.NullUUID
+}
+
+// Typed auth clients, as the upstream OAuth migration records them: Linear's
+// personal client over its OAuth registration, and one static credential
+// shared by GitHub and Linear, so the server settings show a shared client
+// and a server offering two. Slack is left undecided about upstream
+// authentication.
+// The projects delete cascades the clients, their headers and associations.
+func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsertAuthClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAuthClient,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.ClientType,
+		arg.Name,
+		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
+const serversInsertAuthClientHeader = `-- name: ServersInsertAuthClientHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_secret, value)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text, TRUE,
+   $5::text)
+`
+
+type ServersInsertAuthClientHeaderParams struct {
+	ID           uuid.UUID
+	AuthClientID uuid.UUID
+	OrgID        string
+	Name         string
+	Value        string
+}
+
+// The value is a placeholder; stored values are never returned.
+func (q *Queries) ServersInsertAuthClientHeader(ctx context.Context, arg ServersInsertAuthClientHeaderParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAuthClientHeader,
+		arg.ID,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.Name,
+		arg.Value,
+	)
+	return err
+}
+
+const serversInsertAuthClientRoleGrants = `-- name: ServersInsertAuthClientRoleGrants :exec
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT v.id, $1::text, 'role:organization:' || r.id, v.scope,
+       jsonb_build_object('resource_kind', 'mcp_auth_client',
+         'resource_id', ($2::uuid)::text)
+FROM (VALUES
+  ($3::uuid, 'engineer', 'mcp:auth'),
+  ($4::uuid, 'contractors', 'mcp:blocked_auth')
+) AS v(id, slug, scope)
+JOIN organization_roles r
+  ON r.organization_id = $1::text AND r.workos_slug = v.slug
+`
+
+type ServersInsertAuthClientRoleGrantsParams struct {
+	OrgID        string
+	AuthClientID uuid.UUID
+	UseID        uuid.UUID
+	BlockID      uuid.UUID
+}
+
+// Engineers may use the shared GitHub token; Contractors are blocked from
+// it on every server that offers it. Cleared by id at the top of the seed.
+func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg ServersInsertAuthClientRoleGrantsParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAuthClientRoleGrants,
+		arg.OrgID,
+		arg.AuthClientID,
+		arg.UseID,
+		arg.BlockID,
+	)
+	return err
+}
+
+const serversInsertCodeGateway = `-- name: ServersInsertCodeGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id) VALUES
+  ($1::uuid, $2::text, $3::uuid, 'Python Code Gateway',
+   $4::uuid)
+`
+
+type ServersInsertCodeGatewayParams struct {
+	ID                  uuid.UUID
+	OrgID               string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Stored as Progressive (the column default) because the shared demo org has
+// no code runtime; local fixtures switch it to code_mode (RunLocalFixtures).
+func (q *Queries) ServersInsertCodeGateway(ctx context.Context, arg ServersInsertCodeGatewayParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCodeGateway,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+	)
+	return err
+}
+
+const serversInsertCodeGatewayEndpoint = `-- name: ServersInsertCodeGatewayEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, $3::uuid, NULL, $4::text)
+`
+
+type ServersInsertCodeGatewayEndpointParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	MetaID    uuid.UUID
+	Slug      string
+}
+
+func (q *Queries) ServersInsertCodeGatewayEndpoint(ctx context.Context, arg ServersInsertCodeGatewayEndpointParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCodeGatewayEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.MetaID,
+		arg.Slug,
+	)
+	return err
+}
+
+const serversInsertCodeGatewayMembers = `-- name: ServersInsertCodeGatewayMembers :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  ($1::uuid, $2::uuid,
+   $3::uuid, $4::uuid, 0),
+  ($5::uuid, $2::uuid,
+   $3::uuid, $6::uuid, 1)
+`
+
+type ServersInsertCodeGatewayMembersParams struct {
+	SupportMemberID uuid.UUID
+	ProjectID       uuid.UUID
+	MetaID          uuid.UUID
+	SupportServerID uuid.UUID
+	OpsMemberID     uuid.UUID
+	OpsServerID     uuid.UUID
+}
+
+func (q *Queries) ServersInsertCodeGatewayMembers(ctx context.Context, arg ServersInsertCodeGatewayMembersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCodeGatewayMembers,
+		arg.SupportMemberID,
+		arg.ProjectID,
+		arg.MetaID,
+		arg.SupportServerID,
+		arg.OpsMemberID,
+		arg.OpsServerID,
+	)
+	return err
+}
+
 const serversInsertEMABindings = `-- name: ServersInsertEMABindings :exec
 INSERT INTO remote_session_ema_bindings
   (id, project_id, organization_id, user_session_issuer_id,
@@ -1071,6 +1247,105 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 	return err
 }
 
+const serversInsertPrivateInventoryEndpoint = `-- name: ServersInsertPrivateInventoryEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, $3::uuid, $4::text)
+`
+
+type ServersInsertPrivateInventoryEndpointParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+func (q *Queries) ServersInsertPrivateInventoryEndpoint(ctx context.Context, arg ServersInsertPrivateInventoryEndpointParams) error {
+	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.Slug,
+	)
+	return err
+}
+
+const serversInsertPrivateInventoryMCPServer = `-- name: ServersInsertPrivateInventoryMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         visibility) VALUES
+  ($1::uuid, $2::uuid, 'Private inventory', $3::text,
+   $4::uuid, 'private')
+`
+
+type ServersInsertPrivateInventoryMCPServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      string
+	TunnelID  uuid.UUID
+}
+
+func (q *Queries) ServersInsertPrivateInventoryMCPServer(ctx context.Context, arg ServersInsertPrivateInventoryMCPServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.TunnelID,
+	)
+	return err
+}
+
+const serversInsertPrivateInventoryTunnel = `-- name: ServersInsertPrivateInventoryTunnel :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
+                                  status, agent_version, last_seen_at) VALUES
+  ($1::uuid, $2::uuid, 'Private inventory tunnel',
+   md5($3::text), 'demo_inert', 'active', '0.2.0', NULL)
+`
+
+type ServersInsertPrivateInventoryTunnelParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	KeySeed   string
+}
+
+// Tunnel example, deliberately disconnected: its activity history must not
+// fabricate a live customer agent in the shared demo environment. The key
+// hash comes from the tenant's name seed, so it stays globally unique and
+// matches no issued key. ClickHouse metric rows reference these ids
+// (ch_05_tunnel_metrics.go).
+func (q *Queries) ServersInsertPrivateInventoryTunnel(ctx context.Context, arg ServersInsertPrivateInventoryTunnelParams) error {
+	_, err := q.db.Exec(ctx, serversInsertPrivateInventoryTunnel, arg.ID, arg.ProjectID, arg.KeySeed)
+	return err
+}
+
+const serversInsertRegistryPromotionCandidate = `-- name: ServersInsertRegistryPromotionCandidate :exec
+INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, curation_status, created_at)
+VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, $5::uuid, 'unobserved', false, 'insufficient_evidence', $6::text, clock_timestamp() - make_interval(days => $7::integer))
+ON CONFLICT (project_id,mcp_server_id) DO NOTHING
+`
+
+type ServersInsertRegistryPromotionCandidateParams struct {
+	ID                uuid.UUID
+	OrgID             string
+	ProjectID         uuid.UUID
+	McpServerID       uuid.UUID
+	RemoteMcpServerID uuid.UUID
+	CurationStatus    string
+	AgeDays           int32
+}
+
+// Synthetic evidence stays ineligible and queues no public publication or messages.
+func (q *Queries) ServersInsertRegistryPromotionCandidate(ctx context.Context, arg ServersInsertRegistryPromotionCandidateParams) error {
+	_, err := q.db.Exec(ctx, serversInsertRegistryPromotionCandidate,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.RemoteMcpServerID,
+		arg.CurationStatus,
+		arg.AgeDays,
+	)
+	return err
+}
+
 const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
 
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
@@ -1190,6 +1465,35 @@ func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg Se
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const serversInsertServerAuthClient = `-- name: ServersInsertServerAuthClient :exec
+INSERT INTO mcp_server_auth_clients
+  (id, project_id, organization_id, mcp_server_id, auth_client_id,
+   client_attachment_scope, source)
+SELECT $1::uuid, $2::uuid, $3::text, $4::uuid,
+       ac.id, ac.attachment_scope, 'backfill'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $5::uuid
+`
+
+type ServersInsertServerAuthClientParams struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	OrgID        string
+	McpServerID  uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+func (q *Queries) ServersInsertServerAuthClient(ctx context.Context, arg ServersInsertServerAuthClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertServerAuthClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	return err
 }
 
 const serversInsertServerClientAssociation = `-- name: ServersInsertServerClientAssociation :exec
@@ -1426,16 +1730,19 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
   ($5::uuid, $4::uuid, $2::text, 'slack',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   ($6::uuid, $4::uuid, $2::text, 'acme-agent-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+  ($7::uuid, $4::uuid, $2::text, 'python-code-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
 `
 
 type ServersInsertUserSessionIssuersParams struct {
-	WorkforceID uuid.UUID
-	OrgID       string
-	LinearID    uuid.UUID
-	ProjectID   uuid.UUID
-	SlackID     uuid.UUID
-	GatewayID   uuid.UUID
+	WorkforceID   uuid.UUID
+	OrgID         string
+	LinearID      uuid.UUID
+	ProjectID     uuid.UUID
+	SlackID       uuid.UUID
+	GatewayID     uuid.UUID
+	CodeGatewayID uuid.UUID
 }
 
 // Remote-backed servers must carry a Speakeasy-as-AS issuer for their lifetime
@@ -1455,6 +1762,7 @@ func (q *Queries) ServersInsertUserSessionIssuers(ctx context.Context, arg Serve
 		arg.ProjectID,
 		arg.SlackID,
 		arg.GatewayID,
+		arg.CodeGatewayID,
 	)
 	return err
 }
@@ -1502,6 +1810,23 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 		arg.HoursAgo,
 		arg.DaysAgo,
 	)
+	return err
+}
+
+const serversMarkRequiresUpstreamAuth = `-- name: ServersMarkRequiresUpstreamAuth :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE
+WHERE project_id = $1::uuid
+  AND id = ANY($2::uuid[])
+`
+
+type ServersMarkRequiresUpstreamAuthParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+func (q *Queries) ServersMarkRequiresUpstreamAuth(ctx context.Context, arg ServersMarkRequiresUpstreamAuthParams) error {
+	_, err := q.db.Exec(ctx, serversMarkRequiresUpstreamAuth, arg.ProjectID, arg.Ids)
 	return err
 }
 

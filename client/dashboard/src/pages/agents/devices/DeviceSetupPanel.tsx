@@ -2,12 +2,13 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useCreateWorkloadDeviceJoinTokenMutation } from "@gram/client/react-query/createWorkloadDeviceJoinToken.js";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { CodeBlock } from "../provision/StepProvision";
+import { CodeBlock } from "../credentials/CodeBlock";
 import { Countdown } from "./Countdown";
 import {
   MANAGED_CONFIG_PATH,
   controlPlaneURL,
   managedConfig,
+  secureControlPlaneOrigin,
   type WatchedToken,
 } from "./device-enrollment";
 import {
@@ -101,18 +102,17 @@ function InstallCommand({
     })
       .then((next) => {
         setCommand(next);
-        onTokenCreated({ id: next.joinTokenId });
+        onTokenCreated({
+          id: next.joinTokenId,
+          expiresAt: next.tokenExpiresAt,
+        });
       })
       .catch((failure: unknown) => {
         if (failure instanceof InstallCommandUnavailable) {
           onUnavailable();
           return;
         }
-        setError(
-          failure instanceof Error && failure.message
-            ? failure.message
-            : "Could not prepare the install command. Try again.",
-        );
+        setError("Could not prepare the install command. Try again.");
       })
       .finally(() => setPending(false));
   }, [
@@ -139,11 +139,13 @@ function InstallCommand({
       </Text>
       {command ? (
         <>
-          <CodeBlock
-            value={command.command}
-            label="install command"
-            language="shell"
-          />
+          <div data-demo-secret>
+            <CodeBlock
+              value={command.command}
+              label="install command"
+              language="shell"
+            />
+          </div>
           <Text muted small>
             Works once. The command <Countdown to={command.codeExpiresAt} />;
             the bootstrap token in it <Countdown to={command.tokenExpiresAt} />.{" "}
@@ -157,25 +159,31 @@ function InstallCommand({
             </button>
           </Text>
           <Text muted small>
-            Running as root, or for another account? End the command with{" "}
+            Running as root, or for another account? Add the account after the
+            script filename:{" "}
             <code className="text-xs">
-              | sudo sh -s -- --user &lt;account&gt;
+              sudo sh &quot;$script&quot; --user &lt;account&gt;
             </code>
-            .
+            , before the final <code>)</code>.
           </Text>
           <details>
             <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">
-              Save and read the script first
+              Download and run from a file
             </summary>
             <div className="mt-2 space-y-2">
-              <CodeBlock
-                value={command.downloadCommand}
-                label="download, then run"
-                language="shell"
-              />
+              <div data-demo-secret>
+                <CodeBlock
+                  value={command.downloadCommand}
+                  label="download, then run"
+                  language="shell"
+                />
+              </div>
               <Text muted small>
-                Downloading spends the command. The saved script carries the
-                bootstrap token, so delete it once it has run.
+                This downloads and runs the script, keeping the file afterward.
+                The saved script carries the bootstrap token, so delete it once
+                it has run. For another account, add{" "}
+                <code>--user &lt;account&gt;</code> after the saved script
+                filename, before the final <code>)</code>.
               </Text>
             </div>
           </details>
@@ -229,6 +237,16 @@ export function ManualSetup({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const secureOrigin = secureControlPlaneOrigin(controlPlaneURL());
+  if (secureOrigin === null) {
+    return (
+      <Text role="alert">
+        Device enrollment requires an HTTPS connection. Open the secure
+        dashboard before creating a token.
+      </Text>
+    );
+  }
+
   const issue = () => {
     setError(null);
     create.mutate(
@@ -243,14 +261,10 @@ export function ManualSetup({
       {
         onSuccess: (result) => {
           setIssued({ token: result.token, expiresAt: result.expiresAt });
-          onTokenCreated({ expiresAt: result.expiresAt });
+          onTokenCreated({ id: result.id, expiresAt: result.expiresAt });
         },
-        onError: (failure) =>
-          setError(
-            failure instanceof Error && failure.message
-              ? failure.message
-              : "Could not create a bootstrap token. Try again.",
-          ),
+        onError: () =>
+          setError("Could not create a bootstrap token. Try again."),
       },
     );
   };
@@ -292,13 +306,26 @@ export function ManualSetup({
                 value={managedConfig({
                   joinToken: issued.token,
                   hooksProjectSlug: hooksProject.slug,
-                  controlPlaneURL: controlPlaneURL(),
+                  controlPlaneURL: secureOrigin,
                 })}
                 label={MANAGED_CONFIG_PATH}
                 language="json"
                 breakAnywhere
               />
             </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={create.isPending}
+              onClick={issue}
+            >
+              {create.isPending ? "Creating…" : "Create a new token"}
+            </Button>
+            {error && (
+              <Text role="alert" small>
+                {error}
+              </Text>
+            )}
             <CodeBlock
               value={[
                 `sudo chown root:<group> ${MANAGED_CONFIG_PATH}`,

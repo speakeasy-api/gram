@@ -8,10 +8,10 @@ import type { ServiceRow } from "./useEmaServices";
 vi.mock("@/routes", () => ({
   useRoutes: ({ projectSlug }: { projectSlug: string }) => ({
     mcp: {
-      x: {
+      details: {
         settings: {
           href: (server: string) =>
-            `/example/projects/${projectSlug}/mcp/x/${server}/settings`,
+            `/example/projects/${projectSlug}/mcp/${server}/settings`,
         },
       },
     },
@@ -82,12 +82,10 @@ describe("Servers on a service page", () => {
     );
     expect(
       screen.getByRole("link", { name: "Tracker" }).getAttribute("href"),
-    ).toBe(
-      "/example/projects/default/mcp/x/tracker/settings#identity-chaining",
-    );
+    ).toBe("/example/projects/default/mcp/tracker/settings#identity-chaining");
     expect(
       screen.getByRole("link", { name: "Wiki" }).getAttribute("href"),
-    ).toBe("/example/projects/docs/mcp/x/wiki/settings#identity-chaining");
+    ).toBe("/example/projects/docs/mcp/wiki/settings#identity-chaining");
     expect(screen.getByRole("link", { name: "broken" })).toBeTruthy();
     expect(screen.getByText("Working")).toBeTruthy();
     expect(screen.getByText("On, waiting for a first connection")).toBeTruthy();
@@ -181,4 +179,18 @@ describe("Servers on a service page", () => {
     expect(screen.getByText("Working")).toBeTruthy();
     expect(screen.queryByText(/doesn’t accept/)).toBeNull();
   });
+});
+
+it("shows unknown server status neutrally even when the known providers do not cover it", () => {
+  show(
+    row({
+      isDefault: false,
+      servers: [
+        server({ status: "future_status" as EMAServiceServer["status"] }),
+      ],
+    }),
+  );
+  expect(screen.getByText("Unknown")).toBeTruthy();
+  expect(screen.queryByText("Working")).toBeNull();
+  expect(screen.queryByText("Needs attention")).toBeNull();
 });

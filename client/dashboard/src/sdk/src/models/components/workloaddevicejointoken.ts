@@ -14,6 +14,10 @@ export type WorkloadDeviceJoinToken = {
    */
   expiresAt: Date;
   /**
+   * The unique token id used to track or revoke this issuance without its secret.
+   */
+  id: string;
+  /**
    * The join token. Shown once; only its hash is stored.
    */
   token: string;
@@ -29,6 +33,7 @@ export const WorkloadDeviceJoinToken$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    id: z.string(),
     token: z.string(),
   }),
   z.transform((v) => {

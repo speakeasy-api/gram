@@ -15,6 +15,7 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters } from "@/lib/dates";
+import { enumPresentation } from "@/lib/enum";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
@@ -70,7 +71,7 @@ export function AgentBootstrapTokens({
 }): JSX.Element | null {
   const { hasAnyScope } = useRBAC();
   // Tokens and devices are both workload identities, read under one scope.
-  if (!hasAnyScope(["workload:read", "workload:write"])) {
+  if (!hasAnyScope(["workload:read"])) {
     return (
       <Text muted small>
         You need permission to view workload identities to see this
@@ -113,7 +114,11 @@ function AgentBootstrapTokensContent({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const { user } = useSession();
-  const members = useMembers(undefined, undefined, { throwOnError: false });
+  const { hasAnyScope } = useRBAC();
+  const members = useMembers(undefined, undefined, {
+    enabled: hasAnyScope(["org:read"]),
+    throwOnError: false,
+  });
   const tokens = useWorkloadDeviceJoinTokensInfinite(
     { agentId: agent.id },
     undefined,
@@ -151,17 +156,18 @@ function AgentBootstrapTokensContent({
   const rows = (tokens.data?.pages ?? []).flatMap((page) => page.result.items);
   const creatorName = (userId: string): string => {
     if (userId === user.id) return "You";
-    const member = members.data?.members.find(
+    if (!members.data) return "—";
+    const member = members.data.members.find(
       (candidate) => candidate.id === userId,
     );
     return member ? member.name || member.email : "Former member";
   };
   const deviceName = (subject: string | undefined): string => {
     if (!subject) return "—";
-    return (
-      admissions.admissions.find((admission) => admission.subject === subject)
-        ?.name || "Unnamed device"
-    );
+    if (admissions.isPending || admissions.isError) return "—";
+    const device = devices.find((admission) => admission.subject === subject);
+    if (!device) return "Device unavailable";
+    return device.name || "Unnamed device";
   };
 
   const columns: Column<WorkloadDeviceJoinTokenSummary>[] = [
@@ -169,11 +175,17 @@ function AgentBootstrapTokensContent({
       key: "status",
       header: "Status",
       width: "120px",
-      render: (token) => (
-        <Badge variant={STATUS[token.status].variant} size="sm">
-          {STATUS[token.status].label}
-        </Badge>
-      ),
+      render: (token) => {
+        const status = enumPresentation(STATUS, token.status, {
+          label: "Unknown",
+          variant: "neutral",
+        });
+        return (
+          <Badge variant={status.variant} size="sm">
+            {status.label}
+          </Badge>
+        );
+      },
     },
     {
       key: "createdByUserId",
@@ -457,6 +469,10 @@ function IssueBootstrapTokenSheet({
   const close = (next: boolean) => {
     onOpenChange(next);
     if (!next) {
+      void Promise.all([
+        invalidateAllWorkloadDeviceJoinTokens(queryClient),
+        invalidateAllWorkloadIdentities(queryClient, { refetchType: "all" }),
+      ]);
       // A fresh sheet next time: a token shown once must not reappear.
       setStarted(false);
       setGrantError(null);

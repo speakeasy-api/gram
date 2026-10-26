@@ -6,7 +6,7 @@ import { CheckIcon, ChevronDown, ChevronsUpDown, PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { InputDialog } from "./input-dialog";
-import { ProjectAvatar } from "./project-menu";
+import { ProjectIcon } from "./project-icon";
 import { Button } from "./ui/Button";
 import {
   Command,
@@ -57,7 +57,7 @@ export function WorkspaceSwitcher({
   };
 
   // Org-level pages have no project — render org context only. Collapsed,
-  // swap the truncated name for a gradient initial tile (mirrors ProjectAvatar).
+  // swap the truncated name for a gradient initial tile (mirrors ProjectIcon).
   // With multiple orgs the row becomes a button that opens the org switcher.
   if (!projectSlug) {
     const orgLabel = organization.name || organization.slug;
@@ -125,11 +125,10 @@ export function WorkspaceSwitcher({
               className,
             )}
           >
-            {/* rounded-none: keep the square tile idiom over ProjectAvatar's
-                rounded-full default. */}
-            <ProjectAvatar
+            <ProjectIcon
+              decorative
               project={project}
-              className="h-5 w-5 shrink-0 rounded-none"
+              className="size-5 text-[10px]"
             />
             {/* "Project" suffix names what the switcher switches. */}
             <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
@@ -157,9 +156,10 @@ export function WorkspaceSwitcher({
                       onSelect={() => handleProjectSelect(p.slug)}
                       className="flex cursor-pointer items-center gap-2"
                     >
-                      <ProjectAvatar
+                      <ProjectIcon
+                        decorative
                         project={p}
-                        className="h-5 w-5 shrink-0 rounded-none"
+                        className="size-5 text-[10px]"
                       />
                       <span className="flex-1 truncate">
                         {p.name || p.slug}

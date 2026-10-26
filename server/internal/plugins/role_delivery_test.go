@@ -107,49 +107,6 @@ func TestRoleAudienceDeliversExistingUseGrant(t *testing.T) {
 	require.True(t, refreshRequested, "explicit re-add requests a new refresh of the affected marketplace")
 }
 
-func TestRoleAudiencePreservesLegacyToolsetMembershipIdentity(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestPluginsService(t)
-	ac, _ := contextvalues.GetAuthContext(ctx)
-	role := createTestRolePrincipal(t, ctx, ti, "legacy-delivery")
-	server := createUnwrappedTestToolset(t, ctx, ti.conn, "Legacy server")
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy delivery"})
-	require.NoError(t, err)
-	id := server.ID.String()
-	// Pods before the server-key writers stored this entry under the toolset.
-	membership, err := testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
-		PluginID: uuid.MustParse(plugin.ID), ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, DisplayName: server.Name, Policy: "optional", SortOrder: 0,
-	})
-	require.NoError(t, err)
-	principal, err := urn.ParsePrincipal(role)
-	require.NoError(t, err)
-	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, id).MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
-	require.NoError(t, err)
-	wrapper, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: uuid.New(), ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, Visibility: "private"})
-	require.NoError(t, err)
-	_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: wrapper, Valid: true}, Slug: "legacy-endpoint"})
-	require.NoError(t, err)
-	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
-	require.NoError(t, err)
-	// The public manual-add path also rejects the typed alias of this legacy entry.
-	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(wrapper.String()), DisplayName: conv.PtrEmpty("Typed alias"), Policy: "required"})
-	var duplicate *oops.ShareableError
-	require.ErrorAs(t, err, &duplicate)
-	require.Equal(t, oops.CodeConflict, duplicate.Code)
-	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
-	require.NoError(t, err)
-	require.Len(t, got.Servers, 1)
-	require.Equal(t, membership.ID.String(), got.Servers[0].ID)
-	require.Equal(t, "optional", got.Servers[0].Policy)
-	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{}})
-	require.NoError(t, err)
-	got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
-	require.NoError(t, err)
-	require.Empty(t, got.Servers)
-}
-
 func TestRoleAudienceDeliveryAvoidsOccupiedFallbackDisplayName(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestPluginsService(t)

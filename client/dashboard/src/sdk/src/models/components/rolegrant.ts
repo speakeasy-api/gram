@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -32,6 +33,8 @@ export const Scope = {
   McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
   McpBlockedConnect: "mcp:blocked_connect",
+  McpAuth: "mcp:auth",
+  McpBlockedAuth: "mcp:blocked_auth",
   EnvironmentRead: "environment:read",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
@@ -51,6 +54,7 @@ export const Scope = {
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  InferenceExecute: "inference:execute",
   LogRead: "log:read",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
@@ -66,7 +70,7 @@ export const Scope = {
 /**
  * The scope slug this grant applies to.
  */
-export type Scope = ClosedEnum<typeof Scope>;
+export type Scope = OpenEnum<typeof Scope>;
 
 export type RoleGrant = {
   /**
@@ -80,10 +84,11 @@ export type RoleGrant = {
 };
 
 /** @internal */
-export const Scope$inboundSchema: z.ZodMiniEnum<typeof Scope> = z.enum(Scope);
+export const Scope$inboundSchema: z.ZodMiniType<Scope, unknown> = openEnums
+  .inboundSchema(Scope);
 /** @internal */
-export const Scope$outboundSchema: z.ZodMiniEnum<typeof Scope> =
-  Scope$inboundSchema;
+export const Scope$outboundSchema: z.ZodMiniType<string, Scope> = openEnums
+  .outboundSchema(Scope);
 
 /** @internal */
 export const RoleGrant$inboundSchema: z.ZodMiniType<RoleGrant, unknown> = z

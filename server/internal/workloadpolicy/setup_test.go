@@ -77,8 +77,8 @@ type testInstance struct {
 }
 
 // newTestService builds the service against a cloned database and a dashboard
-// session context with admin grants. The context also carries a project, which
-// a session never selects in production; resolve must ignore it.
+// session context with admin grants. Its incidental context project is not an
+// explicit selection; resolve must ignore it unless the payload names a project.
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -165,8 +165,7 @@ func withScopes(t *testing.T, ctx context.Context, ti *testInstance, scopes ...a
 }
 
 // withoutProject returns ctx with the caller's project cleared, as a dashboard
-// session arrives: the service is organization-wide, so a session names no
-// project and only an API key selects one.
+// session arrives before an explicit project header has been resolved.
 func withoutProject(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 
@@ -181,7 +180,7 @@ func withoutProject(t *testing.T, ctx context.Context) context.Context {
 }
 
 // asAPIKey returns ctx as a legacy API key arrives: the key names the project
-// already on the context, and only a key reaches the project tier. A legacy key
+// already on the context, independently of an explicit header. A legacy key
 // skips RBAC enforcement, so scope tests stay on the session context.
 func asAPIKey(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
