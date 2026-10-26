@@ -124,7 +124,7 @@ export const POLICY_STATES: Record<PolicyState, CoverageDisplay> = {
     variant: "destructive",
     icon: ShieldOff,
     detail:
-      "The device runs an agent version your organization blocked, so the agent stopped enforcing policy. Update the agent on this device.",
+      "The agent reported running a version your organization blocked, so it stopped enforcing policy. Update that agent to resume.",
   },
 };
 
@@ -152,11 +152,14 @@ export function deviceCoverageKey(
 // Safe lookup: the SDK enums are open, so a value from a newer server must
 // degrade to a neutral badge, not a crash.
 export function coverageDisplay(key: string): CoverageDisplay {
-  return (
-    POLICY_STATES[key as PolicyState] ??
-    BUCKETS[key as CoverageBucket] ??
-    FALLBACK
-  );
+  // Own keys only, so a value like "constructor" falls back too.
+  const policy = Object.hasOwn(POLICY_STATES, key)
+    ? POLICY_STATES[key as PolicyState]
+    : undefined;
+  const bucket = Object.hasOwn(BUCKETS, key)
+    ? BUCKETS[key as CoverageBucket]
+    : undefined;
+  return policy ?? bucket ?? FALLBACK;
 }
 
 const TOOL_LABELS: Record<string, string> = {

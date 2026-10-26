@@ -43,6 +43,11 @@ describe("coverageDisplay", () => {
       variant: "neutral",
     });
   });
+
+  it("ignores inherited keys", () => {
+    expect(coverageDisplay("constructor").label).toBe("Unknown");
+    expect(coverageDisplay("__proto__").label).toBe("Unknown");
+  });
 });
 
 describe("toolLabel", () => {

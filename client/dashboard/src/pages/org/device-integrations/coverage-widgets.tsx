@@ -192,13 +192,18 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
       const matchesBucket =
         !selectedBuckets ||
         selectedBuckets.length === 0 ||
-        selectedBuckets.includes(deviceCoverageKey(device));
+        selectedBuckets.includes(deviceCoverageKey(device)) ||
+        (device.coverageBucket === "agent_active" &&
+          selectedBuckets.includes("agent_active"));
       return matchesSearch && matchesBucket;
     });
   }, [devices, deferredSearch, selectedBuckets]);
 
   const columns = useMemo(() => deviceColumns(), []);
+  // The device outlives `open`, so the sheet keeps its content while it
+  // slides out.
   const [selected, setSelected] = useState<ManagedDevice | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   if (isLoading) return <SkeletonTable />;
   if (isError) {
@@ -236,7 +241,10 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
         columns={columns}
         data={filteredDevices}
         rowKey={(row) => row.id}
-        onRowClick={setSelected}
+        onRowClick={(device) => {
+          setSelected(device);
+          setSheetOpen(true);
+        }}
         noResultsMessage={<WidgetEmptyState message="No matching devices" />}
       />
       {hasMore ? (
@@ -259,22 +267,26 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
       ) : null}
       <DeviceDetailSheet
         device={selected}
-        onOpenChange={(open) => {
-          if (!open) setSelected(null);
-        }}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
       />
     </Stack>
   );
 });
 
-// agent_active is offered as its policy states, which partition it, so the
-// filter matches what the Coverage column shows.
+// The policy states match what the Coverage column shows. agent_active stays
+// as the whole bucket, for existing links and rows from a server that sends
+// no policy state.
 const COVERAGE_OPTIONS = [
   ...(Object.keys(POLICY_STATES) as PolicyState[]),
-  ...(Object.keys(BUCKETS) as CoverageBucket[]).filter(
-    (bucket) => bucket !== "agent_active",
-  ),
-].map((key) => ({ label: coverageDisplay(key).label, value: key }));
+  ...(Object.keys(BUCKETS) as CoverageBucket[]),
+].map((key) => ({
+  label:
+    key === "agent_active"
+      ? "Agent active (any policy state)"
+      : coverageDisplay(key).label,
+  value: key,
+}));
 const DEVICE_FILTERS = defineFilters([
   { id: "coverage", label: "Coverage", kind: "multiselect", pinned: true },
 ]);

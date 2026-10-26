@@ -36,13 +36,15 @@ import {
  */
 export function DeviceDetailSheet({
   device,
+  open,
   onOpenChange,
 }: {
   device: ManagedDevice | null;
+  open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
   return (
-    <Sheet open={device !== null} onOpenChange={onOpenChange}>
+    <Sheet open={open && device !== null} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col sm:max-w-xl">
         {device ? <DeviceDetails device={device} /> : null}
       </SheetContent>
@@ -134,7 +136,9 @@ function DeviceDetails({ device }: { device: ManagedDevice }): JSX.Element {
 }
 
 // The kill switch is the one state worth interrupting for: the agent is
-// installed and running, and enforces nothing.
+// installed and running, and enforces nothing. Under user-level matching the
+// report can come from the user's other machine, so the copy names the
+// agent, not this device.
 function HaltedAlert({
   state,
 }: {
@@ -144,10 +148,9 @@ function HaltedAlert({
   const version = state.speakeasydVersion;
   return (
     <Alert variant="error" title="Enforcement paused">
-      This device runs{" "}
-      {version ? `agent version ${version}` : "an agent version"}, which your
-      organization blocked, so the agent stopped enforcing policy. Update the
-      agent on this device to resume, or{" "}
+      The agent reported running {version ? `version ${version}` : "a version"},
+      which your organization blocked, so it stopped enforcing policy. Update
+      that agent to resume, or{" "}
       <Link
         to={orgRoutes.deviceAgent.configuration.href()}
         className="underline underline-offset-2"
@@ -285,14 +288,16 @@ function toolStatus(tool: ManagedDeviceTool): ToolStatus {
       return {
         label: "Waiting",
         className: "text-default-warning",
-        reason: PENDING_REASONS[tool.pendingReason ?? ""] ?? undefined,
+        reason:
+          ownValue(PENDING_REASONS, tool.pendingReason) ??
+          "The agent is still preparing to apply this tool's policy.",
       };
     case "error":
       return {
         label: "Not enforcing",
         className: "text-default-destructive",
         reason:
-          ERROR_KINDS[tool.errorKind ?? ""] ??
+          ownValue(ERROR_KINDS, tool.errorKind) ??
           "The agent hit an unexpected error applying the policy.",
       };
     case "skipped":
@@ -328,6 +333,15 @@ const ERROR_KINDS: Record<string, string> = {
   not_found: "The agent could not find where this tool keeps its settings.",
   invalid_config: "This tool's existing settings could not be read.",
 };
+
+// The reason codes come from the server; own keys only, so an unexpected
+// value like "constructor" falls back instead of rendering a function.
+function ownValue(
+  map: Record<string, string>,
+  key: string | undefined,
+): string | undefined {
+  return key !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+}
 
 function layerLabel(layer: string): string {
   switch (layer) {
