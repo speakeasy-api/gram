@@ -66,6 +66,9 @@ type UpdateMcpServerRequestBody struct {
 	// The ID of an existing project- or organization-owned user session issuer to
 	// attach. Omit to preserve the current issuer.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Detach the current user session issuer, so the server no longer requires
+	// user sessions. Must not be true when user_session_issuer_id is set.
+	ClearUserSessionIssuer *bool `form:"clear_user_session_issuer,omitempty" json:"clear_user_session_issuer,omitempty" xml:"clear_user_session_issuer,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The allowed network surfaces. Omit to preserve the stored mode.
@@ -3021,16 +3024,17 @@ func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *Create
 // of the "updateMcpServer" endpoint of the "mcpServers" service.
 func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *UpdateMcpServerRequestBody {
 	body := &UpdateMcpServerRequestBody{
-		ID:                    p.ID,
-		Name:                  p.Name,
-		EnvironmentID:         p.EnvironmentID,
-		RemoteMcpServerID:     p.RemoteMcpServerID,
-		TunneledMcpServerID:   p.TunneledMcpServerID,
-		ToolsetID:             p.ToolsetID,
-		UnproxiedMcpServerID:  p.UnproxiedMcpServerID,
-		ToolVariationsGroupID: p.ToolVariationsGroupID,
-		UserSessionIssuerID:   p.UserSessionIssuerID,
-		Visibility:            string(p.Visibility),
+		ID:                     p.ID,
+		Name:                   p.Name,
+		EnvironmentID:          p.EnvironmentID,
+		RemoteMcpServerID:      p.RemoteMcpServerID,
+		TunneledMcpServerID:    p.TunneledMcpServerID,
+		ToolsetID:              p.ToolsetID,
+		UnproxiedMcpServerID:   p.UnproxiedMcpServerID,
+		ToolVariationsGroupID:  p.ToolVariationsGroupID,
+		UserSessionIssuerID:    p.UserSessionIssuerID,
+		ClearUserSessionIssuer: p.ClearUserSessionIssuer,
+		Visibility:             string(p.Visibility),
 	}
 	if p.NetworkAccessMode != nil {
 		networkAccessMode := string(*p.NetworkAccessMode)

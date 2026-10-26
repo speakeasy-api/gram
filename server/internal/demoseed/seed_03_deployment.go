@@ -119,12 +119,9 @@ func (s *seeder) seedDeploymentToolsets(ctx context.Context) error {
 		Toolset1:              s.toolset1(),
 		OrganizationID:        s.orgID(),
 		ProjectID:             proj,
-		SupportMcpSlug:        s.spec.OrgSlug + "-support",
 		Toolset2:              s.toolset2(),
 		Toolset3:              s.toolset3(),
-		PartnerMcpSlug:        s.spec.OrgSlug + "-partner",
 		Toolset4:              s.toolset4(),
-		DiscoveryMcpSlug:      s.spec.OrgSlug + "-oauth-discovery",
 		ExternalOauthServerID: externalOAuthID,
 	}); err != nil {
 		return fmt.Errorf("insert demo toolsets: %w", err)
@@ -198,13 +195,6 @@ func (s *seeder) seedDeploymentConnections(ctx context.Context) error {
 		OrganizationID: org,
 	}); err != nil {
 		return fmt.Errorf("insert demo user session issuer: %w", err)
-	}
-
-	if err := s.q.DeployAttachUserSessionIssuer(ctx, repo.DeployAttachUserSessionIssuerParams{
-		UserSessionIssuerID: s.usIssuer(),
-		ToolsetID:           s.toolset3(),
-	}); err != nil {
-		return fmt.Errorf("attach demo user session issuer: %w", err)
 	}
 
 	// Advertised capability and an administrator-declared registration are

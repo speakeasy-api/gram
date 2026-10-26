@@ -37,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -96,8 +95,6 @@ type Service struct {
 	// scanner wearing Speakeasy's egress IPs, or pin goroutines against a
 	// slowloris host for fetchTimeout apiece.
 	verifyLimiter *ratelimit.Limiter
-
-	hostedSync HostedSyncFunc
 }
 
 var (
@@ -143,7 +140,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		verifyLimiter: ratelimit.New(verifyStore, "cimd-url-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
-		hostedSync: hostedmcp.SyncDeferringIssuerResync,
 	}
 }
 

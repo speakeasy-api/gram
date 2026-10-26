@@ -590,6 +590,8 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, errMCPEnableForbidden):
 		return oops.E(oops.CodeForbidden, err, "%s", errMCPEnableForbidden.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errMCPEnableUnavailable):
+		return oops.E(oops.CodeInvalid, err, "%s", errMCPEnableUnavailable.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, errToolsetNoMCPServer):
 		return oops.E(oops.CodeBadRequest, err, "%s", hostedmcp.NoServerMessage).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
