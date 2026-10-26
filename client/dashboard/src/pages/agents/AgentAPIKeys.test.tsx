@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   serverScoping: false,
   selectedServerId: "server_one",
   selectedIssuerId: undefined as string | undefined,
+  selectedKind: "Toolset",
+  selectedAuthClientId: undefined as string | undefined,
+  listChoices: vi.fn(),
   list: vi.fn(),
   create: vi.fn(),
   revoke: vi.fn(),
@@ -53,7 +56,12 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.org, projects: mocks.projects }),
   useSession: () => ({ user: { id: mocks.user } }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ agents: mocks }) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    agents: mocks,
+    authClients: { listMcpServerChoices: mocks.listChoices },
+  }),
+}));
 vi.mock("@gram/client/react-query/listAPIKeys", () => ({
   useListAPIKeys: (request: unknown, security: unknown, options: object) =>
     useQuery({
@@ -153,7 +161,8 @@ vi.mock("./AgentKeyServers", () => ({
               name: "Server one",
               projectId: "project_one",
               projectSlug: "project-one",
-              kind: "Toolset",
+              kind: mocks.selectedKind,
+              authClientId: mocks.selectedAuthClientId,
               endpoints: ["https://example.test/mcp/server-one"],
             },
           ])
@@ -291,6 +300,9 @@ beforeEach(() => {
   mocks.serverScoping = false;
   mocks.selectedServerId = "server_one";
   mocks.selectedIssuerId = undefined;
+  mocks.selectedKind = "Toolset";
+  mocks.selectedAuthClientId = undefined;
+  mocks.listChoices.mockResolvedValue({ choices: [] });
   mocks.org = "org_example";
   mocks.user = "user_example";
   mocks.projects = [
@@ -718,6 +730,46 @@ describe("Agent API keys", () => {
     expect(screen.getByRole("alert").textContent).toMatch(
       /reserved|255 Unicode characters/,
     );
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("sends the credential chosen for a server that offers several", async () => {
+    mocks.selectedKind = "Remote";
+    mocks.selectedAuthClientId = "client_b";
+    mocks.listChoices.mockResolvedValue({
+      choices: [{ id: "client_a" }, { id: "client_b" }],
+    });
+    mocks.listDelegableGrants.mockResolvedValue([{ ...grant }]);
+    setup();
+    await createWithGrant();
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.authClientChoices,
+    ).toEqual([{ mcpServerId: "server_one", authClientId: "client_b" }]);
+  });
+  it("stays on the servers step until a credential is chosen", async () => {
+    mocks.selectedKind = "Remote";
+    mocks.listChoices.mockResolvedValue({
+      choices: [{ id: "client_a" }, { id: "client_b" }],
+    });
+    mocks.listDelegableGrants.mockResolvedValue([{ ...grant }]);
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Issue a key" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Choose fixture server" }),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Choose which credential the key uses on Server one.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Choose fixture server" }),
+    ).toBeTruthy();
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("submits a trimmed name at the Unicode codepoint limit", async () => {
