@@ -42,7 +42,7 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 			failOpenFlag := featuresrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)}
 			_, err := featuresrepo.New(ti.conn).EnableFeature(ctx, failOpenFlag)
 			require.NoError(t, err)
-			_, err = featuresrepo.New(ti.conn).DeleteFeature(ctx, featuresrepo.DeleteFeatureParams{OrganizationID: failOpenFlag.OrganizationID, FeatureName: failOpenFlag.FeatureName})
+			_, err = featuresrepo.New(ti.conn).DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(failOpenFlag))
 			require.NoError(t, err)
 			handler, err := ti.service.ahpHandler()
 			require.NoError(t, err)

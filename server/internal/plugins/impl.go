@@ -3486,8 +3486,9 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 	// browser: senders authenticate through env credentials, a previously
 	// cached key, or the baked org-wide key.
 	browserLogin, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
-		OrganizationID: orgID,
-		FeatureName:    string(productfeatures.FeatureHooksBrowserLogin),
+		OrganizationID:         orgID,
+		FeatureName:            string(productfeatures.FeatureHooksBrowserLogin),
+		EnabledUntilConfigured: productfeatures.FeatureHooksBrowserLogin.EnabledUntilConfigured(),
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to read hooks browser login flag, defaulting to no browser login",
@@ -3506,8 +3507,9 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 	// Explicitly turned off (or unreadable), a distribution failure fails
 	// closed — the same posture as every other unobtainable verdict.
 	installFailOpen, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
-		OrganizationID: orgID,
-		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+		OrganizationID:         orgID,
+		FeatureName:            string(productfeatures.FeatureHooksFailOpen),
+		EnabledUntilConfigured: productfeatures.FeatureHooksFailOpen.EnabledUntilConfigured(),
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to read hooks fail-open flag, defaulting to fail closed",

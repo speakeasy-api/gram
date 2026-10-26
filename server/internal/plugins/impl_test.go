@@ -3156,7 +3156,7 @@ func TestPluginsService_PublishProject_InstallFailOpenByDefault(t *testing.T) {
 	flag := productfeaturesrepo.EnableFeatureParams{OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)}
 	_, err = q.EnableFeature(ctx, flag)
 	require.NoError(t, err)
-	_, err = q.DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{OrganizationID: flag.OrganizationID, FeatureName: flag.FeatureName})
+	_, err = q.DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams(flag))
 	require.NoError(t, err)
 
 	second, err := ti.service.PublishProject(ctx, input)

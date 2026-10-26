@@ -2628,6 +2628,25 @@ func (q *Queries) GetUserSessionMigrationTombstonesFixture(ctx context.Context, 
 	return i, err
 }
 
+const hasOrganizationFeatureFixture = `-- name: HasOrganizationFeatureFixture :one
+SELECT EXISTS (
+    SELECT 1 FROM organization_features
+    WHERE organization_id = $1 AND feature_name = $2
+)::boolean
+`
+
+type HasOrganizationFeatureFixtureParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+func (q *Queries) HasOrganizationFeatureFixture(ctx context.Context, arg HasOrganizationFeatureFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOrganizationFeatureFixture, arg.OrganizationID, arg.FeatureName)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const insertAttachmentFixture = `-- name: InsertAttachmentFixture :execrows
 INSERT INTO principal_remote_session_bindings
  (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, attached_by_subject_id, grant_generation)

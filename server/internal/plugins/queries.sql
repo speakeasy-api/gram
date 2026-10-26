@@ -799,7 +799,7 @@ SELECT (
       AND active_feature.deleted IS FALSE
   )
   OR (
-    @feature_name::text IN ('organization_gateway_disabled', 'hooks_fail_open')
+    @enabled_until_configured::boolean
     AND NOT EXISTS (
       SELECT 1
       FROM organization_features AS configured_feature

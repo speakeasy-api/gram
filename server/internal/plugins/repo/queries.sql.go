@@ -1169,7 +1169,7 @@ SELECT (
       AND active_feature.deleted IS FALSE
   )
   OR (
-    $2::text IN ('organization_gateway_disabled', 'hooks_fail_open')
+    $3::boolean
     AND NOT EXISTS (
       SELECT 1
       FROM organization_features AS configured_feature
@@ -1181,8 +1181,9 @@ SELECT (
 `
 
 type IsOrganizationFeatureEnabledParams struct {
-	OrganizationID string
-	FeatureName    string
+	OrganizationID         string
+	FeatureName            string
+	EnabledUntilConfigured bool
 }
 
 // Reports whether an organization feature flag is enabled. Mirrors the
@@ -1191,7 +1192,7 @@ type IsOrganizationFeatureEnabledParams struct {
 // including the features that read as enabled until an administrator turns
 // them off (Feature.EnabledUntilConfigured).
 func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrganizationFeatureEnabledParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isOrganizationFeatureEnabled, arg.OrganizationID, arg.FeatureName)
+	row := q.db.QueryRow(ctx, isOrganizationFeatureEnabled, arg.OrganizationID, arg.FeatureName, arg.EnabledUntilConfigured)
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err

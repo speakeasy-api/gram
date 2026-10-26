@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -282,20 +283,16 @@ func requireOrganizationDefaultFeatures(t *testing.T, ctx context.Context, conn 
 	for _, feature := range productfeatures.OrganizationDefaultFeatures {
 		if !enabled && feature.EnabledUntilConfigured() {
 			// Reads as enabled without a row, so assert nothing was seeded.
-			var seeded bool
-			require.NoError(t, conn.QueryRow(ctx,
-				`SELECT EXISTS (SELECT 1 FROM organization_features WHERE organization_id = $1 AND feature_name = $2)`,
-				organizationID, string(feature),
-			).Scan(&seeded))
+			seeded, err := testrepo.New(conn).HasOrganizationFeatureFixture(ctx, testrepo.HasOrganizationFeatureFixtureParams{OrganizationID: organizationID, FeatureName: string(feature)})
+			require.NoError(t, err)
 			require.Falsef(t, seeded, "feature %s", feature)
-			continue
 		}
 		got, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),
 		})
 		require.NoError(t, err)
-		require.Equalf(t, enabled, got, "feature %s", feature)
+		require.Equalf(t, enabled || feature.EnabledUntilConfigured(), got, "feature %s", feature)
 	}
 }
 

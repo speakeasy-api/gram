@@ -96,7 +96,7 @@ func TestAHPConfigurationDynamicPosture(t *testing.T) {
 	_, err = features.EnableFeature(ctx, flag)
 	require.NoError(t, err)
 	requireAHPConfiguration(t, h, "fail-open")
-	_, err = features.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams{OrganizationID: flag.OrganizationID, FeatureName: flag.FeatureName})
+	_, err = features.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(flag))
 	require.NoError(t, err)
 	requireAHPConfiguration(t, h, "fail-closed")
 	// The posture belongs to the authenticated organization, not server state.

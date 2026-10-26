@@ -2307,3 +2307,9 @@ SELECT EXISTS (
       AND wait_event_type = 'Lock'
       AND query LIKE '%LockWorkloadIssuerForWrite%'
 )::boolean;
+
+-- name: HasOrganizationFeatureFixture :one
+SELECT EXISTS (
+    SELECT 1 FROM organization_features
+    WHERE organization_id = @organization_id AND feature_name = @feature_name
+)::boolean;
