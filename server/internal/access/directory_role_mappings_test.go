@@ -547,6 +547,42 @@ func TestService_SetDirectoryRoleMappings_RejectsUnknownRole(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+func TestService_SetDirectoryRoleMappings_CapsRolesPerSource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String()
+
+	// One role over the cap is refused before anything is written.
+	tooMany := make([]string, 0, maxDirectoryRolesPerSource+1)
+	for range maxDirectoryRolesPerSource + 1 {
+		tooMany = append(tooMany, "role:organization:"+uuid.NewString())
+	}
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: tooMany,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, fmt.Sprintf("at most %d roles", maxDirectoryRolesPerSource))
+	mappings, err := repo.New(ti.conn).ListDirectoryRoleMappings(ctx, orgID)
+	require.NoError(t, err)
+	require.Empty(t, mappings)
+
+	// Repeats of one role count once.
+	repeated := make([]string, 0, maxDirectoryRolesPerSource+1)
+	for range maxDirectoryRolesPerSource + 1 {
+		repeated = append(repeated, builder)
+	}
+	created, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: repeated,
+	})
+	require.NoError(t, err)
+	require.Len(t, created, 1)
+}
+
 func TestService_SetDirectoryRoleMappings_RejectsOtherOrganization(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAccessService(t)

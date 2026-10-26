@@ -133,11 +133,38 @@ type CompareSkillVersionsToolInput struct {
 // refused once the suggestion is closed; dismissing discards the suggestion
 // and settles on the same state when repeated.
 func approveSkillSuggestionAnnotations() *mcp.ToolAnnotations {
-	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: false}
+	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: false, OpenWorldHint: new(false)}
 }
 
 func dismissSkillSuggestionAnnotations() *mcp.ToolAnnotations {
-	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), IdempotentHint: true}
+	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), IdempotentHint: true, OpenWorldHint: new(false)}
+}
+
+// skillWriteAnnotations are for create_skill and add_skill_version. Each adds
+// a skill or a version and does not remove one. A repeat with identical
+// content returns the existing version.
+func skillWriteAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(false, true, false)
+}
+
+// distributeSkillAnnotations is for distribute_skill. A call on a distribution
+// pinned to a version clears the pin, so agents switch to the latest version.
+// A repeat settles on the same distribution.
+func distributeSkillAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, false)
+}
+
+// updateSkillMetadataAnnotations is for update_skill_metadata. clear_summary
+// removes the existing summary. A repeat with the same arguments settles on
+// the same metadata.
+func updateSkillMetadataAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, false)
+}
+
+// undistributeSkillAnnotations is for undistribute_skill, which stops agents
+// loading a skill.
+func undistributeSkillAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, false)
 }
 
 type skillsRefusalResult struct {
@@ -304,6 +331,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Name:        "create_skill",
 		Title:       "Create Skill",
 		Description: "Write a new skill in a named project — a set of instructions an agent loads when it applies — from complete SKILL.md content. Writing it alone does nothing: no agent loads it until distribute_skill gives it to a plugin or an assistant. Constraints: an existing active skill with the same normalized name records a new version instead, and identical content returns the existing version unchanged.",
+		Annotations: skillWriteAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateSkillToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
 		return skillsToolCall(ctx, func(principal Principal) (SkillAuthoringResult, error) {
 			return skills.CreateSkill(ctx, principal, CreateSkillInput(input))
@@ -314,6 +342,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Name:        "add_skill_version",
 		Title:       "Add Skill Version",
 		Description: "Change what a skill tells an agent, by recording a new version from complete replacement SKILL.md content. Versions are fixed snapshots, so a correction is a new one rather than an edit. Constraints: pass the version you read as expected_latest_version_id — if the skill has moved on since, the write is refused rather than overwriting someone else's version. Identical content returns the existing version unchanged. Recording a version gives it to nobody new; the plugins and assistants that already carry the skill and track its latest version pick it up. To take a change proposed by list_skill_suggestions, use approve_skill_suggestion where it is offered, or have the user approve it in the AI Control Plane dashboard; either closes the suggestion, which a new version recorded here does not.",
+		Annotations: skillWriteAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input AddSkillVersionToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
 		return skillsToolCall(ctx, func(principal Principal) (SkillAuthoringResult, error) {
 			return skills.AddSkillVersion(ctx, principal, AddSkillVersionInput(input))
@@ -324,6 +353,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Name:        "update_skill_metadata",
 		Title:       "Rename a Skill",
 		Description: "Rename a skill, or change how it is described in the list — its canonical name, display name, and summary. Nothing here changes what the skill tells an agent to do; that lives in its versions. Constraints: pass the version you read as expected_latest_version_id.",
+		Annotations: updateSkillMetadataAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateSkillMetadataToolInput) (*mcp.CallToolResult, UpdateSkillMetadataOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (UpdateSkillMetadataOutput, error) {
 			return skills.UpdateSkillMetadata(ctx, principal, UpdateSkillMetadataInput(input))
@@ -334,6 +364,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Name:        "distribute_skill",
 		Title:       "Give a Skill to a Plugin or Assistant",
 		Description: "Give a skill to one plugin or one assistant in the same project, so agents there start loading it. This is the only way a skill takes effect. Constraints: name the target exactly — a name matching nothing is refused as not_found and a name matching more than one target as ambiguous_target, with no fallback to the default plugin. Repeat calls settle on the same result rather than adding it twice.",
+		Annotations: distributeSkillAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input DistributeSkillToolInput) (*mcp.CallToolResult, DistributeSkillOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (DistributeSkillOutput, error) {
 			return skills.DistributeSkill(ctx, principal, DistributeSkillInput(input))
@@ -355,6 +386,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Name:        "undistribute_skill",
 		Title:       "Take a Skill Back from a Plugin or Assistant",
 		Description: "Take a skill back from one plugin or one assistant in the same project, undoing distribute_skill, so agents there stop loading it. The skill and its versions stay; only that one distribution ends. Tell the user which plugin or assistant loses the skill, ask them to confirm out loud, then call this with confirmed: true. Constraints: name the target exactly — a name matching nothing is refused as not_found and a name matching more than one target as ambiguous_target, with no fallback to the default plugin. A distribution that is already gone is a no-op, so a retry with the same idempotency_key is safe.",
+		Annotations: undistributeSkillAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UndistributeSkillToolInput) (*mcp.CallToolResult, UndistributeSkillOutput, error) {
 		if !input.Confirmed {
 			return skillsRefusal("confirmation_required", "Tell the user which plugin or assistant will stop carrying this skill, ask them to explicitly confirm it, then call this tool again with confirmed: true."), UndistributeSkillOutput{}, nil
@@ -412,6 +444,14 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 			manifest.Annotations = approveSkillSuggestionAnnotations()
 		case tool.name == "dismiss_skill_suggestion":
 			manifest.Annotations = dismissSkillSuggestionAnnotations()
+		case tool.name == "update_skill_metadata":
+			manifest.Annotations = updateSkillMetadataAnnotations()
+		case tool.name == "undistribute_skill":
+			manifest.Annotations = undistributeSkillAnnotations()
+		case tool.name == "distribute_skill":
+			manifest.Annotations = distributeSkillAnnotations()
+		default:
+			manifest.Annotations = skillWriteAnnotations()
 		}
 		var discoveryScopes []authz.Scope
 		if tool.authority == ExternalAuthorizationMember {

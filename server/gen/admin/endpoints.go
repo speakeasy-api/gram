@@ -81,6 +81,11 @@ type Endpoints struct {
 	ListExternalMcpMigrationCandidates      goa.Endpoint
 	PreviewExternalMcpMigration             goa.Endpoint
 	MigrateExternalMcpServers               goa.Endpoint
+	ListRegistryPromotionCandidates         goa.Endpoint
+	GetRegistryPromotionCandidate           goa.Endpoint
+	PromoteRegistryCandidate                goa.Endpoint
+	CurateRegistryPromotionCandidate        goa.Endpoint
+	RetryRegistryPromotionDocs              goa.Endpoint
 	GetRegistryOktaCandidates               goa.Endpoint
 	ListRegistryOktaUnmapped                goa.Endpoint
 	ListRegistryEntries                     goa.Endpoint
@@ -112,6 +117,8 @@ type Endpoints struct {
 	ListUpstreamOAuthMigrationOrganizations goa.Endpoint
 	GetUpstreamOAuthMigrationStatus         goa.Endpoint
 	RunUpstreamOAuthMigration               goa.Endpoint
+	EnableUpstreamAuthEnforcement           goa.Endpoint
+	DisableUpstreamAuthEnforcement          goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -201,6 +208,11 @@ func NewEndpoints(s Service) *Endpoints {
 		ListExternalMcpMigrationCandidates:      NewListExternalMcpMigrationCandidatesEndpoint(s, a.APIKeyAuth),
 		PreviewExternalMcpMigration:             NewPreviewExternalMcpMigrationEndpoint(s, a.APIKeyAuth),
 		MigrateExternalMcpServers:               NewMigrateExternalMcpServersEndpoint(s, a.APIKeyAuth),
+		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesEndpoint(s, a.APIKeyAuth),
+		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
+		PromoteRegistryCandidate:                NewPromoteRegistryCandidateEndpoint(s, a.APIKeyAuth),
+		CurateRegistryPromotionCandidate:        NewCurateRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
+		RetryRegistryPromotionDocs:              NewRetryRegistryPromotionDocsEndpoint(s, a.APIKeyAuth),
 		GetRegistryOktaCandidates:               NewGetRegistryOktaCandidatesEndpoint(s, a.APIKeyAuth),
 		ListRegistryOktaUnmapped:                NewListRegistryOktaUnmappedEndpoint(s, a.APIKeyAuth),
 		ListRegistryEntries:                     NewListRegistryEntriesEndpoint(s, a.APIKeyAuth),
@@ -232,6 +244,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListUpstreamOAuthMigrationOrganizations: NewListUpstreamOAuthMigrationOrganizationsEndpoint(s, a.APIKeyAuth),
 		GetUpstreamOAuthMigrationStatus:         NewGetUpstreamOAuthMigrationStatusEndpoint(s, a.APIKeyAuth),
 		RunUpstreamOAuthMigration:               NewRunUpstreamOAuthMigrationEndpoint(s, a.APIKeyAuth),
+		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
+		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -301,6 +315,11 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListExternalMcpMigrationCandidates = m(e.ListExternalMcpMigrationCandidates)
 	e.PreviewExternalMcpMigration = m(e.PreviewExternalMcpMigration)
 	e.MigrateExternalMcpServers = m(e.MigrateExternalMcpServers)
+	e.ListRegistryPromotionCandidates = m(e.ListRegistryPromotionCandidates)
+	e.GetRegistryPromotionCandidate = m(e.GetRegistryPromotionCandidate)
+	e.PromoteRegistryCandidate = m(e.PromoteRegistryCandidate)
+	e.CurateRegistryPromotionCandidate = m(e.CurateRegistryPromotionCandidate)
+	e.RetryRegistryPromotionDocs = m(e.RetryRegistryPromotionDocs)
 	e.GetRegistryOktaCandidates = m(e.GetRegistryOktaCandidates)
 	e.ListRegistryOktaUnmapped = m(e.ListRegistryOktaUnmapped)
 	e.ListRegistryEntries = m(e.ListRegistryEntries)
@@ -332,6 +351,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListUpstreamOAuthMigrationOrganizations = m(e.ListUpstreamOAuthMigrationOrganizations)
 	e.GetUpstreamOAuthMigrationStatus = m(e.GetUpstreamOAuthMigrationStatus)
 	e.RunUpstreamOAuthMigration = m(e.RunUpstreamOAuthMigration)
+	e.EnableUpstreamAuthEnforcement = m(e.EnableUpstreamAuthEnforcement)
+	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1768,6 +1789,121 @@ func NewMigrateExternalMcpServersEndpoint(s Service, authAPIKeyFn security.AuthA
 	}
 }
 
+// NewListRegistryPromotionCandidatesEndpoint returns an endpoint function that
+// calls the method "listRegistryPromotionCandidates" of service "admin".
+func NewListRegistryPromotionCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRegistryPromotionCandidatesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRegistryPromotionCandidates(ctx, p)
+	}
+}
+
+// NewGetRegistryPromotionCandidateEndpoint returns an endpoint function that
+// calls the method "getRegistryPromotionCandidate" of service "admin".
+func NewGetRegistryPromotionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRegistryPromotionCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRegistryPromotionCandidate(ctx, p)
+	}
+}
+
+// NewPromoteRegistryCandidateEndpoint returns an endpoint function that calls
+// the method "promoteRegistryCandidate" of service "admin".
+func NewPromoteRegistryCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PromoteRegistryCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.PromoteRegistryCandidate(ctx, p)
+	}
+}
+
+// NewCurateRegistryPromotionCandidateEndpoint returns an endpoint function
+// that calls the method "curateRegistryPromotionCandidate" of service "admin".
+func NewCurateRegistryPromotionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CurateRegistryPromotionCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CurateRegistryPromotionCandidate(ctx, p)
+	}
+}
+
+// NewRetryRegistryPromotionDocsEndpoint returns an endpoint function that
+// calls the method "retryRegistryPromotionDocs" of service "admin".
+func NewRetryRegistryPromotionDocsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RetryRegistryPromotionDocsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RetryRegistryPromotionDocs(ctx, p)
+	}
+}
+
 // NewGetRegistryOktaCandidatesEndpoint returns an endpoint function that calls
 // the method "getRegistryOktaCandidates" of service "admin".
 func NewGetRegistryOktaCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -2480,5 +2616,51 @@ func NewRunUpstreamOAuthMigrationEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.RunUpstreamOAuthMigration(ctx, p)
+	}
+}
+
+// NewEnableUpstreamAuthEnforcementEndpoint returns an endpoint function that
+// calls the method "enableUpstreamAuthEnforcement" of service "admin".
+func NewEnableUpstreamAuthEnforcementEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnableUpstreamAuthEnforcementPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.EnableUpstreamAuthEnforcement(ctx, p)
+	}
+}
+
+// NewDisableUpstreamAuthEnforcementEndpoint returns an endpoint function that
+// calls the method "disableUpstreamAuthEnforcement" of service "admin".
+func NewDisableUpstreamAuthEnforcementEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DisableUpstreamAuthEnforcementPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DisableUpstreamAuthEnforcement(ctx, p)
 	}
 }

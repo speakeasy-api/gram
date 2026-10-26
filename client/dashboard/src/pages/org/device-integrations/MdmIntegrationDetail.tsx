@@ -1,7 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { Switch } from "@/components/ui/Switch";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -45,20 +44,14 @@ const COVERAGE_STALE_TIME = 30_000;
 
 // Detail page for one MDM integration: its connection state and controls,
 // the vendor-scoped coverage breakdown, sync schedules, and the synced
-// device inventory. Routed below the Device Agent tab shell, so it carries
-// its own rollout-flag gate.
+// device inventory.
 export default function MdmIntegrationDetail(): JSX.Element | null {
-  const telemetry = useTelemetry();
-  const mdmEnabled = telemetry.isFeatureEnabled("gram-device-integrations");
   const { provider: providerID = "" } = useParams<{ provider: string }>();
   const { data, isLoading } = useDeviceIntegrationProviders(
     undefined,
     undefined,
     { staleTime: COVERAGE_STALE_TIME },
   );
-
-  if (mdmEnabled === undefined) return null;
-  if (!mdmEnabled) return <Navigate to=".." replace />;
 
   const provider = data?.providers.find((p) => p.id === providerID);
   if (isLoading) return null;

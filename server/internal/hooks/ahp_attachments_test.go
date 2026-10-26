@@ -2,9 +2,11 @@ package hooks
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +20,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -112,7 +115,6 @@ func TestAHPInboundAttachmentPersistsAsPromptAttachment(t *testing.T) {
 			ahpTestPart("Summarize the attached notes"),
 			ahpTestAttachmentPart("notes", "application/xml", ref),
 			ahpTestAttachmentPart("binary", "application/pdf", binaryRef),
-			ahpTestAttachmentPart("unknown", "application/xml", ahpUploadRefPrefix+uuid.NewString()),
 			ahpTestAttachmentPart("foreign", "application/xml", "urn:example:host:report"),
 		}},
 	}}
@@ -200,7 +202,7 @@ func TestAHPAttachmentReferencesAreProjectScoped(t *testing.T) {
 	otherProject := uuid.New()
 	other.ProjectID = &otherProject
 	attachments, err = ti.service.ahpPromptAttachments(contextvalues.SetAuthContext(ctx, &other), &e)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, errAHPAttachmentUnavailable)
 	require.Empty(t, attachments)
 }
 
@@ -257,4 +259,53 @@ func TestAHPUploadQuotaFailsClosed(t *testing.T) {
 	w := ahpUploadRequest(t, ti.service.ahpUploadHandler(), content, ahpDigest(content), ahpAuthHeaders)
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
 	require.Empty(t, w.Header().Get("Retry-After"))
+}
+
+// Fail only reads, leaving the rest of the real cache contract unchanged.
+type ahpAttachmentReadFailure struct{ cache.Cache }
+
+func (ahpAttachmentReadFailure) Get(context.Context, string, any) error {
+	return errors.New("attachment cache unavailable")
+}
+
+func TestAHPInboundAttachmentUnavailable(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []string{"missing", "read error", "cache absent"} {
+		for _, prompt := range []string{"", "safe inline prompt"} {
+			t.Run(failure+"/"+prompt, func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestHooksService(t)
+				auth := hookAuthContext(t, ctx)
+				ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+				ref := ahpUploadRef(t, ti.service.ahpUploadHandler(), []byte("RESTRICTED_TEST_CONTENT"))
+				switch failure {
+				case "missing":
+					require.NoError(t, ti.service.cache.Delete(ctx, ahpUploadCacheKey(*auth.ProjectID, strings.TrimPrefix(ref, ahpUploadRefPrefix))))
+				case "read error":
+					ti.service.cache = ahpAttachmentReadFailure{Cache: ti.service.cache}
+				case "cache absent":
+					ti.service.cache = nil
+				}
+				handler, err := ti.service.ahpHandler()
+				require.NoError(t, err)
+				input := ahpTestInbound()
+				parts := []any{ahpTestAttachmentPart("notes", "application/xml", ref)}
+				if prompt != "" {
+					parts = append(parts, ahpTestPart(prompt))
+				}
+				input["message"] = map[string]any{"sender": "user", "channel": "cli", "messages": []any{map[string]any{"id": "message", "role": "user", "parts": parts}}}
+				response := ahpRequest(t, handler, "hooks/intercept", input, []string{"deny"}, ahpAuthHeaders)
+				require.Equal(t, http.StatusOK, response.Code)
+				var envelope struct {
+					Result json.RawMessage `json:"result"`
+					Error  struct {
+						Code int `json:"code"`
+					} `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
+				require.Equal(t, -32004, envelope.Error.Code, "missing attachment must not return a successful partial or empty scan")
+				require.Empty(t, envelope.Result)
+			})
+		}
+	}
 }

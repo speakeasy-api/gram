@@ -969,7 +969,6 @@ SELECT
     m.created_at,
     m.user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     COALESCE((
         SELECT e.slug FROM mcp_endpoints e
         WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
@@ -1008,7 +1007,6 @@ SELECT
     t.created_at,
     t.user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     COALESCE(t.mcp_slug, '')::text AS url_slug,
     t.slug AS toolset_slug,
     0::bigint AS toolset_wrapper_count

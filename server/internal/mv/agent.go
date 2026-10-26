@@ -51,7 +51,12 @@ import (
 //
 // marketplaceURL constructs the public marketplace git URL from a token; the
 // caller owns the URL shape so this builder stays free of server-side config.
-func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func(token string) string) *gen.GetPluginsResult {
+//
+// servers holds each assigned plugin's MCP servers by plugin id. A plugin
+// missing from it gets an empty list. A nil map means the lists could not be
+// read, so every plugin's list is left off. The observability plugin carries
+// hooks rather than servers, so it never gets a list.
+func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func(token string) string, servers map[uuid.UUID][]*gen.AgentPluginServer) *gen.GetPluginsResult {
 	var marketplaces []*gen.AgentMarketplace
 	var plugins []*gen.AgentPlugin
 	etag := sha256.New()
@@ -86,6 +91,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 					InstallMode:     string(installmode.Required),
 					Name:            nil,
 					Description:     nil,
+					Servers:         nil,
 				})
 				writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, observabilitySlug, int64(0), installmode.Required)
 			}
@@ -93,18 +99,33 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 
 		if delivered {
 			mode := installmode.FromStored(row.PluginInstallMode)
+			pluginServers := servers[row.PluginID.UUID]
+			if servers != nil && pluginServers == nil {
+				pluginServers = []*gen.AgentPluginServer{}
+			}
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            row.PluginSlug.String,
 				MarketplaceName: name,
 				InstallMode:     string(mode),
 				Name:            conv.FromPGText[string](row.PluginName),
 				Description:     conv.FromPGText[string](row.PluginDescription),
+				Servers:         pluginServers,
 			})
 			// Name and description changes bump plugins.updated_at, so the
-			// timestamp already covers them.
+			// timestamp already covers them. Server membership and the
+			// caller's dashboard access do not, so each server is hashed.
 			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano(), mode)
+			for _, server := range pluginServers {
+				writeAgentPluginsETag(etag, "server\x00%s\x00%s\x00%s\n", conv.PtrValOr(server.ID, ""), server.Name, conv.PtrValOr(server.DashboardURL, ""))
+			}
 		}
 	})
+	// Omitted lists must not share an ETag with empty ones, or an agent that
+	// polled while the lists were unreadable would keep that result after
+	// they recover.
+	if servers == nil {
+		writeAgentPluginsETag(etag, "servers\x00unavailable\n")
+	}
 
 	return &gen.GetPluginsResult{
 		Etag:                   hex.EncodeToString(etag.Sum(nil)),

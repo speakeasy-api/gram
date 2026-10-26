@@ -22,6 +22,7 @@ type Endpoints struct {
 	UpdateRole                           goa.Endpoint
 	DeleteRole                           goa.Endpoint
 	ListDirectoryRoleMappings            goa.Endpoint
+	ListDirectoryPeople                  goa.Endpoint
 	SyncDirectoryGroups                  goa.Endpoint
 	SetDirectoryRoleMapping              goa.Endpoint
 	SetDirectoryRoleMappings             goa.Endpoint
@@ -68,6 +69,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateRole:                           NewUpdateRoleEndpoint(s, a.APIKeyAuth),
 		DeleteRole:                           NewDeleteRoleEndpoint(s, a.APIKeyAuth),
 		ListDirectoryRoleMappings:            NewListDirectoryRoleMappingsEndpoint(s, a.APIKeyAuth),
+		ListDirectoryPeople:                  NewListDirectoryPeopleEndpoint(s, a.APIKeyAuth),
 		SyncDirectoryGroups:                  NewSyncDirectoryGroupsEndpoint(s, a.APIKeyAuth),
 		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingEndpoint(s, a.APIKeyAuth),
 		SetDirectoryRoleMappings:             NewSetDirectoryRoleMappingsEndpoint(s, a.APIKeyAuth),
@@ -112,6 +114,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateRole = m(e.UpdateRole)
 	e.DeleteRole = m(e.DeleteRole)
 	e.ListDirectoryRoleMappings = m(e.ListDirectoryRoleMappings)
+	e.ListDirectoryPeople = m(e.ListDirectoryPeople)
 	e.SyncDirectoryGroups = m(e.SyncDirectoryGroups)
 	e.SetDirectoryRoleMapping = m(e.SetDirectoryRoleMapping)
 	e.SetDirectoryRoleMappings = m(e.SetDirectoryRoleMappings)
@@ -354,6 +357,29 @@ func NewListDirectoryRoleMappingsEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.ListDirectoryRoleMappings(ctx, p)
+	}
+}
+
+// NewListDirectoryPeopleEndpoint returns an endpoint function that calls the
+// method "listDirectoryPeople" of service "access".
+func NewListDirectoryPeopleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListDirectoryPeoplePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListDirectoryPeople(ctx, p)
 	}
 }
 

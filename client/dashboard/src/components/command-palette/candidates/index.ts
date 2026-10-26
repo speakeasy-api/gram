@@ -4,11 +4,14 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useMemo } from "react";
 import type { LauncherCandidate } from "./types";
 import { useAccessRequestCandidates } from "./useAccessRequestCandidates";
+import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
 import { useActionCandidates } from "./useActionCandidates";
+import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useAssistantCandidates } from "./useAssistantCandidates";
 import { useCatalogCandidates } from "./useCatalogCandidates";
 import { useDeploymentCandidates } from "./useDeploymentCandidates";
 import { useEnvironmentCandidates } from "./useEnvironmentCandidates";
+import { useGatewayCandidates } from "./useGatewayCandidates";
 import { useMarketplaceCandidate } from "./useMarketplaceCandidate";
 import { useMcpServerCandidates } from "./useMcpServerCandidates";
 import { usePersonCandidates } from "./usePersonCandidates";
@@ -17,6 +20,7 @@ import { usePolicyCandidates } from "./usePolicyCandidates";
 import { useProjectCandidates } from "./useProjectCandidates";
 import { useRecentCandidates } from "./useRecentCandidates";
 import { useRuleCandidates } from "./useRuleCandidates";
+import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
 
 /**
@@ -62,6 +66,10 @@ export function useLauncherCandidates({
   // Sources are a tab of that section and their detail page gates on
   // mcp:read, so they share it.
   const canListMcp = hasAnyScope(["mcp:read", "mcp:write"]);
+  // Listing gateways requires mcp:read on the project itself
+  // (server/internal/metamcp/impl.go), so a grant in another project must not
+  // fire the forbidden list call here or keep its cached names visible.
+  const canListGateways = hasAnyScope(["mcp:read", "mcp:write"], project.id);
   // Plugins list for whoever can edit them (org admins and plugin:write on
   // this project, per usePluginWriteAccess) or read the organization; the
   // same gate the Plugins page renders behind.
@@ -74,6 +82,8 @@ export function useLauncherCandidates({
   // refused. Named on the project, as the server checks it.
   const canBrowseCatalog = hasScope("project:read", project.id);
   const canReadAssistants = hasScope("assistant:read", undefined, project.id);
+
+  const canReadSkills = hasScope("skill:read", project.id);
 
   const projectEnabled = enabled && inProject;
 
@@ -88,6 +98,9 @@ export function useLauncherCandidates({
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,
   });
+  const gateways = useGatewayCandidates({
+    enabled: projectEnabled && canListGateways,
+  });
   const catalog = useCatalogCandidates({
     enabled: projectEnabled && canBrowseCatalog,
   });
@@ -97,6 +110,11 @@ export function useLauncherCandidates({
   const assistants = useAssistantCandidates({
     enabled: projectEnabled && canReadAssistants,
   });
+  const skills = useSkillCandidates({
+    enabled: projectEnabled && canReadSkills,
+  });
+  const inferenceSetup = useInferenceSetupCandidate({ enabled, inProject });
+  const agentIdentities = useAgentIdentityCandidates({ enabled });
   const environments = useEnvironmentCandidates({ enabled: projectEnabled });
   const sources = useSourceCandidates({
     enabled: projectEnabled && canListMcp,
@@ -123,11 +141,15 @@ export function useLauncherCandidates({
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
+      ...(inProject && canListGateways ? gateways : []),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
       ...(inProject && canListPlugins ? plugins : []),
       ...(inProject && canReadAssistants ? assistants : []),
+      ...(inProject && canReadSkills ? skills : []),
+      ...agentIdentities,
+      ...inferenceSetup,
       ...projectOnly(environments),
       ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
@@ -143,13 +165,19 @@ export function useLauncherCandidates({
     canReadApprovals,
     canReadPeople,
     canListMcp,
+    canListGateways,
     canListPlugins,
     canBrowseCatalog,
     canReadAssistants,
+    canReadSkills,
+    skills,
+    agentIdentities,
+    inferenceSetup,
     actions,
     recents,
     marketplace,
     mcpServers,
+    gateways,
     catalog,
     plugins,
     assistants,

@@ -33,7 +33,7 @@ func TestAgentGrantsReseed(t *testing.T) {
 			seedLocalPostgres(ctx, t, db, spec)
 			agentsBefore, err := fixtures.ListDemoSeedAgentsFixture(ctx, spec.OrgID)
 			require.NoError(t, err)
-			require.Len(t, agentsBefore, 5)
+			require.Len(t, agentsBefore, 6)
 			principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agentsBefore[0].ID.String())
 
 			// Use the target agent's URN in both organizations to catch cleanup
@@ -78,7 +78,7 @@ func TestAgentGrantsReseed(t *testing.T) {
 
 				grants, err := fixtures.CountDemoSeedAgentGrantsFixture(ctx, spec.OrgID)
 				require.NoError(t, err)
-				require.EqualValues(t, 6, grants, "recreated agents must retain only the scoped seed policies")
+				require.EqualValues(t, 7, grants, "recreated agents must retain only the scoped seed policies")
 				keys, err := fixtures.CountDemoSeedAPIKeysFixture(ctx, spec.OrgID)
 				require.NoError(t, err)
 				require.Zero(t, keys, "shared SQL must never leave usable API keys")

@@ -363,7 +363,12 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 	default:
 		return nil, sharedResourceMalformed, nil
 	}
-	if slug == "" || strings.Contains(slug, "/") {
+	if routeBase == mcproute.OrganizationGateway && strings.Contains(slug, "/") {
+		organization, project, scoped := strings.Cut(slug, "/projects/")
+		if !scoped || organization == "" || project == "" || strings.Contains(organization, "/") || strings.Contains(project, "/") {
+			return nil, sharedResourceMalformed, nil
+		}
+	} else if slug == "" || strings.Contains(slug, "/") {
 		return nil, sharedResourceMalformed, nil
 	}
 

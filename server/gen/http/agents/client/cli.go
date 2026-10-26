@@ -227,7 +227,7 @@ func BuildCreatePayload(agentsCreateBody string, agentsCreateSessionToken string
 	{
 		err = json.Unmarshal([]byte(agentsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"project_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"project_id\": \"abc123\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
@@ -413,6 +413,66 @@ func BuildListPolicyGrantsPayload(agentsListPolicyGrantsAgentID string, agentsLi
 	return v, nil
 }
 
+// BuildCheckPolicyGrantsPayload builds the payload for the agents
+// checkPolicyGrants endpoint from CLI flags.
+func BuildCheckPolicyGrantsPayload(agentsCheckPolicyGrantsBody string, agentsCheckPolicyGrantsSessionToken string) (*agents.CheckPolicyGrantsPayload, error) {
+	var err error
+	var body CheckPolicyGrantsRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsCheckPolicyGrantsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }'")
+		}
+		if body.PolicyGrants == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("policy_grants", "body"))
+		}
+		if body.AgentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+		}
+		if len(body.PolicyGrants) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 1, true))
+		}
+		if len(body.PolicyGrants) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 100, false))
+		}
+		for _, e := range body.PolicyGrants {
+			if e != nil {
+				if err2 := ValidateAgentPolicyGrantFormRequestBodyRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsCheckPolicyGrantsSessionToken != "" {
+			sessionToken = &agentsCheckPolicyGrantsSessionToken
+		}
+	}
+	v := &agents.CheckPolicyGrantsPayload{
+		AgentID:     body.AgentID,
+		OwnerUserID: body.OwnerUserID,
+	}
+	if body.PolicyGrants != nil {
+		v.PolicyGrants = make([]*agents.AgentPolicyGrantForm, len(body.PolicyGrants))
+		for i, val := range body.PolicyGrants {
+			if val == nil {
+				v.PolicyGrants[i] = nil
+				continue
+			}
+			v.PolicyGrants[i] = marshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm(val)
+		}
+	} else {
+		v.PolicyGrants = []*agents.AgentPolicyGrantForm{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreatePolicyGrantPayload builds the payload for the agents
 // createPolicyGrant endpoint from CLI flags.
 func BuildCreatePolicyGrantPayload(agentsCreatePolicyGrantBody string, agentsCreatePolicyGrantSessionToken string) (*agents.CreatePolicyGrantPayload, error) {
@@ -421,7 +481,7 @@ func BuildCreatePolicyGrantPayload(agentsCreatePolicyGrantBody string, agentsCre
 	{
 		err = json.Unmarshal([]byte(agentsCreatePolicyGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }'")
 		}
 		if body.Selector == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
@@ -469,7 +529,7 @@ func BuildUpdatePolicyGrantPayload(agentsUpdatePolicyGrantBody string, agentsUpd
 	{
 		err = json.Unmarshal([]byte(agentsUpdatePolicyGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }'")
 		}
 		if body.Selector == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
@@ -519,7 +579,12 @@ func BuildDeletePolicyGrantPayload(agentsDeletePolicyGrantBody string, agentsDel
 	{
 		err = json.Unmarshal([]byte(agentsDeletePolicyGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_policy\": {\n         \"scope\": \"aa\",\n         \"selector\": {\n            \"client_type\": \"service_account\",\n            \"connection_owner\": \"abc123\",\n            \"disposition\": \"destructive\",\n            \"project_id\": \"abc123\",\n            \"resource_id\": \"abc123\",\n            \"resource_kind\": \"mcp\",\n            \"server_identity\": \"abc123\",\n            \"server_url\": \"https://example.com/foo\",\n            \"tool\": \"abc123\",\n            \"upstream_client\": \"abc123\"\n         }\n      },\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.ExpectedPolicy != nil {
+			if err2 := ValidateAgentExpectedPolicyRequestBodyRequestBody(body.ExpectedPolicy); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.grant_id", body.GrantID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
@@ -536,6 +601,113 @@ func BuildDeletePolicyGrantPayload(agentsDeletePolicyGrantBody string, agentsDel
 	v := &agents.DeletePolicyGrantPayload{
 		GrantID: body.GrantID,
 		AgentID: body.AgentID,
+	}
+	if body.ExpectedPolicy != nil {
+		v.ExpectedPolicy = marshalAgentExpectedPolicyRequestBodyRequestBodyToAgentsAgentExpectedPolicy(body.ExpectedPolicy)
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListConnectionBlocksPayload builds the payload for the agents
+// listConnectionBlocks endpoint from CLI flags.
+func BuildListConnectionBlocksPayload(agentsListConnectionBlocksCursor string, agentsListConnectionBlocksLimit string, agentsListConnectionBlocksSessionToken string) (*agents.ListConnectionBlocksPayload, error) {
+	var err error
+	var cursor *string
+	{
+		if agentsListConnectionBlocksCursor != "" {
+			cursor = &agentsListConnectionBlocksCursor
+		}
+	}
+	var limit int
+	{
+		if agentsListConnectionBlocksLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(agentsListConnectionBlocksLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsListConnectionBlocksSessionToken != "" {
+			sessionToken = &agentsListConnectionBlocksSessionToken
+		}
+	}
+	v := &agents.ListConnectionBlocksPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildBlockAgentOnConnectionPayload builds the payload for the agents
+// blockAgentOnConnection endpoint from CLI flags.
+func BuildBlockAgentOnConnectionPayload(agentsBlockAgentOnConnectionBody string, agentsBlockAgentOnConnectionSessionToken string) (*agents.BlockAgentOnConnectionPayload, error) {
+	var err error
+	var body BlockAgentOnConnectionRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsBlockAgentOnConnectionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", body.RemoteSessionClientID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsBlockAgentOnConnectionSessionToken != "" {
+			sessionToken = &agentsBlockAgentOnConnectionSessionToken
+		}
+	}
+	v := &agents.BlockAgentOnConnectionPayload{
+		AgentID:               body.AgentID,
+		RemoteSessionClientID: body.RemoteSessionClientID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRemoveConnectionBlockPayload builds the payload for the agents
+// removeConnectionBlock endpoint from CLI flags.
+func BuildRemoveConnectionBlockPayload(agentsRemoveConnectionBlockBody string, agentsRemoveConnectionBlockSessionToken string) (*agents.RemoveConnectionBlockPayload, error) {
+	var err error
+	var body RemoveConnectionBlockRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsRemoveConnectionBlockBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"block_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.block_id", body.BlockID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsRemoveConnectionBlockSessionToken != "" {
+			sessionToken = &agentsRemoveConnectionBlockSessionToken
+		}
+	}
+	v := &agents.RemoveConnectionBlockPayload{
+		BlockID: body.BlockID,
 	}
 	v.SessionToken = sessionToken
 

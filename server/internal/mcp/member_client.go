@@ -32,21 +32,55 @@ var errMemberResponseTooLarge = errors.New("member response exceeds the meta MCP
 // as a tunnel with no live connection.
 var errMemberUnroutable = errors.New("member is not reachable")
 
-// memberRoundTripper runs every SDK request through the member's proxy builder,
-// so routing, tunnel affinity, configured headers, RBAC and visibility all
-// apply, and records any authentication rejection the member answered with.
-type memberRoundTripper struct {
+// memberAttempt is the routing and outcome of one operation over a member
+// connection. A reused session gets a new one per call through the request
+// context, so concurrent calls never share a proxy build or a failure.
+type memberAttempt struct {
 	build memberProxyBuilder
-	// deadline bounds the operation; a legacy DELETE or a cancellation notice after it still gets closeFloor.
-	deadline   time.Time
-	closeFloor time.Duration
 
 	mu         sync.Mutex
 	rejected   int
 	lastStatus int
 	// lastErr is the transport failure of the latest recorded exchange, if any.
 	lastErr error
+	// refused marks a tools/call the member itself answered with a JSON-RPC error.
+	refused bool
+	// sentCall marks a tools/call handed to the member's proxy. A call on a
+	// session that had already failed never gets that far.
+	sentCall bool
+}
 
+type memberAttemptKey struct{}
+
+func newMemberAttempt(build memberProxyBuilder) *memberAttempt {
+	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, lastStatus: 0, lastErr: nil, refused: false, sentCall: false}
+}
+
+func (a *memberAttempt) memberRefused() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.refused
+}
+
+// memberOutcome is what failure classification reads from an operation.
+type memberOutcome interface {
+	failure() error
+	rejection() (int, bool)
+	status() int
+}
+
+// memberRoundTripper runs every SDK request through the member's proxy builder,
+// so routing, tunnel affinity, configured headers, RBAC and visibility all
+// apply, and records any authentication rejection the member answered with.
+// Its own attempt covers the handshake and exchanges on the connection's context.
+type memberRoundTripper struct {
+	*memberAttempt
+
+	// deadline bounds the operation; a legacy DELETE or a cancellation notice after it still gets closeFloor.
+	deadline   time.Time
+	closeFloor time.Duration
+
+	sessionMu sync.Mutex
 	// initialSessionID is captured even when the SDK rejects the response headers or body.
 	initialSessionID string
 
@@ -64,11 +98,11 @@ func (rt *memberRoundTripper) closeBudget() time.Duration {
 func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 	if req.Method == http.MethodDelete {
-		rt.mu.Lock()
+		rt.sessionMu.Lock()
 		if req.Header.Get(proxy.McpSessionIDHeader) == rt.initialSessionID {
 			rt.deleteAttempted = true
 		}
-		rt.mu.Unlock()
+		rt.sessionMu.Unlock()
 		// The SDK closes on its own detached context; the DELETE gets its own budget.
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), rt.closeBudget())
@@ -94,18 +128,27 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		ctx, cancel = context.WithTimeout(ctx, rt.closeBudget())
 		defer cancel()
 	}
+	attempt := rt.memberAttempt
+	if perCall, ok := ctx.Value(memberAttemptKey{}).(*memberAttempt); ok {
+		attempt = perCall
+	}
 	// The SDK falls back to initialize after any server/discover failure, and
 	// cleanup must not overwrite the outcome of the call, so neither is recorded.
 	record := req.Method != http.MethodDelete && rpc.Method != "server/discover"
 
-	p, err := rt.build(ctx)
+	p, err := attempt.build(ctx)
 	if err != nil {
 		err = fmt.Errorf("%w: %w", errMemberUnroutable, err)
-		rt.recordFailure(record, err)
+		attempt.recordFailure(record, err)
 		return nil, err
 	}
 	if capture, ok := ctx.Value(memberToolResultKey{}).(*memberToolResult); ok {
 		p.ToolsCallResponseInterceptors = append(p.ToolsCallResponseInterceptors, capture)
+	}
+	if rpc.Method == "tools/call" {
+		attempt.mu.Lock()
+		attempt.sentCall = true
+		attempt.mu.Unlock()
 	}
 	out, err := http.NewRequestWithContext(ctx, req.Method, "/", bytes.NewReader(requestBody))
 	if err != nil {
@@ -126,26 +169,26 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	}
 	exchangeErr := serveProxyBackend(rec, out, p)
 	if rpc.Method == "initialize" && mintedSession != "" {
-		rt.mu.Lock()
+		rt.sessionMu.Lock()
 		rt.initialSessionID = mintedSession
-		rt.mu.Unlock()
+		rt.sessionMu.Unlock()
 	}
 	if rec.truncated {
 		exchangeErr = errMemberResponseTooLarge
 	}
 	if exchangeErr != nil {
-		rt.recordFailure(record, exchangeErr)
+		attempt.recordFailure(record, exchangeErr)
 		return nil, exchangeErr
 	}
-	rt.mu.Lock()
+	attempt.mu.Lock()
 	if record {
-		rt.lastStatus = rec.status
-		rt.lastErr = nil
+		attempt.lastStatus = rec.status
+		attempt.lastErr = nil
 		if rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden {
-			rt.rejected = rec.status
+			attempt.rejected = rec.status
 		}
 	}
-	rt.mu.Unlock()
+	attempt.mu.Unlock()
 	return &http.Response{
 		Status:           fmt.Sprintf("%d %s", rec.status, http.StatusText(rec.status)),
 		StatusCode:       rec.status,
@@ -166,32 +209,32 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 
 // recordFailure marks the latest exchange as unanswered, so classification
 // does not report the status of an earlier exchange for it.
-func (rt *memberRoundTripper) recordFailure(record bool, err error) {
+func (a *memberAttempt) recordFailure(record bool, err error) {
 	if !record {
 		return
 	}
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.lastStatus = 0
-	rt.lastErr = err
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.lastStatus = 0
+	a.lastErr = err
 }
 
-func (rt *memberRoundTripper) failure() error {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	return rt.lastErr
+func (a *memberAttempt) failure() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastErr
 }
 
-func (rt *memberRoundTripper) rejection() (int, bool) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	return rt.rejected, rt.rejected != 0
+func (a *memberAttempt) rejection() (int, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.rejected, a.rejected != 0
 }
 
-func (rt *memberRoundTripper) status() int {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	return rt.lastStatus
+func (a *memberAttempt) status() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastStatus
 }
 
 // closeUnobservedMemberSession best-effort terminates a session on a detached context
@@ -217,11 +260,12 @@ func closeUnobservedMemberSession(ctx context.Context, logger *slog.Logger, buil
 	}
 }
 
-// connectMetaMember gives each operation its own SDK connection and transport state.
+// connectMetaMember opens an SDK connection with its own transport state; only
+// a Code Mode execution shares one, across its own operations.
 // The SDK owns negotiation and sessions; the proxy retains routing and enforcement.
 func (s *Service) connectMetaMember(ctx context.Context, logger *slog.Logger, build memberProxyBuilder, closeFloor time.Duration) (*mcp.ClientSession, *memberRoundTripper, error) {
 	deadline, _ := ctx.Deadline()
-	rt := &memberRoundTripper{build: build, deadline: deadline, closeFloor: closeFloor, mu: sync.Mutex{}, rejected: 0, lastStatus: 0, lastErr: nil, initialSessionID: "", deleteAttempted: false}
+	rt := &memberRoundTripper{memberAttempt: newMemberAttempt(build), deadline: deadline, closeFloor: closeFloor, sessionMu: sync.Mutex{}, initialSessionID: "", deleteAttempted: false}
 	client := mcp.NewClient(&mcp.Implementation{Name: "gram-gateway", Version: "1", Title: "", Description: "", WebsiteURL: "", Icons: nil}, nil)
 	// Actual network requests remain inside the member proxy and its policy.
 	// No retry layer is added here; the operation context bounds all calls.
@@ -243,13 +287,13 @@ func (s *Service) connectMetaMember(ctx context.Context, logger *slog.Logger, bu
 		}
 		// HTTP errors and failed buffered bodies can hide the session from
 		// the SDK. Only these unclaimed sessions need a fallback DELETE.
-		rt.mu.Lock()
+		rt.sessionMu.Lock()
 		orphan := rt.initialSessionID
 		if rt.deleteAttempted {
 			orphan = ""
 		}
 		rt.deleteAttempted = true
-		rt.mu.Unlock()
+		rt.sessionMu.Unlock()
 		closeUnobservedMemberSession(ctx, logger, build, orphan, rt.closeBudget())
 		return nil, rt, fmt.Errorf("connect meta MCP member: %w", err)
 	}
@@ -263,7 +307,7 @@ func upstreamStatusOK(status int) bool {
 // memberClientFailure keeps transport failures scoped to a member and preserves
 // the distinction between an absent credential and a rejected routed credential.
 // Failures it cannot attribute to the member are logged, since they may be ours.
-func memberClientFailure(ctx context.Context, logger *slog.Logger, rt *memberRoundTripper, dial memberDial, member metaMember, err error) error {
+func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutcome, dial memberDial, member metaMember, err error) error {
 	// The SDK need not wrap a transport error, so consult the recorded
 	// exchange before reducing a credential failure to an upstream status.
 	exchangeErr := rt.failure()
@@ -327,6 +371,10 @@ type memberToolResult struct {
 	// context after an input_required answer, and CallTool returns only the
 	// last attempt, so later exchanges replace earlier ones.
 	raw json.RawMessage
+	// refusal is the member's own JSON-RPC error. It runs last, so an error a
+	// proxy interceptor synthesized, including a withheld response after the
+	// tool ran, never reaches it.
+	refusal *jsonrpc.Error
 }
 
 func (*memberToolResult) Name() string { return "meta_member_result" }
@@ -336,7 +384,7 @@ func (c *memberToolResult) InterceptToolsCallResponse(_ context.Context, call *p
 		return nil
 	}
 	response, ok := call.RemoteMessage.Message.(*jsonrpc.Response)
-	if !ok || response.Error != nil {
+	if !ok {
 		return nil
 	}
 	request, ok := call.Request.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request)
@@ -345,16 +393,41 @@ func (c *memberToolResult) InterceptToolsCallResponse(_ context.Context, call *p
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if response.Error != nil {
+		c.refusal, _ = errors.AsType[*jsonrpc.Error](response.Error)
+		return nil
+	}
 	c.raw = bytes.Clone(response.Result)
+	c.refusal = nil
 	return nil
 }
 
 // callMemberTool lets the SDK validate the response and correlate the call,
 // then returns the accepted raw result without a lossy typed round trip.
 func callMemberTool(ctx context.Context, session *mcp.ClientSession, params *mcp.CallToolParams) (json.RawMessage, error) {
-	capture := &memberToolResult{mu: sync.Mutex{}, raw: nil}
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		invocation.dispatched = true
+	}
+	capture := &memberToolResult{mu: sync.Mutex{}, raw: nil, refusal: nil}
 	_, err := session.CallTool(context.WithValue(ctx, memberToolResultKey{}, capture), params)
 	if err != nil {
+		capture.mu.Lock()
+		refusal := capture.refusal
+		capture.mu.Unlock()
+		if attempt, ok := ctx.Value(memberAttemptKey{}).(*memberAttempt); ok {
+			attempt.mu.Lock()
+			attempt.refused = refusal != nil
+			sent := attempt.sentCall
+			attempt.mu.Unlock()
+			if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && !sent {
+				invocation.dispatched = false
+			}
+		}
+		// A member reporting an unknown tool or invalid arguments did not run it.
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && refusal != nil &&
+			(refusal.Code == jsonrpc.CodeInvalidParams || refusal.Code == jsonrpc.CodeMethodNotFound) {
+			invocation.rejected = true
+		}
 		return nil, fmt.Errorf("call member tool: %w", err)
 	}
 	capture.mu.Lock()

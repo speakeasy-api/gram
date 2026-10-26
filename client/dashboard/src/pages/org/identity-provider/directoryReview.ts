@@ -1,10 +1,18 @@
-import type { DirectoryReviewItem } from "@gram/client/models/components/directoryreviewitem.js";
+import { isKnownEnumValue } from "@/lib/enum";
+import {
+  DirectoryReviewItemKind,
+  type DirectoryReviewItem,
+} from "@gram/client/models/components/directoryreviewitem.js";
 import type { ResolveDirectoryReviewItemForm } from "@gram/client/models/components/resolvedirectoryreviewitemform.js";
 import type { SetupChoice } from "./directoryRoleSetup";
 import { pluralize } from "@/lib/format";
 
 /** What an admin can decide about a review item. */
 export type ReviewDecision = "approve" | "dismiss" | "opt_out_key";
+
+export function isKnownReviewItem(item: DirectoryReviewItem): boolean {
+  return isKnownEnumValue(DirectoryReviewItemKind, item.kind);
+}
 
 /** The headline for an item: what changed in the directory. */
 export function reviewItemTitle(item: DirectoryReviewItem): string {
@@ -20,6 +28,7 @@ export function reviewItemTitle(item: DirectoryReviewItem): string {
         ? `Group deleted: ${name}`
         : `No one has ${name} any more`;
   }
+  return `Directory change: ${name}`;
 }
 
 /** The line under the headline: who it affects, and what deciding does. */

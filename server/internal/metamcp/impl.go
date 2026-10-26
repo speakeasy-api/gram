@@ -25,12 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	gatewaymcp "github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -45,10 +45,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 )
 
 type Service struct {
 	tracerProvider           trace.TracerProvider
+	codeModeSelection        codemode.SelectionGate
 	tracer                   trace.Tracer
 	logger                   *slog.Logger
 	db                       *pgxpool.Pool
@@ -74,11 +76,13 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	networkAccessEligibility networkaccess.EligibilityChecker,
+	codeModeSelection codemode.SelectionGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
 		tracerProvider:           tracerProvider,
+		codeModeSelection:        codeModeSelection,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
 		logger:                   logger,
 		db:                       db,
@@ -135,6 +139,7 @@ var gatewayWriteRefusals = []struct {
 	{ErrMemberServerNotInProject, oops.CodeInvalid},
 	{ErrMemberServerHasNoSlug, oops.CodeInvalid},
 	{ErrMemberServerUnproxied, oops.CodeInvalid},
+	{ErrMemberServerBuiltin, oops.CodeInvalid},
 	{ErrMemberServerIsHostedToolset, oops.CodeInvalid},
 	{ErrMemberSharesBackend, oops.CodeConflict},
 	{ErrMemberAlreadyPresent, oops.CodeConflict},
@@ -212,7 +217,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildMetaMcpServerView(created), nil
+	return withGatewayCapabilities(mv.BuildMetaMcpServerView(created), s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -242,7 +247,7 @@ func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpS
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildMetaMcpServerView(row), nil
+	return withGatewayCapabilities(mv.BuildMetaMcpServerView(row), s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaMcpServersPayload) (*gen.ListMetaMcpServersResult, error) {
@@ -263,7 +268,12 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp servers").LogError(ctx, s.logger)
 	}
 
-	return &gen.ListMetaMcpServersResult{MetaMcpServers: mv.BuildMetaMcpServerListView(rows)}, nil
+	views := mv.BuildMetaMcpServerListView(rows)
+	codeModeAllowed := s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)
+	for _, view := range views {
+		withGatewayCapabilities(view, codeModeAllowed)
+	}
+	return &gen.ListMetaMcpServersResult{MetaMcpServers: views}, nil
 }
 
 func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -308,6 +318,13 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
 	}
+	preflightDiscovery := gatewaymcp.ResolveDiscoveryMode(unlocked.DiscoveryMode)
+	// Evaluate external gates before taking project/row locks or a transaction connection.
+	if payload.DiscoveryMode != nil && *payload.DiscoveryMode != string(preflightDiscovery) &&
+		*payload.DiscoveryMode == string(gatewaymcp.DiscoveryModeCode) && !s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID) {
+		return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+	}
+
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
 	if err != nil {
 		if payload.NetworkAccessMode == nil {
@@ -345,15 +362,21 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
 	}
 
+	// Reject a changed baseline instead of using a gate evaluated for another mode.
+	if payload.DiscoveryMode != nil && gatewaymcp.ResolveDiscoveryMode(existing.DiscoveryMode) != preflightDiscovery {
+		return nil, oops.E(oops.CodeConflict, nil, "gateway discovery mode changed concurrently; retry the update")
+	}
+
 	// Defensive issuer wiring, mirroring create: an omitted issuer preserves
 	// the existing one (matching UpdateMCPServer's COALESCE) and a gateway
 	// that would end up issuer-less gets one minted, so no update path can
-	// strand a gateway in the anonymous trap.
+	// strand a gateway in the anonymous trap. It also keeps every Code Mode
+	// gateway signed in: anonymous callers never get Code Mode.
 	if !issuerID.Valid {
 		issuerID = existing.UserSessionIssuerID
 	}
 	if !issuerID.Valid {
-		issuerID, err = mcpservers.MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.Name)
+		issuerID, err = serverissuer.Mint(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.Name)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint meta mcp issuer").LogError(ctx, logger)
 		}
@@ -467,7 +490,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
-	return afterView, nil
+	return withGatewayCapabilities(afterView, s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 // UpdateMetaMCPServerNetworkAccessModeInTransaction changes only an existing
@@ -690,7 +713,7 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 	}
 	// The admission lock taken above precedes the gateway row lock, as the
 	// risk policy cleanup requires.
-	deletedPolicies, err := policylifecycle.NewCleaner(s.tracerProvider, s.audit).SoftDeleteForMCPServer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.ID, policylifecycle.Actor{
+	policyCleanup, err := policylifecycle.NewCleaner(s.tracerProvider, s.audit).SoftDeleteForMCPServer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.ID, policylifecycle.Actor{
 		Principal:   actor,
 		DisplayName: authCtx.Email,
 		Slug:        nil,
@@ -725,7 +748,7 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, len(detached) > 0)
 	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
-	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, deletedPolicies)
+	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, policyCleanup.Deleted)
 	if err := s.reconcileCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
 		return err
 	}

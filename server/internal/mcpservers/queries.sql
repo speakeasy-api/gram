@@ -731,7 +731,28 @@ WHERE p.organization_id = @organization_id
 ORDER BY s.project_id, s.slug;
 
 -- name: ListToolsetSummariesByIDs :many
--- Proxy URNs are tools:externalmcp:<slug>:proxy; tool_count skips them.
+-- tool_count resolves URNs like mv.readToolsetTools, minus :proxy URNs; callers add platform_tool_urns.
+WITH active_deployments AS MATERIALIZED (
+  SELECT p.project_id, d.id
+  FROM (
+    SELECT DISTINCT ts.project_id
+    FROM toolsets ts
+    WHERE ts.id = ANY(@toolset_ids::uuid[])
+      AND ts.organization_id = @organization_id
+      AND ts.project_id = ANY(@project_ids::uuid[])
+      AND ts.deleted IS FALSE
+  ) p
+  CROSS JOIN LATERAL (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON ds.deployment_id = d.id
+    WHERE d.project_id = p.project_id
+      AND d.organization_id = @organization_id
+      AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+  ) d
+)
 SELECT
     t.id
   , t.slug
@@ -740,10 +761,52 @@ SELECT
   , t.tool_selection_mode
   , t.external_oauth_server_id
   , (
-      SELECT COUNT(DISTINCT u.urn)
-      FROM unnest(lv.tool_urns) AS u(urn)
-      WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy'
+      (
+        SELECT COUNT(DISTINCT h.name)
+        FROM http_tool_definitions h
+        WHERE h.deployment_id = ANY(ARRAY(
+            SELECT ad.id
+            UNION ALL
+            SELECT pv.deployment_id
+            FROM deployments_packages dp
+            JOIN package_versions pv ON pv.id = dp.version_id
+            WHERE dp.deployment_id = ad.id
+          ))
+          AND h.tool_urn = ANY(lv.tool_urns)
+          AND h.deleted IS FALSE
+      )
+      + (
+        SELECT COUNT(*)
+        FROM function_tool_definitions f
+        WHERE f.deployment_id = ad.id
+          AND f.project_id = t.project_id
+          AND f.deleted IS FALSE
+          AND f.tool_urn = ANY(lv.tool_urns)
+      )
+      + (
+        SELECT COUNT(DISTINCT pt.tool_urn)
+        FROM prompt_templates pt
+        WHERE pt.project_id = t.project_id
+          AND pt.deleted IS FALSE
+          AND pt.tool_urn = ANY(lv.tool_urns)
+      )
+      + (
+        SELECT COUNT(*)
+        FROM external_mcp_tool_definitions x
+        JOIN external_mcp_attachments e ON e.id = x.external_mcp_attachment_id
+        WHERE e.deployment_id = ad.id
+          AND e.deleted IS FALSE
+          AND x.deleted IS FALSE
+          AND x.tool_urn = ANY(lv.tool_urns)
+          AND x.tool_urn NOT LIKE 'tools:externalmcp:%:proxy'
+      )
     )::bigint AS tool_count
+  , ARRAY(
+      SELECT DISTINCT u.urn
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:platform:%'
+      ORDER BY u.urn
+    )::text[] AS platform_tool_urns
   , ARRAY(
       SELECT DISTINCT split_part(u.urn, ':', 3) AS slug
       FROM unnest(lv.tool_urns) AS u(urn)
@@ -764,6 +827,7 @@ LEFT JOIN LATERAL (
   ORDER BY tv.version DESC
   LIMIT 1
 ) lv ON TRUE
+LEFT JOIN active_deployments ad ON ad.project_id = t.project_id
 LEFT JOIN LATERAL (
   SELECT o.origin_registry_specifier
   FROM toolset_origins o
@@ -789,3 +853,62 @@ JOIN projects p
 WHERE e.project_id = ANY(@project_ids::uuid[])
   AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND e.deleted IS FALSE;
+
+-- name: ListToolsetHostingMCPServerIDs :many
+-- A toolset's host is its canonical wrapper (id = toolset id); without one, its
+-- oldest server with an endpoint. Visibility is ignored so a toggle never moves it.
+SELECT DISTINCT ON (ms.toolset_id)
+    ms.toolset_id::uuid AS toolset_id
+  , ms.id AS mcp_server_id
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+WHERE ms.toolset_id = ANY(@toolset_ids::uuid[])
+  AND ms.project_id = ANY(@project_ids::uuid[])
+  AND ms.deleted IS FALSE
+  AND (
+    ms.id = ms.toolset_id
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM mcp_servers c
+        WHERE c.id = ms.toolset_id AND c.project_id = ms.project_id AND c.deleted IS FALSE
+      )
+      AND EXISTS (
+        SELECT 1 FROM mcp_endpoints e
+        WHERE e.mcp_server_id = ms.id AND e.project_id = ms.project_id AND e.deleted IS FALSE
+      )
+    )
+  )
+ORDER BY ms.toolset_id, (ms.id = ms.toolset_id) DESC, ms.created_at, ms.id;
+
+-- name: ListMCPServerConsentConfigurations :many
+-- Hash stored routing configuration in one tenant-scoped read. Header secrets
+-- remain ciphertext; tool definitions are deliberately outside this boundary.
+SELECT m.id, m.project_id,
+       encode(sha256(convert_to(jsonb_build_object(
+           'remote', m.remote_mcp_server_id, 'url', r.url,
+           'transport', r.transport_type,
+           'tunnel', m.tunneled_mcp_server_id, 'resource', t.resource_identifier,
+           'toolset', m.toolset_id, 'environment', m.environment_id,
+           'variation', m.tool_variations_group_id,
+           'issuer', m.remote_session_issuer_id,
+           'visibility', m.visibility, 'network', m.network_access_mode,
+           'requires_auth', m.requires_upstream_auth,
+           'headers', COALESCE((
+               SELECT jsonb_agg(jsonb_build_array(h.name, h.value,
+                          h.value_from_request_header, h.is_required, h.is_secret)
+                                ORDER BY h.name, h.id)
+               FROM remote_mcp_server_headers AS h
+               WHERE h.remote_mcp_server_id = r.id AND h.deleted IS FALSE
+           ), '[]'::jsonb)
+       )::text, 'UTF8')), 'hex')::text AS configuration_hash
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+ AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
+ AND r.project_id = m.project_id AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
+ AND t.project_id = m.project_id AND t.deleted IS FALSE
+WHERE m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE;

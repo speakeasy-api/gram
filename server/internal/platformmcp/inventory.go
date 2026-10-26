@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
@@ -92,7 +93,7 @@ func inventoryDistributions(rows []platformrepo.ListPlatformMCPInventoryPluginMe
 func mcpFromInventoryRow(row platformrepo.ListPlatformMCPInventoryRow, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	return mcpFromInventory(
 		row.McpServerID, row.ProjectID, row.ProjectName, row.ProjectSlug, row.McpName.String, row.McpSlug.String, row.Visibility,
-		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
+		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID, row.BuiltinBackend), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
 		row.RegistrationRemoteMcpServerID, row.RegistrationUserSessionIssuerID, row.RegistrationMcpServerID, row.RegistrationMcpEndpointID,
 		row.ReadinessState, timestampString(row.ReadinessCheckedAt.Time, row.ReadinessCheckedAt.Valid), timestampString(row.ReadinessExpiresAt.Time, row.ReadinessExpiresAt.Valid), distributions,
 	)
@@ -101,13 +102,21 @@ func mcpFromInventoryRow(row platformrepo.ListPlatformMCPInventoryRow, distribut
 func mcpFromInventoryItem(row platformrepo.GetPlatformMCPInventoryItemRow, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	return mcpFromInventory(
 		row.McpServerID, row.ProjectID, row.ProjectName, row.ProjectSlug, row.McpName.String, row.McpSlug.String, row.Visibility,
-		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
+		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID, row.BuiltinBackend), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
 		row.RegistrationRemoteMcpServerID, row.RegistrationUserSessionIssuerID, row.RegistrationMcpServerID, row.RegistrationMcpEndpointID,
 		row.ReadinessState, timestampString(row.ReadinessCheckedAt.Time, row.ReadinessCheckedAt.Valid), timestampString(row.ReadinessExpiresAt.Time, row.ReadinessExpiresAt.Valid), distributions,
 	)
 }
 
 func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, slug, visibility, model string, backendKind MCPBackendKind, upstreamURL string, registrationID uuid.UUID, sourceKind, provider, reference, registrationStatus string, registrationRemoteID, registrationIssuerID, registrationMCPID, registrationEndpointID uuid.NullUUID, readinessState, checkedAt, expiresAt string, distributions map[uuid.UUID][]MCPDistribution) MCP {
+	enabledState := "unknown"
+	switch visibility {
+	case "private", "public":
+		enabledState = "enabled"
+	case "disabled":
+		enabledState = "disabled"
+	}
+
 	mcp := MCP{
 		ID:               id.String(),
 		ProjectID:        projectID.String(),
@@ -117,7 +126,8 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		Slug:             slug,
 		Version:          "",
 		Visibility:       visibility,
-		EffectiveEnabled: visibility != "disabled",
+		EffectiveEnabled: enabledState == "enabled",
+		EnabledState:     enabledState,
 		Model:            "",
 		BackendKind:      backendKind,
 		UpstreamURL:      "",
@@ -151,9 +161,9 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		if readinessState != "" {
 			mcp.Readiness = MCPReadiness{State: readinessState, CheckedAt: checkedAt, ExpiresAt: expiresAt}
 		}
-		// Disabled MCPs retain historical readiness evidence for audit and later
-		// diagnosis, but it cannot be treated as effective current readiness.
-		if visibility == "disabled" {
+		// Only confirmed enabled MCPs can expose historical readiness evidence
+		// as effective current readiness.
+		if enabledState != "enabled" {
 			mcp.Readiness = MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}
 		}
 		mcp.Operations = []string{"read", "dashboard_setup", "update_mcp_metadata"}
@@ -198,8 +208,10 @@ func validInventoryBackend(backend uuid.NullUUID) bool {
 	return backend.Valid && backend.UUID != uuid.Nil
 }
 
-func inventoryBackendKind(remote, tunneled, toolset, unproxied uuid.NullUUID) MCPBackendKind {
+func inventoryBackendKind(remote, tunneled, toolset, unproxied uuid.NullUUID, builtin pgtype.Text) MCPBackendKind {
 	switch {
+	case builtin.Valid:
+		return MCPBackendBuiltin
 	case validInventoryBackend(remote):
 		return MCPBackendRemote
 	case validInventoryBackend(tunneled):

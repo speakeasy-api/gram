@@ -140,7 +140,8 @@ func registerDirectoryReviewTools(reg *Registrar, accessReads *AccessReadService
 		Title: "Decide One Directory Change",
 		Description: "Decide one pending item from list_directory_review_items, through the same checks as the dashboard. approve on a new group or attribute value maps it to the given role set, reusing existing roles by role_urn or creating new roles with no grants by create_name; approve needs the item's current version and fails with conflict if the source or its mappings changed. approve on a missing source removes its role mappings, so its people lose those roles. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. " +
 			"First show the user the exact source, decision and role set, and retry with confirmed: true once they agree. An item that is no longer pending returns conflict, so repeating a decision never applies it twice. The result reports committed state and a fresh pending count; WorkOS role sync and role distribution are requested, not verified.",
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true},
+		// WorkOS role sync is requested in the background, not called here.
+		Annotations: writeAnnotations(true, true, false),
 	}, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input ResolveDirectoryReviewItemInput) (*mcp.CallToolResult, ResolveDirectoryReviewItemOutput, error) {
 		return principalToolCall(ctx, directoryReviewToolResult, func(principal Principal) (ResolveDirectoryReviewItemOutput, error) {
 			if backend == nil {

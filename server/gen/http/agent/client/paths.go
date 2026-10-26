@@ -12,6 +12,11 @@ func GetPluginsAgentPath() string {
 	return "/rpc/agent.getPlugins"
 }
 
+// GetMyConnectionsAgentPath returns the URL path to the agent service getMyConnections HTTP endpoint.
+func GetMyConnectionsAgentPath() string {
+	return "/rpc/agent.getMyConnections"
+}
+
 // ListSyncedUsersAgentPath returns the URL path to the agent service listSyncedUsers HTTP endpoint.
 func ListSyncedUsersAgentPath() string {
 	return "/rpc/agent.listSyncedUsers"

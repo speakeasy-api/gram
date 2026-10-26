@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ConnectionStatus = {
 /**
  * Derived live connection status for a tunneled MCP server source
  */
-export type ConnectionStatus = ClosedEnum<typeof ConnectionStatus>;
+export type ConnectionStatus = OpenEnum<typeof ConnectionStatus>;
 
 /**
  * Stored lifecycle status for a tunneled MCP server source
@@ -33,9 +34,7 @@ export const TunneledMcpServerStatus = {
 /**
  * Stored lifecycle status for a tunneled MCP server source
  */
-export type TunneledMcpServerStatus = ClosedEnum<
-  typeof TunneledMcpServerStatus
->;
+export type TunneledMcpServerStatus = OpenEnum<typeof TunneledMcpServerStatus>;
 
 /**
  * A customer-hosted MCP server connected through a tunnel
@@ -116,14 +115,16 @@ export type TunneledMcpServer = {
 };
 
 /** @internal */
-export const ConnectionStatus$inboundSchema: z.ZodMiniEnum<
-  typeof ConnectionStatus
-> = z.enum(ConnectionStatus);
+export const ConnectionStatus$inboundSchema: z.ZodMiniType<
+  ConnectionStatus,
+  unknown
+> = openEnums.inboundSchema(ConnectionStatus);
 
 /** @internal */
-export const TunneledMcpServerStatus$inboundSchema: z.ZodMiniEnum<
-  typeof TunneledMcpServerStatus
-> = z.enum(TunneledMcpServerStatus);
+export const TunneledMcpServerStatus$inboundSchema: z.ZodMiniType<
+  TunneledMcpServerStatus,
+  unknown
+> = openEnums.inboundSchema(TunneledMcpServerStatus);
 
 /** @internal */
 export const TunneledMcpServer$inboundSchema: z.ZodMiniType<

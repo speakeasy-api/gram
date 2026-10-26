@@ -47,8 +47,8 @@ VALUES (@organization_id, @project_id, 'Default', 'default', true)
 RETURNING id;
 
 -- name: RolesInsertEveryonePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, '*');
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES (@plugin_id, @organization_id, '*', 'available');
 
 -- Every role (the tenant's custom ones, then the global ones) with the plugin
 -- slug it maps to. The slug matches conv.ToSlug, including Go's ASCII-only
@@ -78,8 +78,8 @@ VALUES (@organization_id, @project_id, @name, @slug, true)
 RETURNING id;
 
 -- name: RolesInsertRolePluginAssignment :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-VALUES (@plugin_id, @organization_id, @principal_urn)
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+VALUES (@plugin_id, @organization_id, @principal_urn, 'default')
 ON CONFLICT (plugin_id, principal_urn) DO NOTHING;
 
 -- The Read-only Tools role is the disposition case: it reaches every server,
@@ -208,10 +208,12 @@ VALUES (@organization_id::text, @group_prefix::text || @slug::text, @name::text,
         now() - interval '3 days', now() - interval '3 days');
 
 -- name: RolesInsertDirectoryUser :exec
+-- user_id is NULL for directory people who have not signed in yet.
 INSERT INTO directory_users
-  (organization_id, user_id, workos_directory_user_id, email, attributes,
-   workos_created_at, workos_updated_at)
-VALUES (@organization_id, @user_id::text, @workos_directory_user_id, @email::text,
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   last_name, attributes, workos_created_at, workos_updated_at)
+VALUES (@organization_id, sqlc.narg(user_id)::text, @workos_directory_user_id,
+        @email::text, sqlc.narg(first_name)::text, sqlc.narg(last_name)::text,
         jsonb_build_object(
           'division_name', @division_name::text,
           'department_name', @department_name::text,
