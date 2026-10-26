@@ -188,8 +188,15 @@ export function SettingsTab({
             resourceId={hostedToolset.id}
             level="section"
           >
-            <HostedAddressSections toolset={hostedToolset} />
-            <NetworkAccessSection toolset={hostedToolset} />
+            <HostedAddressSections
+              toolset={hostedToolset}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+            />
+            <NetworkAccessSection
+              mcpServer={mcpServer}
+              toolset={hostedToolset}
+            />
             <div id={MCP_AUTHENTICATION_SECTION_ID}>
               <ToolsetOAuthSection toolset={hostedToolset} />
             </div>
