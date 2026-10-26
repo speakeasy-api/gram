@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
@@ -143,6 +144,12 @@ type Service struct {
 
 	// approvals holds, lists and decides tool approval requests.
 	approvals *approval.Service
+	// publicationRequests records a plugin republish in the transaction that
+	// adds the approvals server to the Default plugin.
+	publicationRequests plugins.PublicationRequests
+	// pluginPublish enqueues that republish after commit. Nil when plugin
+	// publishing is not configured.
+	pluginPublish PluginPublishFunc
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng         *celenv.Engine
@@ -210,6 +217,8 @@ func NewObserver(
 		findingsCH:                   nil,
 		findingEvidence:              nil,
 		assetStorage:                 nil,
+		publicationRequests:          plugins.PublicationRequests{Enabled: false},
+		pluginPublish:                nil,
 	}
 }
 
@@ -296,6 +305,8 @@ func NewService(
 		platformToolsets:             platformToolsets,
 		stokenCodec:                  stokens.NewCodec(),
 		approvals:                    approvals,
+		publicationRequests:          plugins.PublicationRequests{Enabled: false},
+		pluginPublish:                nil,
 	}
 }
 
@@ -534,7 +545,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "encode approval config").LogError(ctx, s.logger)
 	}
 
-	result, err := s.policies.CreatePolicy(ctx, policycore.CreateMutation{
+	result, setup, err := s.createPolicy(ctx, authCtx, policycore.CreateMutation{
 		Params: repo.CreateRiskPolicyParams{
 			ID:                   id,
 			ProjectID:            *authCtx.ProjectID,
@@ -571,9 +582,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		},
 	})
 	if err != nil {
-		return nil, s.policyMutationError(ctx, err)
+		return nil, err
 	}
-	return s.policyToType(ctx, result.Row)
+	return s.policyWithSetup(ctx, result.Row, setup)
 }
 
 func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPoliciesPayload) (*gen.ListRiskPoliciesResult, error) {
@@ -1147,7 +1158,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, err
 	}
 
-	result, err := s.policies.UpdatePolicy(ctx, policycore.UpdateMutation{
+	result, setup, err := s.updatePolicy(ctx, authCtx, policycore.UpdateMutation{
 		Current: current,
 		Params: repo.UpdateRiskPolicyParams{
 			ID:                   id,
@@ -1187,9 +1198,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		},
 	})
 	if err != nil {
-		return nil, s.policyMutationError(ctx, err)
+		return nil, err
 	}
-	return s.policyToType(ctx, result.Row)
+	return s.policyWithSetup(ctx, result.Row, setup)
 }
 
 func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskPolicyPayload) error {

@@ -13599,6 +13599,23 @@ func marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigResponseBody(
 	return res
 }
 
+// marshalTypesRiskPolicyApprovalsServerSetupToRiskPolicyApprovalsServerSetupResponseBody
+// builds a value of type *RiskPolicyApprovalsServerSetupResponseBody from a
+// value of type *types.RiskPolicyApprovalsServerSetup.
+func marshalTypesRiskPolicyApprovalsServerSetupToRiskPolicyApprovalsServerSetupResponseBody(v *types.RiskPolicyApprovalsServerSetup) *RiskPolicyApprovalsServerSetupResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskPolicyApprovalsServerSetupResponseBody{
+		McpServerID:          v.McpServerID,
+		McpServerSlug:        v.McpServerSlug,
+		PluginServerName:     v.PluginServerName,
+		AddedToDefaultPlugin: v.AddedToDefaultPlugin,
+	}
+
+	return res
+}
+
 // marshalTypesRiskPolicyToRiskPolicyResponseBody builds a value of type
 // *RiskPolicyResponseBody from a value of type *types.RiskPolicy.
 func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPolicyResponseBody {
@@ -13684,6 +13701,9 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 	}
 	if v.ApprovalConfig != nil {
 		res.ApprovalConfig = marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigResponseBody(v.ApprovalConfig)
+	}
+	if v.ApprovalsServerSetup != nil {
+		res.ApprovalsServerSetup = marshalTypesRiskPolicyApprovalsServerSetupToRiskPolicyApprovalsServerSetupResponseBody(v.ApprovalsServerSetup)
 	}
 
 	return res

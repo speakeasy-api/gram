@@ -1,4 +1,7 @@
-package mcpservers
+// Package serverissuer mints the user_session_issuer an MCP server carries for
+// its lifetime. It depends only on the issuer table, so any package that
+// creates servers can use it.
+package serverissuer
 
 import (
 	"context"
@@ -45,13 +48,13 @@ func buildUserSessionResourceSlug(baseSlug string) (string, error) {
 	return normalizedBase + "-" + suffix, nil
 }
 
-// MintServerUserSessionIssuer creates the user_session_issuer a remote- or
-// tunneled-backed server carries for its lifetime, inside the caller's create
+// Mint creates the user_session_issuer a remote-, tunneled- or first-party
+// backed server carries for its lifetime, inside the caller's create
 // transaction so a failed create can never leak an orphan issuer. The issuer
 // is slugged after the given resource, so it reads naturally in the issuer
 // list and stays unique per resource. Meta MCP creation mints its gateway
 // issuer through this too.
-func MintServerUserSessionIssuer(
+func Mint(
 	ctx context.Context,
 	dbtx pgx.Tx,
 	organizationID string,
