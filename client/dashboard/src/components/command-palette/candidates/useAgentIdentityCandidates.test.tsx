@@ -8,8 +8,6 @@ const mocks = vi.hoisted(() => ({
     organizationOverride: false,
     impersonatorEmail: undefined as string | undefined,
   },
-  isPlatformAdmin: false,
-  scopeOverride: null as string | null,
   sdk: { name: "sdk" },
   projectSlug: "project-one",
   routeProjectSlug: "project-one" as string | undefined,
@@ -38,10 +36,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => mocks.organization,
   useSession: () => mocks.session,
-  useIsPlatformAdmin: () => mocks.isPlatformAdmin,
-}));
-vi.mock("@/components/dev-toolbar-utils", () => ({
-  getRBACScopeOverrideHeader: () => mocks.scopeOverride,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mocks.sdk,
@@ -96,8 +90,6 @@ describe("useAgentIdentityCandidates", () => {
     mocks.session.user.id = "user-one";
     mocks.session.organizationOverride = false;
     mocks.session.impersonatorEmail = undefined;
-    mocks.isPlatformAdmin = false;
-    mocks.scopeOverride = null;
     mocks.projectSlug = "project-one";
     mocks.routeProjectSlug = "project-one";
     mocks.queryData = undefined;
@@ -161,7 +153,6 @@ describe("useAgentIdentityCandidates", () => {
       "impersonated session",
       () => (mocks.session.impersonatorEmail = "operator@example.test"),
     ],
-    ["RBAC override", () => (mocks.scopeOverride = "project:read")],
   ])("does not expose agents in a %s", (_label, restrict) => {
     mocks.queryData = {
       pages: [{ items: [{ id: "agent-one", name: "Build bot" }] }],

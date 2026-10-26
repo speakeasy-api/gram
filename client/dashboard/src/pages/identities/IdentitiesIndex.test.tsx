@@ -20,7 +20,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example", slug: "example" }),
   useSession: () => mocks.session,
-  useIsPlatformAdmin: () => false,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
@@ -28,9 +27,6 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.orgRead }),
-}));
-vi.mock("@/components/dev-toolbar-utils", () => ({
-  getRBACScopeOverrideHeader: () => null,
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
