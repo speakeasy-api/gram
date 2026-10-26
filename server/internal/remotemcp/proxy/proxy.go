@@ -830,12 +830,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	}
 	// answerInterrupted ends a request the drain interrupted before any
 	// response header was written.
-	answerInterrupted := func() error {
+	answerInterrupted := func(upstreamResp *http.Response) error {
 		failure = oops.E(oops.CodeUnavailable, errShutdownInterrupt, "interrupted by server shutdown")
 		observation.finish("incomplete")
 		p.logInterrupted(ctx, jsonrpcMethod, false)
 		responseBytes = p.writeInterruptedResponse(ctx, w, span, userReqID, jsonrpcMethod)
-		p.cancelUpstreamRequest(ctx, r, userReqID)
+		p.cancelUpstreamRequest(ctx, r, userReqID, answeredBy(upstreamResp))
 		return nil
 	}
 
@@ -855,7 +855,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			return nil
 		}
 		if forwardInterrupted(forwardCtx) {
-			return answerInterrupted()
+			return answerInterrupted(nil)
 		}
 		return err
 	}
@@ -957,7 +957,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 				p.Logger.DebugContext(ctx, "write shutdown error to remote mcp response stream",
 					attr.SlogComponent("remotemcp.proxy"), attr.SlogError(writeErr))
 			}
-			p.cancelUpstreamRequest(ctx, r, userReqID)
+			p.cancelUpstreamRequest(ctx, r, userReqID, answeredBy(upstreamResp))
 			return nil
 		case StreamEndUpstreamClosed:
 			return nil
@@ -991,7 +991,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	bodyBytes, msg, err := readJSONRPCBody(upstreamResp.Body, p.MaxBufferedBodyBytes)
 	if err != nil && forwardInterrupted(forwardCtx) {
-		return answerInterrupted()
+		return answerInterrupted(upstreamResp)
 	}
 	switch {
 	case errors.Is(err, ErrUndecodableJSONRPCBody):

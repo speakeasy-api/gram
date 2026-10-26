@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -124,7 +125,13 @@ type cancelledParams struct {
 // cancellation, so the proxy sends notifications/cancelled in the client's
 // session. Under 2026-07-28 closing the response stream is the cancellation
 // and nothing is sent. Best effort: failures are logged at debug level.
-func (p *Proxy) cancelUpstreamRequest(ctx context.Context, userReq *http.Request, id jsonrpc.ID) {
+//
+// answeredBy is the URL that answered the interrupted request, nil when no
+// response arrived. When the request followed a redirect on the configured
+// origin, the notification goes there, where the session lives. A redirect to
+// another origin is not followed: the proxy strips credentials on such a
+// hop, and resending them there would undo that.
+func (p *Proxy) cancelUpstreamRequest(ctx context.Context, userReq *http.Request, id jsonrpc.ID, answeredBy *url.URL) {
 	if !id.IsValid() || mcpversions.AtLeast(mcpversions.Sanitize(userReq.Header.Get(mcpversions.HTTPHeader)), mcpversions.Version20260728) {
 		return
 	}
@@ -132,13 +139,34 @@ func (p *Proxy) cancelUpstreamRequest(ctx context.Context, userReq *http.Request
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamCancelTimeout)
 	defer cancel()
 
-	if err := p.sendUpstreamCancel(ctx, userReq, id); err != nil {
+	if err := p.sendUpstreamCancel(ctx, userReq, id, p.upstreamCancelTarget(answeredBy)); err != nil {
 		p.Logger.DebugContext(ctx, "send notifications/cancelled to remote mcp server",
 			attr.SlogComponent("remotemcp.proxy"), attr.SlogError(err))
 	}
 }
 
-func (p *Proxy) sendUpstreamCancel(ctx context.Context, userReq *http.Request, id jsonrpc.ID) error {
+// upstreamCancelTarget returns the URL notifications/cancelled is sent to:
+// answeredBy when it is on the configured origin, otherwise the configured URL.
+func (p *Proxy) upstreamCancelTarget(answeredBy *url.URL) string {
+	if answeredBy == nil {
+		return p.RemoteURL
+	}
+	configured, err := url.Parse(p.RemoteURL)
+	if err != nil || !sameRemoteMCPOrigin(configured, answeredBy) {
+		return p.RemoteURL
+	}
+	return answeredBy.String()
+}
+
+// answeredBy returns the URL that produced resp, after any redirects, or nil.
+func answeredBy(resp *http.Response) *url.URL {
+	if resp == nil || resp.Request == nil {
+		return nil
+	}
+	return resp.Request.URL
+}
+
+func (p *Proxy) sendUpstreamCancel(ctx context.Context, userReq *http.Request, id jsonrpc.ID, target string) error {
 	body, err := json.Marshal(cancelledNotification{
 		JSONRPC: "2.0",
 		Method:  mcpversions.MethodNotificationsCancelled,
@@ -148,7 +176,7 @@ func (p *Proxy) sendUpstreamCancel(ctx context.Context, userReq *http.Request, i
 		return fmt.Errorf("marshal notifications/cancelled: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.RemoteURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("build notifications/cancelled request: %w", err)
 	}
