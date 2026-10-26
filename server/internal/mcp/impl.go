@@ -1853,11 +1853,9 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 	}
 	wrapper, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		hosting := hostedmcp.ServerHosting(toolset, nil)
-		if !hosting.Enabled {
-			return nil, hostingstate.NotHosted(), noWrapper, errToolsetNotFound
-		}
-		return &toolset, hosting, noWrapper, nil
+		s.logger.WarnContext(ctx, "legacy MCP alias names a toolset without a hosted MCP server; not serving it",
+			attr.SlogToolsetID(toolset.ID.String()), attr.SlogProjectID(toolset.ProjectID.String()))
+		return nil, hostingstate.NotHosted(), noWrapper, errToolsetNotFound
 	}
 	if err != nil {
 		return nil, hostingstate.NotHosted(), noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)

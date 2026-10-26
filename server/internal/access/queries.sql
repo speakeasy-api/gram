@@ -1189,6 +1189,12 @@ SELECT resource_type, visibility FROM (
     AND toolsets.id = sqlc.arg(resource_id)::uuid
     AND toolsets.deleted IS FALSE
     AND projects.deleted IS FALSE
+    -- A server that kept the toolset's id after leaving it answers for that id instead.
+    AND NOT EXISTS (
+      SELECT 1 FROM mcp_servers kept
+      WHERE kept.id = toolsets.id AND kept.project_id = toolsets.project_id AND kept.deleted IS FALSE
+        AND kept.toolset_id IS DISTINCT FROM toolsets.id
+    )
   UNION ALL
   SELECT 'mcp_server'::text AS resource_type, mcp_servers.visibility::text AS visibility, 1 AS source_rank
   FROM mcp_servers

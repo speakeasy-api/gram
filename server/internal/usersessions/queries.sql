@@ -473,7 +473,6 @@ FROM (
     AND project.organization_id = @organization_id::text
     AND server.project_id <> @target_project_id::uuid
 
-
   UNION ALL
 
   SELECT meta.id
@@ -1050,7 +1049,6 @@ WHERE issuer.id = @id
       AND server.deleted IS FALSE
       AND server.project_id = issuer.project_id
 
-
     UNION ALL
 
     SELECT 1
@@ -1085,7 +1083,6 @@ SELECT EXISTS (
         WHERE server.user_session_issuer_id = issuer.id
           AND server.deleted IS FALSE
           AND server.project_id = issuer.project_id
-
 
         UNION ALL
 

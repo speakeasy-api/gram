@@ -2281,15 +2281,17 @@ UPDATE mcp_servers
 SET user_session_issuer_id = @user_session_issuer_id, updated_at = clock_timestamp()
 WHERE id = @id AND toolset_id = @id AND project_id = @project_id AND deleted IS FALSE;
 
--- name: ReplaceHostedToolsetEndpointFixture :exec
--- Leaves the canonical MCP server of a toolset with the one live endpoint given.
-WITH retired AS (
-  UPDATE mcp_endpoints
-  SET deleted_at = clock_timestamp()
-  WHERE mcp_server_id = @id AND project_id = @project_id AND deleted IS FALSE
-)
+-- name: RetireHostedToolsetEndpointsFixture :exec
+UPDATE mcp_endpoints
+SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: CreateHostedToolsetEndpointFixture :execrows
+-- Gives the canonical MCP server of a toolset an endpoint.
 INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
-VALUES (@project_id, @id, sqlc.narg('custom_domain_id')::uuid, @slug);
+SELECT s.project_id, s.id, sqlc.narg('custom_domain_id')::uuid, @slug
+FROM mcp_servers s
+WHERE s.id = @id AND s.toolset_id = @id AND s.project_id = @project_id AND s.deleted IS FALSE;
 
 -- name: SetToolsetLegacyAliasFixture :exec
 -- Sets the legacy /mcp/<slug> alias a toolset created before hosted servers owned their endpoints still carries.

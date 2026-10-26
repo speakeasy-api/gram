@@ -568,7 +568,7 @@ func TestToolsetViewsDeriveAddressFromCanonicalServer(t *testing.T) {
 	require.True(t, *view.McpIsPublic, "visibility still comes from the server")
 }
 
-func TestToolsetViewsOmitFrozenAliasWithoutServableEndpoint(t *testing.T) {
+func TestToolsetViewsFallBackToFrozenAlias(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -592,8 +592,11 @@ func TestToolsetViewsOmitFrozenAliasWithoutServableEndpoint(t *testing.T) {
 	require.NoError(t, err)
 
 	view := getToolset(t, ctx, ti, types.Slug(legacy.Slug))
-	require.Nil(t, view.McpSlug, "a server with no servable endpoint reports no address")
+	require.NotNil(t, view.McpSlug, "a server with no servable endpoint reports the alias that still serves it")
+	require.Equal(t, alias, string(*view.McpSlug))
 	require.Nil(t, view.CustomDomainID)
 	require.True(t, *view.McpEnabled)
-	require.Nil(t, listedEntry(t, ctx, ti, legacy.ID.String()).McpSlug)
+	listed := listedEntry(t, ctx, ti, legacy.ID.String()).McpSlug
+	require.NotNil(t, listed)
+	require.Equal(t, alias, string(*listed))
 }

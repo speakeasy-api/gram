@@ -1431,6 +1431,8 @@ SELECT
   t.slug,
   t.description,
   t.default_environment_slug,
+  -- The legacy alias, the address of a hosted server without a servable endpoint.
+  t.mcp_slug,
   t.tool_selection_mode,
   t.external_oauth_server_id,
   t.created_at,
@@ -1460,6 +1462,7 @@ type ListToolsetsWithVersionsByOrganizationRow struct {
 	Slug                   string
 	Description            pgtype.Text
 	DefaultEnvironmentSlug pgtype.Text
+	McpSlug                pgtype.Text
 	ToolSelectionMode      string
 	ExternalOauthServerID  uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
@@ -1485,6 +1488,7 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 			&i.Slug,
 			&i.Description,
 			&i.DefaultEnvironmentSlug,
+			&i.McpSlug,
 			&i.ToolSelectionMode,
 			&i.ExternalOauthServerID,
 			&i.CreatedAt,

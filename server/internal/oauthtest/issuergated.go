@@ -27,7 +27,7 @@ import (
 type IssuerGatedToolsetOpts struct {
 	// Slug prefix for the toolset. A UUID suffix is appended automatically.
 	Slug string
-	// IsPublic sets McpIsPublic on the toolset. Default false (private).
+	// IsPublic makes the canonical server public. Default false (private).
 	IsPublic bool
 	// UpstreamMetadata is RFC 8414 JSON describing the remote authorization
 	// server (e.g. devidptest.Instance.OAuth21Metadata(t)). The helper reads

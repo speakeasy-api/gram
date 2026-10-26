@@ -30,7 +30,14 @@ scoped_toolsets AS (
     -- The canonical wrapper owns hosting state; a toolset without one is not hosted.
     (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::boolean AS mcp_enabled,
     t.custom_domain_id,
-    cw.user_session_issuer_id,
+    -- The issuer of the server fronting the toolset: its canonical wrapper, else the server that holds it.
+    (
+      SELECT ms.user_session_issuer_id
+      FROM mcp_servers AS ms
+      WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE
+      ORDER BY (ms.id = t.id) DESC, ms.id
+      LIMIT 1
+    ) AS user_session_issuer_id,
     t.external_oauth_server_id,
     t.tool_variations_group_id,
     (

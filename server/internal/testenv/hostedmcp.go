@@ -29,9 +29,12 @@ func SetHostedMCP(t *testing.T, ctx context.Context, db testrepo.DBTX, projectID
 
 	q := testrepo.New(db)
 	if hosted.Slug != "" {
-		require.NoError(t, q.ReplaceHostedToolsetEndpointFixture(ctx, testrepo.ReplaceHostedToolsetEndpointFixtureParams{
-			ID: uuid.NullUUID{UUID: toolsetID, Valid: true}, ProjectID: projectID, CustomDomainID: hosted.CustomDomainID, Slug: hosted.Slug,
-		}))
+		require.NoError(t, q.RetireHostedToolsetEndpointsFixture(ctx, testrepo.RetireHostedToolsetEndpointsFixtureParams{ID: uuid.NullUUID{UUID: toolsetID, Valid: true}, ProjectID: projectID}))
+		rows, err := q.CreateHostedToolsetEndpointFixture(ctx, testrepo.CreateHostedToolsetEndpointFixtureParams{
+			ID: toolsetID, ProjectID: projectID, CustomDomainID: hosted.CustomDomainID, Slug: hosted.Slug,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), rows, "toolset has no canonical MCP server")
 	}
 	if hosted.UserSessionIssuerID != nil {
 		rows, err := q.SetHostedToolsetIssuerFixture(ctx, testrepo.SetHostedToolsetIssuerFixtureParams{ID: toolsetID, ProjectID: projectID, UserSessionIssuerID: *hosted.UserSessionIssuerID})

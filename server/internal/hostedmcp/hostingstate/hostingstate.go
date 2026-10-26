@@ -83,15 +83,16 @@ func reEnableVisibility(externalOAuthServerID uuid.NullUUID) string {
 	return visibility.Private
 }
 
-// Derive is a toolset's hosting state and preferred address given the server row holding its id. Only a canonical
-// wrapper hosts the toolset, and only a servable endpoint gives it an address.
-func Derive(externalOAuthServerID uuid.NullUUID, row *Row) (Hosting, Address) {
+// Derive is a toolset's hosting state and preferred address given the server row holding its id and the toolset's
+// legacy alias. Only a canonical wrapper hosts the toolset; without a servable endpoint its alias, which still
+// serves, is its address.
+func Derive(alias Address, externalOAuthServerID uuid.NullUUID, row *Row) (Hosting, Address) {
 	if row == nil || !row.Canonical {
 		return NotHosted(), Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 	}
 	hosting := FromServer(externalOAuthServerID, row.Visibility, row.UserSessionIssuerID)
 	if !row.HasEndpoint {
-		return hosting, Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+		return hosting, alias
 	}
 	return hosting, Address{Slug: pgtype.Text{String: row.EndpointSlug, Valid: true}, CustomDomainID: row.EndpointCustomDomainID}
 }
@@ -152,7 +153,7 @@ func CheckPrivateIngress(ctx context.Context, db networkingressrepo.DBTX, organi
 
 // AliasAddress is the address a legacy toolset's MCP alias follows among its hosted server's live endpoints: its
 // current address while an endpoint still holds it, else the platform endpoint, else the oldest one. With no live
-// endpoint the alias stays. This is the address rule pods that mirror the toolset columns apply, so both agree.
+// endpoint the alias stays.
 func AliasAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
 	alias := LegacyAlias(toolset)
 	var preferred *mcpendpointsrepo.McpEndpoint

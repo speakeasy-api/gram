@@ -820,6 +820,34 @@ func (q *Queries) CreateAuthClientHeaderFixture(ctx context.Context, arg CreateA
 	return err
 }
 
+const createHostedToolsetEndpointFixture = `-- name: CreateHostedToolsetEndpointFixture :execrows
+INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
+SELECT s.project_id, s.id, $1::uuid, $2
+FROM mcp_servers s
+WHERE s.id = $3 AND s.toolset_id = $3 AND s.project_id = $4 AND s.deleted IS FALSE
+`
+
+type CreateHostedToolsetEndpointFixtureParams struct {
+	CustomDomainID uuid.NullUUID
+	Slug           string
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Gives the canonical MCP server of a toolset an endpoint.
+func (q *Queries) CreateHostedToolsetEndpointFixture(ctx context.Context, arg CreateHostedToolsetEndpointFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createHostedToolsetEndpointFixture,
+		arg.CustomDomainID,
+		arg.Slug,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createMCPGatewayFixture = `-- name: CreateMCPGatewayFixture :one
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
 VALUES ($1, $2, $3, $4)
@@ -4820,34 +4848,6 @@ func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
 	return err
 }
 
-const replaceHostedToolsetEndpointFixture = `-- name: ReplaceHostedToolsetEndpointFixture :exec
-WITH retired AS (
-  UPDATE mcp_endpoints
-  SET deleted_at = clock_timestamp()
-  WHERE mcp_server_id = $2 AND project_id = $1 AND deleted IS FALSE
-)
-INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
-VALUES ($1, $2, $3::uuid, $4)
-`
-
-type ReplaceHostedToolsetEndpointFixtureParams struct {
-	ProjectID      uuid.UUID
-	ID             uuid.NullUUID
-	CustomDomainID uuid.NullUUID
-	Slug           string
-}
-
-// Leaves the canonical MCP server of a toolset with the one live endpoint given.
-func (q *Queries) ReplaceHostedToolsetEndpointFixture(ctx context.Context, arg ReplaceHostedToolsetEndpointFixtureParams) error {
-	_, err := q.db.Exec(ctx, replaceHostedToolsetEndpointFixture,
-		arg.ProjectID,
-		arg.ID,
-		arg.CustomDomainID,
-		arg.Slug,
-	)
-	return err
-}
-
 const repointMCPServerToolsetFixture = `-- name: RepointMCPServerToolsetFixture :one
 UPDATE mcp_servers AS m
 SET toolset_id = (
@@ -4940,6 +4940,22 @@ func (q *Queries) RestoreAttachmentConfigFixture(ctx context.Context, arg Restor
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const retireHostedToolsetEndpointsFixture = `-- name: RetireHostedToolsetEndpointsFixture :exec
+UPDATE mcp_endpoints
+SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type RetireHostedToolsetEndpointsFixtureParams struct {
+	ID        uuid.NullUUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RetireHostedToolsetEndpointsFixture(ctx context.Context, arg RetireHostedToolsetEndpointsFixtureParams) error {
+	_, err := q.db.Exec(ctx, retireHostedToolsetEndpointsFixture, arg.ID, arg.ProjectID)
+	return err
 }
 
 const revokeAgentAttachmentsFixture = `-- name: RevokeAgentAttachmentsFixture :execrows

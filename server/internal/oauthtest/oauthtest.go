@@ -30,7 +30,7 @@ type ExternalOAuthToolsetResult struct {
 type ExternalOAuthToolsetOpts struct {
 	// Slug prefix for the toolset. A UUID suffix is appended automatically.
 	Slug string
-	// IsPublic sets McpIsPublic on the toolset. Default false (private).
+	// IsPublic makes the canonical server public. Default false (private).
 	IsPublic bool
 	// Metadata is RFC 8414 compliant JSON. If nil, a minimal default is used.
 	// Callers that want to wire the toolset to a live upstream OAuth server

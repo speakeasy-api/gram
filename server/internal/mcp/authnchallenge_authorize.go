@@ -41,10 +41,10 @@ import (
 //   - validate the request (response_type=code, S256 PKCE, known client,
 //     allowed redirect_uri)
 //   - mint an AuthnChallengeState in Redis carrying the request context
-//   - branch on the toolset's privacy:
-//   - private (`!McpIsPublic`): 302 to the Speakeasy IDP login page; on
+//   - branch on the server's hosting privacy:
+//   - private: 302 to the Speakeasy IDP login page; on
 //     return HandleIDPCallback stamps `user:<id>` onto the state
-//   - public (`McpIsPublic`): stamp an anonymous subject, then 302 directly
+//   - public: stamp an anonymous subject, then 302 directly
 //     to /connect
 func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()

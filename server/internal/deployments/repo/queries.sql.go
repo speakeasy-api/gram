@@ -1841,7 +1841,7 @@ SELECT
     t.id
   , t.name
   , t.slug
-  , COALESCE(addr.slug, '')::text AS mcp_slug
+  , COALESCE(addr.slug, CASE WHEN cw.id IS NOT NULL THEN t.mcp_slug END, '')::text AS mcp_slug
   , (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::BOOLEAN AS mcp_enabled
   , (t.external_oauth_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
   , ARRAY(

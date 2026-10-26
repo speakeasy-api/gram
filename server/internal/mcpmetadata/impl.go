@@ -2170,11 +2170,9 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 	server, err := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		hosting := hostedmcp.ServerHosting(toolset, nil)
-		if !hosting.Enabled {
-			return nil, hostingstate.NotHosted(), false, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
-		}
-		return &toolset, hosting, false, nil
+		s.logger.WarnContext(ctx, "legacy MCP alias names a toolset without a hosted MCP server; not serving it",
+			attr.SlogToolsetID(toolset.ID.String()), attr.SlogProjectID(toolset.ProjectID.String()))
+		return nil, hostingstate.NotHosted(), false, fmt.Errorf("%w: no hosted MCP server", errToolsetNotFound)
 	case err != nil:
 		return nil, hostingstate.NotHosted(), false, fmt.Errorf("load hosted MCP network policy: %w", err)
 	case !hostedmcp.IsCanonical(&server, toolset.ID):
