@@ -87,7 +87,7 @@ func validateWakeRuntimeAuthority(ctx context.Context, tx pgx.Tx, params CreateW
 	}
 	binding, err := q.GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID})
 	if err != nil {
-		return wakeAuthorityReadError("read wake assistant binding", err)
+		return wakeAuthorityReadError("read wake assistant binding row", err)
 	}
 	if binding.OrganizationID != params.OrganizationID || binding.ID != identity.BindingID || binding.Generation != identity.BindingGeneration || binding.OriginalAgentID != identity.AgentID {
 		return fmt.Errorf("%w: wake assistant identity changed", ErrBadRequest)

@@ -512,3 +512,42 @@ func flushKitTestResponse(t *testing.T, w http.ResponseWriter) {
 	}
 	flusher.Flush()
 }
+
+func TestKitProtocolSourceContextIsPerTurn(t *testing.T) {
+	t.Parallel()
+	contexts := []string{}
+	for _, channel := range []string{"CHANNEL_ONE", "CHANNEL_TWO"} {
+		source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"` + channel + `","thread_id":"123.456"}`)}, nil)
+		require.NoError(t, err)
+		prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: "Please reply"})
+		require.NoError(t, err)
+		require.Len(t, prompt, 2)
+		require.Equal(t, "Please reply", prompt[1]["text"])
+		context := prompt[0]["text"].(string)
+		require.Contains(t, context, "Text responses are not delivered to the user")
+		require.Contains(t, context, "call a Slack post tool")
+		require.Contains(t, context, "Surface AuthURL to owner verbatim")
+		require.Contains(t, context, "Never expose AuthURL to non-owners")
+		require.Contains(t, context, "ChannelID: "+channel)
+		require.Contains(t, context, "ThreadID: 123.456")
+		contexts = append(contexts, context)
+	}
+	require.NotContains(t, contexts[0], "CHANNEL_TWO")
+	require.NotContains(t, contexts[1], "CHANNEL_ONE")
+	prompt, err := kitProtocolPrompt(runTurnRequest{Prompt: "No Slack context"})
+	require.NoError(t, err)
+	require.Len(t, prompt, 1)
+	require.Equal(t, "No Slack context", prompt[0]["text"])
+}
+
+func TestKitProtocolPreservesUpstreamSignInAction(t *testing.T) {
+	t.Parallel()
+	source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"CHANNEL","thread_id":"123.456"}`)}, nil)
+	require.NoError(t, err)
+	action := "<message-context>\nEventType: assistant_mcp_auth_required\nMCPSlug: tools\nAuthURL: https://auth.example/authorize?state=opaque-state&code_challenge=opaque-challenge\n</message-context>"
+	prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: action})
+	require.NoError(t, err)
+	require.Equal(t, action, prompt[1]["text"], "an upstream sign-in action must reach the model verbatim")
+	require.Contains(t, prompt[0]["text"], "deliver it to the OWNER")
+	require.Contains(t, prompt[0]["text"], "single primary button")
+}

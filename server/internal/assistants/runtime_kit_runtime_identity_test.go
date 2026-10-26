@@ -6,10 +6,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+
+	"encoding/json"
+	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
@@ -40,15 +41,20 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, event.State)
 
-	backend, err := remotemcprepo.New(db).CreateServer(t.Context(), remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: r.ProjectID, Name: pgtype.Text{String: "Remote", Valid: true}, Slug: pgtype.Text{String: "remote", Valid: true}, TransportType: "streamable-http", Url: "https://tools.example/mcp"})
+	var selected uuid.UUID
+	for _, slug := range []string{"default-env", "selected-env"} {
+		env, err := environmentsrepo.New(db).CreateEnvironment(t.Context(), environmentsrepo.CreateEnvironmentParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: slug, Slug: slug})
+		require.NoError(t, err)
+		if slug == "selected-env" {
+			selected = env.ID
+		}
+	}
+	hosted, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: "Tools", Slug: "tools", DefaultEnvironmentSlug: pgtype.Text{String: "default-env", Valid: true}, McpSlug: pgtype.Text{String: "tools-endpoint", Valid: true}, McpEnabled: true})
 	require.NoError(t, err)
-	server, err := mcpserversrepo.New(db).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{ID: uuid.New(), ProjectID: r.ProjectID, Name: pgtype.Text{String: "Tools", Valid: true}, Slug: pgtype.Text{String: "tools", Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: backend.ID, Valid: true}, Visibility: "private"})
-	require.NoError(t, err)
-	_, err = mcpendpointsrepo.New(db).CreateMCPEndpoint(t.Context(), mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: r.ProjectID, McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true}, Slug: "tools"})
-	require.NoError(t, err)
+	syncCanonicalWrapper(t, db, hosted)
 	q := assistantrepo.New(db)
-	require.NoError(t, q.SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{ID: server.ID, ProjectID: r.ProjectID, UserSessionIssuerID: uuid.NullUUID{UUID: config.MCPUserSessionIssuerID, Valid: true}}))
-	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: server.ID}})
+	require.NoError(t, q.SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{ID: hosted.ID, ProjectID: r.ProjectID, UserSessionIssuerID: uuid.NullUUID{UUID: config.MCPUserSessionIssuerID, Valid: true}}))
+	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: hosted.ID, EnvironmentID: uuid.NullUUID{UUID: selected, Valid: true}}})
 	require.NoError(t, err)
 	require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeVersion: 3}))
 	chat := uuid.New()
@@ -67,9 +73,22 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 		r.LifecycleTx = nil
 		require.Equal(t, identity, b.Workload.Identity)
 		require.NotEmpty(t, b.Workload.ServiceAccount)
+		require.NotContains(t, string(b.AgentsMD), "human-delegated sign-in are unavailable")
 		return b
 	}
+	assertEnvironment := func(b KitLocalBootstrap, expected string) {
+		t.Helper()
+		var document struct {
+			Servers map[string]struct {
+				Headers map[string]string `json:"headers"`
+			} `json:"mcpServers"`
+		}
+		require.NoError(t, json.Unmarshal(b.MCPJSON, &document))
+		require.Equal(t, expected, document.Servers["workload"].Headers["Gram-Environment"])
+	}
 	first := bootstrap()
+	assertEnvironment(first, "selected-env")
+
 	// Withdrawing a root revokes that event, not the assistant's runtime identity.
 	admissions, err := workloadrepo.New(db).ListWorkloadAdmissions(t.Context(), workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}})
 	require.NoError(t, err)
@@ -85,9 +104,17 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	require.ErrorIs(t, core.identities.Validate(t.Context(), db, *event.Identity), assistantidentity.ErrInvalidIdentity)
 	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, identity))
 	second := bootstrap()
+	assertEnvironment(second, "selected-env")
 	require.NotEqual(t, first.Workload.Subject, second.Workload.Subject)
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, first.Workload)))
 	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, second.Workload.Identity))
+	require.NoError(t, q.ClearAssistantMcpServersForServers(t.Context(), assistantrepo.ClearAssistantMcpServersForServersParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, McpServerIds: []uuid.UUID{hosted.ID}}))
+	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: hosted.ID}})
+	require.NoError(t, err)
+	assertEnvironment(bootstrap(), "default-env")
+	_, err = db.Exec(t.Context(), "UPDATE toolsets SET default_environment_slug = NULL WHERE id = $1 AND project_id = $2", hosted.ID, r.ProjectID)
+	require.NoError(t, err)
+	assertEnvironment(bootstrap(), "")
 	// Replacement selecting the same agent is still a different authority.
 	iq := identityrepo.New(db)
 	require.NoError(t, iq.TombstoneAssistantBinding(t.Context(), identityrepo.TombstoneAssistantBindingParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID}))

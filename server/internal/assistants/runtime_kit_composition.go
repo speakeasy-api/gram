@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -24,6 +23,8 @@ import (
 // Built-in platform endpoints are intentionally unsupported: no human token or
 // inference bearer is ever substituted for their missing machine-auth contract.
 type KitLocalCompositionConfig struct {
+	// Derived only from the exact persisted attachment during bootstrap.
+	mcpEnvironment string
 	// PersistedMCP derives production machine connections from the assistant attachment.
 	PersistedMCP                                              bool
 	Environment, Image, ExtraCACertFile, Network              string
@@ -218,7 +219,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	assistant := assistantRecordFromGetRow(row)
 	attachments, err := q.LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
 	for _, attached := range attachments {
-		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: pgtype.Text{String: "", Valid: false}, ToolsetSlug: pgtype.Text{String: "", Valid: false}, DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, EnvironmentSlug: pgtype.Text{String: "", Valid: false}, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug, EndpointDomain: attached.EndpointDomain})
+		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: attached.ServerSlug, ToolsetSlug: attached.ToolsetSlug, DefaultEnvironmentSlug: attached.DefaultEnvironmentSlug, EnvironmentID: attached.EnvironmentID, EnvironmentSlug: attached.EnvironmentSlug, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug, EndpointDomain: attached.EndpointDomain})
 	}
 	if err != nil {
 		return zero, fmt.Errorf("load Kit assistant MCP servers: %w", err)
@@ -231,6 +232,13 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 	if !kitResourceAttached(assistant, s.serverURL, c.MCPResource) {
 		return zero, errors.New("configured Kit MCP resource is not an enabled attachment of this assistant")
+	}
+	c.mcpEnvironment = ""
+	for _, attached := range assistant.MCPServers {
+		if attached.Visibility != "disabled" && attached.endpointURL(s.serverURL).String() == c.MCPResource.String() {
+			c.mcpEnvironment = assistantMCPEnvironment(attached)
+			break
+		}
 	}
 	if r.LifecycleTx == nil {
 		return zero, errors.New("kit bootstrap requires the runtime admission lock")
@@ -260,7 +268,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, err
 	}
 
-	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n\nUse the configured independent workload MCP connection. Built-in platform endpoints and human-delegated sign-in are unavailable in this runtime. Never request or substitute a user's credentials.\n")
+	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n")
 	bootstrap := KitLocalBootstrap{Model: assistant.Model, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: c.Origin.String() + "/chat/completions"}
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return zero, err
@@ -291,8 +299,12 @@ func kitCompositionMCP(c KitLocalCompositionConfig, binding *KitWorkloadBinding)
 		return nil, errors.New("kit MCP requires workload binding and resource")
 	}
 	path := KitWorkloadAssertionPath
+	headers := map[string]string{}
+	if c.mcpEnvironment != "" {
+		headers["Gram-Environment"] = c.mcpEnvironment
+	}
 	data, err := json.Marshal(map[string]any{"mcpServers": map[string]any{"workload": map[string]any{
-		"type": "streamable-http", "url": c.MCPResource.String(), "auth": map[string]any{
+		"type": "streamable-http", "url": c.MCPResource.String(), "headers": headers, "auth": map[string]any{
 			"type": "workload_identity", "tokenFile": path, "endpointMode": "explicit", "grant": "jwtBearer",
 			"tokenEndpoint": binding.Audience + "/token", "resource": c.MCPResource.String(), "scope": "mcp:connect",
 		},

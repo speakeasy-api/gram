@@ -7,7 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // RuntimeIdentity binds a managed runtime to the assistant's dedicated agent.
@@ -57,6 +59,16 @@ func resolveRuntime(ctx context.Context, tx pgx.Tx, org string, project, assista
 	if binding.OrganizationID != org || state.State != Active || state.AgentID == nil || *state.AgentID != binding.OriginalAgentID {
 		return zero, ErrInvalidIdentity
 	}
+	agent, err := agents.ResolvePrincipal(ctx, tx, org, urn.NewPrincipal(urn.PrincipalTypeAgent, binding.OriginalAgentID.String()))
+	if errors.Is(err, agents.ErrPrincipalNotFound) {
+		return zero, ErrInvalidIdentity
+	}
+	if err != nil {
+		return zero, fmt.Errorf("resolve runtime agent: %w", err)
+	}
+	if agent.OwnerReassignmentRequiredAt.Valid {
+		return zero, ErrInvalidIdentity
+	}
 	return RuntimeIdentity{OrganizationID: org, ProjectID: project, AssistantID: assistant, AgentID: binding.OriginalAgentID, BindingID: binding.ID, BindingGeneration: binding.Generation}, nil
 }
 
@@ -72,7 +84,7 @@ func (s *Service) ResolveRuntime(ctx context.Context, db DB, org string, project
 		return RuntimeIdentity{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return RuntimeIdentity{}, err
+		return RuntimeIdentity{}, fmt.Errorf("commit runtime identity read snapshot: %w", err)
 	}
 	return identity, nil
 }

@@ -190,7 +190,7 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 
 func TestWakeRuntimeIdentity(t *testing.T) {
 	t.Parallel()
-	for _, change := range []string{"live", "ended", "runtime generation", "assistant", "project", "version", "issuer", "subject", "identity organization", "identity project", "identity assistant", "agent", "corrupt"} {
+	for _, change := range []string{"live", "ended", "runtime generation", "assistant", "project", "version", "issuer", "subject", "identity organization", "identity project", "identity assistant", "agent", "missing binding", "zero generation", "negative generation", "corrupt"} {
 		t.Run(change, func(t *testing.T) {
 			t.Parallel()
 			runtimeID, projectID, assistantID, agentID, issuerID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
@@ -217,6 +217,12 @@ func TestWakeRuntimeIdentity(t *testing.T) {
 				identity.ProjectID = uuid.New()
 			case "identity assistant":
 				identity.AssistantID = uuid.New()
+			case "missing binding":
+				identity.BindingID = uuid.Nil
+			case "zero generation":
+				identity.BindingGeneration = 0
+			case "negative generation":
+				identity.BindingGeneration = -1
 			case "agent":
 				identity.AgentID = uuid.New()
 			}

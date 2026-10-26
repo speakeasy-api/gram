@@ -467,3 +467,15 @@ func TestKitWorkloadDBRetiredFenceAfterIdentityTombstone(t *testing.T) {
 		})
 	}
 }
+
+func TestKitRuntimeIdentityRejectsOwnerReassignmentLatch(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, config, _ := kitWorkloadDBFixture(t)
+	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, identity))
+	rows, err := agentrepo.New(db).LatchAgentsForOwnerLossByMembership(t.Context(), agentrepo.LatchAgentsForOwnerLossByMembershipParams{OrganizationID: identity.OrganizationID, OwnerUserID: "user-1", OwnerReassignmentReason: pgtype.Text{String: "membership_removed", Valid: true}})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	require.ErrorIs(t, core.identities.ValidateRuntime(t.Context(), db, identity), assistantidentity.ErrInvalidIdentity)
+	_, err = core.provisionKitWorkload(t.Context(), r, config, identity, "owner-latched")
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
+}
