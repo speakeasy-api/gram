@@ -744,14 +744,20 @@ func (s *Service) serveRemoteBackend(
 	return serveProxyBackend(w, r.WithContext(ctx), p)
 }
 
-// authClientBuildOptions sends the resolved typed auth client's headers in
-// place of the server's credential headers; none when the upstream client
-// choice governs the request.
+// authClientBuildOptions sends the typed auth client's headers in place of
+// the server's credential headers; none when the upstream client choice
+// governs the request without one.
 func authClientBuildOptions(authentication *issuerGateAuthentication) []remotemcp.BuildOption {
-	if authentication == nil || authentication.authClient == nil {
+	switch {
+	case authentication == nil:
+		return nil
+	case authentication.authClient != nil:
+		return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
+	case authentication.chainingAuthClient != nil:
+		return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.chainingAuthClient.headers)}
+	default:
 		return nil
 	}
-	return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
 }
 
 // remoteBackendProxyBuilder loads a remote-backed server once and yields fresh one-request proxies for it.
