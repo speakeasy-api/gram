@@ -755,7 +755,7 @@ type MarkApprovalRequestedParams struct {
 
 // Moves a blocked request to pending once the agent asks for approval. A
 // request that is already pending is returned unchanged by the caller, so
-// repeating request_approval never re-notifies approvers.
+// repeating a request never re-notifies approvers.
 func (q *Queries) MarkApprovalRequested(ctx context.Context, arg MarkApprovalRequestedParams) (RiskPolicyApproval, error) {
 	row := q.db.QueryRow(ctx, markApprovalRequested,
 		arg.Reason,
