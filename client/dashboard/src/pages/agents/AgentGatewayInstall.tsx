@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { getServerURL } from "@/lib/utils";
+import { openClawInstallMessage } from "./agent-install-message";
 import { isCredentialSafe } from "./credentials/gateway";
 import { useState, type JSX } from "react";
 
@@ -237,7 +238,9 @@ export function AgentGatewayInstall({
                 : "Generate install command"}
           </Button>
           <Text muted small>
-            Configures the MCP clients on a machine in one step. The command
+            Connects Claude Code, Codex and OpenClaw on a machine in one step.
+            On OpenClaw it also installs Speakeasy hooks, so this agent&apos;s
+            sessions appear in Agent Sessions under its name. The command
             carries a single-use code, not the key, and the code expires in 15
             minutes.
           </Text>
@@ -252,6 +255,34 @@ export function AgentGatewayInstall({
                 {command.replace(" | sh", " -o gram-install.sh")}
               </code>
             </Text>
+          )}
+          {command && (
+            <>
+              <Text small className="font-medium">
+                Or paste into OpenClaw
+              </Text>
+              <div className="border-border flex items-start gap-2 border p-3">
+                <pre className="min-w-0 flex-1 whitespace-pre-wrap break-all text-xs">
+                  {openClawInstallMessage(command)}
+                </pre>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(openClawInstallMessage(command))
+                      .then(() => setCopied("openclaw"));
+                  }}
+                >
+                  {copied === "openclaw" ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <Text muted small>
+                OpenClaw runs the command in its own shell and reports whether
+                its hooks passed the check. Use this or the command above, not
+                both: the code works once.
+              </Text>
+            </>
           )}
           {commandError && (
             <Text role="alert" small>

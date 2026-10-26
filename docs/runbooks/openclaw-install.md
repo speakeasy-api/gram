@@ -136,6 +136,25 @@ releases read both and prefer the `SPEAKEASY_AI_HOOKS_*` name.
 Sessions from a shared gateway attribute to the org, not to an individual.
 Per-user attribution on shared gateways is tracked separately in DNO-971.
 
+## Install for an agent (one command)
+
+An agent's page in the dashboard issues a single-use install command,
+`curl -fsSL <server>/agent-mcp/install/<code> | sh`, and a message to paste
+into OpenClaw's chat so OpenClaw runs it in its own shell. When `openclaw` is
+on `PATH` the script:
+
+1. Saves the agent gateway as the `speakeasy` MCP server
+   (`openclaw mcp set`), replacing any `gram` or `speakeasy` entry.
+2. Installs this observability plugin with the agent's key and project baked
+   into `speakeasy.json`, so its sessions are recorded under the agent. It
+   passes `--force`, plus `--accept-capabilities` when
+   `openclaw plugins install --help` lists it (2026.8.1 and later).
+3. Sets `allowConversationAccess`.
+4. Sends one `before_tool_call` frame through the plugin's hooks binary and
+   prints `Speakeasy hooks: PASS` or `Speakeasy hooks: FAIL: <reason>`. A
+   `permission denied` reason means the agent lacks `org:hooks_ingest` on its
+   project or `project:read`.
+
 ## Verify
 
 1. Run a turn that uses a tool:

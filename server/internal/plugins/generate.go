@@ -385,7 +385,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "51"
+const hooksGeneratorVersion = "52"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -2030,7 +2030,11 @@ func generateOpenClawObservabilityPluginInDir(files map[string][]byte, subdir st
 			"additionalProperties": false,
 			"properties":           map[string]any{},
 		},
-		"activation": map[string]any{"onStartup": true},
+		// From 2026.9.3 the Gateway may skip a hook-only plugin at startup
+		// unless its manifest declares the hook capability
+		// (openclaw/openclaw#155079). Releases back to 2026.4.24 already
+		// parse onCapabilities, so declaring it next to onStartup is safe.
+		"activation": map[string]any{"onStartup": true, "onCapabilities": []string{"hook"}},
 	}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal openclaw plugin manifest: %w", err)
@@ -2291,6 +2295,23 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
 	return files, nil
+}
+
+// ObservabilityPluginZip renders one platform's observability plugin as the
+// ZIP archive its installer accepts directly (for OpenClaw,
+// `openclaw plugins install <zip>`). The archive carries cfg.HooksAPIKey in
+// its speakeasy.json, so it is as sensitive as the key.
+func ObservabilityPluginZip(cfg GenerateConfig, platform string) ([]byte, error) {
+	files, err := GenerateObservabilityPluginPackage(cfg, platform)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	if err := writePluginZip(&buf, files); err != nil {
+		return nil, fmt.Errorf("zip %s observability plugin: %w", platform, err)
+	}
+	return buf.Bytes(), nil
 }
 
 // codexHookApproval is a single [hooks.state] entry that pre-approves a Codex
