@@ -3704,6 +3704,8 @@ const assistantRuntimeTokenTTL = 60 * time.Minute
 // live in each adapter's OutputChannelGuidance.
 const mcpAuthAddendum = `## MCP authentication
 
+Use the supplied sign-in links for authentication. Never ask users to paste passwords or tokens, and never disclose workload credentials.
+
 OAuth + MCP auth are owner-only: only owner can sign in and complete flow. Owner = the person who set this assistant up — NOT simply whoever triggered the current turn. When your instructions record the owner's identity (an "Owner" entry, e.g. a Slack handle + user ID), treat the requester as owner only if they match it. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
 Two MCP auth events may appear in thread, each as <message-context> block with EventType and field lines.
