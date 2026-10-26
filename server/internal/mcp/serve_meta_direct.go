@@ -94,8 +94,8 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 // describeMetaMemberWithRetry describes a member, and describes it again after
 // a retryable failure once its Retry-After, or a jittered backoff, has passed,
 // up to maxMemberDescribeAttempts in all. A retry that would start with less
-// than minMemberRetryBudget before ctx's deadline is not attempted, so the
-// last failure is returned instead.
+// than minMemberRetryBudget before ctx's deadline, after its backoff or its
+// wait for a slot, is not attempted, so the last failure is returned instead.
 // Each attempt holds one of slots and is bounded by the member call timeout;
 // a member waiting to retry holds no slot. The result is empty when ctx ended
 // before the first attempt got a slot.
@@ -103,6 +103,10 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 	var result memberDescribeResult
 	for attempt := 1; ; attempt++ {
 		if slots.Acquire(ctx, 1) != nil {
+			return result
+		}
+		if attempt > 1 && !retryFitsListing(ctx, 0) {
+			slots.Release(1)
 			return result
 		}
 		memberCtx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
@@ -118,7 +122,7 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 			delay = memberRetryBaseDelay << (attempt - 1)
 		}
 		delay += randomDuration(delay / memberRetryJitterDivisor)
-		if deadline, bounded := ctx.Deadline(); bounded && time.Now().Add(delay+minMemberRetryBudget).After(deadline) {
+		if !retryFitsListing(ctx, delay) {
 			return result
 		}
 		logger.InfoContext(ctx, "retrying gateway member tool listing", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(failure))
@@ -129,6 +133,13 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 		}
 		timer.Stop()
 	}
+}
+
+// retryFitsListing reports whether a retry starting after wait still has
+// minMemberRetryBudget before ctx's deadline.
+func retryFitsListing(ctx context.Context, wait time.Duration) bool {
+	deadline, bounded := ctx.Deadline()
+	return !bounded || time.Until(deadline) >= wait+minMemberRetryBudget
 }
 
 // expiredListingResult classifies a member's result once the listing time ran

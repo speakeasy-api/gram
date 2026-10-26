@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -421,6 +424,33 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 			require.Error(t, err)
 			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: build, anonymous: false}, member, err)
 			require.EqualError(t, got, tc.want)
+			failure, ok := errors.AsType[memberDiscoveryError](got)
+			require.True(t, ok, "%v", got)
+			require.Equal(t, tc.retryable, failure.retryable)
+		})
+	}
+}
+
+// A recorded transport failure is retryable only when a retry can change it:
+// a timeout already spent the attempt's time, and egress policy refuses the
+// same address again. A transport timeout need not wrap a context error.
+func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		err       error
+		retryable bool
+	}{
+		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true},
+		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false},
+		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			attempt := newMemberAttempt(nil)
+			attempt.recordFailure(true, tc.err)
+			got := memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, metaMember{slug: "fixture"}, tc.err)
+			require.EqualError(t, got, `server "fixture" did not answer: upstream unreachable or timed out`)
 			failure, ok := errors.AsType[memberDiscoveryError](got)
 			require.True(t, ok, "%v", got)
 			require.Equal(t, tc.retryable, failure.retryable)

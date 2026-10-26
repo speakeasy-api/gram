@@ -5,13 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestExpiredListingResultKeepsAccessDenialsAndClassifiesTimeouts(t *testing.T) {
@@ -52,6 +58,41 @@ func TestExpiredListingResultKeepsAccessDenialsAndClassifiesTimeouts(t *testing.
 			require.False(t, memberAccessDenied(got.err))
 		})
 	}
+}
+
+// A retry that waited for a slot until too little listing time remained keeps
+// the upstream's own failure instead of starting an attempt that could only
+// time out.
+func TestDescribeMetaMemberWithRetryKeepsTheFailureWhenASlotFreesTooLate(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		rateLimited := memberDiscoveryError{metaMemberError: &metaMemberError{message: "rate limited"}, status: http.StatusTooManyRequests, retryable: true, retryAfter: 100 * time.Millisecond}
+		member := metaMember{slug: "linear", serverID: uuid.New(), projectID: uuid.New(), backend: metaMemberBackendProxied, upstreamUnavailable: rateLimited}
+		catalog := &connectionCatalog{Members: map[string]connectionCatalogMember{member.slug: {ServerID: member.serverID, ProjectID: member.projectID}}}
+		gate := &metaGateContext{catalog: catalog, execute: true}
+		service := &Service{metaRuntime: MetaRuntimeConfig{MemberCallTimeout: time.Second}}
+		const listingTime = time.Second
+		ctx, cancel := context.WithTimeout(t.Context(), listingTime)
+		defer cancel()
+		slots := semaphore.NewWeighted(1)
+
+		described := make(chan memberDescribeResult, 1)
+		go func() {
+			described <- service.describeMetaMemberWithRetry(ctx, testenv.NewLogger(t), gate, member, slots)
+		}()
+		synctest.Wait()
+
+		// The first attempt failed and its retry is waiting out the backoff.
+		// Hold the only slot until less than the retry budget remains, and
+		// make any second describe fail differently.
+		require.True(t, slots.TryAcquire(1))
+		delete(catalog.Members, member.slug)
+		time.Sleep(listingTime - minMemberRetryBudget/2) //nolint:forbidigo // synctest advances the fake clock without a wall-clock wait.
+		slots.Release(1)
+
+		require.ErrorIs(t, (<-described).err, rateLimited)
+	})
 }
 
 // The size bound applies to the tool definitions, not the response envelope.

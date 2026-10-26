@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -402,10 +403,11 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		// A transport failure may clear on a retry, unless it timed out, which
 		// already spent the attempt's time, or no retry can change it: egress
 		// policy refused the address, or the certificate failed verification.
+		netErr, isNetErr := errors.AsType[net.Error](exchangeErr)
+		spent := (isNetErr && netErr.Timeout()) || errors.Is(exchangeErr, context.DeadlineExceeded) || errors.Is(exchangeErr, context.Canceled)
 		_, untrusted := errors.AsType[*tls.CertificateVerificationError](exchangeErr)
-		retryable := !untrusted && !errors.Is(exchangeErr, guardian.ErrBlockedIP) && !errors.Is(exchangeErr, guardian.ErrBadHost) &&
-			!errors.Is(exchangeErr, context.DeadlineExceeded) && !errors.Is(exchangeErr, context.Canceled)
-		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), retryable)
+		refused := untrusted || errors.Is(exchangeErr, guardian.ErrBlockedIP) || errors.Is(exchangeErr, guardian.ErrBadHost)
+		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), !spent && !refused)
 	}
 	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok {
 		return upstreamFailure(fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message), retryableStatus)
