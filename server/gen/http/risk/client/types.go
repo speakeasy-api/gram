@@ -536,6 +536,10 @@ type CreateRiskPolicyResponseBody struct {
 	// For require_approval policies: who may approve held calls. Null for every
 	// other action.
 	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
+	// Set only on the create or update response that turned on the project's first
+	// approval policy: the approvals server Speakeasy created and whether it
+	// joined the Default plugin.
+	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -654,6 +658,10 @@ type GetRiskPolicyResponseBody struct {
 	// For require_approval policies: who may approve held calls. Null for every
 	// other action.
 	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
+	// Set only on the create or update response that turned on the project's first
+	// approval policy: the approvals server Speakeasy created and whether it
+	// joined the Default plugin.
+	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -742,6 +750,10 @@ type UpdateRiskPolicyResponseBody struct {
 	// For require_approval policies: who may approve held calls. Null for every
 	// other action.
 	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
+	// Set only on the create or update response that turned on the project's first
+	// approval policy: the approvals server Speakeasy created and whether it
+	// joined the Default plugin.
+	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -12344,6 +12356,20 @@ type RiskPolicyApprovalConfigResponseBody struct {
 	Approvers []string `form:"approvers,omitempty" json:"approvers,omitempty" xml:"approvers,omitempty"`
 }
 
+// RiskPolicyApprovalsServerSetupResponseBody is used to define fields on
+// response body types.
+type RiskPolicyApprovalsServerSetupResponseBody struct {
+	// The approvals server Speakeasy created in the project.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The approvals server's slug.
+	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
+	// How plugins name the server, and how held calls refer to it.
+	PluginServerName *string `form:"plugin_server_name,omitempty" json:"plugin_server_name,omitempty" xml:"plugin_server_name,omitempty"`
+	// Whether the server joined the project's Default plugin, which republishes so
+	// agents that use the plugin get it.
+	AddedToDefaultPlugin *bool `form:"added_to_default_plugin,omitempty" json:"added_to_default_plugin,omitempty" xml:"added_to_default_plugin,omitempty"`
+}
+
 // RiskPolicyResponseBody is used to define fields on response body types.
 type RiskPolicyResponseBody struct {
 	// The risk policy ID.
@@ -12419,6 +12445,10 @@ type RiskPolicyResponseBody struct {
 	// For require_approval policies: who may approve held calls. Null for every
 	// other action.
 	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
+	// Set only on the create or update response that turned on the project's first
+	// approval policy: the approvals server Speakeasy created and whether it
+	// joined the Default plugin.
+	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -13802,6 +13832,9 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 	if body.ApprovalConfig != nil {
 		v.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(body.ApprovalConfig)
 	}
+	if body.ApprovalsServerSetup != nil {
+		v.ApprovalsServerSetup = unmarshalRiskPolicyApprovalsServerSetupResponseBodyToTypesRiskPolicyApprovalsServerSetup(body.ApprovalsServerSetup)
+	}
 
 	return v
 }
@@ -14701,6 +14734,9 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 	if body.ApprovalConfig != nil {
 		v.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(body.ApprovalConfig)
 	}
+	if body.ApprovalsServerSetup != nil {
+		v.ApprovalsServerSetup = unmarshalRiskPolicyApprovalsServerSetupResponseBodyToTypesRiskPolicyApprovalsServerSetup(body.ApprovalsServerSetup)
+	}
 
 	return v
 }
@@ -14932,6 +14968,9 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 	}
 	if body.ApprovalConfig != nil {
 		v.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(body.ApprovalConfig)
+	}
+	if body.ApprovalsServerSetup != nil {
+		v.ApprovalsServerSetup = unmarshalRiskPolicyApprovalsServerSetupResponseBodyToTypesRiskPolicyApprovalsServerSetup(body.ApprovalsServerSetup)
 	}
 
 	return v
@@ -23563,6 +23602,11 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.ApprovalsServerSetup != nil {
+		if err2 := ValidateRiskPolicyApprovalsServerSetupResponseBody(body.ApprovalsServerSetup); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.Score != nil {
 		if *body.Score < 0.1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 0.1, true))
@@ -23747,6 +23791,11 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.ApprovalsServerSetup != nil {
+		if err2 := ValidateRiskPolicyApprovalsServerSetupResponseBody(body.ApprovalsServerSetup); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.Score != nil {
 		if *body.Score < 0.1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.score", *body.Score, 0.1, true))
@@ -23861,6 +23910,11 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	}
 	if body.ApprovalConfig != nil {
 		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ApprovalsServerSetup != nil {
+		if err2 := ValidateRiskPolicyApprovalsServerSetupResponseBody(body.ApprovalsServerSetup); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -39141,6 +39195,27 @@ func ValidateRiskPolicyApprovalConfigResponseBody(body *RiskPolicyApprovalConfig
 	return
 }
 
+// ValidateRiskPolicyApprovalsServerSetupResponseBody runs the validations
+// defined on RiskPolicyApprovalsServerSetupResponseBody
+func ValidateRiskPolicyApprovalsServerSetupResponseBody(body *RiskPolicyApprovalsServerSetupResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_slug", "body"))
+	}
+	if body.PluginServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_server_name", "body"))
+	}
+	if body.AddedToDefaultPlugin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("added_to_default_plugin", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateRiskPolicyResponseBody runs the validations defined on
 // RiskPolicyResponseBody
 func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
@@ -39236,6 +39311,11 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	}
 	if body.ApprovalConfig != nil {
 		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ApprovalsServerSetup != nil {
+		if err2 := ValidateRiskPolicyApprovalsServerSetupResponseBody(body.ApprovalsServerSetup); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}

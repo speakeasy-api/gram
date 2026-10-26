@@ -64,13 +64,24 @@ func NewScanner(db repo.DBTX) (*Scanner, error) {
 }
 
 func (s *Scanner) Scan(ctx context.Context, req ScanRequest) (scanners.Result, error) {
+	result, _, err := s.scan(ctx, req)
+	return result, err
+}
+
+// ScanForEnforcement reports whether any effective rule was evaluated so a
+// no-op rule selection stays distinct from an incomplete attempted scan.
+func (s *Scanner) ScanForEnforcement(ctx context.Context, req ScanRequest) (scanners.Result, bool, error) {
+	return s.scan(ctx, req)
+}
+
+func (s *Scanner) scan(ctx context.Context, req ScanRequest) (scanners.Result, bool, error) {
 	rules, err := customrules.LoadSelected(ctx, repo.New(s.db), req.ProjectID, req.CustomRuleIDs)
 	if err != nil {
-		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, &loadError{err: fmt.Errorf("load custom detection rules: %w", err)}
+		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, false, &loadError{err: fmt.Errorf("load custom detection rules: %w", err)}
 	}
 
 	if !hasEffectiveRule(rules) {
-		return scanners.Result{Findings: []scanners.Finding{}, STokens: 0, Completed: false}, nil
+		return scanners.Result{Findings: []scanners.Finding{}, STokens: 0, Completed: false}, false, nil
 	}
 
 	msg := celMessageFromMessage(ScanMessage{
@@ -81,9 +92,9 @@ func (s *Scanner) Scan(ctx context.Context, req ScanRequest) (scanners.Result, e
 	stokenCount, countErr := s.countMessageSTokens(ctx, msg)
 	findings, err := s.evaluate(rules, msg)
 	if err != nil {
-		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, err
+		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, true, err
 	}
-	return scanners.Result{Findings: findings, STokens: stokenCount, Completed: countErr == nil}, nil
+	return scanners.Result{Findings: findings, STokens: stokenCount, Completed: countErr == nil}, true, nil
 }
 
 // ScanBatch evaluates the selected rule set against every message in req,

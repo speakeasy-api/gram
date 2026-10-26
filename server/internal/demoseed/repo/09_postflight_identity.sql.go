@@ -338,6 +338,19 @@ func (q *Queries) PostflightIDExternalOAuthMetadata(ctx context.Context, project
 	return count, err
 }
 
+const postflightIDGatewayIssuers = `-- name: PostflightIDGatewayIssuers :one
+SELECT count(DISTINCT user_session_issuer_id)::bigint
+FROM meta_mcp_servers
+WHERE project_id = $1::uuid AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightIDGatewayIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDGatewayIssuers, projectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const postflightIDGitHubCheckAccessGrants = `-- name: PostflightIDGitHubCheckAccessGrants :one
 SELECT count(*) FROM principal_grants
 WHERE organization_id = $1::text
@@ -806,9 +819,9 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // credential kind, plus the pre-column row. A rerun that dropped or
 // duplicated any of them would leave the badges telling a different story
 // than the one they were seeded to tell.
-// One issuer per Connections credential story (acme-partner-gateway), three
-// project MCP issuers, and the organization-wide workforce issuer used by
-// GitHub.
+// Two upstream MCP issuers, two independent gateway issuers, one
+// Connections issuer, and the approvals server's issuer; GitHub uses the
+// organization workforce issuer.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
 	var count int64

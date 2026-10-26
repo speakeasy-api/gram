@@ -25,6 +25,7 @@ var All = []outbox.EventRegistration{
 	AwsIamCredentialV1,
 	AwsKmsKeyV1,
 	BillingMetadataV1,
+	CatalogPromotionV1,
 	ChatAnalysisSettingsV1,
 	ChatSessionV1,
 	CustomDomainV1,

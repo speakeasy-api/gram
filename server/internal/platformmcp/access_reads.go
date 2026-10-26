@@ -975,6 +975,8 @@ func accessBackend(row platformrepo.GetPlatformMCPInventoryItemRow) string {
 		return "hosted"
 	case row.UnproxiedMcpServerID.Valid:
 		return "unproxied"
+	case row.BuiltinBackend.Valid:
+		return "built_in"
 	default:
 		return "legacy"
 	}

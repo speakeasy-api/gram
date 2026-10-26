@@ -1,4 +1,5 @@
 import { isKnownEnumValue } from "@/lib/enum";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import {
   invalidateMcpServerQueries,
@@ -588,13 +589,17 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
+  // Speakeasy manages a built-in server's visibility.
   const canWrite =
     hasScope("mcp:write") &&
-    isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
+    isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility) &&
+    !server.builtinBackend;
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
+  const followRenamedServer = useFollowRenamedServer();
   const update = useUpdateMcpServerMutation({
-    onSuccess: async (_data, variables) => {
+    onSuccess: async (updated, variables) => {
+      followRenamedServer(updated);
       await invalidateMcpServerQueries(queryClient);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(mcpServerVisibilityToast(next));

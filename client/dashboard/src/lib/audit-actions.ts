@@ -65,6 +65,10 @@ export const AUDIT_ACTIONS = [
   "billing_metadata:create_stripe_portal",
   "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
+  "catalog-promotion:archive",
+  "catalog-promotion:reject",
+  "catalog-promotion:restore",
+  "catalog-promotion:retry-docs",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -140,6 +144,7 @@ export const AUDIT_ACTIONS = [
   "mcp-endpoint:update",
   "mcp-server:create",
   "mcp-server:delete",
+  "mcp-server:promote-catalogue",
   "mcp-server:update",
   "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
@@ -555,6 +560,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
+    case "catalog-promotion:archive":
+      return "archived catalog promotion candidate";
+    case "catalog-promotion:reject":
+      return "rejected catalog promotion candidate";
+    case "catalog-promotion:restore":
+      return "restored catalog promotion candidate";
+    case "catalog-promotion:retry-docs":
+      return "retried setup documentation for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
@@ -672,6 +685,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "meta-mcp:remove_member":
       return "removed meta MCP member";
 
+    case "mcp-server:promote-catalogue":
+      return "published to the MCP catalog";
     case "mcp-server:create":
       return "created MCP server";
     case "mcp-server:update":

@@ -50,6 +50,7 @@ const DISCOVERED_2_1: DiscoveredOAuth = {
 
 const baseInput: Input = {
   discovered: null,
+  toolsetId: "toolset-1",
   toolsetSlug: "ts",
   toolsetName: "Toolset",
   activeOrganizationId: "org-1",
@@ -194,6 +195,7 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
     error: null,
     autoRegistering: false,
     result: null,
+    toolsetId: "",
     toolsetSlug: "",
     toolsetName: "",
     activeOrganizationId: "",

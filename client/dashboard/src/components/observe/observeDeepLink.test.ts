@@ -20,6 +20,7 @@ const REQUIRED_SHARED_PARAMS = [
   "status",
   "account_type",
   "client",
+  "agent",
   "range",
   "from",
   "to",

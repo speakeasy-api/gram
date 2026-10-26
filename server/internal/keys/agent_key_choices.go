@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -56,6 +57,11 @@ func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, organizatio
 				return oops.E(oops.CodeBadRequest, err, "agent keys use shared credentials; an agent reaches a person's own connection only when it acts for them")
 			}
 			return oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+		}
+		for _, row := range offered {
+			if row.AuthClientID == clientID && clientID.Valid && !authz.IsAgentKeyAuthClientType(row.ClientType.String) {
+				return oops.E(oops.CodeBadRequest, nil, "agent keys cannot use a pass-through credential; the agent gateway does not forward the caller's headers to its servers")
+			}
 		}
 
 		recorded, err := queries.RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{

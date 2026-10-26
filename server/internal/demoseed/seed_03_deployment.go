@@ -405,16 +405,18 @@ func (s *seeder) seedDeploymentWorkloads(ctx context.Context) error {
 			Issuer:                 "https://ci-identity.example.com",
 			JwksUri:                "https://ci-identity.example.com/.well-known/jwks.json",
 			AllowWildcardAdmission: false,
+			AllowAssertionReuse:    false,
 		},
 		{
 			ID:                     agentIssuer,
 			OrganizationID:         org,
 			Name:                   "Acme Agent Platform",
-			Description:            "Autonomous support and operations agents, one identity per agent deployment.",
+			Description:            "Autonomous support and operations agents, one identity per agent deployment, reusing short-lived projected tokens until rotation.",
 			Tags:                   []string{"agents", "build"},
 			Issuer:                 "https://agents.example.com",
 			JwksUri:                "https://agents.example.com/.well-known/jwks.json",
 			AllowWildcardAdmission: true,
+			AllowAssertionReuse:    true,
 		},
 	}
 	for _, p := range issuers {
