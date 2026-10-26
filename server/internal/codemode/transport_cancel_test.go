@@ -159,7 +159,7 @@ func (deadlineHost) Call(ctx context.Context, path string, _ json.RawMessage) (*
 const (
 	// deadlineBatches runs of deadlineBatch executions each end at their
 	// deadline. A stream timeout firing a moment before the context reported
-	// about one run in five as outcome_unknown, so 100 runs catch it.
+	// about two runs in three as outcome_unknown, so 100 runs catch it.
 	deadlineBatches = 25
 
 	// deadlineBatch is the stream capacity startedRunner reports.
