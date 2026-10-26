@@ -323,8 +323,12 @@ type SetIssuanceProfilePayload struct {
 	WorkloadSubject *string
 	// The profile's name.
 	Name string
-	// Every choice the profile should hold.
-	Choices      []*types.IssuanceProfileChoice
+	// Every choice the profile should hold. With mcp_server_id, the choice for
+	// that server alone, or none to remove it.
+	Choices []*types.IssuanceProfileChoice
+	// Limits the write to this MCP server: the profile's choices for other servers
+	// are kept as they are.
+	McpServerID  *string
 	SessionToken *string
 	ApikeyToken  *string
 }

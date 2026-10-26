@@ -121198,8 +121198,12 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/IssuanceProfileChoice'
-                    description: Every choice the profile should hold.
+                    description: Every choice the profile should hold. With mcp_server_id, the choice for that server alone, or none to remove it.
                     maxItems: 100
+                mcp_server_id:
+                    type: string
+                    description: 'Limits the write to this MCP server: the profile''s choices for other servers are kept as they are.'
+                    format: uuid
                 name:
                     type: string
                     description: The profile's name.

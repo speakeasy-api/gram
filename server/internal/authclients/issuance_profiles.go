@@ -73,11 +73,27 @@ func (s *Service) SetIssuanceProfile(ctx context.Context, payload *gen.SetIssuan
 	if name == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a profile needs a name").LogWarn(ctx, logger)
 	}
+	choices := func([]*types.IssuanceProfileChoice) []*types.IssuanceProfileChoice { return payload.Choices }
+	if payload.McpServerID != nil {
+		serverID := *payload.McpServerID
+		if len(payload.Choices) > 1 || (len(payload.Choices) == 1 && (payload.Choices[0] == nil || payload.Choices[0].McpServerID != serverID)) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "a write limited to one MCP server holds at most that server's choice").LogWarn(ctx, logger)
+		}
+		choices = func(current []*types.IssuanceProfileChoice) []*types.IssuanceProfileChoice {
+			next := make([]*types.IssuanceProfileChoice, 0, len(current)+1)
+			for _, choice := range current {
+				if choice.McpServerID != serverID {
+					next = append(next, choice)
+				}
+			}
+			return append(next, payload.Choices...)
+		}
+	}
 	profile, err := WriteIssuanceProfile(ctx, s.db, s.audit, IssuanceProfileWrite{
 		OrganizationID: authCtx.ActiveOrganizationID, ActorUserID: authCtx.UserID, ActorDisplayName: authCtx.Email,
 		UserSessionIssuerID: issuerID, ClientID: clientID, WorkloadIssuerID: workloadIssuerID,
 		WorkloadSubject: conv.PtrValOr(payload.WorkloadSubject, ""), Name: name,
-		Choices: func([]*types.IssuanceProfileChoice) []*types.IssuanceProfileChoice { return payload.Choices },
+		Choices: choices,
 	})
 	if err != nil {
 		if _, ok := errors.AsType[*oops.ShareableError](err); ok {
@@ -203,12 +219,9 @@ func WriteIssuanceProfile(ctx context.Context, db *pgxpool.Pool, auditLogger *au
 		if err != nil {
 			return nil, fmt.Errorf("update issuance profile: %w", err)
 		}
-		if err := queries.ClearIssuanceProfileChoices(ctx, repo.ClearIssuanceProfileChoicesParams{ProfileID: profile.ID, OrganizationID: organizationID}); err != nil {
-			return nil, fmt.Errorf("clear issuance profile choices: %w", err)
-		}
 	}
 
-	if err := recordProfileChoices(ctx, dbtx, organizationID, profile.ID, workload, w.Choices(current)); err != nil {
+	if err := recordProfileChoices(ctx, dbtx, organizationID, profile.ID, workload, current, w.Choices(current)); err != nil {
 		return nil, err
 	}
 
@@ -285,10 +298,24 @@ func (s *Service) DeleteIssuanceProfile(ctx context.Context, payload *gen.Delete
 	return nil
 }
 
-// recordProfileChoices validates and stores a profile's choices. A workload
-// profile represents nobody, so it may name shared credentials only.
-func recordProfileChoices(ctx context.Context, dbtx pgx.Tx, organizationID string, profileID uuid.UUID, sharedOnly bool, choices []*types.IssuanceProfileChoice) error {
+// recordProfileChoices moves a profile from its current choices to the given
+// ones. A choice it already holds unchanged is kept without being checked
+// again, so a stale choice on one server never blocks an edit to another;
+// every new or changed choice is validated. A workload profile represents
+// nobody, so it may name shared credentials only.
+func recordProfileChoices(ctx context.Context, dbtx pgx.Tx, organizationID string, profileID uuid.UUID, sharedOnly bool, current, choices []*types.IssuanceProfileChoice) error {
 	queries := upstreamclientsrepo.New(dbtx)
+	profileQueries := repo.New(dbtx)
+	held := make(map[string]string, len(current))
+	for _, choice := range current {
+		held[choice.McpServerID] = conv.PtrValOr(choice.AuthClientID, "")
+	}
+	clearServer := func(serverID uuid.UUID) error {
+		if err := profileQueries.ClearIssuanceProfileServerChoice(ctx, repo.ClearIssuanceProfileServerChoiceParams{ProfileID: profileID, McpServerID: serverID, OrganizationID: organizationID}); err != nil {
+			return fmt.Errorf("clear issuance profile choice: %w", err)
+		}
+		return nil
+	}
 	seen := make(map[uuid.UUID]bool, len(choices))
 	for _, choice := range choices {
 		if choice == nil {
@@ -305,6 +332,14 @@ func recordProfileChoices(ctx context.Context, dbtx pgx.Tx, organizationID strin
 		clientID, err := parseOptionalUUID(choice.AuthClientID)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "invalid auth client id")
+		}
+		if heldClient, ok := held[serverID.String()]; ok {
+			if clientID.Valid && heldClient == clientID.UUID.String() || !clientID.Valid && heldClient == "" {
+				continue
+			}
+			if err := clearServer(serverID); err != nil {
+				return err
+			}
 		}
 		offered, err := queries.ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{serverID}})
 		if err != nil {
@@ -326,6 +361,17 @@ func recordProfileChoices(ctx context.Context, dbtx pgx.Tx, organizationID strin
 		}
 		if recorded != 1 {
 			return oops.E(oops.CodeConflict, nil, "the server's credentials changed; review the choice and try again")
+		}
+	}
+	for server := range held {
+		serverID, err := uuid.Parse(server)
+		if err != nil {
+			return fmt.Errorf("parse held choice server: %w", err)
+		}
+		if !seen[serverID] {
+			if err := clearServer(serverID); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

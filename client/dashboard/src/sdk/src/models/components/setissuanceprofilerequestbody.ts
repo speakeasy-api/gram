@@ -12,9 +12,13 @@ import {
 
 export type SetIssuanceProfileRequestBody = {
   /**
-   * Every choice the profile should hold.
+   * Every choice the profile should hold. With mcp_server_id, the choice for that server alone, or none to remove it.
    */
   choices: Array<IssuanceProfileChoice>;
+  /**
+   * Limits the write to this MCP server: the profile's choices for other servers are kept as they are.
+   */
+  mcpServerId?: string | undefined;
   /**
    * The profile's name.
    */
@@ -40,6 +44,7 @@ export type SetIssuanceProfileRequestBody = {
 /** @internal */
 export type SetIssuanceProfileRequestBody$Outbound = {
   choices: Array<IssuanceProfileChoice$Outbound>;
+  mcp_server_id?: string | undefined;
   name: string;
   user_session_client_id?: string | undefined;
   user_session_issuer_id: string;
@@ -54,6 +59,7 @@ export const SetIssuanceProfileRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     choices: z.array(IssuanceProfileChoice$outboundSchema),
+    mcpServerId: z.optional(z.string()),
     name: z.string(),
     userSessionClientId: z.optional(z.string()),
     userSessionIssuerId: z.string(),
@@ -62,6 +68,7 @@ export const SetIssuanceProfileRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      mcpServerId: "mcp_server_id",
       userSessionClientId: "user_session_client_id",
       userSessionIssuerId: "user_session_issuer_id",
       workloadIssuerId: "workload_issuer_id",

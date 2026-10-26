@@ -66,6 +66,28 @@ func (q *Queries) ClearIssuanceProfileChoices(ctx context.Context, arg ClearIssu
 	return err
 }
 
+const clearIssuanceProfileServerChoice = `-- name: ClearIssuanceProfileServerChoice :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE credential_kind = 'issuance_profile'
+  AND credential_id = $1
+  AND mcp_server_id = $2
+  AND organization_id = $3
+  AND deleted IS FALSE
+`
+
+type ClearIssuanceProfileServerChoiceParams struct {
+	ProfileID      uuid.UUID
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ClearIssuanceProfileServerChoice(ctx context.Context, arg ClearIssuanceProfileServerChoiceParams) error {
+	_, err := q.db.Exec(ctx, clearIssuanceProfileServerChoice, arg.ProfileID, arg.McpServerID, arg.OrganizationID)
+	return err
+}
+
 const createAuthClient = `-- name: CreateAuthClient :one
 INSERT INTO mcp_auth_clients (
   organization_id,

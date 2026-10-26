@@ -89,7 +89,7 @@ describe("HeadlessCallersSection", () => {
     expect(screen.getByText("Shared token")).toBeTruthy();
   });
 
-  it("removes only this server's choice and keeps the others", () => {
+  it("removes only this server's choice, leaving the others to the server", () => {
     mocks.profiles = [
       {
         id: "p-1",
@@ -116,7 +116,8 @@ describe("HeadlessCallersSection", () => {
         setIssuanceProfileRequestBody: expect.objectContaining({
           userSessionIssuerId: "usi-1",
           userSessionClientId: "usc-1",
-          choices: [{ mcpServerId: "server-2", authClientId: "ac-other" }],
+          mcpServerId: "server-1",
+          choices: [],
         }),
       },
     });
