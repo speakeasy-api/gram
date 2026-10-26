@@ -2295,3 +2295,10 @@ UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
 WHERE organization_id = @organization_id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND id = @id AND deleted IS FALSE;
+
+-- name: LockMCPServerForUpdateFixture :one
+-- Test-only synchronization: holds an MCP server's row lock.
+SELECT id
+FROM mcp_servers
+WHERE id = @id
+FOR UPDATE;

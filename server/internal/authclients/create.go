@@ -1,10 +1,12 @@
 package authclients
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -85,6 +87,9 @@ func (s *Service) CreateAuthClient(ctx context.Context, payload *gen.CreateAuthC
 			serverIDs = append(serverIDs, id)
 		}
 	}
+	// Concurrent creates lock the same servers in one order, so they wait for
+	// each other rather than deadlock.
+	slices.SortFunc(serverIDs, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
 
 	var wantOwner string
 	switch payload.ClientType {

@@ -1038,6 +1038,11 @@ type issuerGateAuthentication struct {
 	// endpoint when the resolver is authoritative for the organization; nil
 	// keeps the upstream client choice.
 	authClient *authClientResolution
+
+	// chainingAuthClient is the typed auth client whose registration the
+	// upstream client choice serves because it may chain an identity; the
+	// request sends its headers in place of the server's.
+	chainingAuthClient *authClientResolution
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1172,6 +1177,7 @@ func (s *Service) authenticateIssuerGate(
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
 		authClient:             nil,
+		chainingAuthClient:     nil,
 	}, toolSelection, nil
 }
 
