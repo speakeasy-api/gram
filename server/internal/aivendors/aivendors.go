@@ -93,6 +93,11 @@ type Product struct {
 	// only — self-reported, so any client can claim any name.
 	ClientInfoNames []string
 
+	// Surfaces are the other names producers report for the product: hook
+	// sources and the surfaces telemetry dialects state, each with the client
+	// the name implies. Attribution only, like ClientInfoNames.
+	Surfaces []Surface
+
 	// Documents are the CIMD documents it publishes.
 	Documents []Document
 }
@@ -209,6 +214,7 @@ func (p Product) clone() Product {
 		ProcessNames: slices.Clone(p.Signatures.ProcessNames),
 	}
 	out.ClientInfoNames = slices.Clone(p.ClientInfoNames)
+	out.Surfaces = slices.Clone(p.Surfaces)
 	out.Documents = slices.Clone(p.Documents)
 	return out
 }
