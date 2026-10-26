@@ -1621,7 +1621,7 @@ func newStartCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, siteURL.String(), orgHosts, auditLogger, svixClient)
+			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chReadDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, siteURL.String(), orgHosts, auditLogger, svixClient)
 			organizationsService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			organizations.Attach(mux, organizationsService)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
@@ -1711,7 +1711,7 @@ func newStartCommand() *cli.Command {
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
 			sigintSvc := sigint.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures)
 			sigint.Attach(mux, sigintSvc)
-			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))
+			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chReadDB)))
 			// The manual trigger bypasses the write-throttled signaler on purpose:
 			// an admin pressing "run now" wants the coordinator woken immediately,
 			// not coalesced into the chat-write cooldown.
@@ -1937,7 +1937,7 @@ func newStartCommand() *cli.Command {
 				TemporalEnv:               temporalEnv,
 				ProjectCore:               projects.NewCore(logger.With(attr.SlogComponent("projects")), auditLogger, temporalEnv, pluginsGitHub != nil),
 				Skills:                    skillsService,
-				SkillInsights:             telemetryrepo.New(chDB),
+				SkillInsights:             telemetryrepo.New(chReadDB),
 				RiskPolicyApprovals:       mcpApprovalService,
 				RiskPolicySignaler:        riskSignaler,
 				RiskPolicyCache:           shadowMCPClient,
@@ -1947,20 +1947,20 @@ func newStartCommand() *cli.Command {
 				RiskFindingList:           riskFindings,
 				ChatRiskFindings:          riskFindings,
 				RiskFalsePositiveFindings: riskFindings,
-				UserSearch:                telemetryrepo.New(chDB),
-				Telemetry:                 telemetryrepo.New(chDB),
-				ToolUsage:                 telemetryrepo.New(chDB),
-				ToolCallSearch:            telemetryrepo.New(chDB),
-				TelemetryDrilldown:        telemetryrepo.New(chDB),
+				UserSearch:                telemetryrepo.New(chReadDB),
+				Telemetry:                 telemetryrepo.New(chReadDB),
+				ToolUsage:                 telemetryrepo.New(chReadDB),
+				ToolCallSearch:            telemetryrepo.New(chReadDB),
+				TelemetryDrilldown:        telemetryrepo.New(chReadDB),
 				Analytics:                 analyticsSvc.Engine(),
 				ConversationAccess:        chatService,
 				Widgets:                   widgetsSvc,
 				Dashboards:                dashboardsSvc,
 				WorkflowRun:               posthogClient,
 				CanonicalIdentity:         telemSvc,
-				RecentToolCalls:           telemetryrepo.New(chDB),
-				NetworkTraffic:            telemetryrepo.New(chDB),
-				EventFeed:                 otelchrepo.New(chDB),
+				RecentToolCalls:           telemetryrepo.New(chReadDB),
+				NetworkTraffic:            telemetryrepo.New(chReadDB),
+				EventFeed:                 otelchrepo.New(chReadDB),
 				LogsEnabled:               platformmcp.FeatureChecker(logsEnabled),
 				ShadowInventory:           accessService,
 				ShadowReview:              mcpApprovalService,
@@ -2110,7 +2110,7 @@ func newStartCommand() *cli.Command {
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService, c.String(usersessions.JWTSigningKeyFlag))...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDeploymentsTools(deploymentsService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantSkillsTools(skillsService, telemetryrepo.New(chDB))...)
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantSkillsTools(skillsService, telemetryrepo.New(chReadDB))...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantPluginsTools(pluginsSvc)...)
 			// One-off fetches on a cold cache; a pooled client would only hold
 			// idle connections to the marketing site. Bound the whole request
@@ -2171,7 +2171,7 @@ func newStartCommand() *cli.Command {
 					}
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
+						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator), productFeatures, tm.NewMCPServerHealth(db, chReadDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 						CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 						GuardianPolicy:                 guardianPolicy,
 						TunnelHTTPClient:               tunnelHTTPClient,
