@@ -45,7 +45,10 @@ func TestStreamEndReasonPrefersCleanEOFOverDrain(t *testing.T) {
 	_, cancel := context.WithCancel(t.Context())
 	sr := newStreamReader(io.NopCloser(strings.NewReader("")), time.Hour, cancel)
 	defer func() { _ = sr.Close() }()
-	// The drain marked the stream after the upstream had already reached EOF.
+	// The upstream reaches EOF, and the drain marks the stream before the
+	// relay has finished classifying it.
+	_, err := sr.Read(make([]byte, 1))
+	require.ErrorIs(t, err, io.EOF)
 	sr.drained.Store(true)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
