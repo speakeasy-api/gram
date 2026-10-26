@@ -90,11 +90,11 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 		}
 	}
 	if err != nil {
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomePublishError, scanners.AsyncScanEngineSelectionUpstreamSelected)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomePublishError)
 		return err
 	}
 
-	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomeOK, scanners.AsyncScanEngineSelectionUpstreamSelected)
+	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomeOK)
 	return nil
 }
 

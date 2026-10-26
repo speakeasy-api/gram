@@ -45,8 +45,8 @@ func CanonicalExecutionID(id string) string {
 	return id
 }
 
-// listResultsByProjectFromClickHouse serves the ListRiskResults page, project-wide
-// or chat-scoped, from the ClickHouse risk_findings table. Rows come back pre-redacted (the store never
+// listResultsByProjectFromClickHouse serves the ListRiskResults page,
+// project-wide or chat-scoped, from the ClickHouse risk_findings table. Rows come back pre-redacted (the store never
 // holds raw match content), so Match and Spans are always nil and
 // MatchRedacted carries the ingest-time display string.
 // Chat titles and tool-call block ids are enriched from Postgres per page

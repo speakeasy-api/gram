@@ -1373,33 +1373,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		}
 	}
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	for _, r := range raw.Results {
-		// ClickHouse-served rows are already store-redacted (Match nil,
-		// MatchRedacted stamped at ingest); re-deriving from a nil Match would
-		// clobber the real fingerprint with `<redacted len=0>`.
-		if r.Match == nil && r.MatchRedacted != nil {
-			continue
-		}
-		redactResultMatchInPlace(r, authCtx.ActiveOrganizationID)
-	}
 	return raw, nil
-}
-
-// redactResultMatchInPlace clears a result's raw match/spans and populates
-// match_redacted in their place, reusing the same fingerprint format (and
-// shadow_mcp/account_identity passthrough carve-out) as
-// redactMatch/redactRiskResult below.
-// Spans aren't given a redacted counterpart here because nothing on this
-// (non-agent) redacted path renders them.
-func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
-	matchRedacted := redactMatch(r.Source, conv.PtrValOrEmpty(r.RuleID, ""), r.Match, orgID)
-	r.MatchRedacted = &matchRedacted
-	r.Match = nil
-	r.Spans = nil
 }
 
 func parseOptionalMCPServerID(raw *string) (string, error) {
