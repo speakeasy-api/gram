@@ -390,8 +390,37 @@ if ! cache_valid; then
     python3 -c $'import sys, zipfile\ndata = zipfile.ZipFile(sys.argv[1]).read(sys.argv[2])\nwith open(sys.argv[3], "wb") as out: out.write(data)' "$archive" "$binary_name" "$extracted" || install_failure 'archive extraction failed'
   elif command -v bsdtar >/dev/null 2>&1; then
     bsdtar -xOf "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
+  elif command -v node >/dev/null 2>&1; then
+    # Images built to run Node apps, OpenClaw's among them, always carry node.
+    # Node has no unzip API, so this reads the central directory by hand and
+    # inflates the one entry. ZIP64, a missing entry, or a method other than
+    # store or deflate exits non-zero.
+    node -e '
+      const fs = require("fs");
+      const zlib = require("zlib");
+      const [, archive, name, out] = process.argv;
+      const zip = fs.readFileSync(archive);
+      const end = zip.lastIndexOf("PK\x05\x06");
+      if (end < 0) process.exit(1);
+      let entry = zip.readUInt32LE(end + 16);
+      if (entry === 0xffffffff) process.exit(1);
+      while (zip.readUInt32LE(entry) === 0x02014b50) {
+        const nameEnd = entry + 46 + zip.readUInt16LE(entry + 28);
+        if (zip.toString("utf8", entry + 46, nameEnd) === name) break;
+        entry = nameEnd + zip.readUInt16LE(entry + 30) + zip.readUInt16LE(entry + 32);
+      }
+      if (zip.readUInt32LE(entry) !== 0x02014b50) process.exit(1);
+      const method = zip.readUInt16LE(entry + 10);
+      const size = zip.readUInt32LE(entry + 20);
+      const local = zip.readUInt32LE(entry + 42);
+      if (method !== 0 && method !== 8) process.exit(1);
+      if (size === 0xffffffff || local === 0xffffffff || zip.readUInt32LE(local) !== 0x04034b50) process.exit(1);
+      const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+      const data = zip.subarray(start, start + size);
+      fs.writeFileSync(out, method === 8 ? zlib.inflateRawSync(data) : data);
+    ' "$archive" "$binary_name" "$extracted" || install_failure 'archive extraction failed'
   else
-    install_failure 'unzip, busybox, python3 or bsdtar is required for first install'
+    install_failure 'unzip, busybox, python3, bsdtar or node is required for first install'
   fi
   chmod 755 "$extracted" || install_failure 'could not mark the binary executable'
   mkdir -p "$install_dir" || install_failure 'could not create the install directory'
