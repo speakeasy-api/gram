@@ -59,7 +59,7 @@ export type GetMetaMcpServerUsageQueryError =
  * getMetaMcpServerUsage telemetry
  *
  * @remarks
- * Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
+ * Discovery versus execution across every discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
  */
 export function useGetMetaMcpServerUsage(
   request: GetMetaMcpServerUsageRequest,
@@ -88,7 +88,7 @@ export function useGetMetaMcpServerUsage(
  * getMetaMcpServerUsage telemetry
  *
  * @remarks
- * Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
+ * Discovery versus execution across every discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
  */
 export function useGetMetaMcpServerUsageSuspense(
   request: GetMetaMcpServerUsageRequest,

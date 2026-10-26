@@ -318,7 +318,7 @@ export class Telemetry extends ClientSDK {
    * getMetaMcpServerUsage telemetry
    *
    * @remarks
-   * Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
+   * Discovery versus execution across every discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.
    */
   async getMetaMcpServerUsage(
     request: GetMetaMcpServerUsageRequest,
