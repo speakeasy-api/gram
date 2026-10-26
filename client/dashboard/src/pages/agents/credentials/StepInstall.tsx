@@ -457,7 +457,7 @@ export function StepInstall({
                 </div>
                 <div className="space-y-2">
                   <CodeBlock
-                    value="speakeasyd sync --once"
+                    value="speakeasy sync"
                     label="3 · Configure the tools — as the account that runs them"
                     language="shell"
                   />

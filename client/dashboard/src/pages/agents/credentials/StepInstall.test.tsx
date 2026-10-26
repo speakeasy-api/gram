@@ -73,7 +73,7 @@ describe("Device Agent tab", () => {
       await blockText(
         "3 · Configure the tools — as the account that runs them",
       ),
-    ).toContain("speakeasyd sync --once");
+    ).toBe("speakeasy sync");
     expect(screen.getByText(/Plugin sync and hooks are not/)).toBeTruthy();
     expect(
       screen.getByText(/written into those tools' MCP settings/),
