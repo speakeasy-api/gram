@@ -1357,25 +1357,10 @@ func encodeRiskResultsCursor(c riskResultsCursor) string {
 	return c.MessageCreatedAt.UTC().Format(time.RFC3339Nano) + "|" + c.ID.String()
 }
 
-func cursorToParams(c *riskResultsCursor) (pgtype.Timestamptz, uuid.NullUUID) {
-	if c == nil {
-		return pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return pgtype.Timestamptz{Time: c.MessageCreatedAt, InfinityModifier: pgtype.Finite, Valid: true}, uuid.NullUUID{UUID: c.ID, Valid: true}
-}
-
-// ListRiskResults serves the dashboard's default risk results listing. It
-// always requires org:admin, but only returns raw `match`/`spans` content
-// when the request is scoped to a single chat_id AND the caller separately
-// holds chat:read for that exact chat — the same condition that already lets
-// them load the chat's full transcript (which contains the same secret
-// embedded in message content) via chat.LoadChat. That is a soft check
-// (FindMatched, not Require): missing chat:read doesn't fail the request, it
-// just falls back to a redacted response. Impersonation also disables the raw
-// content bypass regardless of grants, except in the fabricated demo org.
-// Every other call — notably the
-// Risk Events page, which lists across many chats with no single chat_id
-// filter — gets match_redacted instead of the raw secret.
+// ListRiskResults serves the dashboard's risk results listing. It requires
+// org:admin and never returns raw `match`/`spans` content: ClickHouse rows
+// carry only the ingest-time match_redacted, and the plaintext is revealed
+// per finding through UnmaskRiskResult.
 func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResultsPayload) (*gen.ListRiskResultsResult, error) {
 	raw, err := s.listRiskResultsRaw(ctx, payload)
 	if err != nil {
@@ -1388,40 +1373,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		}
 	}
 
-	if payload.ChatID != nil && *payload.ChatID != "" && authz.CheckSensitiveContentAccess(ctx) == nil {
-		matched, err := s.authz.FindMatched(ctx, []authz.Check{authz.ChatReadCheck(*payload.ChatID)})
-		if err == nil && len(matched) == 1 && matched[0] {
-			return raw, nil
-		}
-	}
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	for _, r := range raw.Results {
-		// ClickHouse-served rows are already store-redacted (Match nil,
-		// MatchRedacted stamped at ingest); re-deriving from a nil Match would
-		// clobber the real fingerprint with `<redacted len=0>`.
-		if r.Match == nil && r.MatchRedacted != nil {
-			continue
-		}
-		redactResultMatchInPlace(r, authCtx.ActiveOrganizationID)
-	}
 	return raw, nil
-}
-
-// redactResultMatchInPlace clears a result's raw match/spans and populates
-// match_redacted in their place, reusing the same fingerprint format (and
-// shadow_mcp/account_identity passthrough carve-out) as
-// redactMatch/redactRiskResult below.
-// Spans aren't given a redacted counterpart here because nothing on this
-// (non-agent) redacted path renders them.
-func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
-	matchRedacted := redactMatch(r.Source, conv.PtrValOrEmpty(r.RuleID, ""), r.Match, orgID)
-	r.MatchRedacted = &matchRedacted
-	r.Match = nil
-	r.Spans = nil
 }
 
 func parseOptionalMCPServerID(raw *string) (string, error) {
@@ -1433,19 +1385,6 @@ func parseOptionalMCPServerID(raw *string) (string, error) {
 		return "", oops.E(oops.CodeInvalid, err, "invalid MCP server ID")
 	}
 	return id.String(), nil
-}
-
-func (s *Service) riskFindingsClickHouseEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	projectSlug := ""
-	if authCtx.ProjectSlug != nil {
-		projectSlug = *authCtx.ProjectSlug
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, projectSlug))
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate risk findings ClickHouse cutover", attr.SlogError(err))
-		return false
-	}
-	return evaluation == feature.EvaluationEnabled
 }
 
 // listRiskResultsRaw is the shared, always-unredacted fetch behind both
@@ -1494,14 +1433,6 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.E(oops.CodeInvalid, nil, "invalid execution ID")
 	}
 
-	clickHouseCutover := s.riskFindingsClickHouseEnabled(ctx, authCtx)
-	if chatID != "" && mcpServerID == "" && !resultID.Valid && executionID == "" && !clickHouseCutover {
-		totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
-		if err != nil {
-			totalCount = 0
-		}
-		return s.listResultsByChat(ctx, *authCtx.ProjectID, chatID, cursor, pageSize, totalCount)
-	}
 	// A policy filter narrows the pushdown alongside the other filters, so
 	// combinations like policy_id + rule_id are honored.
 	var policyIDInput *string
@@ -1557,7 +1488,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if toTime.Valid {
 		to = &toTime.Time
 	}
-	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to, chatID != "" && clickHouseCutover)
+	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1802,44 +1733,7 @@ func (s *Service) listRiskResultsByChatRaw(ctx context.Context, payload *gen.Lis
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
-	pageSize := resolvePageSize(payload.Limit)
-	if s.flags != nil {
-		groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-		cutover, flagErr := s.flags.IsFlagEnabled(ctx, feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, groups)
-		if flagErr != nil {
-			s.logger.WarnContext(ctx, "risk findings clickhouse cutover flag check failed; using postgres", attr.SlogError(flagErr))
-		} else if cutover {
-			return s.listRiskResultsByChatFromClickHouse(ctx, authCtx, cursor, pageSize)
-		}
-	}
-
-	rows, err := s.repo.ListRiskResultsGroupedByChat(ctx, repo.ListRiskResultsGroupedByChatParams{
-		ProjectID: *authCtx.ProjectID,
-		Cursor:    cursor,
-		PageLimit: conv.SafeInt32(pageSize + 1),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").LogError(ctx, s.logger)
-	}
-
-	chats := make([]*types.RiskChatSummary, 0, len(rows))
-	for _, row := range rows {
-		chats = append(chats, &types.RiskChatSummary{
-			ChatID:         row.ChatID.String(),
-			ChatTitle:      conv.FromPGText[string](row.ChatTitle),
-			UserID:         conv.FromPGText[string](row.ChatUserID),
-			FindingsCount:  row.FindingsCount,
-			LatestDetected: row.LatestDetected.Time.Format(time.RFC3339),
-		})
-	}
-
-	var nextCursor *string
-	if len(chats) > pageSize {
-		nextCursor = &chats[pageSize].ChatID
-		chats = chats[:pageSize]
-	}
-
-	return &gen.ListRiskResultsByChatResult{Chats: chats, NextCursor: nextCursor}, nil
+	return s.listRiskResultsByChatFromClickHouse(ctx, authCtx, cursor, resolvePageSize(payload.Limit))
 }
 
 func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverviewPayload) (*gen.RiskOverviewResult, error) {
@@ -1951,38 +1845,6 @@ func (s *Service) paginateResults(results []*types.RiskResult, extraRow *riskRes
 		results = results[:pageSize]
 	}
 	return &gen.ListRiskResultsResult{Results: results, TotalCount: totalCount, NextCursor: nextCursor}
-}
-
-func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, cursor *riskResultsCursor, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
-	chatID, err := uuid.Parse(rawChatID)
-	if err != nil {
-		return nil, oops.C(oops.CodeInvalid)
-	}
-	cursorCreatedAt, cursorID := cursorToParams(cursor)
-	rows, err := s.repo.ListRiskResultsByChatFound(ctx, repo.ListRiskResultsByChatFoundParams{
-		ChatID:                 chatID,
-		ProjectID:              projectID,
-		CursorMessageCreatedAt: cursorCreatedAt,
-		CursorID:               cursorID,
-		PageLimit:              conv.SafeInt32(pageSize + 1),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").LogError(ctx, s.logger)
-	}
-	results := make([]*types.RiskResult, 0, len(rows))
-	var nextCursor *riskResultsCursor
-	for i, row := range rows {
-		cid := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
-		if i == pageSize {
-			// Cursor from the LAST RETURNED row (not this extra row): the
-			// next-page predicate is a strict (message_created_at, id) <, so a
-			// cursor pointing at the extra row would skip it entirely.
-			last := rows[pageSize-1]
-			nextCursor = &riskResultsCursor{MessageCreatedAt: last.MessageCreatedAt.Time, ID: last.ID}
-		}
-	}
-	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
 func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskCategoriesPayload) (*gen.RiskCategoriesResult, error) {
@@ -4161,98 +4023,4 @@ func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextval
 		return false
 	}
 	return on
-}
-
-func foundRowToResult(
-	id, policyID uuid.UUID, policyVersion int64, blockID uuid.UUID, chatMessageID, chatContentPartID uuid.NullUUID, chatID *string, chatTitle, chatUserID pgtype.Text,
-	source string, ruleID, description, match pgtype.Text,
-	startPos, endPos pgtype.Int4,
-	confidence pgtype.Float8, tags []string, spans []byte, createdAt pgtype.Timestamptz,
-) *types.RiskResult {
-	return &types.RiskResult{
-		ID:                 id.String(),
-		PolicyID:           policyID.String(),
-		PolicyVersion:      policyVersion,
-		ExecutionID:        nil,
-		McpServerID:        nil,
-		MetaMcpServerID:    nil,
-		ToolsetID:          nil,
-		ToolName:           nil,
-		Phase:              nil,
-		MediationSurface:   nil,
-		McpMethod:          nil,
-		PrincipalKind:      nil,
-		IdentityStamped:    nil,
-		EnforcementOutcome: nil,
-		BlockID:            blockIDPtr(blockID),
-		ChatMessageID:      nullUUIDStringPtr(chatMessageID),
-		ChatContentPartID:  nullUUIDStringPtr(chatContentPartID),
-		ChatID:             chatID,
-		ChatTitle:          conv.FromPGText[string](chatTitle),
-		UserID:             conv.FromPGText[string](chatUserID),
-		Source:             source,
-		RuleID:             conv.FromPGText[string](ruleID),
-		Description:        conv.FromPGText[string](description),
-		Match:              conv.FromPGText[string](match),
-		StartPos:           conv.PtrInt32ToInt(conv.FromPGInt4(startPos)),
-		EndPos:             conv.PtrInt32ToInt(conv.FromPGInt4(endPos)),
-		Confidence:         conv.FromPGFloat8(confidence),
-		Tags:               tags,
-		Spans:              parseRiskSpans(spans),
-		// MatchRedacted is populated later by redactResultMatchInPlace, only
-		// for callers ListRiskResults decides shouldn't see raw match/spans.
-		MatchRedacted: nil,
-		CreatedAt:     createdAt.Time.Format(time.RFC3339),
-		// The PG listings behind this mapper only return open findings, so the
-		// suppression fields (and the deprecated FalsePositiveAt mirror) stay
-		// unset; the suppressed listing populates them from its own rows.
-		FalsePositiveAt:  nil,
-		SuppressedAt:     nil,
-		SuppressedReason: nil,
-		SuppressedDetail: nil,
-		ExclusionID:      nil,
-	}
-}
-
-func nullUUIDStringPtr(id uuid.NullUUID) *string {
-	if !id.Valid {
-		return nil
-	}
-	value := id.UUID.String()
-	return &value
-}
-
-// blockIDPtr maps the COALESCE'd block id to an optional string: a nil UUID
-// means the finding's message has no durable tool call block.
-func blockIDPtr(blockID uuid.UUID) *string {
-	if blockID == uuid.Nil {
-		return nil
-	}
-	return conv.PtrEmpty(blockID.String())
-}
-
-// parseRiskSpans decodes the risk_results.spans JSONB column into the API span
-// type. A nil/empty/invalid column yields nil so legacy rows simply have no
-// spans (the top-level match still carries the primary span).
-func parseRiskSpans(raw []byte) []*types.RiskSpan {
-	if len(raw) == 0 {
-		return nil
-	}
-	var spans []ra.FindingSpan
-	if err := json.Unmarshal(raw, &spans); err != nil {
-		return nil
-	}
-	out := make([]*types.RiskSpan, 0, len(spans))
-	for _, s := range spans {
-		start := s.StartPos
-		end := s.EndPos
-		out = append(out, &types.RiskSpan{
-			Match:    s.Match,
-			Field:    conv.PtrEmpty(s.Field),
-			Path:     conv.PtrEmpty(s.Path),
-			StartPos: &start,
-			EndPos:   &end,
-		})
-	}
-	return out
 }
