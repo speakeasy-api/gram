@@ -1,11 +1,14 @@
 package chrepo
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 )
 
 // RiskOverviewWindowParams scopes every overview read to one tenant and a
@@ -231,6 +234,87 @@ func (q *Queries) ListRiskOverviewTopUsers(ctx context.Context, p RiskOverviewWi
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read risk overview top users: %w", err)
+	}
+
+	return out, nil
+}
+
+// RiskOverviewCategoryCount is one category's finding count.
+type RiskOverviewCategoryCount struct {
+	// Category is the canonical category from internal/risk/categories.
+	Category string
+
+	// Findings is the number of live findings in the category.
+	Findings uint64
+}
+
+// ListRiskUserCategoryBreakdown returns per-category finding counts for one
+// external user.
+func (q *Queries) ListRiskUserCategoryBreakdown(ctx context.Context, p RiskOverviewWindowParams, externalUserID string, policyIDs []string) ([]RiskOverviewCategoryCount, error) {
+	ruleRows, err := q.ListRiskUserRuleBreakdown(ctx, p, externalUserID, policyIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list risk user rules for category breakdown: %w", err)
+	}
+
+	counts := make(map[categories.Category]uint64, len(ruleRows))
+	for _, row := range ruleRows {
+		counts[categories.Classify(row.Source, row.RuleID)] += row.Findings
+	}
+
+	out := make([]RiskOverviewCategoryCount, 0, len(counts))
+	for category, findings := range counts {
+		out = append(out, RiskOverviewCategoryCount{
+			Category: string(category),
+			Findings: findings,
+		})
+	}
+	slices.SortFunc(out, func(a, b RiskOverviewCategoryCount) int {
+		if a.Findings != b.Findings {
+			return cmp.Compare(b.Findings, a.Findings)
+		}
+		return cmp.Compare(a.Category, b.Category)
+	})
+
+	return out, nil
+}
+
+// ListRiskUserRuleBreakdown returns per-(rule_id, source) finding counts for
+// one external user.
+func (q *Queries) ListRiskUserRuleBreakdown(ctx context.Context, p RiskOverviewWindowParams, externalUserID string, policyIDs []string) ([]RiskOverviewRuleCount, error) {
+	if len(policyIDs) == 0 {
+		return nil, errEmptyPolicyIDs
+	}
+
+	query, args, err := overviewFindings(p,
+		"rule_id",
+		"source",
+		"uniqExact(id) AS findings",
+	).
+		Where("external_user_id = ?", externalUserID).
+		Where(squirrel.Eq{"risk_policy_id": policyIDs}).
+		GroupBy("rule_id", "source").
+		OrderBy("findings DESC", "rule_id ASC", "source ASC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build risk user rule breakdown query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query risk user rule breakdown: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []RiskOverviewRuleCount
+	for rows.Next() {
+		var row RiskOverviewRuleCount
+		if err := rows.Scan(&row.RuleID, &row.Source, &row.Findings); err != nil {
+			return nil, fmt.Errorf("scan risk user rule breakdown row: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read risk user rule breakdown: %w", err)
 	}
 
 	return out, nil
