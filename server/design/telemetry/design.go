@@ -3071,7 +3071,7 @@ var MetaMcpMemberUsage = Type("MetaMcpMemberUsage", func() {
 })
 
 var MetaMcpDiscoveryMode = Type("MetaMcpDiscoveryMode", String, func() {
-	Description("The discovery mode of the gateway connection that served a call. unrecorded marks member calls written before gateway calls recorded their connection's mode.")
+	Description("The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection's mode, and modes a newer release recorded.")
 	Enum("progressive", "direct", "code_mode", "unrecorded")
 })
 

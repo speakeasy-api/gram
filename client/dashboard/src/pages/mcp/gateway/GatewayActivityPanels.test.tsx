@@ -75,12 +75,16 @@ describe("ExecutionShareChart", () => {
   };
 
   it("explains calls that came without a session instead of an empty chart", () => {
-    render(<ExecutionShareChart {...props} hasCalls />);
+    render(
+      <ExecutionShareChart {...props} callsWithoutSession={12} hasCalls />,
+    );
     expect(screen.getByText(/sent no session with these calls/)).toBeTruthy();
   });
 
   it("says the range has no calls when it has none", () => {
     render(<ExecutionShareChart {...props} hasCalls={false} />);
-    expect(screen.getByText("No calls in the selected range")).toBeTruthy();
+    expect(
+      screen.getByText("No discovery or tool calls in the selected range"),
+    ).toBeTruthy();
   });
 });

@@ -111920,7 +111920,7 @@ components:
                     format: int64
                 mode:
                     type: string
-                    description: The discovery mode of the gateway connection that served a call. unrecorded marks member calls written before gateway calls recorded their connection's mode.
+                    description: 'The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection''s mode, and modes a newer release recorded.'
                     enum:
                         - progressive
                         - direct
@@ -111967,7 +111967,7 @@ components:
                     format: int64
                 mode:
                     type: string
-                    description: The discovery mode of the gateway connection that served a call. unrecorded marks member calls written before gateway calls recorded their connection's mode.
+                    description: 'The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection''s mode, and modes a newer release recorded.'
                     enum:
                         - progressive
                         - direct
@@ -111993,7 +111993,7 @@ components:
                     format: int64
                 mode:
                     type: string
-                    description: The discovery mode of the gateway connection that served a call. unrecorded marks member calls written before gateway calls recorded their connection's mode.
+                    description: 'The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection''s mode, and modes a newer release recorded.'
                     enum:
                         - progressive
                         - direct

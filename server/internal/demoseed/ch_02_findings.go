@@ -800,6 +800,10 @@ var (
 	chfGatewayToolsets = map[string]string{"support": "acme-support-tools", "ops": "acme-ops"}
 )
 
+// chfGatewaySessionDays spans gateway sessions over two weeks, so a seven-day
+// Activity range has a full previous week to compare against.
+const chfGatewaySessionDays = 14
+
 // chfGatewayMode is the discovery mode a gateway connection was served in, as
 // the gateway stamps it on every row.
 type chfGatewayMode string
@@ -867,10 +871,10 @@ func (s *seeder) chfGatewaySessions(ctx context.Context, ch driver.Conn) error {
 		case 4:
 			mode = chfGatewayDirect
 		}
-		sessions = append(sessions, chfGatewaySession{gateway: agentGateway, mode: mode, members: chfGatewayMembers[:], key: "agw-" + strconv.Itoa(n), day: n % 12})
+		sessions = append(sessions, chfGatewaySession{gateway: agentGateway, mode: mode, members: chfGatewayMembers[:], key: "agw-" + strconv.Itoa(n), day: n % chfGatewaySessionDays})
 	}
 	for n := range 6 {
-		sessions = append(sessions, chfGatewaySession{gateway: codeGateway, mode: chfGatewayCode, members: []string{"support", "support", "ops"}, key: "cgw-" + strconv.Itoa(n), day: (n * 2) % 12})
+		sessions = append(sessions, chfGatewaySession{gateway: codeGateway, mode: chfGatewayCode, members: []string{"support", "support", "ops"}, key: "cgw-" + strconv.Itoa(n), day: (n * 2) % chfGatewaySessionDays})
 	}
 
 	rows := make([]chfTelemetryRow, 0, 600)

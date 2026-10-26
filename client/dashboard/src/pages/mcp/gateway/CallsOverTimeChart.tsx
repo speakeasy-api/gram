@@ -153,8 +153,8 @@ export function CallsOverTimeChart({
               datasets={datasets}
               tooltipAfterBody={runsLine}
               onRangeSelect={onRangeSelect}
+              // The legend below stands in for the chart's own, expanded too.
               height={isExpanded ? 420 : 240}
-              expanded={isExpanded}
             />
             <SeriesLegend
               items={[

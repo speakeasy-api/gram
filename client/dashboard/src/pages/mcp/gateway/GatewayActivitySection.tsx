@@ -172,6 +172,11 @@ export function GatewayActivitySection({
     [usage.data, memberRows],
   );
   const hasCalls = phases ? totalCalls(phases) > 0 : false;
+  // Code runs alone (say, ones the runtime refused) hold no lookups or tool
+  // calls to order, so the session chart must not blame missing sessions.
+  const hasLookupsOrToolCalls = modes.some(
+    (mode) => mode.discoveryCalls + mode.executionCalls > 0,
+  );
 
   let body: JSX.Element;
   if (usage.isLogsDisabled) {
@@ -205,7 +210,7 @@ export function GatewayActivitySection({
         <ExecutionShareChart
           lines={lines}
           callsWithoutSession={phases?.callsWithoutSession ?? 0}
-          hasCalls={hasCalls}
+          hasCalls={hasLookupsOrToolCalls}
           loading={loading}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}

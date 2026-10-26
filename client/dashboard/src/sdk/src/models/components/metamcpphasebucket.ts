@@ -11,7 +11,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * The discovery mode of the gateway connection that served a call. unrecorded marks member calls written before gateway calls recorded their connection's mode.
+ * The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection's mode, and modes a newer release recorded.
  */
 export const MetaMcpPhaseBucketMode = {
   Progressive: "progressive",
@@ -20,7 +20,7 @@ export const MetaMcpPhaseBucketMode = {
   Unrecorded: "unrecorded",
 } as const;
 /**
- * The discovery mode of the gateway connection that served a call. unrecorded marks member calls written before gateway calls recorded their connection's mode.
+ * The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection's mode, and modes a newer release recorded.
  */
 export type MetaMcpPhaseBucketMode = OpenEnum<typeof MetaMcpPhaseBucketMode>;
 
@@ -45,7 +45,7 @@ export type MetaMcpPhaseBucket = {
    */
   executionCalls: number;
   /**
-   * The discovery mode of the gateway connection that served a call. unrecorded marks member calls written before gateway calls recorded their connection's mode.
+   * The discovery mode of the gateway connection that served a call. unrecorded marks a call whose row names no mode this server knows: member calls written before gateways recorded their connection's mode, and modes a newer release recorded.
    */
   mode: MetaMcpPhaseBucketMode;
 };

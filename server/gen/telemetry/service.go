@@ -1543,8 +1543,9 @@ type MetaMcpDiscoveryFunnel struct {
 }
 
 // The discovery mode of the gateway connection that served a call. unrecorded
-// marks member calls written before gateway calls recorded their connection's
-// mode.
+// marks a call whose row names no mode this server knows: member calls written
+// before gateways recorded their connection's mode, and modes a newer release
+// recorded.
 type MetaMcpDiscoveryMode string
 
 // Gateway-dispatched execution activity for one member server.

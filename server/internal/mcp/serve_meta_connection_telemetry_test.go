@@ -138,6 +138,7 @@ func TestCodeModeRecordsRefusedRun(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND user_id = ? AND event_source = 'meta_discovery' AND tool_name = 'execute'
-		   AND toInt32OrZero(toString(attributes.http.response.status_code)) = 503`,
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) = 503
+		   AND toString(attributes.gram.meta_mcp_server.discovery_mode) = 'code_mode'`,
 		1, endpoint.MetaMcpServerID.UUID.String(), fx.subject.ID)
 }

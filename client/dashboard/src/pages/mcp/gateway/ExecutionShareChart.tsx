@@ -66,7 +66,7 @@ export function ExecutionShareChart({
   lines: PositionLine[];
   /** Calls in the range that carried no session, which the chart leaves out. */
   callsWithoutSession: number;
-  /** Whether the range has any calls at all, with or without a session. */
+  /** Whether the range has lookups or tool calls, with or without a session. */
   hasCalls: boolean;
   loading: boolean;
   expandedChart: string | null;
@@ -196,7 +196,7 @@ export function ExecutionShareChart({
         message={
           hasCalls
             ? "Agents' clients sent no session with these calls, so they can't be ordered. Calls over time still shows how they split."
-            : "No calls in the selected range"
+            : "No discovery or tool calls in the selected range"
         }
         className="h-[260px]"
       />
