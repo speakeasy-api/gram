@@ -1,5 +1,10 @@
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import type { Agents } from "@gram/client/sdk/agents.js";
+import {
+  discoverUnscopedGrants,
+  HOOKS_INGEST_SCOPE,
+  hooksIngestPolicyGrant,
+} from "../agent-hook-events";
 
 /**
  * An agent identity that reaches no MCP server and only reports what its
@@ -11,9 +16,6 @@ import type { Agents } from "@gram/client/sdk/agents.js";
  * their own.
  */
 
-/** Send AI-tool hook events and telemetry. Checked per project. */
-export const HOOKS_INGEST_SCOPE = "org:hooks_ingest";
-
 /** Let the device agent sync the plugins assigned to this agent. */
 export const DEVICE_AGENT_SYNC_SCOPE = "org:device_agent_sync";
 
@@ -23,9 +25,8 @@ const HOOKS_ONLY_SCOPES: readonly string[] = [
 ];
 
 /**
- * The policy a hooks-only agent is created with. Hook ingestion is bounded to
- * the agent's own project, because every hook request names the project it
- * is sent to and an agent belongs to one. Plugin sync takes no project bound:
+ * The policy a hooks-only agent is created with: the hook ingestion grant
+ * every new agent gets, and plugin sync. Plugin sync takes no project bound:
  * the server rejects one on that scope.
  */
 export function hooksOnlyPolicyGrants(
@@ -33,11 +34,7 @@ export function hooksOnlyPolicyGrants(
   projectId: string,
 ): AgentPolicyGrantForm[] {
   return [
-    {
-      effect: "allow",
-      scope: HOOKS_INGEST_SCOPE,
-      selector: { resourceKind: "org", resourceId: organizationId, projectId },
-    },
+    hooksIngestPolicyGrant(organizationId, projectId),
     {
       effect: "allow",
       scope: DEVICE_AGENT_SYNC_SCOPE,
@@ -59,12 +56,7 @@ export async function discoverHooksOnlyGrants(
   agentId: string,
   signal: AbortSignal,
 ): Promise<AgentPolicyGrantForm[]> {
-  const grants = await agents.listDelegableGrants({ agentId }, undefined, {
-    signal,
-  });
-  if (!Array.isArray(grants)) {
-    throw new Error("Invalid delegable permission response");
-  }
+  const grants = await discoverUnscopedGrants(agents, agentId, signal);
   return grants.filter(
     (grant) =>
       grant.effect === "allow" && HOOKS_ONLY_SCOPES.includes(grant.scope),

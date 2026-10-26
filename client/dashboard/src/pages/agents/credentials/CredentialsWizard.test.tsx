@@ -28,7 +28,8 @@ const mocks = vi.hoisted(() => ({
   admitSubject: vi.fn(),
   projectId: "project_one",
   canFederate: true,
-  canGrantHooks: true,
+  canIngestHooks: true,
+  canSyncDevices: true,
   renameAgent: vi.fn(),
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
@@ -80,12 +81,17 @@ vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    // An agent with no server is given the hook grants, which the caller must
-    // hold; every other check here is the one for trusting a platform.
+    // Every new agent is given hook ingestion, and one with no server plugin
+    // sync too, which the caller must hold; every other check here is the one
+    // for trusting a platform.
     hasAllScopes: (scopes: string[]) =>
-      scopes.includes("org:hooks_ingest")
-        ? mocks.canGrantHooks
-        : mocks.canFederate,
+      scopes.every((scope) =>
+        scope === "org:hooks_ingest"
+          ? mocks.canIngestHooks
+          : scope === "org:device_agent_sync"
+            ? mocks.canSyncDevices
+            : mocks.canFederate,
+      ),
     hasAnyScope: () => mocks.canFederate,
     isLoading: false,
   }),
@@ -159,6 +165,16 @@ const grant = {
   },
 };
 
+const hooksIngestGrant = {
+  effect: "allow",
+  scope: "org:hooks_ingest",
+  selector: {
+    resourceKind: "org",
+    resourceId: "org_example",
+    projectId: "project_one",
+  },
+};
+
 function setup(initialPlatformKey?: string, initialEntry = "/") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -198,7 +214,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.projectId = "project_one";
   mocks.canFederate = true;
-  mocks.canGrantHooks = true;
+  mocks.canIngestHooks = true;
+  mocks.canSyncDevices = true;
   mocks.platforms.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
   mocks.renameAgent.mockResolvedValue({});
@@ -224,7 +241,13 @@ beforeEach(() => {
   });
   mocks.toolsets.mockResolvedValue({ toolsets: [] });
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
-  mocks.listDelegableGrants.mockResolvedValue([grant]);
+  // Discovery naming servers answers per server; discovery naming none
+  // answers from the whole policy, which is the only one that returns hook
+  // ingestion.
+  mocks.listDelegableGrants.mockImplementation(
+    async (request: { toolsetIds?: string[] }) =>
+      request.toolsetIds ? [grant] : [grant, hooksIngestGrant],
+  );
   mocks.createKey.mockResolvedValue({ id: "key_new", key: "gram_secret" });
   mocks.listKeys.mockResolvedValue({ keys: [] });
   mocks.fetch.mockResolvedValue({
@@ -309,8 +332,10 @@ describe("Provisioning a new agent", () => {
     ).toBe(true);
   });
 
-  it("asks for a server from someone who cannot grant hook events", async () => {
-    mocks.canGrantHooks = false;
+  it("asks for a server from someone who cannot grant plugin sync", async () => {
+    // Hook ingestion alone is not enough: an agent with no server syncs
+    // device-agent plugins too.
+    mocks.canSyncDevices = false;
     setup();
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
@@ -340,7 +365,8 @@ describe("Provisioning a new agent", () => {
 
     await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
     // The policy is the servers the user chose, not a wildcard the key would
-    // then have to be narrowed back down from.
+    // then have to be narrowed back down from, and hook ingestion in the
+    // agent's project, which every new agent sends by default.
     expect(
       mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
     ).toEqual([
@@ -353,6 +379,7 @@ describe("Provisioning a new agent", () => {
           projectId: "project_one",
         },
       },
+      hooksIngestGrant,
     ]);
     expect(
       mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.projectId,
@@ -360,6 +387,16 @@ describe("Provisioning a new agent", () => {
     expect(mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.agentId).toBe(
       "agent_new",
     );
+    // The first key asks for both. Hook ingestion is read from discovery
+    // that names no server, since it names none.
+    expect(mocks.listDelegableGrants).toHaveBeenCalledWith(
+      { agentId: "agent_new" },
+      undefined,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(
+      mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.requestedGrants,
+    ).toEqual([grant, hooksIngestGrant]);
 
     // The command renders in a syntax-highlighted block, so it reaches the
     // DOM as a run of token elements rather than one string. Read the block.
@@ -370,6 +407,64 @@ describe("Provisioning a new agent", () => {
       ),
     );
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("says on the server step that the agent may also send hook events", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText(
+        /It may also send hook events from the observability plugin\./,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("names hook ingestion beside the servers on the summary", async () => {
+    await reachCredentialStep();
+
+    expect(
+      screen.getByText("mcp:connect, org:hooks_ingest", { selector: "code" }),
+    ).toBeTruthy();
+  });
+
+  it("leaves hook events out for someone who cannot grant them, and says so", async () => {
+    mocks.canIngestHooks = false;
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    // Before anything is created, rather than after.
+    expect(
+      await screen.findByText(
+        /It will not send hook events from the observability plugin: that needs a permission you do not have/,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText("mcp:connect", { selector: "code" })).toBeTruthy();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual([grant]);
+    // With no hook grant on the agent there is nothing to discover for it.
+    expect(
+      mocks.listDelegableGrants.mock.calls.every(
+        ([request]) => request.toolsetIds !== undefined,
+      ),
+    ).toBe(true);
+    expect(
+      mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.requestedGrants,
+    ).toEqual([grant]);
   });
 
   it("keeps the agent when the key fails, and says which part did not happen", async () => {
@@ -403,15 +498,7 @@ describe("Provisioning a new agent", () => {
 });
 
 const hooksGrants = [
-  {
-    effect: "allow",
-    scope: "org:hooks_ingest",
-    selector: {
-      resourceKind: "org",
-      resourceId: "org_example",
-      projectId: "project_one",
-    },
-  },
+  hooksIngestGrant,
   {
     effect: "allow",
     scope: "org:device_agent_sync",
@@ -768,6 +855,7 @@ describe("Agent project", () => {
 
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
     const form = mocks.createAgent.mock.calls[0]![0].createAgentForm;
+    // Hook ingestion is bounded to the same project.
     expect(form.policyGrants).toEqual([
       {
         effect: "allow",
@@ -778,6 +866,7 @@ describe("Agent project", () => {
           projectId: "project_one",
         },
       },
+      hooksIngestGrant,
     ]);
   });
 });

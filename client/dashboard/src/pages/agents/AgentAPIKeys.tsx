@@ -47,6 +47,11 @@ import { AgentKeyServers, type KeyServer } from "./AgentKeyServers";
 
 import { narrowGrantsToServers } from "./agent-key-server-grants";
 import { discoverKeyServerGrants } from "./agent-key-discovery";
+import {
+  discoverUnscopedGrants,
+  HOOKS_INGEST_SCOPE,
+  hooksIngestKeyGrants,
+} from "./agent-hook-events";
 
 const security = { sessionHeaderGramSession: "" };
 
@@ -141,6 +146,7 @@ function AgentAPIKeysContent({
   onBusy?: (busy: boolean) => void;
 }) {
   const sdk = useSdkClient();
+  const organization = useOrganization();
   const queryClient = useQueryClient();
   const mounted = useRef(true);
   const canManage = agent.permissions.authorize;
@@ -154,6 +160,9 @@ function AgentAPIKeysContent({
   const [serversBusy, setServersBusy] = useState(false);
   const [name, setName] = useState("");
   const [narrowings, setNarrowings] = useState<GrantNarrowings>({});
+  // Hook events are on unless the issuer turns them off: an agent identity
+  // sends them by default, and a key without them cannot.
+  const [hookEvents, setHookEvents] = useState(true);
   const [expiryDays, setExpiryDays] = useState("90");
   const [customExpiry, setCustomExpiry] = useState("");
   const [issued, setIssued] = useState(false);
@@ -203,6 +212,48 @@ function AgentAPIKeysContent({
     discoveryComplete ? delegable.data : [],
     servers,
   );
+  // Hook ingestion names the organization rather than a server, so it comes
+  // from discovery that names none. It is offered bounded to the agent's own
+  // project, so an agent bound to no project is offered none.
+  const agentProjectId = agent.projectId;
+  const hookDiscovery = useQuery({
+    queryKey: [
+      "agent-delegable-hook-grants",
+      organizationId,
+      userId,
+      agent.id,
+      agentProjectId,
+      agent.updatedAt,
+      agent.ownerUserId,
+    ],
+    queryFn: ({ signal }) =>
+      discoverUnscopedGrants(sdk.agents, agent.id, signal),
+    enabled: open && canIssue && agentProjectId !== undefined,
+    retry: false,
+    throwOnError: false,
+  });
+  const hookDiscoveryComplete =
+    hookDiscovery.isSuccess &&
+    !hookDiscovery.isFetching &&
+    Array.isArray(hookDiscovery.data);
+  // Settled once the read has answered either way. A failure offers nothing,
+  // and the access step says so beside a retry.
+  const hookDiscoverySettled =
+    agentProjectId === undefined ||
+    hookDiscoveryComplete ||
+    (hookDiscovery.isError && !hookDiscovery.isFetching);
+  const hookGrants =
+    hookDiscoveryComplete && agentProjectId !== undefined
+      ? hooksIngestKeyGrants(hookDiscovery.data, agentProjectId)
+      : [];
+  const refetchHookDiscovery = () => {
+    // A query that never ran has nothing to re-read, and refetching it would
+    // ask discovery for an agent that has no project to bound hooks to.
+    if (agentProjectId !== undefined) void hookDiscovery.refetch();
+  };
+  const agentProjectName =
+    organization.projects?.find((project) => project.id === agentProjectId)
+      ?.name ?? "the agent's project";
   let hasSelections = false;
   try {
     hasSelections =
@@ -225,6 +276,12 @@ function AgentAPIKeysContent({
     setReviewAccounts([]);
     setStep((current) => (current === 3 ? 2 : current));
   }, [discoveryComplete, delegable.dataUpdatedAt]);
+  // The same for the hook grant. The choice to send hook events is kept: it
+  // is a yes or no on whatever discovery offers, not a ceiling of its own.
+  useEffect(() => {
+    setReviewGrants([]);
+    setStep((current) => (current === 3 ? 2 : current));
+  }, [hookDiscoveryComplete, hookDiscovery.dataUpdatedAt]);
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
   // Resetting mutation state after issuance must not unlock header navigation
   // while the post-issue inventory refresh is still in flight.
@@ -258,6 +315,7 @@ function AgentAPIKeysContent({
     setIssued(false);
     setName("");
     setNarrowings({});
+    setHookEvents(true);
     setExpiryDays("90");
     setCustomExpiry("");
     setError(null);
@@ -300,13 +358,15 @@ function AgentAPIKeysContent({
             ? "The agent's policy delegates nothing on these servers."
             : step >= 1 && !accountsReady
               ? "Connect an account for every server that needs one."
-              : step >= 2 && !name.trim()
-                ? "Name this key."
-                : step >= 2 && expiryReason
-                  ? expiryReason
-                  : step >= 2 && !hasSelections
-                    ? "Select at least one permission."
-                    : null;
+              : step >= 2 && !hookDiscoverySettled
+                ? "Loading what this agent can be delegated…"
+                : step >= 2 && !name.trim()
+                  ? "Name this key."
+                  : step >= 2 && expiryReason
+                    ? expiryReason
+                    : step >= 2 && !hasSelections
+                      ? "Select at least one permission."
+                      : null;
   // A name is required, so the wizard offers one rather than blocking on an
   // empty field. Names are unique per organization, so a name already in the
   // list is dated to keep the suggestion usable as typed.
@@ -332,6 +392,7 @@ function AgentAPIKeysContent({
     setReviewAccounts([]);
     setError(null);
     void delegable.refetch();
+    refetchHookDiscovery();
   };
   const issue = (review = false) => {
     if (
@@ -352,7 +413,7 @@ function AgentAPIKeysContent({
       );
       return;
     }
-    if (!discoveryComplete) {
+    if (!discoveryComplete || !hookDiscoverySettled) {
       setError("Load available permissions before continuing.");
       return;
     }
@@ -364,9 +425,12 @@ function AgentAPIKeysContent({
         .map((grant) => ({ grant, key: delegableGrantKey(grant) }))
         .filter(({ key }) => narrowings[key] !== undefined)
         .map(({ grant, key }) => ({ grant, narrowing: narrowings[key] ?? {} }));
-      requestedGrants = buildRequestedGrants(selections);
-      if (!requestedGrants.length)
+      const serverGrants = buildRequestedGrants(selections);
+      // The servers chosen are what this key is for, so hook events ride
+      // along with a server permission rather than standing in for one.
+      if (!serverGrants.length)
         throw new Error("Select at least one permission to continue.");
+      requestedGrants = [...serverGrants, ...(hookEvents ? hookGrants : [])];
     } catch (error) {
       setError(
         error instanceof Error
@@ -505,7 +569,10 @@ function AgentAPIKeysContent({
           setReviewGrants([]);
           setReviewAccounts([]);
           setStep(2);
-          if (mounted.current) void delegable.refetch();
+          if (mounted.current) {
+            void delegable.refetch();
+            refetchHookDiscovery();
+          }
           // A name already in use is the one failure the caller can fix from
           // this screen, and the server names it. Everything else keeps the
           // policy explanation, which is what the other causes have in common.
@@ -716,8 +783,7 @@ function AgentAPIKeysContent({
                 <>
                   <h2 className="text-lg font-semibold">Choose access</h2>
                   <Text small muted>
-                    Pick what this key may do on the servers you chose. Nothing
-                    is selected by default.
+                    Pick what this key may do on the servers you chose.
                   </Text>
                   <label className="block space-y-2 text-sm font-medium">
                     Key name
@@ -776,12 +842,22 @@ function AgentAPIKeysContent({
                     disabled={create.isPending}
                     onRetry={() => void delegable.refetch()}
                   />
+                  <HookEventsSection
+                    offered={hookGrants.length > 0}
+                    failed={hookDiscovery.isError && !hookDiscovery.isFetching}
+                    projectName={agentProjectName}
+                    checked={hookEvents}
+                    onChange={setHookEvents}
+                    disabled={create.isPending}
+                    onRetry={refetchHookDiscovery}
+                  />
                 </>
               ) : (
                 <AgentKeyReview
                   name={name}
                   servers={servers}
                   grants={reviewGrants}
+                  hookEventsProjectName={agentProjectName}
                   accounts={reviewAccounts}
                   onEditServers={() => returnToStep(0)}
                   onEditAccounts={() => returnToStep(1)}
@@ -937,5 +1013,69 @@ function DelegableGrantSection({
         Retry permissions
       </Button>
     </div>
+  );
+}
+
+/**
+ * Whether the key sends hook events from the observability plugin. Offered
+ * only when discovery says the agent can delegate hook ingestion, and on by
+ * default, because an agent identity sends them unless told otherwise.
+ */
+function HookEventsSection({
+  offered,
+  failed,
+  projectName,
+  checked,
+  onChange,
+  disabled,
+  onRetry,
+}: {
+  offered: boolean;
+  failed: boolean;
+  projectName: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled: boolean;
+  onRetry: () => void;
+}): JSX.Element | null {
+  if (failed)
+    return (
+      <div className="space-y-2">
+        <Text muted>
+          Could not check whether this key can send hook events. Retry to
+          include them.
+        </Text>
+        <Button type="button" variant="secondary" onClick={onRetry}>
+          Retry hook events
+        </Button>
+      </div>
+    );
+  // An agent that cannot delegate hook ingestion has nothing to offer here,
+  // and saying so on every key would be noise.
+  if (!offered) return null;
+  return (
+    <fieldset className="space-y-3">
+      <legend>Hook events</legend>
+      <div className="border-border space-y-2 border p-3">
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={checked}
+            aria-checked={checked}
+            disabled={disabled}
+            onChange={(event) => onChange(event.target.checked)}
+          />
+          <span className="min-w-0 font-mono text-sm">
+            Send hook events ({HOOKS_INGEST_SCOPE})
+          </span>
+        </label>
+        <div className="pl-6">
+          <Text small muted>
+            Lets the observability plugin report this agent&rsquo;s activity in{" "}
+            {projectName}. Selected by default.
+          </Text>
+        </div>
+      </div>
+    </fieldset>
   );
 }

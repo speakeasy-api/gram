@@ -26,6 +26,7 @@ export interface ServerSelection {
 }
 
 export function StepServers({
+  description,
   servers,
   isLoading,
   isError,
@@ -36,6 +37,11 @@ export function StepServers({
   selected,
   onChange,
 }: {
+  /**
+   * What the agent reaches, said under the title. It depends on whether the
+   * agent is new and what its creator may grant, which only the flow knows.
+   */
+  description: string;
   servers: InventoryServer[];
   isLoading: boolean;
   isError: boolean;
@@ -108,10 +114,7 @@ export function StepServers({
 
   return (
     <div className="space-y-5">
-      <WizardStepHeader
-        title="Server selection"
-        description="The MCP servers this agent may call. It can reach nothing else, and never more than you can reach yourself. Optional: with none selected, the agent only sends hook events from the observability plugin."
-      />
+      <WizardStepHeader title="Server selection" description={description} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex-1">
           <Input

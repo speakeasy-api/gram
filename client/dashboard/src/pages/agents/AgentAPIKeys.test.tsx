@@ -1011,6 +1011,158 @@ describe("Agent API keys", () => {
   );
 });
 
+describe("Hook events on a key", () => {
+  // An agent bound to a project, which is what hook ingestion is bounded to.
+  const projectAgent: ManagedAgent = { ...agent, projectId: "project_one" };
+  const hooksIngestGrant = {
+    effect: "allow",
+    scope: "org:hooks_ingest",
+    selector: {
+      resourceKind: "org",
+      resourceId: "org_example",
+      projectId: "project_one",
+    },
+  };
+  // Discovery naming servers answers per server; discovery naming none
+  // answers from the whole policy, which is the only one that returns hook
+  // ingestion.
+  function discover(unscoped: () => Promise<unknown[]>) {
+    mocks.listDelegableGrants.mockImplementation(
+      (request: { toolsetIds?: string[] }) =>
+        request.toolsetIds ? Promise.resolve([creationGrant]) : unscoped(),
+    );
+  }
+
+  it("offers hook events selected by default, reviews them and requests them", async () => {
+    discover(async () => [creationGrant, hooksIngestGrant]);
+    setup(projectAgent);
+    await openCreate();
+
+    const hooks = await screen.findByRole("checkbox", {
+      name: /Send hook events/,
+    });
+    expect(hooks).toHaveProperty("checked", true);
+    expect(
+      screen.getByText(/report this agent.s activity in Project one/),
+    ).toBeTruthy();
+    // Hook events go with a server permission rather than replacing one.
+    expect(screen.getByRole("button", { name: "Review key" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+
+    const review = screen.getByRole("region", { name: "Key review" });
+    expect(review.textContent).toContain(
+      "Sends hook events from the observability plugin in Project one.",
+    );
+    // Reviewed on their own, not as access that matches no server.
+    expect(review.textContent).not.toContain("could not be matched");
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([creationGrant, hooksIngestGrant]);
+  });
+
+  it("leaves hook events out when the issuer turns them off", async () => {
+    discover(async () => [creationGrant, hooksIngestGrant]);
+    setup(projectAgent);
+    await openCreate();
+
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /Send hook events/ }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+    expect(
+      screen.getByRole("region", { name: "Key review" }).textContent,
+    ).not.toContain("Hook events");
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([creationGrant]);
+  });
+
+  it("bounds an unbounded hook candidate to the agent's project", async () => {
+    discover(async () => [
+      {
+        ...hooksIngestGrant,
+        selector: { resourceKind: "org", resourceId: "org_example" },
+      },
+    ]);
+    setup(projectAgent);
+    await openCreate();
+    await screen.findByRole("checkbox", { name: /Send hook events/ });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([creationGrant, hooksIngestGrant]);
+  });
+
+  it("offers nothing when the agent cannot delegate hook ingestion", async () => {
+    discover(async () => [creationGrant]);
+    setup(projectAgent);
+    await openCreate();
+
+    await waitFor(() =>
+      expect(mocks.listDelegableGrants).toHaveBeenCalledWith(
+        { agentId: projectAgent.id },
+        undefined,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    expect(
+      screen.queryByRole("checkbox", { name: /Send hook events/ }),
+    ).toBeNull();
+    submitKey();
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([creationGrant]);
+  });
+
+  it("does not look for hook ingestion on an agent bound to no project", async () => {
+    setup();
+    await openCreate();
+
+    expect(
+      mocks.listDelegableGrants.mock.calls.every(
+        ([request]) => request.toolsetIds !== undefined,
+      ),
+    ).toBe(true);
+    expect(
+      screen.queryByRole("checkbox", { name: /Send hook events/ }),
+    ).toBeNull();
+  });
+
+  it("says when hook events could not be checked, and still issues the key", async () => {
+    discover(() => Promise.reject(new Error("unavailable")));
+    setup(projectAgent);
+    await openCreate();
+
+    expect(
+      await screen.findByText(
+        /Could not check whether this key can send hook events/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Retry hook events" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    submitKey();
+    await screen.findByText("secret_example_once");
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([creationGrant]);
+  });
+});
+
 describe("the empty state, while the credential is unknown", () => {
   it("says only that no key is issued", async () => {
     mocks.list.mockResolvedValue({ keys: [] });

@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import type { KeyServer } from "./AgentKeyServers";
+import { isHooksIngestGrant } from "./agent-hook-events";
 import { reviewLabel, summarizeKeyReview } from "./agent-key-review";
 
 /** Supply only stored upstream identities from the canonical session view, never dashboard user data. */
@@ -17,6 +18,8 @@ export interface AgentKeyReviewProps {
   name: string;
   servers: KeyServer[];
   grants: AgentPolicyGrantForm[];
+  /** The project a hook ingestion grant among `grants` is bounded to. */
+  hookEventsProjectName?: string;
   accounts?: KeyReviewAccount[];
   onEditServers: () => void;
   onEditAccounts: () => void;
@@ -28,13 +31,20 @@ export function AgentKeyReview({
   name,
   servers,
   grants,
+  hookEventsProjectName,
   accounts,
   onEditServers,
   onEditAccounts,
   onEditAccess,
   disabled,
 }: AgentKeyReviewProps): JSX.Element {
-  const review = summarizeKeyReview(servers, grants);
+  // Hook events name the organization rather than a server, so they are
+  // reviewed on their own rather than matched against the servers.
+  const hookEvents = grants.some(isHooksIngestGrant);
+  const review = summarizeKeyReview(
+    servers,
+    grants.filter((grant) => !isHooksIngestGrant(grant)),
+  );
   return (
     <section aria-label="Key review" className="space-y-5">
       <div className="space-y-1">
@@ -190,6 +200,27 @@ export function AgentKeyReview({
           );
         })}
       </div>
+      {hookEvents ? (
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-medium">Hook events</h3>
+            <Button
+              type="button"
+              variant="tertiary"
+              size="sm"
+              aria-label="Edit hook events"
+              onClick={onEditAccess}
+              disabled={disabled}
+            >
+              Edit access
+            </Button>
+          </div>
+          <Text small muted>
+            Sends hook events from the observability plugin in{" "}
+            {hookEventsProjectName ?? "the agent's project"}.
+          </Text>
+        </div>
+      ) : null}
       {review.hasBroadAccess ? (
         <Text small role="alert">
           Some access applies beyond these servers or projects. Edit access to

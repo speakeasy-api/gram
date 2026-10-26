@@ -24,6 +24,12 @@ import {
   type AgentPolicyDraft,
 } from "../agent-policy-grants";
 import { buildRequestedGrants } from "../agent-api-key-grants";
+import {
+  discoverUnscopedGrants,
+  HOOKS_INGEST_SCOPE,
+  hooksIngestKeyGrants,
+  hooksIngestPolicyGrant,
+} from "../agent-hook-events";
 import { discoverKeyServerGrants } from "../agent-key-discovery";
 import {
   agentGatewayURL,
@@ -33,7 +39,6 @@ import {
 import {
   DEVICE_AGENT_SYNC_SCOPE,
   discoverHooksOnlyGrants,
-  HOOKS_INGEST_SCOPE,
   hooksOnlyPolicyGrants,
   missingHooksOnlyScopes,
 } from "./hooksOnly";
@@ -133,14 +138,14 @@ function hooksOnlyBlockedReason({
   serversLoading,
   serversFailed,
   checkingPermissions,
-  canGrantHooks,
+  canGrantHooksOnly,
 }: {
   /** The platform this flow was opened for, which signs in to reach servers. */
   platformName: string | undefined;
   serversLoading: boolean;
   serversFailed: boolean;
   checkingPermissions: boolean;
-  canGrantHooks: boolean;
+  canGrantHooksOnly: boolean;
 }): string | null {
   // Hook events are signed with an API key, so an agent set up for a
   // platform's own tokens has nothing to do without a server.
@@ -154,8 +159,32 @@ function hooksOnlyBlockedReason({
     return "The server list could not be loaded. Try again to choose servers, or to continue without one.";
   }
   if (checkingPermissions) return "Checking your permissions…";
-  if (canGrantHooks) return null;
-  return "Select at least one MCP server. An agent with none only sends hook events, which you do not have permission to grant.";
+  if (canGrantHooksOnly) return null;
+  return "Select at least one MCP server. An agent with none only sends hook events and syncs plugins, which needs permissions you do not have.";
+}
+
+/**
+ * What the server step says the agent reaches. Every new agent also sends
+ * hook events when its creator may grant that, so the step says which of the
+ * two this agent is before anything is created.
+ */
+function serverStepDescription({
+  creating,
+  checkingPermissions,
+  canGrantHookEvents,
+}: {
+  /** A new agent, rather than an edit of what one already reaches. */
+  creating: boolean;
+  checkingPermissions: boolean;
+  canGrantHookEvents: boolean;
+}): string {
+  const servers =
+    "The MCP servers this agent may call. It reaches no other server, and never more than you can reach yourself.";
+  if (!creating || checkingPermissions) return servers;
+  if (canGrantHookEvents) {
+    return `${servers} It may also send hook events from the observability plugin.`;
+  }
+  return `${servers} It will not send hook events from the observability plugin: that needs a permission you do not have, so ask an organization admin if it should.`;
 }
 
 export function CredentialsWizard({
@@ -208,11 +237,15 @@ export function CredentialsWizard({
   // someone who could carry it out.
   const { hasAllScopes, isLoading: rbacLoading, error: rbacError } = useRBAC();
   const canFederate = hasAllScopes(["workload:write"]);
-  // An agent with no server is given hook ingestion in this project and
-  // device-agent plugin sync, which only someone holding both can delegate.
-  // A failed read of the caller's grants decides nothing: the server checks
-  // the same permissions when the agent is created, and says which it lacks.
-  const canGrantHooks =
+  // Every new agent is given hook ingestion in this project, which only
+  // someone holding it can delegate. An agent with no server is also given
+  // device-agent plugin sync, so it takes both. A failed read of the
+  // caller's grants decides nothing: the server checks the same permissions
+  // when the agent is created, and says which it lacks.
+  const canGrantHookEvents =
+    Boolean(rbacError) ||
+    hasAllScopes([HOOKS_INGEST_SCOPE], organization.id, project.id);
+  const canGrantHooksOnly =
     Boolean(rbacError) ||
     hasAllScopes(
       [HOOKS_INGEST_SCOPE, DEVICE_AGENT_SYNC_SCOPE],
@@ -377,6 +410,15 @@ export function CredentialsWizard({
   );
   const hooksOnly =
     !existing && (createdHooksOnly ?? (!allServers && selected.length === 0));
+  // Every new agent sends hook events too, when its creator may grant that:
+  // its policy carries hook ingestion in its project and its first key asks
+  // for it. As with hooks-only, what the agent was created with is what holds
+  // afterwards. An agent that exists keeps the policy it has.
+  const [createdHookEvents, setCreatedHookEvents] = useState<boolean | null>(
+    null,
+  );
+  const hookEvents =
+    hooksOnly || (!existing && (createdHookEvents ?? canGrantHookEvents));
 
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
@@ -519,6 +561,13 @@ export function CredentialsWizard({
     if (!projectID) {
       throw new Error("This project is still loading. Try again in a moment.");
     }
+    // Whether the agent sends hook events is read from the caller's grants,
+    // so it is not decided while they are still loading.
+    if (rbacLoading) {
+      throw new Error(
+        "Your permissions are still loading. Try again in a moment.",
+      );
+    }
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -545,13 +594,21 @@ export function CredentialsWizard({
         projectId: projectID,
         // With no server chosen the agent reaches none, and is given only
         // what sending hook events and syncing device-agent plugins take.
+        // Otherwise it is given the servers chosen, and hook ingestion in its
+        // project when its creator may grant that.
         policyGrants: hooksOnly
           ? hooksOnlyPolicyGrants(organization.id, projectID)
-          : agentPolicyGrantsFromDraft(draft),
+          : [
+              ...agentPolicyGrantsFromDraft(draft),
+              ...(hookEvents
+                ? [hooksIngestPolicyGrant(organization.id, projectID)]
+                : []),
+            ],
       },
     });
     setAgentID(created.id);
     setCreatedHooksOnly(hooksOnly);
+    setCreatedHookEvents(hookEvents);
     void invalidateAgentPolicy(
       queryClient,
       organization.id,
@@ -918,7 +975,22 @@ export function CredentialsWizard({
         );
       }
 
-      await issueKey(target.id, requestedGrants);
+      // Hook ingestion names the organization rather than a server, so only
+      // discovery that names no server returns it. Asked for only when the
+      // agent was created with it, and bounded to the agent's project.
+      const hookGrants =
+        hookEvents && scopedProjectID
+          ? hooksIngestKeyGrants(
+              await discoverUnscopedGrants(
+                sdk.agents,
+                target.id,
+                controller.signal,
+              ),
+              scopedProjectID,
+            )
+          : [];
+
+      await issueKey(target.id, [...requestedGrants, ...hookGrants]);
     } catch (failure) {
       const conflict =
         failure instanceof GramError && failure.statusCode === 409
@@ -935,8 +1007,11 @@ export function CredentialsWizard({
     }
   };
 
-  const hooksOnlyGrants = `${HOOKS_INGEST_SCOPE}, ${DEVICE_AGENT_SYNC_SCOPE}`;
-  const grantsLabel = hooksOnly ? hooksOnlyGrants : "mcp:connect";
+  const grantsLabel = hooksOnly
+    ? `${HOOKS_INGEST_SCOPE}, ${DEVICE_AGENT_SYNC_SCOPE}`
+    : hookEvents
+      ? `${CONNECT_SCOPE}, ${HOOKS_INGEST_SCOPE}`
+      : CONNECT_SCOPE;
 
   const summary = (
     <WizardSummary
@@ -1065,6 +1140,11 @@ export function CredentialsWizard({
         return (
           <div className="space-y-5">
             <StepServers
+              description={serverStepDescription({
+                creating: !existing,
+                checkingPermissions: rbacLoading,
+                canGrantHookEvents,
+              })}
               servers={listedServers}
               isLoading={inventory.isLoading}
               isError={inventory.isError}
@@ -1220,7 +1300,7 @@ export function CredentialsWizard({
               serversLoading: inventory.isLoading,
               serversFailed: inventory.isError,
               checkingPermissions: rbacLoading,
-              canGrantHooks,
+              canGrantHooksOnly,
             })
           : // A key names servers one by one, and a server that authorizes
             // each person separately is not one a key can name. So "all
