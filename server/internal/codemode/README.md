@@ -90,6 +90,14 @@ and joins dispatchers for up to two seconds before recording outcomes. Stream
 cleanup adds at most one second. The provider release path also has a bounded
 cleanup context. Incomplete writes remain `unknown` even when Python fails.
 
+A failed run still returns what its program printed before the failure, within
+the same 16 KiB bound and with `output_truncated` set when cut. The runner's
+error frame carries that output for Python exceptions, its CPU, memory, result
+and callback limits, and its wall deadline. The server gives the runner a wall
+deadline half a second before its own, so the runner's deadline report arrives
+first. A failure without a runner report, such as a lost connection, leaves the
+output empty, as does an error frame from a runner that sends no output.
+
 ## Local runtime
 
 Run `mise run zero:code-mode`, then `mise exec -- pitchfork start code-runtime`.

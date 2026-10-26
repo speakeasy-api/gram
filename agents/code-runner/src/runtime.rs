@@ -41,15 +41,41 @@ pub async fn new_pool(binary: &str, capacity: usize) -> Result<Pool> {
     Ok(Pool::new(config).await?)
 }
 
+/// Print output captured from one execution, bounded to 16 KiB. The stream
+/// holds it outside the execution, so a failure or the wall deadline can still
+/// report what the program printed first.
+#[derive(Clone, Default)]
+pub struct Output(Arc<Mutex<Printed>>);
+
 #[derive(Default)]
-struct Output {
+struct Printed {
     text: String,
     truncated: bool,
+}
+
+impl Output {
+    fn push(&self, text: &str) {
+        let mut printed = self.0.lock().unwrap();
+        let remaining = MAX_OUTPUT.saturating_sub(printed.text.len());
+        let mut end = remaining.min(text.len());
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        printed.text.push_str(&text[..end]);
+        printed.truncated |= end < text.len();
+    }
+
+    /// Takes the captured text and whether any of it was cut.
+    pub fn take(&self) -> (String, bool) {
+        let mut printed = self.0.lock().unwrap();
+        (std::mem::take(&mut printed.text), printed.truncated)
+    }
 }
 
 pub async fn execute(
     pool: &Pool,
     code: String,
+    output: &Output,
     replies: &mut mpsc::Receiver<(ClientFrame, usize)>,
     frames: &mpsc::Sender<ServerFrame>,
 ) -> Result<ServerFrame> {
@@ -71,18 +97,8 @@ pub async fn execute(
     };
     // Dropping an unfinished checkout kills its worker, including on cancellation.
     let mut session = pool.checkout(&config).await?;
-    let output = Arc::new(Mutex::new(Output::default()));
     let captured = output.clone();
-    let mut print = on_print_sync(move |_, text| {
-        let mut output = captured.lock().unwrap();
-        let remaining = MAX_OUTPUT.saturating_sub(output.text.len());
-        let mut end = remaining.min(text.len());
-        while !text.is_char_boundary(end) {
-            end -= 1;
-        }
-        output.text.push_str(&text[..end]);
-        output.truncated |= end < text.len();
-    });
+    let mut print = on_print_sync(move |_, text| captured.push(text));
     ensure!(
         matches!(
             session
@@ -114,11 +130,11 @@ pub async fn execute(
                 // Cleanup cannot replace a computed result with a reset error.
                 // Kill the process as well as discarding its interpreter state.
                 drop(session);
-                let mut output = output.lock().unwrap();
+                let (output, output_truncated) = output.take();
                 return Ok(ServerFrame::Complete {
                     value,
-                    output: std::mem::take(&mut output.text),
-                    output_truncated: output.truncated,
+                    output,
+                    output_truncated,
                 });
             }
             TurnEvent::FunctionCall {
@@ -223,7 +239,8 @@ pub async fn execute(
     }
 }
 
-pub fn public_error(error: &anyhow::Error) -> ServerFrame {
+/// The public failure for an execution error, with the output printed before it.
+pub fn public_error(error: &anyhow::Error, output: &Output) -> ServerFrame {
     let message = match error.downcast_ref::<PoolError>() {
         Some(PoolError::Runtime(exception)) => exception.to_string(),
         Some(PoolError::Crashed {
@@ -238,9 +255,12 @@ pub fn public_error(error: &anyhow::Error) -> ServerFrame {
     while !message.is_char_boundary(end) {
         end -= 1;
     }
+    let (output, output_truncated) = output.take();
     ServerFrame::Error {
         code: "execution_failed".into(),
         message: message[..end].to_owned(),
+        output,
+        output_truncated,
     }
 }
 
