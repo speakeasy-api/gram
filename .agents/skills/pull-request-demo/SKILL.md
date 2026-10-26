@@ -73,7 +73,7 @@ mise run playwright -s=pr-demo-$PR run-code --filename=.agents/skills/pull-reque
 
 - Tag the smallest element that contains the new UI: the new button, column, or card, not its whole section. When a change spans a whole page or dialog, tag the region that changed and label it (for example `New dialog`).
 - Use a short, specific label when several elements are new (`New filter`, `New column`). Mark changed behavior on an existing element too (`Now sortable`).
-- The ring is drawn at the element's position when the script runs. Re-run the script after any layout change, scroll, or new content. Re-tag and re-run after navigation, which removes both the tag and the marker.
+- The ring is drawn at the element's position when the script runs. Re-run the script after any layout change, scroll, or new content. Client-side navigation can keep old tags, so after navigating remove stale `data-demo-new` tags, tag the new target, and re-run the script.
 - Do not use `highlight`: it adds a selector tooltip to the frame.
 
 ## 2. Capture

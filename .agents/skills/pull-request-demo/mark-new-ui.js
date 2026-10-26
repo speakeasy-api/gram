@@ -5,8 +5,10 @@ async function markNewUi(page) {
     document.querySelectorAll("[data-demo-mark]").forEach((n) => n.remove());
     const targets = [...document.querySelectorAll("[data-demo-new]")];
     const pad = 6;
+    let marked = 0;
     for (const el of targets) {
       const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
       const top = r.top + window.scrollY - pad;
       const left = r.left + window.scrollX - pad;
       const layer = {
@@ -39,8 +41,9 @@ async function markNewUi(page) {
         whiteSpace: "nowrap",
       });
       document.body.append(ring, tag);
+      marked++;
     }
-    return targets.length;
+    return marked;
   });
   return `marked ${count} element(s)`;
 }
