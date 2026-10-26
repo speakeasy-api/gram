@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -259,6 +260,41 @@ func TestUpdateMcpServerHostedWrapperRejectsPublicFlipWithExternalOAuth(t *testi
 	require.True(t, toolset.McpIsPublic, "disabling leaves the public flag alone")
 }
 
+func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer, err := usersessionsrepo.New(f.ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          f.projectID,
+		OrganizationID:     pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		Slug:               "proxy-link-issuer-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: 24 * 60 * 60 * 1_000_000, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) {
+		p.UserSessionIssuerID = new(issuer.ID.String())
+	}))
+	require.NoError(t, err)
+	testenv.LinkRetiredOAuthProxy(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("public"), nil))
+	require.NoError(t, err)
+	toolset, server := f.requireProjected(t, ctx)
+	require.True(t, toolset.McpIsPublic)
+	require.Equal(t, "public", server.Visibility)
+	require.Equal(t, issuer.ID, toolset.UserSessionIssuerID.UUID)
+
+	_, err = f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), McpIsPublic: new(false)})
+	require.NoError(t, err)
+	toolset, server = f.requireProjected(t, ctx)
+	require.False(t, toolset.McpIsPublic)
+	require.Equal(t, "private", server.Visibility)
+	require.Equal(t, issuer.ID, toolset.UserSessionIssuerID.UUID)
+	require.True(t, f.resolve(t, ctx).Allowed)
+}
+
 func TestUpdateMcpServerHostedWrapperRejectsNameOverToolsetLimit(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
@@ -295,11 +331,10 @@ func TestUpdateMcpServerHostedWrapperIgnoresDeletedToolsetWithSameSlug(t *testin
 	require.Equal(t, "Hosted wrapper", deleted.Name, "the deleted twin is not rewritten")
 }
 
-func (f *hostedFixture) pluginMemberships(t *testing.T, ctx context.Context) int {
+func (f *hostedFixture) pluginMemberships(t *testing.T, ctx context.Context) int64 {
 	t.Helper()
 
-	var count int
-	err := f.ti.conn.QueryRow(ctx, `SELECT count(*) FROM plugin_servers WHERE deleted IS FALSE AND (toolset_id = $1 OR mcp_server_id = $1)`, f.toolset.ID).Scan(&count) //nolint:glint // notestingrawsql: counts memberships under either key
+	count, err := pluginsrepo.New(f.ti.conn).CountLivePluginServersByMCPServerIDFixture(ctx, pluginsrepo.CountLivePluginServersByMCPServerIDFixtureParams{ProjectID: f.projectID, McpServerID: uuid.NullUUID{UUID: f.toolset.ID, Valid: true}})
 	require.NoError(t, err)
 	return count
 }

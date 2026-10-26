@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const WorkloadAdmissionMatchKind = {
 /**
  * How the subject is compared: exact | wildcard.
  */
-export type WorkloadAdmissionMatchKind = ClosedEnum<
+export type WorkloadAdmissionMatchKind = OpenEnum<
   typeof WorkloadAdmissionMatchKind
 >;
 
@@ -84,9 +85,10 @@ export type WorkloadAdmission = {
 };
 
 /** @internal */
-export const WorkloadAdmissionMatchKind$inboundSchema: z.ZodMiniEnum<
-  typeof WorkloadAdmissionMatchKind
-> = z.enum(WorkloadAdmissionMatchKind);
+export const WorkloadAdmissionMatchKind$inboundSchema: z.ZodMiniType<
+  WorkloadAdmissionMatchKind,
+  unknown
+> = openEnums.inboundSchema(WorkloadAdmissionMatchKind);
 
 /** @internal */
 export const WorkloadAdmission$inboundSchema: z.ZodMiniType<

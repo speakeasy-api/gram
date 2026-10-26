@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
   canAssignChallengeRole,
   countChallenges,
@@ -173,12 +174,12 @@ describe("countChallenges", () => {
     });
   });
 
-  it("counts error outcome as allow bucket", () => {
+  it("does not count an error outcome as allowed", () => {
     const challenges = [makeChallenge({ outcome: "error" })];
     expect(countChallenges(challenges)).toEqual({
       all: 1,
       deny: 0,
-      allow: 1,
+      allow: 0,
       resolved: 0,
     });
   });
@@ -194,8 +195,23 @@ describe("countChallenges", () => {
     expect(countChallenges(challenges)).toEqual({
       all: 5,
       deny: 2,
-      allow: 2,
+      allow: 1,
       resolved: 1,
     });
+  });
+});
+
+it("never counts unknown or error challenge outcomes as allowed", () => {
+  const challenges = [
+    makeChallenge({ outcome: unrecognized("future_outcome") }),
+    makeChallenge({ outcome: "error" }),
+    makeChallenge({ outcome: "deny" }),
+    makeChallenge({ outcome: "allow" }),
+  ];
+  expect(countChallenges(challenges)).toEqual({
+    all: 4,
+    allow: 1,
+    deny: 1,
+    resolved: 0,
   });
 });

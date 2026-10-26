@@ -19,6 +19,11 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.organizationId }),
 }));
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ agents: mocks }) }));
+// Names for session authorizers. Not what these tests are about, and the
+// real hook needs a client this suite does not stand up.
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({ data: undefined }),
+}));
 
 const agent: ManagedAgent = {
   id: "agent_example",

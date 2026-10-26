@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
@@ -233,7 +234,8 @@ func (s *seeder) seedRoles(ctx context.Context) error {
 	}
 
 	// Show the completed one-time onboarding result, not a pending repair job.
-	// Role plugins stay role-only; the Default plugin remains Everyone.
+	// Role plugins stay role-only and install by default; the Default plugin
+	// remains Everyone and is available for members to turn on.
 	// Matching server content is populated after the servers exist below.
 	defaultPluginID, err := s.q.RolesInsertDefaultPlugin(ctx, repo.RolesInsertDefaultPluginParams{
 		OrganizationID: org,
@@ -408,11 +410,14 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 
 	for _, u := range demoUsers {
 		dirUserID := "demo_dir_" + s.userID(u.handle)
+		firstName, lastName := splitDemoName(u.name)
 		if err := s.q.RolesInsertDirectoryUser(ctx, repo.RolesInsertDirectoryUserParams{
 			OrganizationID:        org,
-			UserID:                s.userID(u.handle),
+			UserID:                conv.ToPGText(s.userID(u.handle)),
 			WorkosDirectoryUserID: dirUserID,
 			Email:                 s.email(u.handle),
+			FirstName:             conv.ToPGText(firstName),
+			LastName:              conv.ToPGText(lastName),
 			DivisionName:          u.division,
 			DepartmentName:        u.department,
 			JobTitle:              u.title,
@@ -427,6 +432,34 @@ func (s *seeder) seedRolesDirectory(ctx context.Context) error {
 			Team:                  u.team,
 		}); err != nil {
 			return fmt.Errorf("insert demo directory group membership %s: %w", u.handle, err)
+		}
+	}
+
+	// Directory people who have not signed in, including one address the
+	// directory reports twice.
+	for _, p := range demoDirectoryPeople {
+		dirUserID := "demo_dir_" + s.userID(p.handle)
+		if err := s.q.RolesInsertDirectoryUser(ctx, repo.RolesInsertDirectoryUserParams{
+			OrganizationID:        org,
+			UserID:                conv.ToPGTextEmpty(""),
+			WorkosDirectoryUserID: dirUserID,
+			Email:                 s.email(p.emailHandle),
+			FirstName:             conv.ToPGText(p.firstName),
+			LastName:              conv.ToPGText(p.lastName),
+			DivisionName:          "",
+			DepartmentName:        p.department,
+			JobTitle:              p.title,
+			EmployeeType:          "full-time",
+			CostCenterName:        "",
+		}); err != nil {
+			return fmt.Errorf("insert demo directory person %s: %w", p.handle, err)
+		}
+		if err := s.q.RolesInsertDirectoryGroupMembership(ctx, repo.RolesInsertDirectoryGroupMembershipParams{
+			WorkosDirectoryUserID: dirUserID,
+			OrganizationID:        org,
+			Team:                  p.team,
+		}); err != nil {
+			return fmt.Errorf("insert demo directory group membership %s: %w", p.handle, err)
 		}
 	}
 

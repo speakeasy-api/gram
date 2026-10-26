@@ -14,10 +14,9 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/slackscopes"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 )
-
-const directoryScopes = "users:read,users:read.email"
 
 // TokenBundle is encrypted as one versioned object. Never log or return it.
 type TokenBundle struct {
@@ -53,7 +52,7 @@ func NewOAuthProvider(api *slackapi.Client, clientID, clientSecret, redirectURI 
 }
 
 func (p *OAuthProvider) AuthorizationURL(state, workspaceID string) string {
-	q := url.Values{"client_id": {p.clientID}, "scope": {directoryScopes}, "redirect_uri": {p.redirectURI}, "state": {state}}
+	q := url.Values{"client_id": {p.clientID}, "scope": {strings.Join(slackscopes.Requested, ",")}, "redirect_uri": {p.redirectURI}, "state": {state}}
 	if workspaceID != "" {
 		q.Set("team", workspaceID)
 	}
@@ -107,7 +106,9 @@ func (p *OAuthProvider) Exchange(ctx context.Context, code string) (*Authorizati
 		return nil, providerFailure("workspace_required")
 	}
 	scopes := strings.Split(result.Scope, ",")
-	for required := range strings.SplitSeq(directoryScopes, ",") {
+	// Only the directory scopes are required. An install without the others
+	// still connects, and the workspace reports them as missing.
+	for _, required := range slackscopes.Directory {
 		if !slices.Contains(scopes, required) {
 			return nil, providerFailure("scope_missing")
 		}

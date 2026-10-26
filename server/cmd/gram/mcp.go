@@ -57,7 +57,9 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -227,6 +229,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	callbackOrigins.OrganizationHosts = orgHosts
 	identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 
 	enc, err := encryption.New(c.String("encryption-key"))
@@ -266,6 +269,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 			AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 			AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 			AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+			AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 			DevMode:                          serviceEnv == "local",
 		})
 
@@ -321,8 +325,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	approvalService := approval.NewService(logger, db, serverURL, auditLogger)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
+		approvalService,
 	)
 	if err != nil {
 		return err
@@ -361,11 +367,17 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, psbroker)
+	stopClient := shutdown.funcs[pubsubShutdown]
+	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
+		return errors.Join(stopTunnelMetrics(ctx), stopClient(ctx))
+	}
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
-		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
+		TunnelMetrics: tunnelCollector,
+		Sessions:      sessionManager, ChatSessions: chatSessions, Environment: env,
 		Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
@@ -424,6 +436,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	internalsessionissuers.AttachDiscovery(mux, db, logger)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)
+	attachApprovals(mux, logger, approvalService, runtime.MCP, ratelimit.NewRedisStore(redisClient))
 	usersessions.AttachRetiredProxy(mux, logger)
 
 	srv := &http.Server{

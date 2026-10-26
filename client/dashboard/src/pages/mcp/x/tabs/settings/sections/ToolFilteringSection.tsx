@@ -1,3 +1,8 @@
+import { mcpServerVisibilityUpdateForm } from "@/lib/mcp-server-visibility";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
+import { handleError } from "@/lib/errors";
+import { isKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { RequireScope } from "@/components/require-scope";
 import { Field, FieldLabel } from "@/components/ui/Field";
 import {
@@ -39,6 +44,10 @@ export function ToolFilteringSection({
   const queryClient = useQueryClient();
   const groupsQuery = useToolVariationGroups();
   const groups = groupsQuery.data?.groups ?? [];
+  const supportsEditing = isKnownEnumValue(
+    KnownUpdateMcpServerFormVisibility,
+    mcpServer.visibility,
+  );
 
   const currentValue = mcpServer.toolVariationsGroupId ?? DISABLED_VALUE;
   const [draft, setDraft] = useState(currentValue);
@@ -55,8 +64,10 @@ export function ToolFilteringSection({
         : "Failed to update tool filtering settings",
     );
 
+  const followRenamedServer = useFollowRenamedServer();
   const updateMcpServer = useUpdateMcpServerMutation({
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
+      followRenamedServer(updated);
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
@@ -69,21 +80,22 @@ export function ToolFilteringSection({
   // mcpServers.update is a full-record replace for the optional UUID
   // references, so every field has to be re-sent or it gets nulled.
   const applyGroup = (groupId: string | null) => {
-    updateMcpServer.mutate({
-      request: {
-        updateMcpServerForm: {
-          id: mcpServer.id,
-          name: mcpServer.name ?? undefined,
-          remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-          tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-          toolsetId: mcpServer.toolsetId ?? undefined,
-          unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
-          environmentId: mcpServer.environmentId ?? undefined,
-          visibility: mcpServer.visibility,
-          toolVariationsGroupId: groupId ?? undefined,
+    try {
+      const form = mcpServerVisibilityUpdateForm(
+        mcpServer,
+        mcpServer.visibility,
+      );
+      updateMcpServer.mutate({
+        request: {
+          updateMcpServerForm: {
+            ...form,
+            toolVariationsGroupId: groupId ?? undefined,
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      handleError(error, { title: "Couldn't update tool filtering" });
+    }
   };
 
   const createGroup = useCreateGlobalToolVariationGroupMutation({
@@ -126,7 +138,7 @@ export function ToolFilteringSection({
               <RequireScope scope="mcp:write" level="component">
                 <Select
                   value={draft}
-                  disabled={isSaving}
+                  disabled={!supportsEditing || isSaving}
                   onValueChange={(value) => setDraft(value)}
                 >
                   <SelectTrigger
@@ -150,8 +162,22 @@ export function ToolFilteringSection({
                 <Button
                   variant="secondary"
                   size="md"
-                  disabled={isSaving || groupsQuery.isLoading}
-                  onClick={() => createGroup.mutate({})}
+                  disabled={
+                    !supportsEditing || isSaving || groupsQuery.isLoading
+                  }
+                  onClick={() => {
+                    try {
+                      mcpServerVisibilityUpdateForm(
+                        mcpServer,
+                        mcpServer.visibility,
+                      );
+                      createGroup.mutate({});
+                    } catch (error) {
+                      handleError(error, {
+                        title: "Couldn't enable tool filtering",
+                      });
+                    }
+                  }}
                 >
                   {createGroup.isPending && (
                     <Button.LeftIcon>
@@ -168,14 +194,16 @@ export function ToolFilteringSection({
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
-            Filtering applies to every endpoint on this server.
+            {supportsEditing
+              ? "Filtering applies to every endpoint on this server."
+              : "Refresh the page before changing tool filtering for this server."}
           </SettingsSection.FooterHint>
           {hasGroups && (
             <SettingsSection.FooterActions>
               <RequireScope scope="mcp:write" level="component">
                 <FooterSaveButton
                   pending={updateMcpServer.isPending}
-                  disabled={!dirty || isSaving}
+                  disabled={!supportsEditing || !dirty || isSaving}
                   onClick={() =>
                     applyGroup(draft === DISABLED_VALUE ? null : draft)
                   }

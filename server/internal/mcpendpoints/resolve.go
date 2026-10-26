@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -196,7 +197,8 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 		case err != nil:
 			return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load hosted MCP toolset").LogError(ctx, logger)
 		}
-		if !toolset.McpEnabled || (server.Visibility == mcpservers.VisibilityPublic) != toolset.McpIsPublic || server.UserSessionIssuerID != toolset.UserSessionIssuerID {
+		// Drifted pairs stay denied until the wrapper becomes the only writer.
+		if !hostedmcp.InSync(toolset, &server) {
 			return deniedResult(&endpoint, &server, nil, mode), nil
 		}
 	}

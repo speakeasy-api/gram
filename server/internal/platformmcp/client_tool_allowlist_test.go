@@ -18,35 +18,37 @@ import (
 
 const (
 	testChatGPTConnectorClientID = "https://chatgpt.com/oauth/connector-id/client.json"
+	testCodexClientID            = "https://chatgpt.com/oauth/codex/client.json"
 	testOtherClientID            = "https://client.example/oauth/client.json"
+	testDCRClientID              = "00000000-0000-0000-0000-000000000000"
 )
 
-func TestIsChatGPTClient(t *testing.T) {
+func TestIsOpenAIClient(t *testing.T) {
 	t.Parallel()
 
 	for clientID, want := range map[string]bool{
 		testChatGPTConnectorClientID:                            true,
 		"https://chatgpt.com/oauth/client.json":                 true,
-		"https://chatgpt.com/oauth/codex/client.json":           false,
-		"https://chatgpt.com/oauth/codex/server-id/client.json": false,
+		testCodexClientID:                                       true,
+		"https://chatgpt.com/oauth/codex/server-id/client.json": true,
 		testOtherClientID:                                       false,
-		"00000000-0000-0000-0000-000000000000":                  false,
+		testDCRClientID:                                         false,
 		"":                                                      false,
 	} {
-		require.Equal(t, want, isChatGPTClient(clientID), clientID)
+		require.Equal(t, want, isOpenAIClient(clientID), clientID)
 	}
 }
 
-func TestChatGPTToolAllowlistNamesRegisteredExternalTools(t *testing.T) {
+func TestOpenAIToolAllowlistNamesRegisteredExternalTools(t *testing.T) {
 	t.Parallel()
 
 	registered := names(newAllowlistTestRuntime(t, nil).registrar.For(AudienceExternal))
-	for _, name := range chatGPTToolAllowlist {
+	for _, name := range openAIToolAllowlist {
 		require.Contains(t, registered, name)
 	}
 }
 
-func TestExternalCatalogueIntersectsChatGPTAllowlistWithGrants(t *testing.T) {
+func TestExternalCatalogueIntersectsOpenAIAllowlistWithGrants(t *testing.T) {
 	t.Parallel()
 
 	registrar := &Registrar{descriptors: []Descriptor{
@@ -67,7 +69,7 @@ func TestExternalCatalogueIntersectsChatGPTAllowlistWithGrants(t *testing.T) {
 	require.Equal(t, []string{"search_mcp_catalog", "list_projects", "get_platform_context"}, toolNames(registrar.FilterExternalTools(ctx, other, tools)))
 }
 
-func TestRuntimeToolsListLimitsChatGPTToAllowlist(t *testing.T) {
+func TestRuntimeToolsListLimitsOpenAIClientsToAllowlist(t *testing.T) {
 	t.Parallel()
 
 	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
@@ -80,50 +82,58 @@ func TestRuntimeToolsListLimitsChatGPTToAllowlist(t *testing.T) {
 		allowlistRPC(t, handler, runtime, clientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
 		return toolNames(list.Tools)
 	}
-	require.ElementsMatch(t, chatGPTToolAllowlist, toolsList(testChatGPTConnectorClientID))
-	require.ElementsMatch(t, names(runtime.registrar.For(AudienceExternal)), toolsList(testOtherClientID), "other clients keep the full catalogue")
+	full := names(runtime.registrar.For(AudienceExternal))
+	require.ElementsMatch(t, openAIToolAllowlist, toolsList(testChatGPTConnectorClientID))
+	require.ElementsMatch(t, openAIToolAllowlist, toolsList(testCodexClientID), "the ChatGPT desktop app signs in as Codex")
+	require.ElementsMatch(t, full, toolsList(testOtherClientID), "other clients keep the full catalogue")
+	require.ElementsMatch(t, full, toolsList(testDCRClientID), "dynamically registered clients keep the full catalogue")
 }
 
-func TestRuntimeToolsCallRejectsToolsHiddenFromChatGPT(t *testing.T) {
+func TestRuntimeToolsCallRejectsToolsHiddenFromOpenAIClients(t *testing.T) {
 	t.Parallel()
 
 	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
 	handler := runtime.Handler()
 	call := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_platform_context","arguments":{}}}`
 
-	chatGPT := allowlistRPCRaw(t, handler, runtime, testChatGPTConnectorClientID, call)
-	require.NotNil(t, chatGPT.Error)
-	require.Equal(t, `unknown tool "get_platform_context"`, chatGPT.Error.Message)
+	for _, clientID := range []string{testChatGPTConnectorClientID, testCodexClientID} {
+		limited := allowlistRPCRaw(t, handler, runtime, clientID, call)
+		require.NotNil(t, limited.Error, clientID)
+		require.Equal(t, `unknown tool "get_platform_context"`, limited.Error.Message, clientID)
+	}
 
 	other := allowlistRPCRaw(t, handler, runtime, testOtherClientID, call)
 	require.Nil(t, other.Error, "other clients can still call the tool")
 }
 
-func TestRuntimeInitializeDropsInstructionsForToolsHiddenFromChatGPT(t *testing.T) {
+func TestRuntimeInitializeDropsInstructionsForToolsHiddenFromOpenAIClients(t *testing.T) {
 	t.Parallel()
 
 	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
 	handler := runtime.Handler()
 	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
 
-	var chatGPT, other struct {
+	var chatGPT, codex, other struct {
 		Instructions string `json:"instructions"`
 	}
 	allowlistRPC(t, handler, runtime, testChatGPTConnectorClientID, initialize, &chatGPT)
+	allowlistRPC(t, handler, runtime, testCodexClientID, initialize, &codex)
 	allowlistRPC(t, handler, runtime, testOtherClientID, initialize, &other)
+
+	require.Equal(t, chatGPT.Instructions, codex.Instructions, "Codex gets the same limited instructions as ChatGPT")
 
 	require.Contains(t, other.Instructions, "distribute_mcp_to_plugin", "other clients keep every instruction")
 	require.Less(t, len(chatGPT.Instructions), len(other.Instructions))
 	require.Contains(t, chatGPT.Instructions, "attach_platform_mcp_identity_provider", "golden-path guidance stays")
 	for _, descriptor := range runtime.registrar.Descriptors() {
-		if slices.Contains(chatGPTToolAllowlist, descriptor.Name) {
+		if slices.Contains(openAIToolAllowlist, descriptor.Name) {
 			continue
 		}
 		require.NotRegexp(t, `\b`+descriptor.Name+`\b`, chatGPT.Instructions)
 	}
 }
 
-func TestRuntimeDiscoverDropsInstructionsForToolsHiddenFromChatGPT(t *testing.T) {
+func TestRuntimeDiscoverDropsInstructionsForToolsHiddenFromOpenAIClients(t *testing.T) {
 	t.Parallel()
 
 	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})

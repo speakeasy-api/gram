@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/Button";
 import { ExternalLink, FolderSync, Globe, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
+import { DirectoryPeopleSummary } from "@/pages/identities/DirectoryPeopleSummary";
+
 import { DirectoryRoleMappings } from "./identity-provider/DirectoryRoleMappings";
 import { IdentityProviders } from "./identity-provider/IdentityProviders";
 import { useEnterpriseIssuer } from "./identity-provider/useEnterpriseIssuer";
@@ -510,20 +512,23 @@ function SingleSignOnTab(): JSX.Element {
         hideCard={showRoleMappings}
         below={
           scimActive && (
-            // "section" renders nothing for non-admins, so the admin-only
-            // listing is never requested.
-            <RequireScope scope="org:admin" level="section">
-              <DirectoryRoleMappings
-                footerAction={
-                  <WorkOSPortalButton
-                    intent="dsync"
-                    errorFallback="Failed to open the directory connection"
-                    label="Manage connection"
-                    external
-                  />
-                }
-              />
-            </RequireScope>
+            <>
+              <DirectoryPeopleSummary className="my-4 text-sm" />
+              {/* "section" renders nothing for non-admins, so the admin-only
+                  listing is never requested. */}
+              <RequireScope scope="org:admin" level="section">
+                <DirectoryRoleMappings
+                  footerAction={
+                    <WorkOSPortalButton
+                      intent="dsync"
+                      errorFallback="Failed to open the directory connection"
+                      label="Manage connection"
+                      external
+                    />
+                  }
+                />
+              </RequireScope>
+            </>
           )
         }
       />

@@ -20,6 +20,7 @@ import {
 import { badgeTone } from "@/lib/badgeTone";
 import { Badge } from "@/components/ui/badge";
 import { RegistryEntrySheet, CATALOG_NOTICE } from "./RegistryEntrySheet";
+import { RegistryPromotionCandidates } from "./RegistryPromotionCandidates";
 import { RegistryOktaUnmapped } from "./RegistryOktaUnmapped";
 
 export function RegistryList(): JSX.Element {
@@ -177,6 +178,7 @@ export function RegistryList(): JSX.Element {
           Next
         </Button>
       </div>
+      <RegistryPromotionCandidates onOpenEntry={(id) => setEditor({ id })} />
       <RegistryOktaUnmapped onOpen={(id) => setEditor({ id })} />
       {editor && (
         <RegistryEntrySheet

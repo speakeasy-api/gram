@@ -33,11 +33,12 @@ const issuerGateReasonIdentityChainingReauthentication = "identity_chaining_reau
 type identityChainer interface {
 	Acquire(ctx context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome)
 	CheckConsent(ctx context.Context, req identitychaining.Request, signInID uuid.UUID) identitychaining.Outcome
+	AcquireConsent(ctx context.Context, req identitychaining.Request, signInID uuid.UUID) (identitychaining.Token, identitychaining.Outcome)
 	Governs(ctx context.Context, req identitychaining.Request) bool
 	Serves(ctx context.Context, req identitychaining.Request) (uuid.UUID, bool)
 	Configured(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID) bool
 	HasUsableCredential(ctx context.Context, req identitychaining.Request) bool
-	RetireConsentCredentials(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, userID string, signInID uuid.UUID) error
+	RetireConsentCredentials(ctx context.Context, organizationID string, userSessionIssuerID uuid.UUID, userID string, signInID uuid.UUID) error
 	RefreshDecision(ctx context.Context, req identitychaining.Request) identitychaining.RefreshVerdict
 }
 
@@ -63,12 +64,16 @@ func (s *Service) SetIdentityChainer(chainer identityChainer) {
 // upstream. Chaining only uses a binding for that client, so a credential
 // without one, a no-auth choice included, never chains.
 func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, backendIssuerID, chosenClientID uuid.NullUUID) (identitychaining.Request, bool) {
+	return s.identityChainingRequestForKind(ctx, mcpidentity.KindUserSession, organizationID, projectID, userSessionIssuerID, upstreamResource, tunneled, backendIssuerID, chosenClientID)
+}
+
+func (s *Service) identityChainingRequestForKind(ctx context.Context, kind mcpidentity.Kind, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, backendIssuerID, chosenClientID uuid.NullUUID) (identitychaining.Request, bool) {
 	var none identitychaining.Request
 	if s.identityChainer == nil || !chosenClientID.Valid {
 		return none, false
 	}
 	identity, ok := mcpidentity.FromContext(ctx)
-	if !ok || identity.Kind() != mcpidentity.KindUserSession || identity.UserID() == "" {
+	if !ok || identity.Kind() != kind || identity.UserID() == "" || (kind == mcpidentity.KindConsentDiscovery && !time.Now().Before(identity.ExpiresAt())) {
 		return none, false
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -99,6 +104,14 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		return none, err
 	case selected && !choice.noAuth():
 		backendIssuerID = choice.remoteSessionIssuerID
+	}
+	// A typed auth client is authoritative: its own material or none, never
+	// identity chaining or another client in its place.
+	if authentication.authClient != nil {
+		if choice.noAuth() {
+			return none, nil
+		}
+		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
 	}
 	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID, authentication.chosenClient)
 	switch {
@@ -241,12 +254,12 @@ func identityChainingError(outcome identitychaining.Outcome) error {
 	return oops.E(oops.CodeForbidden, nil, "enterprise-managed authorization for this MCP server failed (%s); contact your administrator", outcome.Reason)
 }
 
-// metaMemberChainer returns the tools/call gate's chaining hook for member,
+// metaMemberChainer returns the runtime chaining hook for member,
 // or nil when chaining cannot apply: no gated issuer, or, on a stored
 // gateway, a member outside the gateway's project, whose bindings belong to
 // another project. An organization gateway chains each member in its own
 // project.
-func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) func(ctx context.Context, upstreamResource string) (string, error) {
+func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, kind mcpidentity.Kind, signInID uuid.UUID) func(ctx context.Context, upstreamResource string) (string, error) {
 	if s.identityChainer == nil || gate.userSessionIssuerID == uuid.Nil {
 		return nil
 	}
@@ -254,11 +267,17 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) fu
 		return nil
 	}
 	return func(ctx context.Context, upstreamResource string) (string, error) {
-		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, member.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID, member.chosenClientID)
+		req, chainable := s.identityChainingRequestForKind(ctx, kind, gate.organizationID, member.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID, member.chosenClientID)
 		if !chainable {
 			return "", nil
 		}
-		chained, outcome := s.identityChainer.Acquire(ctx, req)
+		var chained identitychaining.Token
+		var outcome identitychaining.Outcome
+		if kind == mcpidentity.KindConsentDiscovery {
+			chained, outcome = s.identityChainer.AcquireConsent(ctx, req, signInID)
+		} else {
+			chained, outcome = s.identityChainer.Acquire(ctx, req)
+		}
 		switch {
 		case outcome.Succeeded():
 			return chained.Value(), nil
@@ -270,6 +289,16 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) fu
 			return "", &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization is temporarily unavailable (%s); retry shortly", member.slug, outcome.Reason)}
 		}
 		return "", &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization failed (%s); contact your administrator", member.slug, outcome.Reason)}
+	}
+}
+
+func (s *Service) gatewayMemberChainer(gate *metaGateContext, kind mcpidentity.Kind, signInID uuid.UUID) func(context.Context, metaMember, string) (string, error) {
+	return func(ctx context.Context, member metaMember, resource string) (string, error) {
+		chain := s.metaMemberChainer(gate, member, kind, signInID)
+		if chain == nil {
+			return "", nil
+		}
+		return chain(ctx, resource)
 	}
 }
 

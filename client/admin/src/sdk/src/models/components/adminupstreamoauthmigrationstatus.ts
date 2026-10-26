@@ -8,18 +8,42 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AdminUpstreamAuthEnforcement,
+  AdminUpstreamAuthEnforcement$inboundSchema,
+} from "./adminupstreamauthenforcement.js";
+import {
+  AdminUpstreamOAuthMigrationAuthClients,
+  AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
+} from "./adminupstreamoauthmigrationauthclients.js";
+import {
+  AdminUpstreamOAuthMigrationExecutionProfiles,
+  AdminUpstreamOAuthMigrationExecutionProfiles$inboundSchema,
+} from "./adminupstreamoauthmigrationexecutionprofiles.js";
+import {
   AdminUpstreamOAuthMigrationServer,
   AdminUpstreamOAuthMigrationServer$inboundSchema,
 } from "./adminupstreamoauthmigrationserver.js";
 
 /**
- * Where one organization stands in the upstream OAuth migration, read from a dry run of both backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices.
+ * Where one organization stands in the upstream OAuth migration, read from a dry run of its backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices. Typed auth clients are reported separately in auth_clients and never affect migrated.
  */
 export type AdminUpstreamOAuthMigrationStatus = {
+  /**
+   * Where one organization stands in recording a typed auth client for every upstream identity its servers are configured with (upstream OAuth clients, source credential headers and identity chaining upstreams), and in retiring backfilled records the configuration no longer yields. Nothing reads these records yet.
+   */
+  authClients?: AdminUpstreamOAuthMigrationAuthClients | undefined;
   /**
    * Live user session credentials scanned.
    */
   credentials: number;
+  /**
+   * One organization's upstream auth enforcement.
+   */
+  enforcement?: AdminUpstreamAuthEnforcement | undefined;
+  /**
+   * Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.
+   */
+  executionProfiles?: AdminUpstreamOAuthMigrationExecutionProfiles | undefined;
   /**
    * Whether the organization has nothing left to write and no server needing configuration.
    */
@@ -56,7 +80,14 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    auth_clients: z.optional(
+      AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
+    ),
     credentials: z.int(),
+    enforcement: z.optional(AdminUpstreamAuthEnforcement$inboundSchema),
+    execution_profiles: z.optional(
+      AdminUpstreamOAuthMigrationExecutionProfiles$inboundSchema,
+    ),
     migrated: z.boolean(),
     organization_id: z.string(),
     pending_associations: z.int(),
@@ -69,6 +100,8 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "auth_clients": "authClients",
+      "execution_profiles": "executionProfiles",
       "organization_id": "organizationId",
       "pending_associations": "pendingAssociations",
       "pending_selections": "pendingSelections",

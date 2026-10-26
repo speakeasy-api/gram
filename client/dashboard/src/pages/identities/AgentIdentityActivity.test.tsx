@@ -16,6 +16,13 @@ vi.mock("./useIdentityQueries", () => ({
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ access: { href: () => "/org/access" } }),
 }));
+// Resolving actor names reads the agent and member inventories, which want a
+// query client and a session. These tests are about which audit query the
+// panel sends, so the lookup is stood in for rather than provided.
+vi.mock("@/components/auditlogs/audit-principals", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useAuditPrincipals: () => ({ agents: new Map(), users: new Map() }),
+}));
 vi.mock("@gram/client/react-query/auditLogs.js", () => ({
   useAuditLogs: (...args: unknown[]) => mocks.audit(...args),
 }));

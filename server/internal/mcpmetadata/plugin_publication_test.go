@@ -112,7 +112,7 @@ func createMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug 
 	t.Helper()
 
 	toolset := createTestToolset(t, ctx, ti, slug)
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
 		McpEnabled: true,
 		ID:         toolset.ID,
 		ProjectID:  toolset.ProjectID,
@@ -128,7 +128,7 @@ func createPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, sl
 	t.Helper()
 
 	toolset := createMCPToolset(t, ctx, ti, slug)
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,

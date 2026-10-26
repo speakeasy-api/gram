@@ -18,12 +18,13 @@ import (
 
 // Server lists the keys service endpoint HTTP handlers.
 type Server struct {
-	Mounts    []*MountPoint
-	CreateKey http.Handler
-	RotateKey http.Handler
-	ListKeys  http.Handler
-	RevokeKey http.Handler
-	VerifyKey http.Handler
+	Mounts          []*MountPoint
+	CreateKey       http.Handler
+	RotateKey       http.Handler
+	ListKeys        http.Handler
+	RevokeKey       http.Handler
+	UpdateKeyPolicy http.Handler
+	VerifyKey       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,13 +58,15 @@ func New(
 			{"RotateKey", "POST", "/rpc/keys.rotate"},
 			{"ListKeys", "GET", "/rpc/keys.list"},
 			{"RevokeKey", "DELETE", "/rpc/keys.revoke"},
+			{"UpdateKeyPolicy", "POST", "/rpc/keys.updatePolicy"},
 			{"VerifyKey", "GET", "/rpc/keys.verify"},
 		},
-		CreateKey: NewCreateKeyHandler(e.CreateKey, mux, decoder, encoder, errhandler, formatter),
-		RotateKey: NewRotateKeyHandler(e.RotateKey, mux, decoder, encoder, errhandler, formatter),
-		ListKeys:  NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
-		RevokeKey: NewRevokeKeyHandler(e.RevokeKey, mux, decoder, encoder, errhandler, formatter),
-		VerifyKey: NewVerifyKeyHandler(e.VerifyKey, mux, decoder, encoder, errhandler, formatter),
+		CreateKey:       NewCreateKeyHandler(e.CreateKey, mux, decoder, encoder, errhandler, formatter),
+		RotateKey:       NewRotateKeyHandler(e.RotateKey, mux, decoder, encoder, errhandler, formatter),
+		ListKeys:        NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
+		RevokeKey:       NewRevokeKeyHandler(e.RevokeKey, mux, decoder, encoder, errhandler, formatter),
+		UpdateKeyPolicy: NewUpdateKeyPolicyHandler(e.UpdateKeyPolicy, mux, decoder, encoder, errhandler, formatter),
+		VerifyKey:       NewVerifyKeyHandler(e.VerifyKey, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -76,6 +79,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RotateKey = m(s.RotateKey)
 	s.ListKeys = m(s.ListKeys)
 	s.RevokeKey = m(s.RevokeKey)
+	s.UpdateKeyPolicy = m(s.UpdateKeyPolicy)
 	s.VerifyKey = m(s.VerifyKey)
 }
 
@@ -88,6 +92,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRotateKeyHandler(mux, h.RotateKey)
 	MountListKeysHandler(mux, h.ListKeys)
 	MountRevokeKeyHandler(mux, h.RevokeKey)
+	MountUpdateKeyPolicyHandler(mux, h.UpdateKeyPolicy)
 	MountVerifyKeyHandler(mux, h.VerifyKey)
 }
 
@@ -285,6 +290,59 @@ func NewRevokeKeyHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "revokeKey")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "keys")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateKeyPolicyHandler configures the mux to serve the "keys" service
+// "updateKeyPolicy" endpoint.
+func MountUpdateKeyPolicyHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/keys.updatePolicy", f)
+}
+
+// NewUpdateKeyPolicyHandler creates a HTTP handler which loads the HTTP
+// request and calls the "keys" service "updateKeyPolicy" endpoint.
+func NewUpdateKeyPolicyHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateKeyPolicyRequest(mux, decoder)
+		encodeResponse = EncodeUpdateKeyPolicyResponse(encoder)
+		encodeError    = EncodeUpdateKeyPolicyError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateKeyPolicy")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "keys")
 		payload, err := decodeRequest(r)
 		if err != nil {

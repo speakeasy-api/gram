@@ -1,3 +1,5 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import type {
   McpServer,
@@ -9,6 +11,9 @@ import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
 import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus.js";
+import { invalidateAllGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import type { QueryClient } from "@tanstack/react-query";
 
 /**
@@ -29,7 +34,10 @@ export function mcpServerVisibilityUpdateForm(
     unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
     environmentId: mcpServer.environmentId ?? undefined,
     toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-    visibility,
+    visibility: requireKnownEnumValue(
+      KnownUpdateMcpServerFormVisibility,
+      visibility,
+    ),
   };
 }
 
@@ -65,5 +73,9 @@ export async function invalidateMcpServerQueries(
     invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
     invalidateAllPlugins(queryClient, { refetchType: "all" }),
     invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
+    // A hosted server's visibility writes through to its toolset and billing counts.
+    invalidateAllToolset(queryClient, { refetchType: "all" }),
+    invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+    invalidateAllGetPeriodUsage(queryClient, { refetchType: "all" }),
   ]);
 }

@@ -193,6 +193,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 					Source:              upstreamclients.SelectionSourceBackfill,
 					PickedMcpServerIds:  []uuid.UUID{},
 					PickedClientIds:     []uuid.UUID{},
+					PickedAuthClientIds: nil,
 				})
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)

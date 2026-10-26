@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -86,6 +87,14 @@ type Service struct {
 	// agentVersions records each polling agent's speakeasyd version for the
 	// staff fleet view. Nil skips recording.
 	agentVersions *deviceagentversions.Store
+
+	// connectionStatuses reads members' MCP server sign-in state for
+	// getMyConnections. Nil reports every server as unknown.
+	connectionStatuses MemberConnectionStatuses
+
+	// connectionsLimiter bounds getMyConnections reads per member. Nil leaves
+	// it unlimited.
+	connectionsLimiter *ratelimit.Limiter
 }
 
 // WorkloadTokenTargets resolves where a workload exchanges an identity
@@ -117,22 +126,24 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:            logger,
-		db:                db,
-		repo:              repo.New(db),
-		auth:              auth.New(logger, db, sessions, authzEngine),
-		authz:             authzEngine,
-		audit:             auditLogger,
-		productFeatures:   productFeatures,
-		serverURL:         serverURL,
-		orgHosts:          orgHosts,
-		blobStore:         blobStore,
-		telemetry:         telemetryLogger,
-		growth:            growthEmitter,
-		workloadTokens:    nil,
-		deviceAgentTokens: deviceAgentTokens,
-		agentVersions:     nil,
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:             logger,
+		db:                 db,
+		repo:               repo.New(db),
+		auth:               auth.New(logger, db, sessions, authzEngine),
+		authz:              authzEngine,
+		audit:              auditLogger,
+		productFeatures:    productFeatures,
+		serverURL:          serverURL,
+		orgHosts:           orgHosts,
+		blobStore:          blobStore,
+		telemetry:          telemetryLogger,
+		growth:             growthEmitter,
+		workloadTokens:     nil,
+		deviceAgentTokens:  deviceAgentTokens,
+		agentVersions:      nil,
+		connectionStatuses: nil,
+		connectionsLimiter: nil,
 	}
 }
 
@@ -266,27 +277,16 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// the `agent` scope; a per-user key carries only `agent_user` (agent implies
 	// agent_user, never the reverse — see auth.effectiveScopes), so the presence
 	// of `agent` distinguishes them.
-	isInstallKey := slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String())
-
-	var email string
-	if isInstallKey {
-		// Org key: the owner is an admin, not the developer, so we must be vouched
-		// an email — the MDM profile supplies it via the Gram-User-Email header,
-		// or the deprecated `?email=` param on agents predating it.
-		vouched := conv.PtrValOr(payload.Email, "")
-		if vouched == "" {
-			vouched = conv.PtrValOr(payload.LegacyEmail, "")
-		}
-		email = conv.NormalizeEmail(vouched)
-		if email == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "a vouched email is required when authenticating with an org-scoped agent install key; send it in the Gram-User-Email header")
-		}
-	} else if authCtx.Email != nil {
-		// Per-user key: the owner is the enrolled developer, bound to the token.
-		email = conv.NormalizeEmail(*authCtx.Email)
+	// Org key: the owner is an admin, not the developer, so the MDM profile
+	// vouches the email via the Gram-User-Email header, or the deprecated
+	// `?email=` param on agents predating it.
+	vouched := conv.PtrValOr(payload.Email, "")
+	if vouched == "" {
+		vouched = conv.PtrValOr(payload.LegacyEmail, "")
 	}
-	if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid email")
+	email, err := pollingEmail(authCtx, vouched)
+	if err != nil {
+		return nil, err
 	}
 
 	// Best-effort: record that this user's device agent polled, so the dashboard
@@ -370,6 +370,28 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 
 	result, _, err := s.pluginSetFor(ctx, authCtx, principals)
 	return result, err
+}
+
+// pollingEmail resolves the enrolled user's email by credential type. An org
+// install key carries the `agent` scope; a per-user key carries only
+// `agent_user` (agent implies agent_user, never the reverse — see
+// auth.effectiveScopes), so the presence of `agent` distinguishes them. The
+// org key's owner is an admin, so the email it is vouched is required; a
+// per-user key's owner is the enrolled user and any vouched email is ignored.
+func pollingEmail(authCtx *contextvalues.AuthContext, vouched string) (string, error) {
+	var email string
+	if slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String()) {
+		email = conv.NormalizeEmail(vouched)
+		if email == "" {
+			return "", oops.E(oops.CodeBadRequest, nil, "a vouched email is required when authenticating with an org-scoped agent install key; send it in the Gram-User-Email header")
+		}
+	} else if authCtx.Email != nil {
+		email = conv.NormalizeEmail(*authCtx.Email)
+	}
+	if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email); err != nil {
+		return "", oops.E(oops.CodeBadRequest, err, "invalid email")
+	}
+	return email, nil
 }
 
 // getAgentPlugins resolves plugins for an agent-principal key: the agent, the
@@ -553,7 +575,16 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		return base + marketplace.RoutePrefix + token + ".git"
 	}
 
-	result := mv.BuildAgentPluginsView(rows, marketplaceURL)
+	// Server lists are display metadata: trouble reading them must not block
+	// plugin delivery. A nil map leaves every plugin's list off, which the
+	// agent renders as it did before plugins listed their servers.
+	servers, err := s.pluginServers(ctx, authCtx.ActiveOrganizationID, principals, rows)
+	if err != nil {
+		s.logger.WarnContext(ctx, "plugin servers unavailable; plugin poll omits server lists", attr.SlogError(err))
+		servers = nil
+	}
+
+	result := mv.BuildAgentPluginsView(rows, marketplaceURL, servers)
 	configuration := defaultDeviceAgentConfigurationView()
 	if hasConfiguration {
 		built, err := buildDeviceAgentConfigurationView(configurationRow)

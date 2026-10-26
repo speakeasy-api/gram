@@ -59,6 +59,7 @@ import (
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -359,7 +360,7 @@ func (s *Service) setDefaultServerIcon(ctx context.Context, logger *slog.Logger,
 	// the row already had a logo (or a user edit raced ahead) -- not a
 	// failure.
 	if _, err := mcpmetadatarepo.New(s.db).SetDefaultLogoIfUnset(ctx, mcpmetadatarepo.SetDefaultLogoIfUnsetParams{
-		McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		McpServerID: mcpServerID,
 		ProjectID:   projectID,
 		LogoID:      uuid.NullUUID{UUID: assetID, Valid: true},
 	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -854,7 +855,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			return nil, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, logger)
 		}
 	} else if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !existing.UserSessionIssuerID.Valid {
-		issuerID, err = MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
+		issuerID, err = serverissuer.Mint(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
 		}
@@ -1114,6 +1115,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		ProjectID:      *authCtx.ProjectID,
 		ActorUserID:    authCtx.UserID,
 		ActorEmail:     authCtx.Email,
+		ActorSystem:    "",
 		TracerProvider: s.tracerProvider,
 	})
 	if err != nil {
