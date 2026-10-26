@@ -555,7 +555,7 @@ func DescribeToolsetEntries(
 
 		hosting := deriveToolsetHosting(toolsetHostingColumns{
 			McpSlug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID, McpEnabled: toolset.McpEnabled, McpIsPublic: toolset.McpIsPublic,
-			UserSessionIssuerID: toolset.UserSessionIssuerID, ExternalOauthServerID: toolset.ExternalOauthServerID, OauthProxyServerID: toolset.OauthProxyServerID,
+			UserSessionIssuerID: toolset.UserSessionIssuerID, ExternalOauthServerID: toolset.ExternalOauthServerID,
 		}, hostingstate.For(hostingByID, toolset.ID))
 		result = append(result, &types.ToolsetEntry{
 			ID:                           toolset.ID.String(),
@@ -642,7 +642,7 @@ func DescribeToolset(
 	}
 	hosting := deriveToolsetHosting(toolsetHostingColumns{
 		McpSlug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID, McpEnabled: toolset.McpEnabled, McpIsPublic: toolset.McpIsPublic,
-		UserSessionIssuerID: toolset.UserSessionIssuerID, ExternalOauthServerID: toolset.ExternalOauthServerID, OauthProxyServerID: toolset.OauthProxyServerID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID, ExternalOauthServerID: toolset.ExternalOauthServerID,
 	}, hostingstate.For(hostingByID, toolset.ID))
 
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
@@ -1104,7 +1104,7 @@ func GetToolsetsSummary(
 
 		hosting := deriveToolsetHosting(toolsetHostingColumns{
 			McpSlug: ts.McpSlug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpEnabled: ts.McpEnabled, McpIsPublic: ts.McpIsPublic,
-			UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ExternalOauthServerID: ts.ExternalOauthServerID, OauthProxyServerID: ts.OauthProxyServerID,
+			UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ExternalOauthServerID: ts.ExternalOauthServerID,
 		}, hostingstate.For(hostingByID, ts.ID))
 		result = append(result, &types.ToolsetSummary{
 			ID:                     ts.ID.String(),
