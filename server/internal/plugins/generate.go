@@ -85,6 +85,11 @@ type GenerateConfig struct {
 	APIKey string
 	// HooksAPIKey controls whether the observability plugin is emitted.
 	HooksAPIKey string
+	// HooksKeyIsAgent marks HooksAPIKey as an agent identity's own key rather
+	// than the shared org key. The hooks binary then prefers it to a cached
+	// personal sign-in on the same machine, so the agent's events are never
+	// recorded under the person who signed in.
+	HooksKeyIsAgent bool
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
 	// requires it via the Speakeasy-AI-Project header, and it scopes the default
 	// marketplace name for non-default projects.
@@ -147,6 +152,7 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 		ServerURL:        "https://app.getgram.ai",
 		APIKey:           fingerprintAPIKeySentinel,
 		HooksAPIKey:      fingerprintHooksKeySentinel,
+		HooksKeyIsAgent:  false,
 		ProjectSlug:      "hooks-check",
 		IsDefaultProject: true,
 		Version:          "",
@@ -197,6 +203,7 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		ServerURL:        "https://app.getgram.ai",
 		APIKey:           "",
 		HooksAPIKey:      "",
+		HooksKeyIsAgent:  false,
 		ProjectSlug:      "",
 		IsDefaultProject: true,
 		Version:          "",
@@ -302,6 +309,7 @@ type HooksConfig struct {
 	ProjectSlug     string                       `json:"project_slug"`
 	ServerURL       string                       `json:"server_url"`
 	OrgID           string                       `json:"org_id"`
+	HooksKeyIsAgent bool                         `json:"hooks_key_is_agent,omitempty"`
 	BrowserLogin    bool                         `json:"browser_login"`
 	InstallFailOpen bool                         `json:"install_fail_open"`
 	BinaryVersion   string                       `json:"binary_version"`
@@ -320,6 +328,7 @@ func hooksConfigSnapshot(cfg GenerateConfig) HooksConfig {
 		ProjectSlug:     cfg.ProjectSlug,
 		ServerURL:       cfg.ServerURL,
 		OrgID:           cfg.OrgID,
+		HooksKeyIsAgent: cfg.HooksKeyIsAgent,
 		BrowserLogin:    cfg.BrowserLogin,
 		InstallFailOpen: cfg.InstallFailOpen,
 		BinaryVersion:   hooksBinaryVersion,

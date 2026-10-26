@@ -2213,6 +2213,24 @@ func TestHooksBootstrapEmbedsPinnedReleaseMetadata(t *testing.T) {
 	require.NotContains(t, string(renderHooksPowerShellBootstrap(cfg)), "github.com")
 }
 
+func TestHooksConfigHashTracksAgentKeyIdentity(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Example"}
+	shared := hooksConfigSnapshot(cfg)
+	sharedJSON, err := marshalHooksConfig(shared)
+	require.NoError(t, err)
+	require.NotContains(t, string(sharedJSON), "hooks_key_is_agent", "preserve snapshots from before the flag existed")
+
+	cfg.HooksKeyIsAgent = true
+	agent := hooksConfigSnapshot(cfg)
+	require.True(t, agent.HooksKeyIsAgent)
+	require.NotEqual(t, hooksConfigHash(shared), hooksConfigHash(agent))
+	agentJSON, err := marshalHooksConfig(agent)
+	require.NoError(t, err)
+	require.Contains(t, string(agentJSON), `"hooks_key_is_agent":true`)
+	require.Equal(t, hooksConfigHash(agent), storedHooksConfigHash(agentJSON))
+}
+
 func TestHooksConfigHashTracksBinaryReleaseMetadata(t *testing.T) {
 	t.Parallel()
 	current := hooksConfigSnapshot(GenerateConfig{OrgName: "Acme"})
@@ -2429,6 +2447,26 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 		out, err := exec.Command(nodePath, "--check", path).CombinedOutput()
 		require.NoError(t, err, "index.js failed node --check: %s", out)
 	}
+}
+
+// The hooks binary prefers an agent's key to a cached personal sign-in only
+// when speakeasy.json says the baked key is the agent's.
+func TestGenerateObservabilityPluginMarksAgentKey(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgID:           "org_123",
+		ServerURL:       "https://app.getgram.ai",
+		HooksAPIKey:     "gram_local_agent_key",
+		HooksKeyIsAgent: true,
+		ProjectSlug:     "agents",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "openclaw")
+	require.NoError(t, err)
+
+	var config relay.FileConfig
+	require.NoError(t, json.Unmarshal(files["speakeasy.json"], &config))
+	require.Equal(t, "gram_local_agent_key", config.HooksAPIKey)
+	require.True(t, config.AgentKey)
 }
 
 type codexOTLPHTTPExporter struct {
