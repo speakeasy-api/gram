@@ -49,7 +49,6 @@ type toolsetHostingColumns struct {
 	McpIsPublic           bool
 	UserSessionIssuerID   uuid.NullUUID
 	ExternalOauthServerID uuid.NullUUID
-	OauthProxyServerID    uuid.NullUUID
 }
 
 // deriveToolsetHosting applies hostingstate.Apply to a toolset's hosting columns.
@@ -57,7 +56,7 @@ func deriveToolsetHosting(columns toolsetHostingColumns, row *hostingstate.Row) 
 	//nolint:exhaustruct // Only the hosting columns feed the derivation.
 	derived := hostingstate.Apply(tsr.Toolset{
 		McpSlug: columns.McpSlug, CustomDomainID: columns.CustomDomainID, McpEnabled: columns.McpEnabled, McpIsPublic: columns.McpIsPublic,
-		UserSessionIssuerID: columns.UserSessionIssuerID, ExternalOauthServerID: columns.ExternalOauthServerID, OauthProxyServerID: columns.OauthProxyServerID,
+		UserSessionIssuerID: columns.UserSessionIssuerID, ExternalOauthServerID: columns.ExternalOauthServerID,
 	}, row)
 	return toolsetHosting{
 		McpSlug:             conv.FromPGText[types.Slug](derived.McpSlug),

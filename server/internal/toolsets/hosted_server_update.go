@@ -301,7 +301,7 @@ func applyHostedServerChange(ctx context.Context, tx pgx.Tx, auditLogger *audit.
 		}
 	}
 	// External OAuth is only allowed on public servers; disabling keeps it for a later re-enable.
-	if visibility == mcpservers.VisibilityPrivate && canonical.Visibility != mcpservers.VisibilityPrivate && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid) {
+	if visibility == mcpservers.VisibilityPrivate && canonical.Visibility != mcpservers.VisibilityPrivate && toolset.ExternalOauthServerID.Valid {
 		return hostedServerWrite{}, oops.E(oops.CodeInvalid, nil, "remove the toolset's external OAuth server before changing public visibility")
 	}
 

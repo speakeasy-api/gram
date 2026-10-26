@@ -38,10 +38,10 @@ func ApplyServer(toolset toolsetsrepo.Toolset, serverVisibility string, issuer u
 }
 
 // ReEnableVisibility is the visibility a disabled hosted server comes back with: public only when it carries
-// external OAuth or an OAuth proxy, which a private server cannot, and private otherwise. The toolset's public
-// flag does not count, since later releases stop updating it.
+// external OAuth, which a private server cannot, and private otherwise. The toolset's public flag does not count,
+// since later releases stop updating it, and neither does the retired OAuth proxy link.
 func ReEnableVisibility(toolset toolsetsrepo.Toolset) string {
-	if toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {
+	if toolset.ExternalOauthServerID.Valid {
 		return visibility.Public
 	}
 	return visibility.Private
