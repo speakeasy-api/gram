@@ -223,9 +223,9 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 	return recorded(), nil
 }
 
-// Sent reports the DMs recorded for a request, without sending any. A send
+// Sent counts the DMs recorded for a request, without sending any. A send
 // that fails without an answer, as when it times out, reports nothing, so the
-// run asks here which DMs still need the outcome.
+// run counts the recorded DMs here.
 func (n *Notifier) Sent(ctx context.Context, target Target) (NotifyResult, error) {
 	row, sent, err := n.sentTo(ctx, target)
 	if errors.Is(err, approval.ErrNotFound) {
