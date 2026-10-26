@@ -1,0 +1,27 @@
+server/internal/risk/list_ch.go
+  s_ad2d0c24ceb8da::t_c87ad0c01c90d4 48-49
+server/internal/scanners/async_scan_metrics.go
+  s_ad2d0c24ceb8da::t_43f30b43a72962 61-63,71,73
+server/internal/scanners/llmanalyzer/handler.go
+  s_ad2d0c24ceb8da::t_a31b53a9d94840 97,117,169,177
+server/internal/scanners/promptinjection/handler.go
+  s_ad2d0c24ceb8da::t_09f192905835d4 65,100,104
+server/internal/scanners/promptpolicy/handler.go
+  s_ad2d0c24ceb8da::t_793be0f1075a30 93,97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c9963b6d8049856b70623dbc0831dbc8af285d50",
+  "prompts": {},
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
