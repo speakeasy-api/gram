@@ -424,13 +424,15 @@ type GetRegistryPromotionCandidateRequestBody struct {
 // PromoteRegistryCandidateRequestBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP request body.
 type PromoteRegistryCandidateRequestBody struct {
-	OrganizationID          string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID               string `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID             string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	SourceRevision          string `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	CurationRevision        string `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	PublicName              string `form:"public_name" json:"public_name" xml:"public_name"`
-	PublicTitle             string `form:"public_title" json:"public_title" xml:"public_title"`
+	OrganizationID   string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID        string `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID      string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	SourceRevision   string `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	CurationRevision string `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	PublicName       string `form:"public_name" json:"public_name" xml:"public_name"`
+	// Public title, at most 100 Unicode code points.
+	PublicTitle string `form:"public_title" json:"public_title" xml:"public_title"`
+	// Public description, at most 100 Unicode code points.
 	PublicDescription       string `form:"public_description" json:"public_description" xml:"public_description"`
 	PublicURL               string `form:"public_url" json:"public_url" xml:"public_url"`
 	DocumentationURL        string `form:"documentation_url" json:"documentation_url" xml:"documentation_url"`

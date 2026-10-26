@@ -12144,12 +12144,14 @@ components:
           format: uuid
         public_description:
           type: string
+          description: Public description, at most 100 Unicode code points.
         public_metadata_confirmed:
           type: boolean
         public_name:
           type: string
         public_title:
           type: string
+          description: Public title, at most 100 Unicode code points.
         public_url:
           type: string
         retry_key:

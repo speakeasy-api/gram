@@ -1,8 +1,8 @@
 // Package cliauth implements the cliAuth Goa service: the device agent's
 // interactive enrollment via a PKCE one-time-code exchange (DNO-388).
 //
-//   - Authorize runs under a dashboard session (member-available, org:read —
-//     NOT org-admin). It mints a short-lived opaque code bound to a PKCE
+//   - Authorize runs under a dashboard session for a member of the active
+//     organization. It mints a short-lived opaque code bound to a PKCE
 //     code_challenge and stashes the resolved {user, org, project, scopes,
 //     challenge, email, slug} against it in Redis with a ~5 minute TTL.
 //   - Redeem takes no session or API-key auth: knowledge of the code_verifier
@@ -78,7 +78,6 @@ type Service struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
 	auth        *auth.Auth
-	authz       *authz.Engine
 	sessions    *sessions.Manager
 	pkce        *oauth.PKCEService
 	redis       *redis.Client
@@ -111,7 +110,6 @@ func NewService(
 		logger:      logger,
 		db:          db,
 		auth:        auth.New(logger, db, sessionManager, authzEngine),
-		authz:       authzEngine,
 		sessions:    sessionManager,
 		pkce:        oauth.NewPKCEService(logger),
 		redis:       redisClient,
@@ -188,12 +186,6 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		return org.ID == authCtx.ActiveOrganizationID
 	}) {
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment requires membership in the active organization").LogError(ctx, s.logger)
-	}
-
-	// Member-available gate: any org member (org:read) may enroll their own
-	// device agent. Intentionally NOT org:admin — enrollment is self-service.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
 	}
 
 	if payload.CodeChallengeMethod != pkceMethodS256 {
