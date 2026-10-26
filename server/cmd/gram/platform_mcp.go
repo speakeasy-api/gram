@@ -535,7 +535,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
-		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
+		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts).WithCodeModeAvailability(config.CodeModeAvailable)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
@@ -1242,7 +1242,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
-		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
+		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts).WithCodeModeAvailability(config.CodeModeAvailable)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))

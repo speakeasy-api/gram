@@ -1025,6 +1025,19 @@ func (q *Queries) OrgInsertSigintSensorSignal(ctx context.Context, arg OrgInsert
 	return err
 }
 
+const orgSeedGatewayDiscoveryMode = `-- name: OrgSeedGatewayDiscoveryMode :exec
+UPDATE organization_metadata
+SET gateway_discovery_mode = 'direct'
+WHERE id = $1::text AND gateway_discovery_mode IS NULL
+`
+
+// Show the Organization Gateway with a non-default discovery mode, preserving
+// an administrator's choice on reseed.
+func (q *Queries) OrgSeedGatewayDiscoveryMode(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgSeedGatewayDiscoveryMode, orgID)
+	return err
+}
+
 const orgUpsertMetadata = `-- name: OrgUpsertMetadata :exec
 INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted, scim_enabled)
 VALUES ($1::text, $2::text, $3::text, 'enterprise', TRUE, TRUE)

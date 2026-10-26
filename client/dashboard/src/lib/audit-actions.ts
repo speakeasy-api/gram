@@ -178,6 +178,7 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
   "organization:enterprise_trial_started",
+  "organization:gateway_discovery_mode_updated",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:onboarding_updated",
@@ -726,6 +727,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled fail-open for hooks";
     case "organization:device_agent_configuration_updated":
       return "updated device agent configuration";
+    case "organization:gateway_discovery_mode_updated":
+      return "changed the Organization Gateway default discovery mode for";
     case "organization:account_type_changed":
       return "changed account type for";
     case "organization:inference_key_repaired":

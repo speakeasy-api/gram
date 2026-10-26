@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { MCPAssignments } from "../access/MCPAssignments";
 import { GatewayAccessReview } from "./GatewayAccessReview";
+import { OrganizationGatewayDiscoverySection } from "./OrganizationGatewayDiscoverySection";
 import { SpeakeasyMark } from "@/components/mcp/OrganizationGatewayCard";
 import {
   GatewayNotServed,
@@ -175,6 +176,13 @@ function OrganizationGatewayContent({
                   View assignments
                 </PageTabsTrigger>
               </RequireScope>
+              <RequireScope
+                scope="org:admin"
+                resourceId={organizationId}
+                level="component"
+              >
+                <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
+              </RequireScope>
             </PageTabsList>
           </div>
           <TabsContent value="install" className="mt-6">
@@ -204,6 +212,29 @@ function OrganizationGatewayContent({
                 />
               ) : (
                 <MCPAssignments />
+              )}
+            </RequireScope>
+          </TabsContent>
+          <TabsContent value="settings" className="mt-6">
+            <RequireScope
+              scope="org:admin"
+              resourceId={organizationId}
+              level="section"
+            >
+              {gateway.data ? (
+                <OrganizationGatewayDiscoverySection
+                  gateway={gateway.data}
+                  codeModeEntitled={features.data?.codeModeEnabled}
+                  canManage={canManage}
+                  isCurrentOrganization={isCurrentOrganization}
+                />
+              ) : gateway.isLoading ? (
+                <Skeleton className="h-48 w-full" />
+              ) : (
+                <Text small muted>
+                  Organization Gateway settings are unavailable. Retry loading
+                  the gateway above.
+                </Text>
               )}
             </RequireScope>
           </TabsContent>

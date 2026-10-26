@@ -1619,7 +1619,7 @@ func newStartCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, siteURL.String(), orgHosts, auditLogger, svixClient)
+			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, siteURL.String(), orgHosts, auditLogger, svixClient, mcpService.CodeModeAvailable)
 			organizationsService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			organizations.Attach(mux, organizationsService)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {

@@ -3,7 +3,8 @@
 // the organization's own user session issuer, whose servers are every server
 // in the organization the signed-in user can reach.
 //
-// The gateway is not stored. It exists while its organization owns exactly
+// The gateway is not stored; only its default discovery mode is, on the
+// organization's metadata. It exists while its organization owns exactly
 // one organization-level user session issuer, so creating, moving, or
 // deleting that issuer is what offers or withdraws it. An organization admin
 // must explicitly opt in before it is served, and can turn it off again. It is
@@ -24,6 +25,7 @@ import (
 
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -121,6 +123,15 @@ func Resolve(ctx context.Context, issuers IssuerLister, organizationID string) (
 	default:
 		return uuid.Nil, UnavailabilityMultipleOrganizationIssuers, nil
 	}
+}
+
+// DiscoveryMode is the discovery mode an organization's gateway serves
+// connections that do not choose one at sign-in. Organization admins set it;
+// an organization that never did, or whose stored mode this build does not
+// support, is served Progressive. Serving still falls back to Progressive
+// while Code Mode is unavailable to the organization.
+func DiscoveryMode(organization orgrepo.OrganizationMetadatum) metamcp.DiscoveryMode {
+	return metamcp.ResolveDiscoveryMode(organization.GatewayDiscoveryMode.String)
 }
 
 // URL is the organization gateway's MCP URL under baseURL.

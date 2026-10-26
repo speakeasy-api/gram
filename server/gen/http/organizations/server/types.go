@@ -13,6 +13,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SetGatewayDiscoveryModeRequestBody is the type of the "organizations"
+// service "setGatewayDiscoveryMode" endpoint HTTP request body.
+type SetGatewayDiscoveryModeRequestBody struct {
+	// The organization gateway's default discovery mode.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
+}
+
 // SendInviteRequestBody is the type of the "organizations" service
 // "sendInvite" endpoint HTTP request body.
 type SendInviteRequestBody struct {
@@ -115,6 +122,33 @@ type GetGatewayResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// Why the gateway is not served. Set only when not available.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// The gateway's stored default discovery mode for connections that do not
+	// choose one at sign-in. Set whether or not the gateway is available. While
+	// code_mode_enabled is false, a code_mode default is served as progressive.
+	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
+	// Whether the organization can select Code Mode now: the code runtime is
+	// available and the organization has Code Mode. While false, a code_mode
+	// default serves Progressive.
+	CodeModeEnabled bool `form:"code_mode_enabled" json:"code_mode_enabled" xml:"code_mode_enabled"`
+}
+
+// SetGatewayDiscoveryModeResponseBody is the type of the "organizations"
+// service "setGatewayDiscoveryMode" endpoint HTTP response body.
+type SetGatewayDiscoveryModeResponseBody struct {
+	// Whether the organization is served a gateway.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// The gateway's MCP URL. Set only when available.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Why the gateway is not served. Set only when not available.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// The gateway's stored default discovery mode for connections that do not
+	// choose one at sign-in. Set whether or not the gateway is available. While
+	// code_mode_enabled is false, a code_mode default is served as progressive.
+	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
+	// Whether the organization can select Code Mode now: the code runtime is
+	// available and the organization has Code Mode. While false, a code_mode
+	// default serves Progressive.
+	CodeModeEnabled bool `form:"code_mode_enabled" json:"code_mode_enabled" xml:"code_mode_enabled"`
 }
 
 // SendInviteResponseBody is the type of the "organizations" service
@@ -633,6 +667,196 @@ type GetGatewayUnexpectedResponseBody struct {
 // service "getGateway" endpoint HTTP response body for the "gateway_error"
 // error.
 type GetGatewayGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeUnauthorizedResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "unauthorized" error.
+type SetGatewayDiscoveryModeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeForbiddenResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "forbidden" error.
+type SetGatewayDiscoveryModeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeBadRequestResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "bad_request" error.
+type SetGatewayDiscoveryModeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeNotFoundResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "not_found" error.
+type SetGatewayDiscoveryModeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeConflictResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "conflict" error.
+type SetGatewayDiscoveryModeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeUnsupportedMediaResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "unsupported_media" error.
+type SetGatewayDiscoveryModeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeInvalidResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "invalid" error.
+type SetGatewayDiscoveryModeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeInvariantViolationResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetGatewayDiscoveryModeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeUnexpectedResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "unexpected" error.
+type SetGatewayDiscoveryModeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetGatewayDiscoveryModeGatewayErrorResponseBody is the type of the
+// "organizations" service "setGatewayDiscoveryMode" endpoint HTTP response
+// body for the "gateway_error" error.
+type SetGatewayDiscoveryModeGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4014,6 +4238,22 @@ func NewGetGatewayResponseBody(res *organizations.OrganizationGateway) *GetGatew
 		Available:         res.Available,
 		URL:               res.URL,
 		UnavailableReason: res.UnavailableReason,
+		DiscoveryMode:     res.DiscoveryMode,
+		CodeModeEnabled:   res.CodeModeEnabled,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeResponseBody builds the HTTP response body from
+// the result of the "setGatewayDiscoveryMode" endpoint of the "organizations"
+// service.
+func NewSetGatewayDiscoveryModeResponseBody(res *organizations.OrganizationGateway) *SetGatewayDiscoveryModeResponseBody {
+	body := &SetGatewayDiscoveryModeResponseBody{
+		Available:         res.Available,
+		URL:               res.URL,
+		UnavailableReason: res.UnavailableReason,
+		DiscoveryMode:     res.DiscoveryMode,
+		CodeModeEnabled:   res.CodeModeEnabled,
 	}
 	return body
 }
@@ -4511,6 +4751,156 @@ func NewGetGatewayUnexpectedResponseBody(res *goa.ServiceError) *GetGatewayUnexp
 // result of the "getGateway" endpoint of the "organizations" service.
 func NewGetGatewayGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayGatewayErrorResponseBody {
 	body := &GetGatewayGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setGatewayDiscoveryMode" endpoint of the
+// "organizations" service.
+func NewSetGatewayDiscoveryModeUnauthorizedResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeUnauthorizedResponseBody {
+	body := &SetGatewayDiscoveryModeUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeForbiddenResponseBody builds the HTTP response
+// body from the result of the "setGatewayDiscoveryMode" endpoint of the
+// "organizations" service.
+func NewSetGatewayDiscoveryModeForbiddenResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeForbiddenResponseBody {
+	body := &SetGatewayDiscoveryModeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeBadRequestResponseBody builds the HTTP response
+// body from the result of the "setGatewayDiscoveryMode" endpoint of the
+// "organizations" service.
+func NewSetGatewayDiscoveryModeBadRequestResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeBadRequestResponseBody {
+	body := &SetGatewayDiscoveryModeBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeNotFoundResponseBody builds the HTTP response body
+// from the result of the "setGatewayDiscoveryMode" endpoint of the
+// "organizations" service.
+func NewSetGatewayDiscoveryModeNotFoundResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeNotFoundResponseBody {
+	body := &SetGatewayDiscoveryModeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeConflictResponseBody builds the HTTP response body
+// from the result of the "setGatewayDiscoveryMode" endpoint of the
+// "organizations" service.
+func NewSetGatewayDiscoveryModeConflictResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeConflictResponseBody {
+	body := &SetGatewayDiscoveryModeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setGatewayDiscoveryMode" endpoint of
+// the "organizations" service.
+func NewSetGatewayDiscoveryModeUnsupportedMediaResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeUnsupportedMediaResponseBody {
+	body := &SetGatewayDiscoveryModeUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeInvalidResponseBody builds the HTTP response body
+// from the result of the "setGatewayDiscoveryMode" endpoint of the
+// "organizations" service.
+func NewSetGatewayDiscoveryModeInvalidResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeInvalidResponseBody {
+	body := &SetGatewayDiscoveryModeInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setGatewayDiscoveryMode" endpoint of
+// the "organizations" service.
+func NewSetGatewayDiscoveryModeInvariantViolationResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeInvariantViolationResponseBody {
+	body := &SetGatewayDiscoveryModeInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeUnexpectedResponseBody builds the HTTP response
+// body from the result of the "setGatewayDiscoveryMode" endpoint of the
+// "organizations" service.
+func NewSetGatewayDiscoveryModeUnexpectedResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeUnexpectedResponseBody {
+	body := &SetGatewayDiscoveryModeUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetGatewayDiscoveryModeGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setGatewayDiscoveryMode" endpoint of the
+// "organizations" service.
+func NewSetGatewayDiscoveryModeGatewayErrorResponseBody(res *goa.ServiceError) *SetGatewayDiscoveryModeGatewayErrorResponseBody {
+	body := &SetGatewayDiscoveryModeGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7006,6 +7396,17 @@ func NewGetGatewayPayload(sessionToken *string) *organizations.GetGatewayPayload
 	return v
 }
 
+// NewSetGatewayDiscoveryModePayload builds a organizations service
+// setGatewayDiscoveryMode endpoint payload.
+func NewSetGatewayDiscoveryModePayload(body *SetGatewayDiscoveryModeRequestBody, sessionToken *string) *organizations.SetGatewayDiscoveryModePayload {
+	v := &organizations.SetGatewayDiscoveryModePayload{
+		DiscoveryMode: *body.DiscoveryMode,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewSendInvitePayload builds a organizations service sendInvite endpoint
 // payload.
 func NewSendInvitePayload(body *SendInviteRequestBody, sessionToken *string) *organizations.SendInvitePayload {
@@ -7196,6 +7597,20 @@ func NewSubmitOnboardingSurveyPayload(body *SubmitOnboardingSurveyRequestBody, s
 	v.SessionToken = sessionToken
 
 	return v
+}
+
+// ValidateSetGatewayDiscoveryModeRequestBody runs the validations defined on
+// SetGatewayDiscoveryModeRequestBody
+func ValidateSetGatewayDiscoveryModeRequestBody(body *SetGatewayDiscoveryModeRequestBody) (err error) {
+	if body.DiscoveryMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_mode", "body"))
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
+		}
+	}
+	return
 }
 
 // ValidateSendInviteRequestBody runs the validations defined on

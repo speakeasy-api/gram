@@ -43971,7 +43971,7 @@ paths:
         name: Organization
   /rpc/organizations.getGateway:
     get:
-      description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.'
+      description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer, and the discovery mode it serves connections that do not choose one. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.'
       operationId: getOrganizationGateway
       parameters:
         - allowEmptyValue: true
@@ -44822,6 +44822,94 @@ paths:
       x-speakeasy-name-override: sendInvite
       x-speakeasy-react-hook:
         name: SendInvite
+  /rpc/organizations.setGatewayDiscoveryMode:
+    post:
+      description: 'Set the discovery mode the active organization''s gateway serves connections that do not choose one at sign-in: progressive, direct, or code_mode. It applies to new connections; existing connections keep their mode until they reconnect. code_mode requires the organization''s Code Mode entitlement and an available code runtime. Requires org:admin.'
+      operationId: setOrganizationGatewayDiscoveryMode
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetGatewayDiscoveryModeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationGateway'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setGatewayDiscoveryMode organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: setGatewayDiscoveryMode
+      x-speakeasy-react-hook:
+        name: SetOrganizationGatewayDiscoveryMode
   /rpc/organizations.submitOnboardingSurvey:
     post:
       description: Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.
@@ -101960,6 +102048,16 @@ components:
         available:
           type: boolean
           description: Whether the organization is served a gateway.
+        code_mode_enabled:
+          type: boolean
+          description: 'Whether the organization can select Code Mode now: the code runtime is available and the organization has Code Mode. While false, a code_mode default serves Progressive.'
+        discovery_mode:
+          type: string
+          description: The gateway's stored default discovery mode for connections that do not choose one at sign-in. Set whether or not the gateway is available. While code_mode_enabled is false, a code_mode default is served as progressive.
+          enum:
+            - progressive
+            - direct
+            - code_mode
         unavailable_reason:
           type: string
           description: Why the gateway is not served. Set only when not available.
@@ -101975,6 +102073,8 @@ components:
       description: The active organization's gateway, or why it is not served.
       required:
         - available
+        - discovery_mode
+        - code_mode_enabled
     OrganizationInvitation:
       type: object
       properties:
@@ -109258,6 +109358,18 @@ components:
           description: Whether Speakeasy may sign with the issuer.
       required:
         - enabled
+    SetGatewayDiscoveryModeRequestBody:
+      type: object
+      properties:
+        discovery_mode:
+          type: string
+          description: The organization gateway's default discovery mode.
+          enum:
+            - progressive
+            - direct
+            - code_mode
+      required:
+        - discovery_mode
     SetIdentityProviderConnectionSetupMethodRequestBody:
       type: object
       properties:

@@ -81,8 +81,15 @@ vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
           ? {
               available: true,
               url: "https://api.example.test/mcp/gateway/test",
+              discoveryMode: "direct",
+              codeModeEnabled: false,
             }
-          : { available: false, unavailableReason: "turned_off" },
+          : {
+              available: false,
+              unavailableReason: "turned_off",
+              discoveryMode: "direct",
+              codeModeEnabled: false,
+            },
     },
     on: state.on,
     setOn: state.setOn,
@@ -103,6 +110,19 @@ vi.mock("@/components/mcp/OrganizationGatewayCard", () => ({
 }));
 vi.mock("@/pages/setup/components/platform-instrumentation-sheet", () => ({
   PlatformInstrumentationSheet: () => null,
+}));
+vi.mock("./OrganizationGatewayDiscoverySection", () => ({
+  OrganizationGatewayDiscoverySection: ({
+    gateway,
+    canManage,
+  }: {
+    gateway: { discoveryMode: string };
+    canManage: boolean;
+  }) => (
+    <p>
+      Default mode {gateway.discoveryMode}, manageable={String(canManage)}
+    </p>
+  ),
 }));
 vi.mock("../access/MCPAssignments", () => ({
   MCPAssignments: ({ onReady }: { onReady?: (ready: boolean) => void }) => (
@@ -262,3 +282,18 @@ it.each([true, false])(
     ).toBeTruthy();
   },
 );
+
+it("lets an organization admin set the default discovery mode from Settings, even while the gateway is off", async () => {
+  render(<OrganizationGateway />);
+  await userEvent.click(screen.getByRole("tab", { name: "Settings" }));
+  expect(screen.getByText("Default mode direct, manageable=true")).toBeTruthy();
+});
+
+it("keeps the default discovery mode setting from non-admin members", async () => {
+  state.admin = false;
+  render(<OrganizationGateway />);
+  const settings = screen.getByRole("tab", { name: "Settings" });
+  expect(settings.closest('[aria-disabled="true"]')).toBeTruthy();
+  await userEvent.click(settings);
+  expect(screen.queryByText(/Default mode/)).toBeNull();
+});

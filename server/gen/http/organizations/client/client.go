@@ -24,6 +24,10 @@ type Client struct {
 	// endpoint.
 	GetGatewayDoer goahttp.Doer
 
+	// SetGatewayDiscoveryMode Doer is the HTTP client used to make requests to the
+	// setGatewayDiscoveryMode endpoint.
+	SetGatewayDiscoveryModeDoer goahttp.Doer
+
 	// SendInvite Doer is the HTTP client used to make requests to the sendInvite
 	// endpoint.
 	SendInviteDoer goahttp.Doer
@@ -115,6 +119,7 @@ func NewClient(
 	return &Client{
 		GetDoer:                                doer,
 		GetGatewayDoer:                         doer,
+		SetGatewayDiscoveryModeDoer:            doer,
 		SendInviteDoer:                         doer,
 		RevokeInviteDoer:                       doer,
 		UpdateInviteRoleDoer:                   doer,
@@ -183,6 +188,30 @@ func (c *Client) GetGateway() goa.Endpoint {
 		resp, err := c.GetGatewayDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "getGateway", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetGatewayDiscoveryMode returns an endpoint that makes HTTP requests to the
+// organizations service setGatewayDiscoveryMode server.
+func (c *Client) SetGatewayDiscoveryMode() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetGatewayDiscoveryModeRequest(c.encoder)
+		decodeResponse = DecodeSetGatewayDiscoveryModeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetGatewayDiscoveryModeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetGatewayDiscoveryModeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "setGatewayDiscoveryMode", err)
 		}
 		return decodeResponse(resp)
 	}

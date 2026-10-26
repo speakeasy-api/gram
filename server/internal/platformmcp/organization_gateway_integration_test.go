@@ -76,6 +76,46 @@ func TestOrganizationGatewayAvailableWithOneOrganizationIssuer(t *testing.T) {
 	require.Contains(t, output.NextAction, "Progressive: call list_servers")
 	require.Contains(t, output.NextAction, "Direct: call the server--tool tools")
 	require.Contains(t, output.NextAction, "Code Mode: run Python with the execute tool")
+	require.Equal(t, "progressive", output.DefaultDiscoveryMode, "an organization that never set a default serves Progressive")
+}
+
+func TestOrganizationGatewayReportsStoredDefaultDiscoveryMode(t *testing.T) {
+	t.Parallel()
+	ctx, conn, service, principal, _ := newOrganizationGatewayFixture(t)
+	createOrganizationIssuerForGateway(t, ctx, conn, principal.OrganizationID)
+	_, err := organizationsrepo.New(conn).SetOrganizationGatewayDiscoveryMode(ctx, organizationsrepo.SetOrganizationGatewayDiscoveryModeParams{
+		GatewayDiscoveryMode: conv.ToPGText("direct"),
+		ID:                   principal.OrganizationID,
+	})
+	require.NoError(t, err)
+
+	output, err := service.Get(ctx, principal)
+
+	require.NoError(t, err)
+	require.True(t, output.Available)
+	require.Equal(t, "direct", output.DefaultDiscoveryMode)
+}
+
+func TestOrganizationGatewayReportsCodeModeDefaultOnlyWhileAvailable(t *testing.T) {
+	t.Parallel()
+	ctx, conn, service, principal, _ := newOrganizationGatewayFixture(t)
+	createOrganizationIssuerForGateway(t, ctx, conn, principal.OrganizationID)
+	_, err := organizationsrepo.New(conn).SetOrganizationGatewayDiscoveryMode(ctx, organizationsrepo.SetOrganizationGatewayDiscoveryModeParams{
+		GatewayDiscoveryMode: conv.ToPGText("code_mode"),
+		ID:                   principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	available := false
+	service.WithCodeModeAvailability(func(context.Context, string) bool { return available })
+
+	output, err := service.Get(ctx, principal)
+	require.NoError(t, err)
+	require.Equal(t, "progressive", output.DefaultDiscoveryMode, "a Code Mode default serves Progressive while Code Mode is unavailable")
+
+	available = true
+	output, err = service.Get(ctx, principal)
+	require.NoError(t, err)
+	require.Equal(t, "code_mode", output.DefaultDiscoveryMode)
 }
 
 func TestOrganizationGatewayUnavailableWithoutOrganizationIssuer(t *testing.T) {
@@ -88,6 +128,7 @@ func TestOrganizationGatewayUnavailableWithoutOrganizationIssuer(t *testing.T) {
 	require.False(t, output.Available)
 	require.Empty(t, output.URL)
 	require.Equal(t, "no_organization_issuer", output.UnavailableReason)
+	require.Empty(t, output.DefaultDiscoveryMode)
 }
 
 func TestOrganizationGatewayUnavailableWithSeveralOrganizationIssuers(t *testing.T) {

@@ -21,6 +21,7 @@ type Server struct {
 	Mounts                             []*MountPoint
 	Get                                http.Handler
 	GetGateway                         http.Handler
+	SetGatewayDiscoveryMode            http.Handler
 	SendInvite                         http.Handler
 	RevokeInvite                       http.Handler
 	UpdateInviteRole                   http.Handler
@@ -69,6 +70,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"Get", "GET", "/rpc/organizations.get"},
 			{"GetGateway", "GET", "/rpc/organizations.getGateway"},
+			{"SetGatewayDiscoveryMode", "POST", "/rpc/organizations.setGatewayDiscoveryMode"},
 			{"SendInvite", "POST", "/rpc/organizations.sendInvite"},
 			{"RevokeInvite", "DELETE", "/rpc/organizations.revokeInvite"},
 			{"UpdateInviteRole", "PUT", "/rpc/organizations.updateInviteRole"},
@@ -89,6 +91,7 @@ func New(
 		},
 		Get:                                NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
 		GetGateway:                         NewGetGatewayHandler(e.GetGateway, mux, decoder, encoder, errhandler, formatter),
+		SetGatewayDiscoveryMode:            NewSetGatewayDiscoveryModeHandler(e.SetGatewayDiscoveryMode, mux, decoder, encoder, errhandler, formatter),
 		SendInvite:                         NewSendInviteHandler(e.SendInvite, mux, decoder, encoder, errhandler, formatter),
 		RevokeInvite:                       NewRevokeInviteHandler(e.RevokeInvite, mux, decoder, encoder, errhandler, formatter),
 		UpdateInviteRole:                   NewUpdateInviteRoleHandler(e.UpdateInviteRole, mux, decoder, encoder, errhandler, formatter),
@@ -116,6 +119,7 @@ func (s *Server) Service() string { return "organizations" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Get = m(s.Get)
 	s.GetGateway = m(s.GetGateway)
+	s.SetGatewayDiscoveryMode = m(s.SetGatewayDiscoveryMode)
 	s.SendInvite = m(s.SendInvite)
 	s.RevokeInvite = m(s.RevokeInvite)
 	s.UpdateInviteRole = m(s.UpdateInviteRole)
@@ -142,6 +146,7 @@ func (s *Server) MethodNames() []string { return organizations.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetHandler(mux, h.Get)
 	MountGetGatewayHandler(mux, h.GetGateway)
+	MountSetGatewayDiscoveryModeHandler(mux, h.SetGatewayDiscoveryMode)
 	MountSendInviteHandler(mux, h.SendInvite)
 	MountRevokeInviteHandler(mux, h.RevokeInvite)
 	MountUpdateInviteRoleHandler(mux, h.UpdateInviteRole)
@@ -249,6 +254,60 @@ func NewGetGatewayHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getGateway")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetGatewayDiscoveryModeHandler configures the mux to serve the
+// "organizations" service "setGatewayDiscoveryMode" endpoint.
+func MountSetGatewayDiscoveryModeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizations.setGatewayDiscoveryMode", f)
+}
+
+// NewSetGatewayDiscoveryModeHandler creates a HTTP handler which loads the
+// HTTP request and calls the "organizations" service "setGatewayDiscoveryMode"
+// endpoint.
+func NewSetGatewayDiscoveryModeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetGatewayDiscoveryModeRequest(mux, decoder)
+		encodeResponse = EncodeSetGatewayDiscoveryModeResponse(encoder)
+		encodeError    = EncodeSetGatewayDiscoveryModeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setGatewayDiscoveryMode")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {

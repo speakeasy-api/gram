@@ -62,6 +62,7 @@ var All = []outbox.EventRegistration{
 	OrganizationBillingV1,
 	OrganizationDeviceAgentConfigurationV1,
 	OrganizationEnterpriseTrialV1,
+	OrganizationGatewayV1,
 	OrganizationHooksFailOpenV1,
 	OrganizationInviteV1,
 	OrganizationOnboardingV1,

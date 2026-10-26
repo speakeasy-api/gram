@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
@@ -169,6 +171,9 @@ type testInstance struct {
 	svixSrv  *svixtest.MockServer
 	// sessionManager is the service's session manager.
 	sessionManager *sessions.Manager
+
+	// codeModeAllowed is what the service's Code Mode selection gate reports.
+	codeModeAllowed *atomic.Bool
 }
 
 type fakeTrialNotifier struct {
@@ -318,17 +323,20 @@ func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeature
 	if useRealFeatures {
 		featureChecker = features
 	}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
+	codeModeAllowed := &atomic.Bool{}
+	codeModeSelection := codemode.SelectionGate(func(context.Context, string) bool { return codeModeAllowed.Load() })
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient, codeModeSelection)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		orgs:           orgs,
-		trial:          trialNotifier,
-		posthog:        posthog,
-		features:       features,
-		svixSrv:        svixSrv,
-		sessionManager: sessionManager,
+		service:         svc,
+		conn:            conn,
+		orgs:            orgs,
+		trial:           trialNotifier,
+		posthog:         posthog,
+		features:        features,
+		svixSrv:         svixSrv,
+		sessionManager:  sessionManager,
+		codeModeAllowed: codeModeAllowed,
 	}
 }
 
@@ -383,7 +391,7 @@ func newTestOrganizationsServiceWithEmailEnabled(t *testing.T, emailEnabled bool
 		"setup_task_assignment": "setup-task-assignment-test-id",
 	}), emailEnabled)
 	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient, nil)
 
 	return ctx, &testInstance{
 		service:        svc,

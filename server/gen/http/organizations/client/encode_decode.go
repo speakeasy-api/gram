@@ -479,6 +479,241 @@ func DecodeGetGatewayResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildSetGatewayDiscoveryModeRequest instantiates a HTTP request object with
+// method and path set to call the "organizations" service
+// "setGatewayDiscoveryMode" endpoint
+func (c *Client) BuildSetGatewayDiscoveryModeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetGatewayDiscoveryModeOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "setGatewayDiscoveryMode", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetGatewayDiscoveryModeRequest returns an encoder for requests sent to
+// the organizations setGatewayDiscoveryMode server.
+func EncodeSetGatewayDiscoveryModeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.SetGatewayDiscoveryModePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "setGatewayDiscoveryMode", "*organizations.SetGatewayDiscoveryModePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetGatewayDiscoveryModeRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "setGatewayDiscoveryMode", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetGatewayDiscoveryModeResponse returns a decoder for responses
+// returned by the organizations setGatewayDiscoveryMode endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetGatewayDiscoveryModeResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetGatewayDiscoveryModeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetGatewayDiscoveryModeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			err = ValidateSetGatewayDiscoveryModeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			res := NewSetGatewayDiscoveryModeOrganizationGatewayOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetGatewayDiscoveryModeUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			err = ValidateSetGatewayDiscoveryModeUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			return nil, NewSetGatewayDiscoveryModeUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetGatewayDiscoveryModeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			err = ValidateSetGatewayDiscoveryModeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			return nil, NewSetGatewayDiscoveryModeForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetGatewayDiscoveryModeBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			err = ValidateSetGatewayDiscoveryModeBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			return nil, NewSetGatewayDiscoveryModeBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetGatewayDiscoveryModeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			err = ValidateSetGatewayDiscoveryModeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			return nil, NewSetGatewayDiscoveryModeNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetGatewayDiscoveryModeConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			err = ValidateSetGatewayDiscoveryModeConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			return nil, NewSetGatewayDiscoveryModeConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetGatewayDiscoveryModeUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			err = ValidateSetGatewayDiscoveryModeUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			return nil, NewSetGatewayDiscoveryModeUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetGatewayDiscoveryModeInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			err = ValidateSetGatewayDiscoveryModeInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			return nil, NewSetGatewayDiscoveryModeInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetGatewayDiscoveryModeInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+				}
+				err = ValidateSetGatewayDiscoveryModeInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+				}
+				return nil, NewSetGatewayDiscoveryModeInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetGatewayDiscoveryModeUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+				}
+				err = ValidateSetGatewayDiscoveryModeUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+				}
+				return nil, NewSetGatewayDiscoveryModeUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "setGatewayDiscoveryMode", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetGatewayDiscoveryModeGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			err = ValidateSetGatewayDiscoveryModeGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setGatewayDiscoveryMode", err)
+			}
+			return nil, NewSetGatewayDiscoveryModeGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "setGatewayDiscoveryMode", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSendInviteRequest instantiates a HTTP request object with method and
 // path set to call the "organizations" service "sendInvite" endpoint
 func (c *Client) BuildSendInviteRequest(ctx context.Context, v any) (*http.Request, error) {

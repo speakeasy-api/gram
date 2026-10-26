@@ -286,8 +286,10 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, gatewaySlug strin
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		Name:                organization.Name,
 		// NULL serves Speakeasy's built-in gateway instructions.
-		Instructions:      pgtype.Text{String: "", Valid: false},
-		DiscoveryMode:     "progressive",
+		Instructions: pgtype.Text{String: "", Valid: false},
+		// Connections that chose a mode at sign-in keep it; serving falls
+		// back to Progressive while Code Mode is unavailable.
+		DiscoveryMode:     string(orggateway.DiscoveryMode(organization)),
 		Visibility:        visibility.Private,
 		NetworkAccessMode: pgtype.Text{String: "", Valid: false},
 		CreatedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},

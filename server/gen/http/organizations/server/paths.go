@@ -17,6 +17,11 @@ func GetGatewayOrganizationsPath() string {
 	return "/rpc/organizations.getGateway"
 }
 
+// SetGatewayDiscoveryModeOrganizationsPath returns the URL path to the organizations service setGatewayDiscoveryMode HTTP endpoint.
+func SetGatewayDiscoveryModeOrganizationsPath() string {
+	return "/rpc/organizations.setGatewayDiscoveryMode"
+}
+
 // SendInviteOrganizationsPath returns the URL path to the organizations service sendInvite HTTP endpoint.
 func SendInviteOrganizationsPath() string {
 	return "/rpc/organizations.sendInvite"
