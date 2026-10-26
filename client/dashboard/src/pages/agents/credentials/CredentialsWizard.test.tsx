@@ -1052,7 +1052,11 @@ describe("Agent project", () => {
     expect(all.hasAttribute("disabled")).toBe(true);
     fireEvent.click(all);
     expect(all.getAttribute("data-state")).toBe("unchecked");
-    expect(screen.getByText("Select at least one MCP server.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No servers selected. This agent will only send hook events.",
+      ),
+    ).toBeTruthy();
     // Asked about the grants Create agent could write, for an agent that does
     // not exist yet: every server in its project, and each server on its own.
     expect(mocks.checkPolicyGrants.mock.calls[0]?.[0]).toEqual({
@@ -1153,7 +1157,7 @@ describe("Agent project", () => {
         (form: { selector: { resourceId: string } }) =>
           form.selector.resourceId,
       ),
-    ).toEqual(["toolset_one"]);
+    ).toEqual(["toolset_one", "org_example"]);
   });
 
   it("saves no server the check has not answered for", async () => {
@@ -1331,7 +1335,7 @@ describe("Agent project", () => {
         (form: { selector: { resourceId: string } }) =>
           form.selector.resourceId,
       ),
-    ).toEqual(["toolset_0"]);
+    ).toEqual(["toolset_0", "org_example"]);
   });
 
   it("holds All servers until the check answers, and retries one that failed", async () => {
