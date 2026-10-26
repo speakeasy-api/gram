@@ -447,6 +447,7 @@ const routeToNavAction = (
   return {
     id,
     label: route.title,
+    keywords: route.keywords,
     icon: typeof iconName === "string" ? iconName : undefined,
     onSelect: () => route.goTo(),
     group,

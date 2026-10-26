@@ -59,7 +59,7 @@ The dashboard names workload identity in plain terms, while the API, scopes and 
 | Job               | workload                          | The thing running on that platform, such as a CI job, a pod or a Claude Tag session.                       |
 | Token issuer      | workload issuer                   | The service that signs the platform's tokens, identified by its issuer URL and signing keys (JWKS).        |
 | Access rule       | admission, subject rule           | Which jobs, by the token's `sub` claim, may sign in, and which agent they act as.                          |
-| Trusted platforms | `workload:read`, `workload:write` | The permission area for managing token issuers, access rules and the agents jobs act as.                   |
+| Trusted platforms | `workload:read`, `workload:write` | The permission area for managing token issuers, access rules and the agents that jobs act as.              |
 
 Workload sessions use the same three independent boundaries: the session's immutable approved policy, the assigned agent's current policy, and the current owner's effective permissions. Admission reads the assignment, agent, owner membership, and policies in one database snapshot on every request. It does not cache owner permissions between requests. Owner permissions include role and `user:all` grants, exclusions, and direct-grant precedence; they do not become grants held by the workload itself.
 

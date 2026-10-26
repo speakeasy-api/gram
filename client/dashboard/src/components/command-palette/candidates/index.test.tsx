@@ -318,6 +318,7 @@ vi.mock("@/routes", () => ({
 }));
 
 import { useLauncherCandidates } from "./index";
+import { prefilter } from "../ranker";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import type { LauncherCandidate } from "./types";
@@ -1300,6 +1301,27 @@ describe("useProjectCandidates", () => {
 });
 
 describe("useActionCandidates", () => {
+  it("finds a page by its registered search aliases", () => {
+    const onSelect = vi.fn();
+    mocks.actions = [
+      {
+        id: "nav-org-access",
+        label: "Roles & Permissions",
+        keywords: ["trusted platforms", "workload identities"],
+        group: "Organization",
+        onSelect,
+      },
+    ];
+    const { result } = renderCandidates();
+
+    for (const query of ["trusted platforms", "workload identities"]) {
+      const match = prefilter(query, result.current).all[0]?.candidate;
+      expect(match?.title).toBe("Roles & Permissions");
+      void match?.run("open");
+    }
+    expect(onSelect).toHaveBeenCalledTimes(2);
+  });
+
   it("maps the action group to the detail string", () => {
     const onSelect = vi.fn();
     mocks.actions = [
