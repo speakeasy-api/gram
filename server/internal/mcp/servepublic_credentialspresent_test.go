@@ -308,7 +308,6 @@ func TestServePublic_PrivateWithoutOAuth_InvalidAPIKey_Returns401(t *testing.T) 
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 		McpSlug:                conv.ToPGText("private-no-oauth-mcp-" + uuid.New().String()[:8]),
 		McpEnabled:             true,
-		// OauthProxyServerID NOT set - no OAuth
 	})
 	require.NoError(t, err)
 
@@ -352,7 +351,6 @@ func TestServePublic_PrivateWithoutOAuth_BearerTokenFails(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 		McpSlug:                conv.ToPGText("private-no-oauth-mcp-" + uuid.New().String()[:8]),
 		McpEnabled:             true,
-		// OauthProxyServerID NOT set - no OAuth
 	})
 	require.NoError(t, err)
 

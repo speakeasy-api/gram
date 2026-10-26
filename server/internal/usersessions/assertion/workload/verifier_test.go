@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,16 +27,20 @@ const (
 )
 
 type testKeys struct {
+	mu      sync.Mutex
 	key     *jose.JSONWebKey
 	lookups int
 }
 
 func (k *testKeys) VerificationKeyForAlgorithm(_ context.Context, _ jwks.Source, _ string, _ jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	k.lookups++
 	return k.key, nil
 }
 
 type testGuard struct {
+	mu      sync.Mutex
 	seen    map[replay.Key]bool
 	maxHold time.Duration
 	err     error
@@ -44,6 +49,8 @@ type testGuard struct {
 func (g *testGuard) MaxHold() time.Duration { return g.maxHold }
 
 func (g *testGuard) Reserve(_ context.Context, key replay.Key, _ time.Time) (bool, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if g.err != nil {
 		return false, g.err
 	}
@@ -100,14 +107,15 @@ func newTestVerifier(t *testing.T, signer testSigner) (*Verifier, *testKeys, *te
 	t.Helper()
 	source, err := jwks.NewRemoteSource("https://platform.example.com/jwks")
 	require.NoError(t, err)
-	guard := &testGuard{seen: make(map[replay.Key]bool), maxHold: assertioncore.ReplayHoldFor(4 * time.Hour), err: nil}
-	keys := &testKeys{key: signer.key, lookups: 0}
+	guard := &testGuard{mu: sync.Mutex{}, seen: make(map[replay.Key]bool), maxHold: assertioncore.ReplayHoldFor(4 * time.Hour), err: nil}
+	keys := &testKeys{mu: sync.Mutex{}, key: signer.key, lookups: 0}
 	verifier, err := NewVerifier(keys, guard)
 	require.NoError(t, err)
 	expect := Expectation{
 		Issuer: testIssuer, Subject: testSubject, KeySource: source,
 		ReplayIssuer: "user-session-issuer-1", ReplayParty: "workload-issuer-1",
 		Audiences: []string{testAudience}, MaxLifetime: 4 * time.Hour,
+		AllowAssertionReuse: false,
 	}
 	return verifier, keys, guard, expect
 }

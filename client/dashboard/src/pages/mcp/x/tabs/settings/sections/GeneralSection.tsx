@@ -1,4 +1,5 @@
 import { isKnownEnumValue } from "@/lib/enum";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { useMcpMetadataMetadataForm } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { RequireScope } from "@/components/require-scope";
@@ -11,8 +12,6 @@ import {
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { mcpServerRouteParam } from "@/lib/sources";
-import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
@@ -22,7 +21,6 @@ import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpSe
 import { useQueryClient } from "@tanstack/react-query";
 import { Network, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { VerifyRemoteMcpUrlButton } from "@/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
@@ -99,8 +97,7 @@ function GeneralSectionContent({
 
   const queryClient = useQueryClient();
   const update = useUpdateMcpServerMutation();
-  const navigate = useNavigate();
-  const routes = useRoutes();
+  const followRenamedServer = useFollowRenamedServer();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const metadataResult = useGetMcpMetadata(
@@ -194,10 +191,7 @@ function GeneralSectionContent({
         // *before* invalidating queries so the refetch uses the new lookup
         // args and the page-level not-found guard doesn't bounce the user
         // back to /mcp.
-        const nextParam = mcpServerRouteParam(updated);
-        void navigate(routes.mcp.details.settings.href(nextParam), {
-          replace: true,
-        });
+        followRenamedServer(updated);
         await Promise.all([
           invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
           invalidateAllMcpServers(queryClient, { refetchType: "all" }),

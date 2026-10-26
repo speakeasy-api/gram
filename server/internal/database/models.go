@@ -2235,8 +2235,6 @@ type ExternalMcpAttachment struct {
 	// @access: confidential
 	RegistryID uuid.NullUUID
 	// @access: confidential
-	OrganizationMcpCollectionRegistryID uuid.NullUUID
-	// @access: confidential
 	Name string
 	// @access: confidential
 	Slug string
@@ -4021,69 +4019,6 @@ type OrganizationInvitation struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
-type OrganizationMcpCollection struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	OrganizationID string
-	// @access: confidential
-	Name string
-	// @access: opaque-restricted
-	Description pgtype.Text
-	// @access: confidential
-	Slug string
-	// @access: confidential
-	Visibility string
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
-type OrganizationMcpCollectionRegistry struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	CollectionID uuid.UUID
-	// @access: confidential
-	Namespace string
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
-type OrganizationMcpCollectionServerAttachment struct {
-	// @access: confidential
-	PublishedAt pgtype.Timestamptz
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	PublishedBy pgtype.Text
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	CollectionID uuid.UUID
-	// @access: confidential
-	ToolsetID uuid.NullUUID
-	// @access: confidential
-	McpServerID uuid.NullUUID
-	// @access: confidential
-	Deleted bool
-}
-
 type OrganizationMetadatum struct {
 	// @access: confidential
 	ID string
@@ -5210,6 +5145,102 @@ type PublishOutboxDeadLetter struct {
 	EnqueuedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
+}
+
+type RegistryPromotionCandidate struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	RemoteMcpServerID uuid.NullUUID
+	// @access: confidential
+	SourceRevision string
+	// @access: confidential
+	Eligible bool
+	// @access: confidential
+	Reason string
+	// @access: confidential
+	ObservedSuccesses int64
+	// @access: confidential
+	ObservedFailures int64
+	// @access: confidential
+	ObservedDays int32
+	// @access: confidential
+	CheckedAt pgtype.Timestamptz
+	// @access: confidential
+	RegistryEntryID uuid.NullUUID
+	// Staff-reviewed public catalogue and documentation input.
+	// @access: opaque-restricted
+	PublicMetadata []byte
+	// @access: restricted
+	EndpointIdentity pgtype.Text
+	// @access: confidential
+	RequestDigest pgtype.Text
+	// @access: confidential
+	RetryKey pgtype.Text
+	// @access: confidential-pii
+	PromotedBy pgtype.Text
+	// @access: confidential
+	PromotedAt pgtype.Timestamptz
+	// @access: restricted
+	DocsUrl pgtype.Text
+	// @access: confidential
+	DocsQueuedAt pgtype.Timestamptz
+	// @access: confidential
+	DeliveryError pgtype.Text
+	// @access: confidential
+	DiscoveryLastAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DiscoveryNextAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DiscoveryFailures int32
+	// @access: confidential
+	DocsAttempts int32
+	// @access: confidential
+	DocsFailures int32
+	// @access: confidential
+	DocsLastAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DocsNextAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DocsNeedsAttention bool
+	// @access: confidential
+	DocsLeaseUntil pgtype.Timestamptz
+	// @access: confidential
+	DocsLeaseToken uuid.NullUUID
+	// @access: confidential
+	DocsRevision uuid.UUID
+	// @access: confidential
+	DocsRetryKey pgtype.Text
+	// @access: confidential
+	DocsRetryRevision pgtype.Text
+	// @access: confidential-pii
+	DocsRetryBy pgtype.Text
+	// Staff curation state, independent of observed eligibility.
+	// @access: confidential
+	CurationStatus string
+	// Compare-and-swap revision for staff curation changes.
+	// @access: confidential
+	CurationRevision uuid.UUID
+	// @access: confidential
+	CurationUpdatedAt pgtype.Timestamptz
+	// @access: confidential-pii
+	CurationUpdatedBy pgtype.Text
+	// @access: confidential
+	CurationRetryKey pgtype.Text
+	// @access: confidential
+	CurationRetryRevision pgtype.Text
+	// @access: confidential
+	CurationRetryAction pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type RemoteMcpServer struct {
@@ -7357,8 +7388,6 @@ type Toolset struct {
 	// @access: confidential
 	ExternalOauthServerID uuid.NullUUID
 	// @access: confidential
-	OauthProxyServerID uuid.NullUUID
-	// @access: confidential
 	UserSessionIssuerID uuid.NullUUID
 	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
@@ -8258,6 +8287,9 @@ type WorkloadIssuer struct {
 	JwksUri string
 	// @access: confidential
 	AllowWildcardAdmission bool
+	// Whether assertions carrying a jti or uti may be exchanged repeatedly until expiry. NULL is false.
+	// @access: confidential
+	AllowAssertionReuse pgtype.Bool
 	// @access: confidential
 	KeySource pgtype.Text
 	// @access: opaque-restricted

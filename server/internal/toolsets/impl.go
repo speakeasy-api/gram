@@ -538,7 +538,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 	updateParams.McpSlug, updateParams.CustomDomainID = mcpSlug, customDomainID
 	if payload.McpIsPublic != nil {
-		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid || existingToolset.OauthProxyServerID.Valid
+		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid
 		if (existingToolset.McpIsPublic != *payload.McpIsPublic) && oAuthIsAttached {
 			_, err := tr.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
 				ProjectID: existingToolset.ProjectID,

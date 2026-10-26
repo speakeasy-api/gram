@@ -404,6 +404,37 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 		CatalogProvider:  request.CatalogProvider,
 		CatalogReference: request.CatalogReference,
 	})
+	if err == nil && registration.McpServerID.Valid {
+		// The MCP server may have been deleted outside Platform MCP, for example
+		// in the dashboard, which leaves this registration pointing at it.
+		// Reusing it would report a server nobody can see, so retire it and add
+		// the catalogue server again from scratch.
+		_, serverErr := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+			ID:        registration.McpServerID.UUID,
+			ProjectID: project.ID,
+		})
+		switch {
+		case errors.Is(serverErr, pgx.ErrNoRows):
+			// Only the registration's owner may retire it, matching every other
+			// lifecycle action; anyone else falls through to the ownership check
+			// below and is refused as before.
+			if _, ownerErr := lifecycleRegistration(ctx, q, principal, project.ID, registration.ID); errors.Is(ownerErr, pgx.ErrNoRows) {
+				break
+			} else if ownerErr != nil {
+				return OperationReceipt{}, fmt.Errorf("authorize retiring platform mcp catalog registration: %w", ownerErr)
+			}
+			if err := q.RetirePlatformMCPCatalogRegistration(ctx, platformrepo.RetirePlatformMCPCatalogRegistrationParams{
+				ID:             registration.ID,
+				OrganizationID: principal.OrganizationID,
+				ProjectID:      project.ID,
+			}); err != nil {
+				return OperationReceipt{}, fmt.Errorf("retire platform mcp catalog registration with deleted server: %w", err)
+			}
+			err = pgx.ErrNoRows
+		case serverErr != nil:
+			return OperationReceipt{}, fmt.Errorf("check platform mcp catalog registration server: %w", serverErr)
+		}
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		registration, err = q.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
 			OrganizationID:       principal.OrganizationID,

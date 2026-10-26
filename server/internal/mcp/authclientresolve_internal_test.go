@@ -687,6 +687,8 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 
 		authentication := &issuerGateAuthentication{chainingAuthClient: &res}
 		require.Len(t, authClientBuildOptions(authentication), 1, "the client's headers replace the server's")
+		authentication.chosenNoAuth = true
+		require.Empty(t, authClientBuildOptions(authentication), "a no-auth choice sends no client's headers")
 	})
 
 	t.Run("headers-only clients on a tunneled server are served the old way", func(t *testing.T) {
