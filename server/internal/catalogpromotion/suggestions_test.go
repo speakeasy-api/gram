@@ -40,7 +40,7 @@ func TestSuggestedMetadataOmitsUnsafeEndpoints(t *testing.T) {
 func TestSuggestedMetadataBoundsDraftsAndDoesNotInventDocs(t *testing.T) {
 	t.Parallel()
 	result := suggestedMetadata(repo.GetSourceRow{UpstreamAuthKnown: true, RemoteName: strings.Repeat("é", 100000), Url: "https://mcp.example.com/mcp"})
-	require.LessOrEqual(t, len(result.Title), 200)
+	require.Equal(t, 100, utf8.RuneCountInString(result.Title))
 	require.True(t, utf8.ValidString(result.Title))
 	require.Empty(t, result.Name)
 	require.Empty(t, result.Description)
@@ -60,7 +60,7 @@ func TestSuggestedMetadataNormalizesTitleFallbacks(t *testing.T) {
 	for _, test := range []struct{ name, resource, remote, source, want string }{
 		{name: "resource whitespace", resource: " \t\n", remote: " Example  MCP ", source: "Fallback", want: "Example MCP"},
 		{name: "remote whitespace", resource: " ", remote: "\t", source: " Example Source ", want: "Example Source"},
-		{name: "truncated space", resource: strings.Repeat("a", 199) + " more", want: strings.Repeat("a", 199)},
+		{name: "truncated space", resource: strings.Repeat("a", 99) + " more", want: strings.Repeat("a", 99)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -75,4 +75,11 @@ func TestSuggestedMetadataNormalizesTrailingDotNamespace(t *testing.T) {
 	result := suggestedMetadata(repo.GetSourceRow{ResourceName: "Example MCP", Url: "https://mcp.example.com./mcp"})
 	require.Equal(t, "com.example.mcp/example-mcp", result.Name)
 	require.Equal(t, "https://mcp.example.com./mcp", result.URL)
+}
+
+func TestSuggestedTitlePreservesCompleteUnicodeCodePoints(t *testing.T) {
+	t.Parallel()
+	result := suggestedMetadata(repo.GetSourceRow{RemoteName: strings.Repeat("🌍", 101)})
+	require.Equal(t, strings.Repeat("🌍", 100), result.Title)
+	require.True(t, utf8.ValidString(result.Title))
 }

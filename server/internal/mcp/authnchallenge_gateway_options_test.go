@@ -21,17 +21,14 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	service := &Service{codeExecutor: codemode.Disabled{}}
 	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, OrganizationID: "org_test", ProjectID: uuid.New()}
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", OrganizationSlug: "test-org"})
-	policy, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "")
-	require.NoError(t, err)
-	require.Nil(t, policy)
-	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
+	_, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
 	requireOopsCode(t, err, oops.CodeUnavailable, "a runtime that cannot start runners is retryable")
 	entitled := false
 	available := &Service{codeExecutor: availableCodeExecutor{}, platformFeatureChecker: func(context.Context, string, string) bool { return entitled }}
 	_, err = available.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
 	requireOopsCode(t, err, oops.CodeForbidden, "an organization without the entitlement is refused")
 	entitled = true
-	policy, err = available.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
+	policy, err := available.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
 	require.NoError(t, err)
 	require.Equal(t, metamcp.DiscoveryModeCode, *policy.Gateway.DiscoveryMode)
 	policy, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "direct")
@@ -55,6 +52,27 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	require.Equal(t, endpointToolSelectionResource(organizationGateway), policy.Resource)
 	_, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{FirstParty: true}, "", "direct")
 	require.Error(t, err)
+}
+
+// TestConsentGatewayDefaultRecordsMode pins that "Gateway default" records the
+// gateway's current default for the connections that can choose a mode, and
+// nothing for first-party and agent approvals, which follow the live default.
+func TestConsentGatewayDefaultRecordsMode(t *testing.T) {
+	t.Parallel()
+	service := &Service{codeExecutor: codemode.Disabled{}}
+	organizationGateway := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, OrganizationID: "org_test", RouteBase: mcproute.OrganizationGateway}
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", OrganizationSlug: "test-org"})
+	policy, err := service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{}, "", "")
+	require.NoError(t, err)
+	require.NotNil(t, policy.Gateway.DiscoveryMode)
+	require.Equal(t, metamcp.DiscoveryModeProgressive, *policy.Gateway.DiscoveryMode, "the organization gateway defaults to Progressive")
+	require.Equal(t, endpointToolSelectionResource(organizationGateway), policy.Resource)
+	policy, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{FirstParty: true}, "", "")
+	require.NoError(t, err)
+	require.Nil(t, policy)
+	policy, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{}, uuid.NewString(), "")
+	require.NoError(t, err)
+	require.Nil(t, policy)
 }
 
 type availableCodeExecutor struct{ codemode.Disabled }

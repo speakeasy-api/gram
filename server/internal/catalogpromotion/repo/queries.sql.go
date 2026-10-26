@@ -53,6 +53,23 @@ func (q *Queries) ChangePromotionSourceFixture(ctx context.Context, arg ChangePr
 	return err
 }
 
+const changePromotionSourceURLFixture = `-- name: ChangePromotionSourceURLFixture :exec
+UPDATE remote_mcp_servers r SET url= $1, updated_at=clock_timestamp()
+FROM mcp_servers m
+WHERE m.id= $2 AND m.project_id= $3 AND r.id=m.remote_mcp_server_id AND r.project_id=m.project_id
+`
+
+type ChangePromotionSourceURLFixtureParams struct {
+	Url         string
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ChangePromotionSourceURLFixture(ctx context.Context, arg ChangePromotionSourceURLFixtureParams) error {
+	_, err := q.db.Exec(ctx, changePromotionSourceURLFixture, arg.Url, arg.McpServerID, arg.ProjectID)
+	return err
+}
+
 const claimDiscovery = `-- name: ClaimDiscovery :one
 INSERT INTO registry_promotion_candidates(organization_id,project_id,mcp_server_id,remote_mcp_server_id,
  source_revision,eligible,reason,discovery_last_attempt_at,discovery_next_attempt_at)
@@ -334,6 +351,12 @@ func (q *Queries) DeletePromotionRegistryEntryFixture(ctx context.Context, id uu
 }
 
 const discoveryTargets = `-- name: DiscoveryTargets :many
+WITH catalogued_endpoints AS MATERIALIZED (
+ SELECT DISTINCT regexp_replace(lower(substring(remote->>'url' FROM '(?i)^https://[^/?#]+')), ':443$', '')
+  || COALESCE(substring(remote->>'url' FROM '(?i)^https://[^/?#]+(.*)$'), '') AS url
+ FROM mcp_registry_entries e,
+ jsonb_array_elements(CASE WHEN jsonb_typeof(e.data #> '{server,remotes}')='array' THEN e.data #> '{server,remotes}' ELSE '[]'::jsonb END) AS remote
+)
 SELECT p.organization_id, m.project_id, m.id AS mcp_server_id
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
@@ -341,6 +364,7 @@ JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.
 LEFT JOIN registry_promotion_candidates c ON c.project_id = m.project_id AND c.mcp_server_id = m.id
 WHERE m.deleted IS FALSE AND r.deleted IS FALSE AND p.deleted IS FALSE AND c.promoted_at IS NULL
  AND (c.curation_status IS NULL OR c.curation_status='active')
+ AND NOT EXISTS (SELECT 1 FROM catalogued_endpoints e WHERE e.url = regexp_replace(lower(substring(r.url FROM '(?i)^https://[^/?#]+')), ':443$', '') || COALESCE(substring(r.url FROM '(?i)^https://[^/?#]+(.*)$'), ''))
  AND p.organization_id <> $1::text
 AND (c.discovery_next_attempt_at IS NULL OR c.discovery_next_attempt_at <= $2::timestamptz)
 ORDER BY c.discovery_last_attempt_at NULLS FIRST, m.id
@@ -381,8 +405,8 @@ func (q *Queries) DiscoveryTargets(ctx context.Context, arg DiscoveryTargetsPara
 const findRegistryEndpoint = `-- name: FindRegistryEndpoint :one
 SELECT EXISTS(SELECT 1 FROM mcp_registry_entries e,
  jsonb_array_elements(CASE WHEN jsonb_typeof(e.data #> '{server,remotes}')='array' THEN e.data #> '{server,remotes}' ELSE '[]'::jsonb END) AS remote
- WHERE regexp_replace(lower(substring(remote->>'url' FROM '^https://[^/?#]+')), ':443$', '')
- || COALESCE(substring(remote->>'url' FROM '^https://[^/?#]+(.*)$'), '') = $1::text)::boolean
+ WHERE regexp_replace(lower(substring(remote->>'url' FROM '(?i)^https://[^/?#]+')), ':443$', '')
+ || COALESCE(substring(remote->>'url' FROM '(?i)^https://[^/?#]+(.*)$'), '') = $1::text)::boolean
 `
 
 func (q *Queries) FindRegistryEndpoint(ctx context.Context, url string) (bool, error) {
@@ -783,8 +807,15 @@ func (q *Queries) JobStatus(ctx context.Context) (JobStatusRow, error) {
 }
 
 const listCandidates = `-- name: ListCandidates :many
+WITH catalogued_endpoints AS MATERIALIZED (
+ SELECT DISTINCT regexp_replace(lower(substring(remote->>'url' FROM '(?i)^https://[^/?#]+')), ':443$', '')
+  || COALESCE(substring(remote->>'url' FROM '(?i)^https://[^/?#]+(.*)$'), '') AS url
+ FROM mcp_registry_entries e,
+ jsonb_array_elements(CASE WHEN jsonb_typeof(e.data #> '{server,remotes}')='array' THEN e.data #> '{server,remotes}' ELSE '[]'::jsonb END) AS remote
+)
 SELECT c.id, c.organization_id, c.project_id, c.mcp_server_id, c.remote_mcp_server_id, c.source_revision, c.eligible, c.reason, c.observed_successes, c.observed_failures, c.observed_days, c.checked_at, c.registry_entry_id, c.public_metadata, c.endpoint_identity, c.request_digest, c.retry_key, c.promoted_by, c.promoted_at, c.docs_url, c.docs_queued_at, c.delivery_error, c.discovery_last_attempt_at, c.discovery_next_attempt_at, c.discovery_failures, c.docs_attempts, c.docs_failures, c.docs_last_attempt_at, c.docs_next_attempt_at, c.docs_needs_attention, c.docs_lease_until, c.docs_lease_token, c.docs_revision, c.docs_retry_key, c.docs_retry_revision, c.docs_retry_by, c.curation_status, c.curation_revision, c.curation_updated_at, c.curation_updated_by, c.curation_retry_key, c.curation_retry_revision, c.curation_retry_action, c.created_at, c.updated_at,left(COALESCE(m.name,''),200)::text AS source_name FROM registry_promotion_candidates c
 LEFT JOIN mcp_servers m ON m.id=c.mcp_server_id AND m.project_id=c.project_id AND m.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r ON r.id=m.remote_mcp_server_id AND r.project_id=m.project_id AND r.deleted IS FALSE
 WHERE (c.promoted_at IS NOT NULL OR EXISTS (
  SELECT 1 FROM mcp_servers source
  JOIN projects source_project ON source_project.id=source.project_id
@@ -794,7 +825,9 @@ WHERE (c.promoted_at IS NOT NULL OR EXISTS (
 ))
 AND (
  $1::text='all'
- OR ($1::text IN ('active','candidate') AND c.promoted_at IS NULL AND c.curation_status='active')
+ OR ($1::text IN ('active','candidate') AND c.promoted_at IS NULL AND c.curation_status='active'
+ AND ($1::text='candidate' OR (c.reason <> 'already_catalogued'
+  AND NOT EXISTS (SELECT 1 FROM catalogued_endpoints e WHERE e.url = regexp_replace(lower(substring(r.url FROM '(?i)^https://[^/?#]+')), ':443$', '') || COALESCE(substring(r.url FROM '(?i)^https://[^/?#]+(.*)$'), '')))))
  OR ($1::text IN ('rejected','archived') AND c.promoted_at IS NULL AND c.curation_status= $1::text)
  OR ($1::text='promoted' AND c.promoted_at IS NOT NULL)
 )
