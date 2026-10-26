@@ -16,7 +16,12 @@ export function OpenClawInstallSheet({
   onClose: () => void;
 }): JSX.Element {
   return (
-    <Sheet open onOpenChange={(open) => !open && onClose()}>
+    <Sheet
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>Install OpenClaw observability</SheetTitle>
