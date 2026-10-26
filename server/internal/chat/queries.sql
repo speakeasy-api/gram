@@ -2352,16 +2352,19 @@ AND r.id = @runtime_id AND r.runtime_version = 3 AND NOT r.deleted AND NOT r.end
 AND NOT t.deleted AND NOT c.deleted AND NOT a.deleted AND a.status = 'active';
 
 -- name: SetKitCompletionRuntimeFixture :exec
--- Test fixture: exercise live runtime admission independently of key validity.
+-- Test fixture: exercise live runtime admission independently of workload verification.
 UPDATE assistant_runtimes
 SET runtime_version = @runtime_version, ended_at = sqlc.narg(ended_at)::timestamptz
 WHERE id = @runtime_id AND project_id = @project_id;
 
--- name: RevokeKitCompletionBindingFixture :exec
--- Test fixture: revoke only the binding, keeping the principal API key live.
-UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
-WHERE api_key_id = @id::uuid AND project_id = @project_id;
+-- name: InsertSupersededKitKeyFixture :exec
+-- Historical credential fixture for permanent rejection at the shared auth boundary.
+INSERT INTO assistant_inference_credentials (api_key_id, project_id, assistant_id, runtime_id, identity_json, revoked_at)
+VALUES (@api_key_id, @project_id, @assistant_id, @runtime_id, '{}'::jsonb, sqlc.narg(revoked_at)::timestamptz);
 
--- name: DeleteKitCompletionBindingFixture :exec
--- Test fixture: remove only the binding, keeping the principal API key live.
-DELETE FROM assistant_inference_credentials WHERE api_key_id = @id::uuid AND project_id = @project_id;
+-- name: SetHistoricalKitKeyProfileFixture :exec
+-- Reproduce the former project's native principal-key profile without an issuer.
+UPDATE api_keys SET scopes = ARRAY[]::text[], subject_urn = @subject_urn,
+  delegated_grants = @delegated_grants::jsonb, delegated_grants_version = @delegated_grants_version,
+  expires_at = clock_timestamp() + interval '1 hour'
+WHERE id = @api_key_id AND project_id = @project_id;

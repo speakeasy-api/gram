@@ -146,6 +146,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindAssistant
 	case "risk_policy":
 		return ResourceKindRiskPolicy
+	case "inference":
+		return ResourceKindInference
 	case "chat":
 		return ResourceKindChat
 	case "agent":
@@ -178,6 +180,9 @@ var validDispositions = map[string]bool{
 // allow no extra keys, except where scopeAllowsSelectorKey admits one for a
 // single scope.
 var allowedSelectorKeys = map[string]map[string]bool{
+	ResourceKindInference: {
+		SelectorKeyProjectID: true,
+	},
 	ResourceKindMCP: {
 		SelectorKeyTool:        true,
 		SelectorKeyDisposition: true,
@@ -237,6 +242,15 @@ func ValidateSelector(scope Scope, sel Selector) error {
 
 	if kind != expectedKind {
 		return fmt.Errorf("scope %q requires resource_kind=%q, got %q", scope, expectedKind, kind)
+	}
+
+	if scope == ScopeInferenceExecute {
+		if sel[SelectorKeyResourceID] != WildcardResource {
+			return fmt.Errorf("scope %q requires resource_id=%q", scope, WildcardResource)
+		}
+		if projectID, ok := sel[SelectorKeyProjectID]; ok && projectID == "" {
+			return fmt.Errorf("selector key %q must not be empty", SelectorKeyProjectID)
+		}
 	}
 
 	allowed := allowedSelectorKeys[expectedKind]

@@ -1,5 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
-import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   Tooltip,
@@ -13,7 +13,7 @@ import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Column } from "@/components/ui/Table";
-import { KeyRound } from "lucide-react";
+import { Bot, KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";
 import { ResourceLink } from "./ResourceLink";
@@ -69,26 +69,33 @@ export function useChallengeRowColumns(
         width: "40px",
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
-          // An agent is not a person, and the identity column beside this one
-          // draws its own square face. A round avatar here would put a second,
-          // human-looking mark on the same row.
-          if (row.principalType === "agent") return null;
           const isApiKey = row.principalType === "api_key";
+          const isAgent = row.principalType === "agent";
           const display = principalDisplayName(row.userEmail, row.principalUrn);
           return (
-            <div className={cn(rowFade(row))}>
-              <Avatar className="h-8 w-8">
-                {row.photoUrl && (
-                  <AvatarImage src={row.photoUrl} alt={display} />
-                )}
-                <AvatarFallback className="text-[11px]">
-                  {isApiKey ? (
-                    <KeyRound className="h-4 w-4" />
-                  ) : (
-                    getInitials(display)
+            <div className={cn("shrink-0", rowFade(row))}>
+              {isAgent ? (
+                <span
+                  role="img"
+                  aria-label="Agent"
+                  className="bg-muted text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center"
+                >
+                  <Bot aria-hidden="true" className="h-4 w-4" />
+                </span>
+              ) : (
+                <Avatar className="h-8 w-8">
+                  {row.photoUrl && (
+                    <AvatarImage src={row.photoUrl} alt={display} />
                   )}
-                </AvatarFallback>
-              </Avatar>
+                  <AvatarFallback className="text-[11px]">
+                    {isApiKey ? (
+                      <KeyRound className="h-4 w-4" />
+                    ) : (
+                      getInitials(display)
+                    )}
+                  </AvatarFallback>
+                </Avatar>
+              )}
             </div>
           );
         },
@@ -99,25 +106,35 @@ export function useChallengeRowColumns(
         width: "1.2fr",
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
-          // An agent gets the shared renderer: its own square face and a link
-          // to its identity page, in place of the raw "agent:<uuid>" under a
-          // person's initials. No authorizer — a challenge records the one
-          // principal that was checked, so naming a person here would invent a
-          // delegation this row knows nothing about.
+          // An agent's face is rendered in the avatar column, so this column
+          // renders just the name/link. No authorizer — a challenge records
+          // the one principal that was checked, so naming a person here would
+          // invent a delegation this row knows nothing about.
           if (row.principalType === "agent") {
             const agentId = row.principalUrn.replace(/^agent:/, "");
             const agent = agentsById?.get(agentId);
+            const agentLabel = actingPrincipalText({
+              id: agentId,
+              name: agent?.name,
+            });
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div
-                    className={cn("min-w-0 text-sm font-medium", rowFade(row))}
+                  <Text
+                    variant="body"
+                    className={cn(
+                      "min-w-0 truncate text-sm font-medium",
+                      rowFade(row),
+                    )}
                   >
-                    <ActingPrincipal
-                      agent={{ id: agentId, name: agent?.name }}
-                      linked={agent !== undefined}
-                    />
-                  </div>
+                    {agent !== undefined ? (
+                      <IdentityLink identifier={{ urn: row.principalUrn }}>
+                        {agentLabel}
+                      </IdentityLink>
+                    ) : (
+                      agentLabel
+                    )}
+                  </Text>
                 </TooltipTrigger>
                 {row.roleSlugs.length > 0 && (
                   <TooltipContent side="bottom">

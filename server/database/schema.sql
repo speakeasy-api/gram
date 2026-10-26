@@ -4638,6 +4638,10 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- absent from the registration UI.
   allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
+  -- Explicitly allow repeated exchanges of valid assertions for this issuer.
+  -- NULL and false retain single-use assertion identifier enforcement.
+  allow_assertion_reuse boolean DEFAULT false,
+
   -- Where assertions' signing keys come from. NULL is the remote jwks_uri;
   -- 'device_keys' verifies each assertion against the key registered for its
   -- own subject in workload_device_keys, so one device cannot sign as another.
@@ -4672,6 +4676,8 @@ COMMENT ON COLUMN workload_issuers.issuer IS '@access: restricted';
 COMMENT ON COLUMN workload_issuers.jwks_uri IS '@access: restricted';
 COMMENT ON COLUMN workload_issuers.key_source IS '@access: confidential';
 COMMENT ON COLUMN workload_issuers.allow_wildcard_admission IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.allow_assertion_reuse IS 'Whether assertions carrying a jti or uti may be exchanged repeatedly until expiry. NULL is false.
+@access: confidential';
 COMMENT ON COLUMN workload_issuers.metadata IS '@access: opaque-restricted';
 COMMENT ON COLUMN workload_issuers.created_at IS '@access: confidential';
 COMMENT ON COLUMN workload_issuers.updated_at IS '@access: confidential';
@@ -9649,6 +9655,10 @@ CREATE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_idx
 ON remote_mcp_server_headers (remote_mcp_server_id)
 WHERE deleted IS FALSE;
 
+-- Promotion revisions include deleted headers to detect authentication changes.
+CREATE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_history_idx
+ON remote_mcp_server_headers (remote_mcp_server_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_name_key
 ON remote_mcp_server_headers (remote_mcp_server_id, name)
 WHERE deleted IS FALSE;
@@ -9760,6 +9770,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   tunneled_mcp_server_id uuid,
   toolset_id uuid,
   unproxied_mcp_server_id uuid,
+  -- A first-party backend Speakeasy serves itself, such as 'approvals' for the
+  -- server agents call request_approval on. Allowed values are validated in
+  -- application code.
+  builtin_backend TEXT,
   -- Optionally enables a variations group for runtime filtering and
   -- modifications. Otherwise defaults to project global (source-level)
   -- variations for runtime modifications.
@@ -9788,7 +9802,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1)
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend) = 1)
 );
 
 COMMENT ON COLUMN mcp_servers.id IS '@access: confidential';
@@ -9801,6 +9815,7 @@ COMMENT ON COLUMN mcp_servers.remote_session_issuer_id IS '@access: confidential
 COMMENT ON COLUMN mcp_servers.remote_mcp_server_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.toolset_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.unproxied_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.builtin_backend IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.tool_variations_group_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.visibility IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.network_access_mode IS '@access: confidential';
@@ -9838,7 +9853,7 @@ CREATE INDEX IF NOT EXISTS mcp_servers_tunneled_mcp_server_id_idx
 ON mcp_servers (tunneled_mcp_server_id)
 WHERE tunneled_mcp_server_id IS NOT NULL;
 
-COMMENT ON COLUMN mcp_servers.tunneled_mcp_server_id IS 'Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
+COMMENT ON COLUMN mcp_servers.tunneled_mcp_server_id IS 'Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, or builtin_backend must be set.
 @access: confidential';
 
 CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
@@ -9848,6 +9863,12 @@ WHERE toolset_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS mcp_servers_unproxied_mcp_server_id_idx
 ON mcp_servers (unproxied_mcp_server_id)
 WHERE unproxied_mcp_server_id IS NOT NULL;
+
+-- At most one live server per project for each first-party backend, so the
+-- first approval policy can create the approvals server idempotently.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_builtin_backend_key
+ON mcp_servers (project_id, builtin_backend)
+WHERE builtin_backend IS NOT NULL AND deleted IS FALSE;
 
 -- Upstream OAuth clients an MCP server is configured to use. Many-to-many:
 -- one client can serve several servers, and one server can offer several
@@ -10050,6 +10071,10 @@ COMMENT ON COLUMN mcp_auth_client_headers.deleted IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_client_headers_auth_client_id_name_key
 ON mcp_auth_client_headers (auth_client_id, name)
 WHERE deleted IS FALSE;
+
+-- Promotion revisions include deleted headers to detect authentication changes.
+CREATE INDEX IF NOT EXISTS mcp_auth_client_headers_auth_client_id_history_idx
+ON mcp_auth_client_headers (auth_client_id);
 
 -- Which auth clients each MCP server offers. Many-to-many: a shared client can
 -- serve several servers, and a server can offer several clients.
@@ -16058,3 +16083,117 @@ COMMENT ON COLUMN assistant_kit_interrupt_requests.attempt IS '@access: confiden
 COMMENT ON COLUMN assistant_kit_interrupt_requests.outcome IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.acknowledged_at IS '@access: confidential';
+
+-- Retain the canonical organization identity and approved delivery input after
+-- source deletion so staff can recover documentation requests. Source/project
+-- pointers may become NULL; writers pin the full organization/project/source
+-- tuple through the canonical source query before storing or promoting evidence.
+CREATE TABLE IF NOT EXISTS registry_promotion_candidates (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id text NOT NULL,
+  project_id uuid,
+  mcp_server_id uuid,
+  remote_mcp_server_id uuid,
+  source_revision text NOT NULL,
+  eligible boolean NOT NULL DEFAULT false,
+  reason text NOT NULL,
+  observed_successes bigint NOT NULL DEFAULT 0,
+  observed_failures bigint NOT NULL DEFAULT 0,
+  observed_days integer NOT NULL DEFAULT 0,
+  checked_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  registry_entry_id uuid,
+  public_metadata jsonb,
+  endpoint_identity text,
+  request_digest text,
+  retry_key text,
+  promoted_by text,
+  promoted_at timestamptz,
+  docs_url text,
+  docs_queued_at timestamptz,
+  delivery_error text,
+  discovery_last_attempt_at timestamptz,
+  discovery_next_attempt_at timestamptz,
+  discovery_failures integer NOT NULL DEFAULT 0,
+  docs_attempts integer NOT NULL DEFAULT 0,
+  docs_failures integer NOT NULL DEFAULT 0,
+  docs_last_attempt_at timestamptz,
+  docs_next_attempt_at timestamptz,
+  docs_needs_attention boolean NOT NULL DEFAULT false,
+  docs_lease_until timestamptz,
+  docs_lease_token uuid,
+  docs_revision uuid NOT NULL DEFAULT generate_uuidv7(),
+  docs_retry_key text,
+  docs_retry_revision text,
+  docs_retry_by text,
+  curation_status text NOT NULL DEFAULT 'active',
+  curation_revision uuid NOT NULL DEFAULT generate_uuidv7(),
+  curation_updated_at timestamptz,
+  curation_updated_by text,
+  curation_retry_key text,
+  curation_retry_revision text,
+  curation_retry_action text,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT registry_promotion_candidates_pkey PRIMARY KEY (id),
+  CONSTRAINT registry_promotion_candidates_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  CONSTRAINT registry_promotion_candidates_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers(id) ON DELETE SET NULL,
+  CONSTRAINT registry_promotion_candidates_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers(id) ON DELETE SET NULL,
+  CONSTRAINT registry_promotion_candidates_registry_entry_id_fkey FOREIGN KEY (registry_entry_id) REFERENCES mcp_registry_entries(id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS registry_promotion_candidates_source_key ON registry_promotion_candidates(project_id, mcp_server_id);
+CREATE UNIQUE INDEX IF NOT EXISTS registry_promotion_candidates_endpoint_key ON registry_promotion_candidates(endpoint_identity) WHERE endpoint_identity IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS registry_promotion_candidates_docs_slug_key ON registry_promotion_candidates((public_metadata->>'docs_slug')) WHERE public_metadata IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS registry_promotion_candidates_retry_key ON registry_promotion_candidates(project_id, retry_key) WHERE retry_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS registry_promotion_candidates_pending_idx ON registry_promotion_candidates(docs_next_attempt_at, id) WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE;
+CREATE INDEX IF NOT EXISTS registry_promotion_candidates_discovery_idx ON registry_promotion_candidates(discovery_next_attempt_at, id) WHERE promoted_at IS NULL;
+CREATE INDEX IF NOT EXISTS registry_promotion_candidates_newest_idx ON registry_promotion_candidates(created_at DESC, id DESC);
+
+COMMENT ON COLUMN registry_promotion_candidates.id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.organization_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.project_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.remote_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.source_revision IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.eligible IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.reason IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.observed_successes IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.observed_failures IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.observed_days IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.checked_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.registry_entry_id IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.request_digest IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.retry_key IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.promoted_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_queued_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.delivery_error IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.created_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.updated_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.public_metadata IS 'Staff-reviewed public catalogue and documentation input.
+@access: opaque-restricted';
+COMMENT ON COLUMN registry_promotion_candidates.endpoint_identity IS '@access: restricted';
+COMMENT ON COLUMN registry_promotion_candidates.promoted_by IS '@access: confidential-pii';
+COMMENT ON COLUMN registry_promotion_candidates.docs_url IS '@access: restricted';
+COMMENT ON COLUMN registry_promotion_candidates.discovery_last_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.discovery_next_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.discovery_failures IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_attempts IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_failures IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_last_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_next_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_needs_attention IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_lease_until IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_lease_token IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_revision IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_retry_key IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_retry_revision IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_retry_by IS '@access: confidential-pii';
+COMMENT ON COLUMN registry_promotion_candidates.curation_status IS 'Staff curation state, independent of observed eligibility.
+@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.curation_revision IS 'Compare-and-swap revision for staff curation changes.
+@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.curation_updated_at IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.curation_updated_by IS '@access: confidential-pii';
+COMMENT ON COLUMN registry_promotion_candidates.curation_retry_key IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.curation_retry_revision IS '@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.curation_retry_action IS '@access: confidential';

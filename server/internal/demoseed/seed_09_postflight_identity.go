@@ -61,11 +61,17 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 	}
 
 	identity := []postflightIDCheck{
+		{byOrg(s.q.PostflightIDInferenceGrants), 2, "demo seed postflight: expected only 2 explicit inference grants, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDInferenceWorkload(ctx, repo.PostflightIDInferenceWorkloadParams{
+				OrgID: org, ProjectID: proj, IssuerID: s.det("inference-workload-issuer"), AgentID: s.det("inference-agent"),
+			})
+		}, 1, "demo seed postflight: expected one project-scoped inference workload with explicit agent and owner access, found %d"},
 		// The seed never creates API keys: any row left here was minted by a
 		// demo visitor and would grant programmatic access that survives the
 		// reseed. (SQL: IF stray > 0; a count is never negative, so == 0.)
 		{byOrg(s.q.PostflightIDAPIKeys), 0, "demo seed postflight: %d api keys survived the reseed"},
-		{byOrg(s.q.PostflightIDAgentGrants), 6, "demo seed postflight: expected 6 scoped agent grants, found %d"},
+		{byOrg(s.q.PostflightIDAgentGrants), 7, "demo seed postflight: expected 7 scoped agent grants, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDScopedAgentGrants(ctx, repo.PostflightIDScopedAgentGrantsParams{
 				OrgID:         org,
@@ -88,7 +94,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDInertUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
 		}, 6, "demo seed postflight: expected 6 inert validated-spread upstream sessions, found %d"},
-		{byOrg(s.q.PostflightIDAgents), 5, "demo seed postflight: expected 5 managed agents, found %d"},
+		{byOrg(s.q.PostflightIDAgents), 6, "demo seed postflight: expected 6 managed agents, found %d"},
 		{byOrg(s.q.PostflightIDAgentSessions), 1, "demo seed postflight: expected 1 managed agent session, found %d"},
 		// This External OAuth row drives the metadata recommendation. Keep its
 		// count stable so a rerun cannot duplicate it or silently drop the demo
@@ -141,10 +147,11 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// credential kind, plus the pre-column row. A rerun that dropped or
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
-		// One issuer per Connections credential story (acme-partner-gateway),
-		// three project MCP issuers, and the organization-wide workforce issuer
-		// used by GitHub.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 4, "demo seed postflight: expected 4 project user session issuers, found %d"},
+		// Two upstream MCP issuers, two independent gateway issuers, one
+		// Connections issuer, and the approvals server's issuer; GitHub uses the
+		// organization workforce issuer.
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 6, "demo seed postflight: expected 6 project user session issuers, found %d"},
+		{byProj(s.q.PostflightIDGatewayIssuers), 2, "demo seed postflight: expected 2 distinct gateway issuers, found %d"},
 		{byOrg(s.q.PostflightIDOrgUserSessionIssuers), 1, "demo seed postflight: expected 1 organization user session issuer, found %d"},
 		// The workforce issuer shows a shared authorization server.
 		{func(ctx context.Context) (int64, error) {
@@ -267,8 +274,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// workload whose issuer or assignment went missing would render as an
 		// unnamed issuer with no agent, which is a real state but not the one
 		// seeded.
-		{byOrg(s.q.PostflightIDWorkloadIssuers), 3, "demo seed postflight: expected 3 workload issuers, found %d"},
-		{byOrg(s.q.PostflightIDWorkloadAdmissions), 5, "demo seed postflight: expected 5 workload admissions, found %d"},
+		{byOrg(s.q.PostflightIDWorkloadIssuers), 4, "demo seed postflight: expected 4 workload issuers, found %d"},
+		{byOrg(s.q.PostflightIDWorkloadAdmissions), 6, "demo seed postflight: expected 6 workload admissions, found %d"},
 	}
 	if err := runPostflightIDChecks(ctx, identity); err != nil {
 		return err
@@ -288,7 +295,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 
 	sig := func(name string) uuid.UUID { return s.det("sigint-" + name) }
 	rest := []postflightIDCheck{
-		{byOrg(s.q.PostflightIDWorkloadAssignments), 4, "demo seed postflight: expected 4 workload agent assignments, found %d"},
+		{byOrg(s.q.PostflightIDWorkloadAssignments), 5, "demo seed postflight: expected 5 workload agent assignments, found %d"},
 		// An admission may not out-reach its issuer's tier: an
 		// organization-tier admission has to name an organization-tier issuer.
 		// The management API refuses the pairing and the admission lookup
