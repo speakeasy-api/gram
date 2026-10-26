@@ -21,10 +21,7 @@ const (
 	MCPBackendRemote    MCPBackendKind = "remote"
 	MCPBackendTunneled  MCPBackendKind = "tunneled"
 	MCPBackendUnproxied MCPBackendKind = "unproxied"
-	// MCPBackendBuiltin is a server Speakeasy serves itself, such as the
-	// approvals server agents call request_approval on.
-	MCPBackendBuiltin MCPBackendKind = "built_in"
-	MCPBackendLegacy  MCPBackendKind = "legacy"
+	MCPBackendLegacy    MCPBackendKind = "legacy"
 )
 
 // bothAudiences admits a tool to the external endpoint and to a project's

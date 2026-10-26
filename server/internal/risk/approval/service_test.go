@@ -50,11 +50,11 @@ func TestApprovedCallIsReleasedExactlyOnce(t *testing.T) {
 	requests, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionRiskPolicyApprovalRequest)
 	require.NoError(t, err)
 	require.Equal(t, StatusPending, f.request(t, token))
-	// Repeating request_approval leaves the request as it is.
+	// Repeating the request leaves it as it is.
 	require.Equal(t, StatusPending, f.request(t, token))
 	requestsAfter, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionRiskPolicyApprovalRequest)
 	require.NoError(t, err)
-	require.Equal(t, requests+1, requestsAfter, "only the first request_approval is audited")
+	require.Equal(t, requests+1, requestsAfter, "only the first request is audited")
 	approvals, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionRiskPolicyApprovalApprove)
 	require.NoError(t, err)
 
@@ -96,7 +96,7 @@ func TestDeniedCallStartsNewRequestOnRetry(t *testing.T) {
 	status, err := f.service.WatchStatus(t.Context(), token)
 	require.NoError(t, err)
 	require.Equal(t, StatusDenied, status)
-	row, status, err := f.service.Request(t.Context(), RequestInput{Token: token, RequesterURN: f.agentURN, OrganizationID: f.organizationID, Reason: "again", Scope: "", ExpiresIn: 0})
+	row, status, err := f.service.Request(t.Context(), RequestInput{Token: token, Reason: "again", Scope: "", ExpiresIn: 0})
 	require.NoError(t, err)
 	require.Equal(t, StatusDenied, status)
 	require.Equal(t, "Use the staging project.", row.DecisionNote.String)
@@ -130,7 +130,7 @@ func TestRequesterCannotApproveOwnCall(t *testing.T) {
 	call.RequesterURN = "user:" + f.approverID
 	call.RequesterUserID = f.approverID
 	token := f.hold(t, call)
-	_, _, err := f.service.Request(t.Context(), RequestInput{Token: token, RequesterURN: call.RequesterURN, OrganizationID: f.organizationID, Reason: "needed", Scope: "", ExpiresIn: 0})
+	_, _, err := f.service.Request(t.Context(), RequestInput{Token: token, Reason: "needed", Scope: "", ExpiresIn: 0})
 	require.NoError(t, err)
 
 	_, err = f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
@@ -146,14 +146,12 @@ func TestRequestValidatesInput(t *testing.T) {
 		input RequestInput
 		err   error
 	}{
-		"unknown token":   {input: RequestInput{Token: "apr_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", RequesterURN: f.agentURN, OrganizationID: f.organizationID, Reason: "r", Scope: "", ExpiresIn: 0}, err: ErrNotFound},
-		"malformed token": {input: RequestInput{Token: "not-a-token", RequesterURN: f.agentURN, OrganizationID: f.organizationID, Reason: "r", Scope: "", ExpiresIn: 0}, err: ErrNotFound},
-		"other requester": {input: RequestInput{Token: token, RequesterURN: "agent:someone-else", OrganizationID: f.organizationID, Reason: "r", Scope: "", ExpiresIn: 0}, err: ErrNotFound},
-		"other org":       {input: RequestInput{Token: token, RequesterURN: f.agentURN, OrganizationID: "org_other", Reason: "r", Scope: "", ExpiresIn: 0}, err: ErrNotFound},
-		"no reason":       {input: RequestInput{Token: token, RequesterURN: f.agentURN, OrganizationID: f.organizationID, Reason: "  ", Scope: "", ExpiresIn: 0}, err: ErrInvalidRequest},
-		"wider scope":     {input: RequestInput{Token: token, RequesterURN: f.agentURN, OrganizationID: f.organizationID, Reason: "r", Scope: "always", ExpiresIn: 0}, err: ErrInvalidRequest},
-		"short expiry":    {input: RequestInput{Token: token, RequesterURN: f.agentURN, OrganizationID: f.organizationID, Reason: "r", Scope: "", ExpiresIn: time.Second}, err: ErrInvalidRequest},
-		"long expiry":     {input: RequestInput{Token: token, RequesterURN: f.agentURN, OrganizationID: f.organizationID, Reason: "r", Scope: "", ExpiresIn: 48 * time.Hour}, err: ErrInvalidRequest},
+		"unknown token":   {input: RequestInput{Token: "apr_" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", Reason: "r", Scope: "", ExpiresIn: 0}, err: ErrNotFound},
+		"malformed token": {input: RequestInput{Token: "not-a-token", Reason: "r", Scope: "", ExpiresIn: 0}, err: ErrNotFound},
+		"no reason":       {input: RequestInput{Token: token, Reason: "  ", Scope: "", ExpiresIn: 0}, err: ErrInvalidRequest},
+		"wider scope":     {input: RequestInput{Token: token, Reason: "r", Scope: "always", ExpiresIn: 0}, err: ErrInvalidRequest},
+		"short expiry":    {input: RequestInput{Token: token, Reason: "r", Scope: "", ExpiresIn: time.Second}, err: ErrInvalidRequest},
+		"long expiry":     {input: RequestInput{Token: token, Reason: "r", Scope: "", ExpiresIn: 48 * time.Hour}, err: ErrInvalidRequest},
 	}
 	// The group returns only after its parallel cases finish, so the status
 	// check below sees every rejected request.

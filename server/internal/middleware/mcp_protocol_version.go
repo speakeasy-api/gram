@@ -97,10 +97,6 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// JSON-RPC endpoint but is mounted only when the local fixture is
 		// configured and is bound to loopback, so it is deliberately excluded.
 		return tail == ""
-	case "approvals-mcp":
-		// POST /approvals-mcp is the Approvals MCP server
-		// (internal/risk/approval). The bare path is the endpoint.
-		return tail == ""
 	default:
 		return false
 	}

@@ -15,17 +15,6 @@ import {
 } from "./mcpservertoolsetsummary.js";
 
 /**
- * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
- */
-export const BuiltinBackend = {
-  Approvals: "approvals",
-} as const;
-/**
- * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
- */
-export type BuiltinBackend = OpenEnum<typeof BuiltinBackend>;
-
-/**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export const McpServerNetworkAccessMode = {
@@ -57,10 +46,6 @@ export type McpServerVisibility = OpenEnum<typeof McpServerVisibility>;
  * An MCP server configuration: authentication, environment, and backend selection for an MCP server.
  */
 export type McpServer = {
-  /**
-   * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
-   */
-  builtinBackend?: BuiltinBackend | undefined;
   /**
    * When the MCP server was created
    */
@@ -144,12 +129,6 @@ export type McpServer = {
 };
 
 /** @internal */
-export const BuiltinBackend$inboundSchema: z.ZodMiniType<
-  BuiltinBackend,
-  unknown
-> = openEnums.inboundSchema(BuiltinBackend);
-
-/** @internal */
 export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniType<
   McpServerNetworkAccessMode,
   unknown
@@ -165,7 +144,6 @@ export const McpServerVisibility$inboundSchema: z.ZodMiniType<
 export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
   .pipe(
     z.object({
-      builtin_backend: z.optional(BuiltinBackend$inboundSchema),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -195,7 +173,6 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
-        "builtin_backend": "builtinBackend",
         "created_at": "createdAt",
         "environment_id": "environmentId",
         "has_endpoint": "hasEndpoint",

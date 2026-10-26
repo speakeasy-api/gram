@@ -14104,23 +14104,6 @@ func unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfi
 	return res
 }
 
-// unmarshalRiskPolicyApprovalsServerSetupResponseBodyToTypesRiskPolicyApprovalsServerSetup
-// builds a value of type *types.RiskPolicyApprovalsServerSetup from a value of
-// type *RiskPolicyApprovalsServerSetupResponseBody.
-func unmarshalRiskPolicyApprovalsServerSetupResponseBodyToTypesRiskPolicyApprovalsServerSetup(v *RiskPolicyApprovalsServerSetupResponseBody) *types.RiskPolicyApprovalsServerSetup {
-	if v == nil {
-		return nil
-	}
-	res := &types.RiskPolicyApprovalsServerSetup{
-		McpServerID:          *v.McpServerID,
-		McpServerSlug:        *v.McpServerSlug,
-		PluginServerName:     *v.PluginServerName,
-		AddedToDefaultPlugin: *v.AddedToDefaultPlugin,
-	}
-
-	return res
-}
-
 // unmarshalRiskPolicyResponseBodyToTypesRiskPolicy builds a value of type
 // *types.RiskPolicy from a value of type *RiskPolicyResponseBody.
 func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody) *types.RiskPolicy {
@@ -14198,9 +14181,6 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 	}
 	if v.ApprovalConfig != nil {
 		res.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(v.ApprovalConfig)
-	}
-	if v.ApprovalsServerSetup != nil {
-		res.ApprovalsServerSetup = unmarshalRiskPolicyApprovalsServerSetupResponseBodyToTypesRiskPolicyApprovalsServerSetup(v.ApprovalsServerSetup)
 	}
 
 	return res

@@ -21,8 +21,8 @@ import (
 //
 // "require_approval" holds an MCP tool call until a listed approver approves
 // it. The call is denied with a request token; the agent files the request
-// with request_approval on the Approvals MCP server, waits on a watcher, and
-// retries the same call once approved. Approvers are set per policy in
+// with curl and the token, waits on a polling loop, and retries the same call
+// once approved. Approvers are set per policy in
 // approval_config. Only MCP-scoped policies may use it.
 //
 // "quarantine" is block plus a session circuit: the triggering event is denied,
@@ -172,20 +172,6 @@ var RiskMCPScope = Type("RiskMCPScope", func() {
 	Required("servers")
 })
 
-// RiskPolicyApprovalsServerSetup reports the approvals server Speakeasy set
-// up when a policy turned on a project's first approval policy.
-var RiskPolicyApprovalsServerSetup = Type("RiskPolicyApprovalsServerSetup", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("mcp_server_id", String, "The approvals server Speakeasy created in the project.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("mcp_server_slug", String, "The approvals server's slug.")
-	Attribute("plugin_server_name", String, "How plugins name the server, and how held calls refer to it.")
-	Attribute("added_to_default_plugin", Boolean, "Whether the server joined the project's Default plugin, which republishes so agents that use the plugin get it.")
-	Required("mcp_server_id", "mcp_server_slug", "plugin_server_name", "added_to_default_plugin")
-})
-
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -231,7 +217,6 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")
 	Attribute("model_config", RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Null for standard policies.")
 	Attribute("approval_config", RiskPolicyApprovalConfig, "For require_approval policies: who may approve held calls. Null for every other action.")
-	Attribute("approvals_server_setup", RiskPolicyApprovalsServerSetup, "Set only on the create or update response that turned on the project's first approval policy: the approvals server Speakeasy created and whether it joined the Default plugin.")
 	Attribute("score", Float64, "CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.", func() {
 		Minimum(0.1)
 		Maximum(10)

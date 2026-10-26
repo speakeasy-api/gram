@@ -154,12 +154,10 @@ func (f fixture) hold(t *testing.T, call HoldInput) string {
 func (f fixture) request(t *testing.T, token string) Status {
 	t.Helper()
 	_, status, err := f.service.Request(t.Context(), RequestInput{
-		Token:          token,
-		RequesterURN:   f.agentURN,
-		OrganizationID: f.organizationID,
-		Reason:         "File the bug the user reported.",
-		Scope:          "",
-		ExpiresIn:      0,
+		Token:     token,
+		Reason:    "File the bug the user reported.",
+		Scope:     "",
+		ExpiresIn: 0,
 	})
 	require.NoError(t, err)
 	return status

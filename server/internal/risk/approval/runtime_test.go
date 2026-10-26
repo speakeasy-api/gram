@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -17,17 +16,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // watchResult is one poll of the watch endpoint.
@@ -63,7 +57,7 @@ func watch(t *testing.T, runtime *Runtime, authorization string) watchResult {
 func TestHandleWatchReportsStatusForToken(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	runtime := NewRuntime(f.service, nil, nil)
+	runtime := NewRuntime(f.service, nil)
 	token := f.hold(t, f.call(`{}`))
 
 	result := watch(t, runtime, "Bearer "+token)
@@ -78,7 +72,7 @@ func TestHandleWatchReportsStatusForToken(t *testing.T) {
 func TestHandleWatchRejectsMissingOrUnknownTokens(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	runtime := NewRuntime(f.service, nil, nil)
+	runtime := NewRuntime(f.service, nil)
 	unknown, err := NewToken()
 	require.NoError(t, err)
 
@@ -99,73 +93,6 @@ func TestHandleWatchRejectsMissingOrUnknownTokens(t *testing.T) {
 	}
 }
 
-// callRequestApproval calls request_approval over the Streamable HTTP handler
-// as the given identity.
-func callRequestApproval(t *testing.T, runtime *Runtime, arguments map[string]any) *mcp.CallToolResult {
-	t.Helper()
-	server := httptest.NewServer(runtime.Handler())
-	t.Cleanup(server.Close)
-	session, err := mcp.NewClient(&mcp.Implementation{Name: "agent", Version: "1"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL, HTTPClient: server.Client(), MaxRetries: -1, DisableStandaloneSSE: true}, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = session.Close() })
-	res, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "request_approval", Arguments: arguments})
-	require.NoError(t, err)
-	return res
-}
-
-func agentAuthenticator(organizationID string, agentID uuid.UUID) Authenticator {
-	return func(_ http.ResponseWriter, r *http.Request) (context.Context, error) {
-		ctx := mcpidentity.NewValidatorBoundary().StampAgent(r.Context(), agentID)
-		return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: organizationID}), nil
-	}
-}
-
-func TestRequestApprovalToolFilesRequestAndReturnsWatcher(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	agentID := uuid.New()
-	f.agentURN = urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()).String()
-	token := f.hold(t, f.call(`{}`))
-	runtime := NewRuntime(f.service, agentAuthenticator(f.organizationID, agentID), nil)
-
-	res := callRequestApproval(t, runtime, map[string]any{"token": token, "reason": "File the bug the user reported."})
-	require.False(t, res.IsError)
-	content, ok := res.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	text := content.Text
-	require.Contains(t, text, "status: pending")
-	require.Contains(t, text, "-H 'Authorization: Bearer "+token+"' 'https://speakeasy.test/approvals/watch?format=text'")
-	require.Contains(t, text, "APPROVED")
-	require.Contains(t, text, "The request expires at ")
-	require.Contains(t, text, "keep this turn open")
-	// The steps are only in the text. Structured content would replace them
-	// in clients that show it to the model instead.
-	require.Nil(t, res.StructuredContent)
-
-	status, err := f.service.WatchStatus(t.Context(), token)
-	require.NoError(t, err)
-	require.Equal(t, StatusPending, status)
-}
-
-func TestRequestApprovalToolHasNoOutputSchema(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	runtime := NewRuntime(f.service, agentAuthenticator(f.organizationID, uuid.New()), nil)
-	server := httptest.NewServer(runtime.Handler())
-	t.Cleanup(server.Close)
-	session, err := mcp.NewClient(&mcp.Implementation{Name: "agent", Version: "1"}, nil).Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL, HTTPClient: server.Client(), MaxRetries: -1, DisableStandaloneSSE: true}, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = session.Close() })
-
-	tools, err := session.ListTools(t.Context(), nil)
-	require.NoError(t, err)
-	require.Len(t, tools.Tools, 1)
-	require.Equal(t, "request_approval", tools.Tools[0].Name)
-	// With an output schema, Claude Code shows the structured result in place
-	// of the text, and the agent never sees the watcher steps.
-	require.Nil(t, tools.Tools[0].OutputSchema)
-}
-
 func TestMonitorTimeoutCoversTheWindowUpToAnHour(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, 1_860_000, monitorTimeoutMs(30*time.Minute))
@@ -173,55 +100,12 @@ func TestMonitorTimeoutCoversTheWindowUpToAnHour(t *testing.T) {
 	require.Equal(t, 3_600_000, monitorTimeoutMs(24*time.Hour))
 }
 
-func TestRequestApprovalToolRejectsOtherCallers(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	token := f.hold(t, f.call(`{}`))
-
-	// A different agent cannot file a request for this agent's call.
-	runtime := NewRuntime(f.service, agentAuthenticator(f.organizationID, uuid.New()), nil)
-	res := callRequestApproval(t, runtime, map[string]any{"token": token, "reason": "needed"})
-	require.True(t, res.IsError)
-	content, ok := res.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.Contains(t, content.Text, "no approval request matches")
-
-	status, err := f.service.WatchStatus(t.Context(), token)
-	require.NoError(t, err)
-	require.Equal(t, StatusBlocked, status)
-}
-
-func TestRequestApprovalHandlerRequiresAuthentication(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	runtime := NewRuntime(f.service, func(http.ResponseWriter, *http.Request) (context.Context, error) {
-		return nil, errors.New("no credential")
-	}, nil)
-	server := httptest.NewServer(runtime.Handler())
-	t.Cleanup(server.Close)
-
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := server.Client().Do(req)
-	require.NoError(t, err)
-	defer func() { _ = res.Body.Close() }()
-	require.Equal(t, http.StatusUnauthorized, res.StatusCode)
-
-	get, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
-	require.NoError(t, err)
-	getRes, err := server.Client().Do(get)
-	require.NoError(t, err)
-	defer func() { _ = getRes.Body.Close() }()
-	require.Equal(t, http.StatusMethodNotAllowed, getRes.StatusCode)
-}
-
 func TestHandleWatchRateLimitsPerToken(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	runtime := NewRuntime(f.service, nil, ratelimit.NewRedisStore(redisClient))
+	runtime := NewRuntime(f.service, ratelimit.NewRedisStore(redisClient))
 	token := f.hold(t, f.call(`{}`))
 
 	server := httptest.NewServer(oops.ErrHandle(testenv.NewLogger(t), runtime.HandleWatch))
@@ -242,21 +126,6 @@ func TestHandleWatchRateLimitsPerToken(t *testing.T) {
 		require.Equal(t, http.StatusOK, res.StatusCode)
 	}
 	require.True(t, limited, "a token polled faster than the limit is told to back off")
-}
-
-func TestRequestApprovalToolRejectsOutOfRangeExpiry(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	agentID := uuid.New()
-	f.agentURN = urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()).String()
-	token := f.hold(t, f.call(`{}`))
-	runtime := NewRuntime(f.service, agentAuthenticator(f.organizationID, agentID), nil)
-
-	res := callRequestApproval(t, runtime, map[string]any{"token": token, "reason": "needed", "expires_in": math.MaxInt64 / 2})
-	require.True(t, res.IsError)
-	content, ok := res.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.Contains(t, content.Text, "expires_in must be between")
 }
 
 // postRequest posts an approval request to the request endpoint once.
@@ -281,7 +150,7 @@ func postRequest(t *testing.T, runtime *Runtime, authorization, body string) (in
 func TestHandleRequestFilesTheRequestWithOnlyTheToken(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	runtime := NewRuntime(f.service, nil, nil)
+	runtime := NewRuntime(f.service, nil)
 	token := f.hold(t, f.call(`{}`))
 
 	code, text := postRequest(t, runtime, "Bearer "+token, `{"reason":"File the bug the user reported."}`)
@@ -305,7 +174,7 @@ func TestHandleRequestFilesTheRequestWithOnlyTheToken(t *testing.T) {
 func TestHandleRequestRejectsMissingOrUnknownTokens(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	runtime := NewRuntime(f.service, nil, nil)
+	runtime := NewRuntime(f.service, nil)
 	unknown, err := NewToken()
 	require.NoError(t, err)
 
@@ -327,7 +196,7 @@ func TestHandleRequestRejectsMissingOrUnknownTokens(t *testing.T) {
 func TestHandleRequestValidatesTheBody(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	runtime := NewRuntime(f.service, nil, nil)
+	runtime := NewRuntime(f.service, nil)
 	token := f.hold(t, f.call(`{}`))
 
 	for name, tc := range map[string]struct{ body, want string }{
@@ -351,7 +220,7 @@ func TestHandleRequestRateLimitsPerToken(t *testing.T) {
 	f := newFixture(t)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	runtime := NewRuntime(f.service, nil, ratelimit.NewRedisStore(redisClient))
+	runtime := NewRuntime(f.service, ratelimit.NewRedisStore(redisClient))
 	token := f.hold(t, f.call(`{}`))
 
 	limited := false
@@ -388,7 +257,7 @@ func watchText(t *testing.T, runtime *Runtime, authorization string) (int, strin
 func TestHandleWatchTextAnswersOneLine(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	runtime := NewRuntime(f.service, nil, nil)
+	runtime := NewRuntime(f.service, nil)
 	line := func(token string) string {
 		t.Helper()
 		code, body := watchText(t, runtime, "Bearer "+token)
@@ -422,7 +291,7 @@ func TestHandleWatchTextAnswersOneLine(t *testing.T) {
 func TestHandleWatchTextReportsExpiry(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	runtime := NewRuntime(f.service, nil, nil)
+	runtime := NewRuntime(f.service, nil)
 	token := f.hold(t, f.call(`{}`))
 	f.request(t, token)
 	f.shiftClock(defaultRequestTTL + time.Minute)
@@ -458,7 +327,7 @@ func TestAgentRequestsAndWaitsWithTheCommandsAsWritten(t *testing.T) {
 	serverURL, err := url.Parse(server.URL)
 	require.NoError(t, err)
 	service := NewService(testenv.NewLogger(t), f.db, serverURL, audit.NewLogger())
-	runtime := NewRuntime(service, nil, nil)
+	runtime := NewRuntime(service, nil)
 	var watches atomic.Int32
 	watchHandler := oops.ErrHandle(testenv.NewLogger(t), runtime.HandleWatch)
 	mux.Handle("POST "+RequestPath, oops.ErrHandle(testenv.NewLogger(t), runtime.HandleRequest))
