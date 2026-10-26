@@ -148,6 +148,7 @@ func openClawPlugin(p Params) ([]byte, error) {
 		// An agent has no browser to sign in with; the baked key is its only
 		// credential.
 		BrowserLogin:    false,
+		HooksKeyIsAgent: true,
 		HooksOrgName:    "",
 		InstallFailOpen: p.InstallFailOpen,
 	}, "openclaw")
@@ -307,7 +308,7 @@ install_openclaw_hooks() {
 decode_base64() {
   base64 -d <"$1" >"$2" 2>/dev/null && return 0
   base64 -D <"$1" >"$2" 2>/dev/null && return 0
-  python3 -c 'import base64, sys; sys.stdout.buffer.write(base64.b64decode(sys.stdin.read()))' <"$1" >"$2" 2>/dev/null && return 0
+  python3 -I -c 'import base64, sys; sys.stdout.buffer.write(base64.b64decode(sys.stdin.read()))' <"$1" >"$2" 2>/dev/null && return 0
   node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => process.stdout.write(Buffer.from(s, "base64")))' <"$1" >"$2" 2>/dev/null
 }
 
@@ -317,7 +318,7 @@ extract_zip() {
   mkdir -p "$2"
   unzip -q "$1" -d "$2" >/dev/null 2>&1 && return 0
   bsdtar -xf "$1" -C "$2" >/dev/null 2>&1 && return 0
-  python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$1" "$2" >/dev/null 2>&1
+  python3 -I -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$1" "$2" >/dev/null 2>&1
 }
 
 # Where OpenClaw keeps an installed plugin: the extensions directory of its
@@ -364,6 +365,7 @@ check_openclaw_hooks() {
   printf '{}\n' >"$1/hooks-auth.env.org-settings.json"
   reply=$(printf '%s\n' "$frame" |
     SPEAKEASY_AI_HOOKS_API_KEY='' GRAM_HOOKS_API_KEY='' \
+      SPEAKEASY_AI_HOOKS_ORG_KEY='' GRAM_HOOKS_ORG_KEY='' \
       SPEAKEASY_AI_HOOKS_FAIL_OPEN='' GRAM_HOOKS_FAIL_OPEN='' \
       SPEAKEASY_AI_HOOKS_AUTH_FILE="$1/hooks-auth.env" \
       bash "$plugin_dir/hooks/bootstrap.sh" agenthooks serve --provider=openclaw --timeout=15s \
@@ -410,14 +412,10 @@ note_credential_overrides() {
     echo "Note: SPEAKEASY_AI_HOOKS_API_KEY is set. If the OpenClaw Gateway inherits it,"
     echo "it is used instead of this agent's key."
   fi
-  config_home=${XDG_CONFIG_HOME:-$HOME/.config}
-  for cached in "${SPEAKEASY_AI_HOOKS_AUTH_FILE:-$config_home/speakeasy-ai/hooks-auth.env}" "$config_home/gram/hooks-auth.env"; do
-    if [ -f "$cached" ]; then
-      echo "Note: $cached holds a cached Speakeasy sign-in."
-      echo "If it is for this organization, it is used instead of this agent's key."
-      return 0
-    fi
-  done
+  if [ -n "${SPEAKEASY_AI_HOOKS_ORG_KEY:-}${GRAM_HOOKS_ORG_KEY:-}" ]; then
+    echo "Note: SPEAKEASY_AI_HOOKS_ORG_KEY is set. If the OpenClaw Gateway inherits it,"
+    echo "it is used instead of this agent's key."
+  fi
 }
 
 main() {

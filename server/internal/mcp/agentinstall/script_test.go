@@ -123,9 +123,11 @@ func TestScriptEmbedsTheAgentsOpenClawPlugin(t *testing.T) {
 		Project     string `json:"project"`
 		Org         string `json:"org"`
 		HooksAPIKey string `json:"hooks_api_key"`
+		AgentKey    bool   `json:"agent_key"`
 	}
 	require.NoError(t, json.Unmarshal(zipFile(t, archive, "speakeasy.json"), &config))
 	require.Equal(t, testKey, config.HooksAPIKey)
+	require.True(t, config.AgentKey)
 	require.Equal(t, testProject, config.Project)
 	require.Equal(t, testServerURL, config.ServerURL)
 	require.Equal(t, testOrgID, config.Org)
@@ -243,6 +245,9 @@ exit 0
 const stubBootstrap = `printf '%s\n' "$*" >"$STUB_DIR/bootstrap.args"
 {
   printf 'key=%s\n' "${SPEAKEASY_AI_HOOKS_API_KEY:-unset}"
+  printf 'org_key=%s\n' "${SPEAKEASY_AI_HOOKS_ORG_KEY:-unset}"
+  printf 'old_key=%s\n' "${GRAM_HOOKS_API_KEY:-unset}"
+  printf 'old_org_key=%s\n' "${GRAM_HOOKS_ORG_KEY:-unset}"
   printf 'fail_open=%s\n' "${SPEAKEASY_AI_HOOKS_FAIL_OPEN:-unset}"
   if [ -f "$SPEAKEASY_AI_HOOKS_AUTH_FILE.org-settings.json" ]; then
     echo "org_settings=present"
@@ -305,6 +310,9 @@ func (h *openClawHarness) runResult(t *testing.T, script string) (string, error)
 		// The self-check must test the plugin's key, not this one, and must
 		// not let an outage pass.
 		"SPEAKEASY_AI_HOOKS_API_KEY=key-from-the-shell",
+		"SPEAKEASY_AI_HOOKS_ORG_KEY=org-key-from-the-shell",
+		"GRAM_HOOKS_API_KEY=old-key-from-the-shell",
+		"GRAM_HOOKS_ORG_KEY=old-org-key-from-the-shell",
 		"SPEAKEASY_AI_HOOKS_FAIL_OPEN=1",
 	}
 	cmd.Env = append(cmd.Env, h.env...)
@@ -380,7 +388,7 @@ func TestScriptConfiguresOpenClawAndPassesTheSelfCheck(t *testing.T) {
 	require.Contains(t, h.stubFile(t, "bootstrap.stdin"), `"hook":"before_tool_call"`)
 	// The plugin's own key, no cached sign-in, and an outage reads as a
 	// refusal: only Speakeasy accepting the key can pass.
-	require.Equal(t, "key=unset\nfail_open=unset\norg_settings=present", h.stubFile(t, "bootstrap.env"))
+	require.Equal(t, "key=unset\norg_key=unset\nold_key=unset\nold_org_key=unset\nfail_open=unset\norg_settings=present", h.stubFile(t, "bootstrap.env"))
 }
 
 // Releases before 2026.8.1 reject --accept-capabilities, so the script asks
@@ -448,6 +456,37 @@ func TestScriptUnpacksTheArchiveWithPython3WhenUnzipIsMissing(t *testing.T) {
 
 	require.NotContains(t, out, "could not find it to test it")
 	require.Contains(t, out, "Speakeasy hooks: FAIL: the hooks binary did not answer. speakeasy-hooks:")
+}
+
+func TestScriptPythonFallbacksIgnoreModulesInTheWorkingDirectory(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	h.skipLayout = true
+	h.optionalTools = []string{toolPython3}
+	// Force both decoding and extraction through Python rather than base64.
+	require.NoError(t, os.WriteFile(filepath.Join(h.stubDir, "base64"), []byte("#!/bin/sh\nexit 1\n"), 0o700))
+	for _, name := range []string{"base64.py", "zipfile.py"} {
+		require.NoError(t, os.WriteFile(filepath.Join(h.workDir, name), []byte("from pathlib import Path\nPath('python-shadow-ran').touch()\nraise RuntimeError('shadow import')\n"), 0o600))
+	}
+	out := h.run(t, renderScript(t, testParams()))
+	require.NotContains(t, out, "could not decode the plugin")
+	require.NotContains(t, out, "could not find it to test it")
+	require.Contains(t, out, "Speakeasy hooks: FAIL: the hooks binary did not answer. speakeasy-hooks:")
+	_, err := os.Stat(filepath.Join(h.workDir, "python-shadow-ran"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestScriptOnlyWarnsAboutExplicitCredentialOverrides(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	cached := filepath.Join(h.home, ".config", "speakeasy-ai", "hooks-auth.env")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cached), 0o700))
+	require.NoError(t, os.WriteFile(cached, []byte("api_key=cached-personal-key\norg="+testOrgID+"\n"), 0o600))
+	out := h.run(t, renderScript(t, testParams()))
+	require.Contains(t, out, "SPEAKEASY_AI_HOOKS_API_KEY is set")
+	require.Contains(t, out, "SPEAKEASY_AI_HOOKS_ORG_KEY is set")
+	require.NotContains(t, out, "cached Speakeasy sign-in")
+	require.NotContains(t, h.stubFile(t, "bootstrap.env"), "sign_in=present")
 }
 
 func TestScriptReportsAPluginItCannotTest(t *testing.T) {

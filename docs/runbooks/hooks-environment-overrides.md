@@ -51,12 +51,17 @@ path stays in use until the new file exists.
 
 ## Credential order
 
+This order describes the current hooks source. Deploying agent-key precedence
+requires releasing that source and updating the server's pinned hooks binary;
+the current `0.3.37` pin predates this behavior.
+
 Each event uses the first credential that resolves:
 
 1. `SPEAKEASY_AI_HOOKS_API_KEY`.
 2. The key baked into the plugin, when `speakeasy.json` marks it as an
    agent's key (`"agent_key": true`). This requires a generator to set
-   `HooksKeyIsAgent: true`; no production generator currently does so.
+   `HooksKeyIsAgent: true`. The agent install script selects this mode for its
+   OpenClaw plugin; shared org plugin generation leaves it off.
    Once set, the agent's events stay under the agent on a machine where a
    person has also signed in.
 3. The cached `speakeasy-hooks login` sign-in, when it was minted for this
