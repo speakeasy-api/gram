@@ -11,6 +11,7 @@ import { useAssistantCandidates } from "./useAssistantCandidates";
 import { useCatalogCandidates } from "./useCatalogCandidates";
 import { useDeploymentCandidates } from "./useDeploymentCandidates";
 import { useEnvironmentCandidates } from "./useEnvironmentCandidates";
+import { useGatewayCandidates } from "./useGatewayCandidates";
 import { useMarketplaceCandidate } from "./useMarketplaceCandidate";
 import { useMcpServerCandidates } from "./useMcpServerCandidates";
 import { usePersonCandidates } from "./usePersonCandidates";
@@ -93,6 +94,10 @@ export function useLauncherCandidates({
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,
   });
+  // Gateways list on the same MCP page, behind the same gate.
+  const gateways = useGatewayCandidates({
+    enabled: projectEnabled && canListMcp,
+  });
   const catalog = useCatalogCandidates({
     enabled: projectEnabled && canBrowseCatalog,
   });
@@ -133,6 +138,7 @@ export function useLauncherCandidates({
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
+      ...(inProject && canListMcp ? gateways : []),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
@@ -167,6 +173,7 @@ export function useLauncherCandidates({
     recents,
     marketplace,
     mcpServers,
+    gateways,
     catalog,
     plugins,
     assistants,
