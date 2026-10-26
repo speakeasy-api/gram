@@ -483,6 +483,10 @@ linters:
       require-specific: true
       require-explanation: true
     wrapcheck:
+      # Generated API packages own their error contracts.
+      ignore-package-globs:
+        - "github.com/speakeasy-api/gram/server/gen"
+        - "github.com/speakeasy-api/gram/server/gen/*"
       ignore-sigs:
         - "errors.New("
         - "errors.Join("
@@ -514,8 +518,6 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting.GatewayFailureRejection("
         - "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy.NewKillswitchInfrastructureRejection("
         - "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy.NewKillswitchMatchRejection("
-        - "github.com/speakeasy-api/gram/server/gen/platform_killswitches.MakeOperationConflict("
-        - "github.com/speakeasy-api/gram/server/gen/platform_killswitches.MakeVersionConflict("
         - "k8s.io/apimachinery/pkg/api/errors.NewConflict("
         - "github.com/speakeasy-api/gram/server/internal/managedrows.RequireUnmanaged("
         - "github.com/speakeasy-api/gram/server/internal/managedrows.RequireDeletable("
