@@ -110,7 +110,7 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	for range 2 {
 		served := []metaMember{member(noAuth)}
 		choices.apply(ctx, testenv.NewLogger(t), served, true)
-		require.Nil(t, served[0].upstreamUnavailable)
+		require.NoError(t, served[0].upstreamUnavailable)
 		require.True(t, served[0].upstreamNoAuth)
 	}
 }
