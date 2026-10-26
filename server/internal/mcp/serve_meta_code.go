@@ -83,11 +83,13 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	}
 	switch {
 	case len(members) == 0 && len(gate.hiddenMembers) > 0 && gate.connectURL != "":
-		fmt.Fprintf(&description, "The person hid every server on this gateway. They can show one again at %s.\n", gate.connectURL)
+		fmt.Fprintf(&description, "The user hid every server on this gateway. The user can show one again at %s.\n", gate.connectURL)
 	case len(members) == 0:
 		description.WriteString("No tool prefixes are currently permitted.\n")
-	case len(gate.hiddenMembers) > 0:
-		fmt.Fprintf(&description, "The person hid %d more servers, which are not available.\n", len(gate.hiddenMembers))
+	case len(gate.hiddenMembers) == 1:
+		description.WriteString("The user hid 1 more server, which is not available.\n")
+	case len(gate.hiddenMembers) > 1:
+		fmt.Fprintf(&description, "The user hid %d more servers, which are not available.\n", len(gate.hiddenMembers))
 	}
 	body, err := json.Marshal(&result[toolsListResultTools]{ID: req.ID, Result: toolsListResultTools{Tools: []*toolListEntry{{Name: metamcp.ToolCodeExecute, Description: description.String(), InputSchema: codeExecuteSchema, Annotations: nil, Meta: nil}}}, serverIdentity: serverInfoMetaServer, cacheHints: cacheHintsCallerVarying})
 	if err != nil {

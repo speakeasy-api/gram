@@ -1,6 +1,4 @@
-// Package hiddenmcpservers stores the MCP servers each user hid. Gateways
-// leave hidden servers out of the user's tools, the consent page lists them
-// last, and the device agent reads the same list.
+// Package hiddenmcpservers stores the MCP servers each user hid.
 package hiddenmcpservers
 
 import (

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -173,13 +174,13 @@ func handleMetaResourcesRead(ctx context.Context, logger *slog.Logger, req *rawR
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse resources/read request").LogError(ctx, logger)
 	}
-	if params.URI != metamcp.ConnectionStatusResourceURI {
+	if !strings.HasPrefix(params.URI, metamcp.ConnectionStatusResourcePrefix) {
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown resource %q", params.URI).LogWarn(ctx, logger)
 	}
 	bs, err := json.Marshal(&result[resourceReadResult]{
 		ID: req.ID,
 		Result: resourceReadResult{Contents: []resourceContent{{
-			URI:      metamcp.ConnectionStatusResourceURI,
+			URI:      params.URI,
 			Name:     nil,
 			MimeType: conv.PtrEmpty(metamcp.MCPAppMimeType),
 			Text:     metamcp.ConnectionStatusHTML,

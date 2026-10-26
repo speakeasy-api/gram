@@ -71,9 +71,7 @@
     });
   }
 
-  // Hide and Show post in the background and move the row between the lists,
-  // so the page keeps its scroll position and open sections. Without the
-  // script the forms post and the server redirects back to the page.
+  // Hide and Show update in place; without the script the forms post and redirect.
   var visibleServers = document.querySelector("[data-gateway-visible-list]");
   var hiddenServers = document.querySelector("[data-gateway-hidden-list]");
   if (visibleServers && hiddenServers) {

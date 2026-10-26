@@ -785,7 +785,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 				if errors.Is(err, errConsentCaptureSuperseded) {
 					approvalError.Message = "This page was replaced by a newer one. Reload the page to continue."
 				}
-			} else if gateway.ReadyCount == 0 {
+			} else if !gateway.AnyReady() {
 				approvalError = &consentApprovalError{Message: "No servers could be verified. Resolve the server statuses above before approving access.", ActionURL: "", ActionLabel: ""}
 			}
 		}

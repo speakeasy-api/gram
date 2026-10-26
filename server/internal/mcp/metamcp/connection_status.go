@@ -19,7 +19,11 @@ const ToolConnectionStatus = "connection_status"
 // io.modelcontextprotocol/ui extension. It carries a hash of the page because
 // hosts cache a resource by URI: an edited page under the same URI is never
 // fetched again.
-var ConnectionStatusResourceURI = "ui://gateway/connection-status/" + contentHash(ConnectionStatusHTML)
+var ConnectionStatusResourceURI = ConnectionStatusResourcePrefix + contentHash(ConnectionStatusHTML)
+
+// ConnectionStatusResourcePrefix matches every version of the view; reads of
+// an earlier hash get the current page so cached tool lists keep rendering.
+const ConnectionStatusResourcePrefix = "ui://gateway/connection-status/"
 
 func contentHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
@@ -124,7 +128,7 @@ func (r ConnectionStatusResult) Text() string {
 			fmt.Fprintf(&b, "- %s: not signed in\n", label)
 		case SignInHidden:
 			hidden = true
-			fmt.Fprintf(&b, "- %s: hidden by you\n", label)
+			fmt.Fprintf(&b, "- %s: hidden by the user\n", label)
 		default:
 			needsConnect = true
 			fmt.Fprintf(&b, "- %s: needs attention (%s)\n", label, s.Detail)

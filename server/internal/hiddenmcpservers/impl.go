@@ -3,10 +3,12 @@ package hiddenmcpservers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -21,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -30,6 +33,7 @@ type Service struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	auth   *auth.Auth
+	authz  *authz.Engine
 }
 
 var (
@@ -44,6 +48,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger: logger,
 		db:     db,
 		auth:   auth.New(logger, db, sessionManager, authzEngine),
+		authz:  authzEngine,
 	}
 }
 
@@ -61,8 +66,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// caller is the signed-in user. The list is the user's own, so no scope is
-// needed, but a support session never changes it.
+// caller is the signed-in user; a support session never changes their list.
 func (s *Service) caller(ctx context.Context, mutation bool) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ActiveOrganizationID == "" {
@@ -86,6 +90,13 @@ func (s *Service) List(ctx context.Context, _ *srv.ListPayload) (*srv.ListHidden
 	}
 	servers := make([]*srv.HiddenMcpServer, 0, len(rows))
 	for _, row := range rows {
+		allowed, err := s.canConnect(ctx, row.Visibility, row.McpServerID, row.ToolsetID, row.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check server access").LogError(ctx, logger)
+		}
+		if !allowed {
+			continue
+		}
 		servers = append(servers, &srv.HiddenMcpServer{
 			McpServerID: row.McpServerID.String(),
 			ProjectID:   row.ProjectID.String(),
@@ -102,6 +113,20 @@ func (s *Service) Hide(ctx context.Context, payload *srv.HidePayload) error {
 	authCtx, logger, serverID, err := s.mutation(ctx, payload.McpServerID)
 	if err != nil {
 		return err
+	}
+	server, err := repo.New(s.db).GetLiveMCPServer(ctx, repo.GetLiveMCPServerParams{McpServerID: serverID, OrganizationID: authCtx.ActiveOrganizationID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load server").LogError(ctx, logger)
+	}
+	allowed, err := s.canConnect(ctx, server.Visibility, server.ID, server.ToolsetID, server.ProjectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check server access").LogError(ctx, logger)
+	}
+	if !allowed {
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 	}
 	if err := Hide(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.UserID, serverID); err != nil {
 		if errors.Is(err, ErrServerNotFound) {
@@ -133,4 +158,29 @@ func (s *Service) mutation(ctx context.Context, rawID string) (*contextvalues.Au
 		return nil, logger, uuid.Nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id")
 	}
 	return authCtx, logger, serverID, nil
+}
+
+// canConnect applies the gateway's admission rule, so the list never names a
+// server the caller cannot reach and hide cannot probe for one.
+func (s *Service) canConnect(ctx context.Context, serverVisibility string, serverID uuid.UUID, toolsetID uuid.NullUUID, projectID uuid.UUID) (bool, error) {
+	switch serverVisibility {
+	case visibility.Public:
+		return true, nil
+	case visibility.Private:
+	default:
+		return false, nil
+	}
+	resourceID := serverID
+	if toolsetID.Valid {
+		resourceID = toolsetID.UUID
+	}
+	err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, resourceID.String(), projectID.String()))
+	if err == nil {
+		return true, nil
+	}
+	var oopsErr *oops.ShareableError
+	if errors.As(err, &oopsErr) && (oopsErr.Code == oops.CodeForbidden || oopsErr.Code == oops.CodeUnauthorized) {
+		return false, nil
+	}
+	return false, fmt.Errorf("check mcp:connect: %w", err)
 }

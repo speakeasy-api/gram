@@ -265,6 +265,7 @@
                 <summary class="text-muted-foreground interact:text-foreground flex cursor-pointer list-none items-center justify-between gap-3 text-xs">
                   <span>Hidden (<span data-gateway-hidden-count>{{len $hidden}}</span>)</span>
                   <span class="text-eyebrow group-open/hidden:hidden" aria-hidden="true">Expand</span>
+                  <span class="text-eyebrow hidden group-open/hidden:inline" aria-hidden="true">Collapse</span>
                 </summary>
                 <p class="text-xs text-muted-foreground mt-2">
                   Hidden servers aren't available to your AI tools. Show one to use it again.
@@ -948,6 +949,7 @@
       >
       {{end}}
     </span>
+    {{if .CanHide}}
     <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0" data-gateway-visibility-form>
       <input type="hidden" name="state" value="{{.State}}" />
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
@@ -963,6 +965,7 @@
         {{if .Hidden}}Show{{else}}Hide{{end}}
       </button>
     </form>
+    {{end}}
   </span>
 </li>
 {{end}}

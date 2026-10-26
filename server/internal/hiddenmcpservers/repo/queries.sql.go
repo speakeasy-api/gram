@@ -12,6 +12,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getLiveMCPServer = `-- name: GetLiveMCPServer :one
+SELECT ms.id, ms.project_id, ms.visibility, ms.toolset_id
+FROM mcp_servers AS ms
+JOIN projects AS p ON p.id = ms.project_id
+WHERE ms.id = $1
+  AND p.organization_id = $2
+  AND ms.deleted IS FALSE
+  AND p.deleted IS FALSE
+`
+
+type GetLiveMCPServerParams struct {
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+type GetLiveMCPServerRow struct {
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+	Visibility string
+	ToolsetID  uuid.NullUUID
+}
+
+func (q *Queries) GetLiveMCPServer(ctx context.Context, arg GetLiveMCPServerParams) (GetLiveMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, getLiveMCPServer, arg.McpServerID, arg.OrganizationID)
+	var i GetLiveMCPServerRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Visibility,
+		&i.ToolsetID,
+	)
+	return i, err
+}
+
 const hideMCPServer = `-- name: HideMCPServer :one
 INSERT INTO user_hidden_mcp_servers (organization_id, user_id, mcp_server_id, project_id)
 SELECT p.organization_id, $1, ms.id, ms.project_id
@@ -22,7 +56,7 @@ WHERE ms.id = $2
   AND ms.deleted IS FALSE
   AND p.deleted IS FALSE
 ON CONFLICT (organization_id, user_id, mcp_server_id) DO UPDATE
-SET updated_at = clock_timestamp()
+SET project_id = EXCLUDED.project_id, updated_at = clock_timestamp()
 RETURNING organization_id, user_id, mcp_server_id, project_id, created_at, updated_at
 `
 
@@ -83,14 +117,16 @@ func (q *Queries) ListHiddenMCPServerIDs(ctx context.Context, arg ListHiddenMCPS
 const listHiddenMCPServers = `-- name: ListHiddenMCPServers :many
 SELECT
   h.mcp_server_id,
-  h.project_id,
+  ms.project_id,
   h.created_at,
   ms.slug,
   ms.name,
+  ms.visibility,
+  ms.toolset_id,
   p.slug AS project_slug
 FROM user_hidden_mcp_servers AS h
-JOIN mcp_servers AS ms ON ms.id = h.mcp_server_id AND ms.project_id = h.project_id
-JOIN projects AS p ON p.id = h.project_id
+JOIN mcp_servers AS ms ON ms.id = h.mcp_server_id
+JOIN projects AS p ON p.id = ms.project_id
 WHERE h.organization_id = $1
   AND h.user_id = $2
   AND p.organization_id = $1
@@ -110,6 +146,8 @@ type ListHiddenMCPServersRow struct {
 	CreatedAt   pgtype.Timestamptz
 	Slug        pgtype.Text
 	Name        pgtype.Text
+	Visibility  string
+	ToolsetID   uuid.NullUUID
 	ProjectSlug string
 }
 
@@ -129,6 +167,8 @@ func (q *Queries) ListHiddenMCPServers(ctx context.Context, arg ListHiddenMCPSer
 			&i.CreatedAt,
 			&i.Slug,
 			&i.Name,
+			&i.Visibility,
+			&i.ToolsetID,
 			&i.ProjectSlug,
 		); err != nil {
 			return nil, err

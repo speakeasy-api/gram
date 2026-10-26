@@ -415,9 +415,7 @@ func findConsentClient(clients []remotesessions.Client, id uuid.UUID) *remoteses
 	return nil
 }
 
-// serveConsentHideServer hides or shows one of the gateway's servers for the
-// subject. Hiding is limited to servers the subject is admitted to, so a
-// crafted form cannot probe for servers outside the gateway.
+// serveConsentHideServer hides or shows a gateway server the subject is admitted to.
 func (s *Service) serveConsentHideServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, stateID string) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(challengeState.FlowID))
@@ -444,7 +442,10 @@ func (s *Service) serveConsentHideServer(w http.ResponseWriter, r *http.Request,
 	} else {
 		err = hiddenmcpservers.Unhide(ctx, s.db, endpoint.OrganizationID, subject.ID, serverID)
 	}
-	if err != nil {
+	switch {
+	case errors.Is(err, hiddenmcpservers.ErrServerNotFound):
+		return oops.E(oops.CodeBadRequest, err, "unknown server for this gateway").LogWarn(ctx, logger)
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "update hidden server").LogError(ctx, logger)
 	}
 	// The page script updates the list in place; a plain form post returns

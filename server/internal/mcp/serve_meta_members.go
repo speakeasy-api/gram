@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -237,7 +238,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		}
 		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, scopeProjectID)
 	}
-	if err == nil && gate.userID != "" {
+	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
 		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
 	}
 	if err == nil && gate.catalog != nil {
@@ -520,13 +521,22 @@ func findMetaMember(members []metaMember, serverSlug string) (metaMember, bool) 
 	return none, false
 }
 
+// isAssistantRequest reports an assistant run, which acts for its owner but
+// must not inherit the owner's hidden servers.
+func isAssistantRequest(ctx context.Context) bool {
+	_, ok := contextvalues.GetAssistantPrincipal(ctx)
+	return ok
+}
+
 // splitHiddenMembers separates the servers the user hid from those served.
 // Hiding is a preference, so a failed lookup serves every member rather than
 // failing the request.
 func (s *Service) splitHiddenMembers(ctx context.Context, logger *slog.Logger, organizationID, userID string, members []metaMember) ([]metaMember, []metaMember) {
 	hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, organizationID, userID)
 	if err != nil {
-		logger.WarnContext(ctx, "load hidden gateway members", attr.SlogError(err))
+		if ctx.Err() == nil {
+			logger.WarnContext(ctx, "load hidden gateway members", attr.SlogError(err))
+		}
 		return members, nil
 	}
 	if len(hidden) == 0 {

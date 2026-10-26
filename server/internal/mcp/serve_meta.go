@@ -646,12 +646,12 @@ func (s *Service) handleMetaListServersCall(
 		})
 	}
 
-	result := metamcp.ListServersResult{Servers: servers, Hidden: nil, ManageURL: "", Note: ""}
-	if len(gate.hiddenMembers) > 0 {
-		for _, member := range gate.hiddenMembers {
-			result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
-		}
-		result.ManageURL = gate.connectURL
+	result := metamcp.ListServersResult{Servers: servers, Hidden: nil, ConnectURL: "", Note: ""}
+	for _, member := range gate.hiddenMembers {
+		result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
+	}
+	if len(result.Hidden) > 0 && gate.connectURL != "" {
+		result.ConnectURL = gate.connectURL
 		result.Note = metamcp.HiddenNote
 	}
 	structured, err := json.Marshal(result)
@@ -761,6 +761,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		catalogRef:          nil,
 		authentication:      gateAuthentication,
 		unapprovedMembers:   nil,
+		hiddenMembers:       nil,
 		execute:             false,
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,

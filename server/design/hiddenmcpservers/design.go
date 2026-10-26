@@ -29,15 +29,6 @@ var ListResult = Type("ListHiddenMcpServersResult", func() {
 	Attribute("servers", ArrayOf(HiddenServer), "Hidden servers, oldest first.")
 })
 
-var ServerPayload = func(typeName string) {
-	security.SessionPayload()
-	Meta("openapi:typename", typeName)
-	Attribute("mcp_server_id", String, "The MCP server.", func() {
-		Format(FormatUUID)
-	})
-	Required("mcp_server_id")
-}
-
 var _ = Service("hiddenMcpServers", func() {
 	Description("MCP servers the signed-in user hid. Gateways leave hidden servers out of the user's tools and list them last on the consent page. Each user manages only their own list.")
 
@@ -71,7 +62,12 @@ var _ = Service("hiddenMcpServers", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			ServerPayload("HideMcpServerRequestBody")
+			security.SessionPayload()
+			Meta("openapi:typename", "HideMcpServerRequestBody")
+			Attribute("mcp_server_id", String, "The MCP server.", func() {
+				Format(FormatUUID)
+			})
+			Required("mcp_server_id")
 		})
 
 		HTTP(func() {
@@ -91,7 +87,12 @@ var _ = Service("hiddenMcpServers", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			ServerPayload("UnhideMcpServerRequestBody")
+			security.SessionPayload()
+			Meta("openapi:typename", "UnhideMcpServerRequestBody")
+			Attribute("mcp_server_id", String, "The MCP server.", func() {
+				Format(FormatUUID)
+			})
+			Required("mcp_server_id")
 		})
 
 		HTTP(func() {
