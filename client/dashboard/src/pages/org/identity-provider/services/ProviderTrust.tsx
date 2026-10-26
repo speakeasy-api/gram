@@ -3,6 +3,7 @@ import { Text } from "@/components/ui/Text";
 
 import {
   acceptanceLabel,
+  supportsProvider,
   SPEAKEASY_DEFAULT_SCOPE,
   type ProviderView,
 } from "./emaServiceView";
@@ -16,11 +17,13 @@ export function ProviderTrust({
   /** In the default, say which servers each entry covers. */
   isDefault?: boolean;
 }): JSX.Element {
-  const tone = !provider.usable
-    ? "warning"
-    : provider.lastAcceptedAt
-      ? "success"
-      : "neutral";
+  const tone = !supportsProvider(provider)
+    ? "neutral"
+    : !provider.usable
+      ? "warning"
+      : provider.lastAcceptedAt
+        ? "success"
+        : "neutral";
   const detail = provider.usable
     ? acceptanceLabel(provider.lastAcceptedAt)
     : provider.unavailable;

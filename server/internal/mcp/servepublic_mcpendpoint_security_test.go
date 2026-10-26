@@ -32,8 +32,20 @@ import (
 
 func attachedMCPMux(ti *testInstance) goahttp.Muxer {
 	mux := goahttp.NewMuxer()
-	mcp.Attach(mux, ti.service, nil)
-	return mux
+	mcp.Attach(mux, ti.service.Service, nil)
+	return migratedMux{Muxer: mux, service: ti.service}
+}
+
+// migratedMux serves the attached routes as migratedService serves its entry
+// points: each request first runs the migration.
+type migratedMux struct {
+	goahttp.Muxer
+	service *migratedService
+}
+
+func (m migratedMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	m.service.migrate(r.Context())
+	m.Muxer.ServeHTTP(w, r)
 }
 
 func serveAttached(t *testing.T, ctx context.Context, mux goahttp.Muxer, method, target, bearer string, body []byte, headers map[string]string) *httptest.ResponseRecorder {
@@ -114,13 +126,17 @@ func TestServePublic_McpEndpoint_PublicRemote_DeleteForwardsSessionTermination(t
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	var gotMethod, gotSession string
-	done := make(chan struct{}, 1)
+	// The upstream can see other requests (such as a GET) besides the forwarded
+	// DELETE, so only the DELETE is handed back, over the channel to avoid a race.
+	deleted := make(chan string, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotSession = r.Header.Get("Mcp-Session-Id")
 		w.WriteHeader(http.StatusNoContent)
-		done <- struct{}{}
+		if r.Method == http.MethodDelete {
+			select {
+			case deleted <- r.Header.Get("Mcp-Session-Id"):
+			default:
+			}
+		}
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -130,13 +146,13 @@ func TestServePublic_McpEndpoint_PublicRemote_DeleteForwardsSessionTermination(t
 	token := mintEndpointUserSession(t, ti, issuerID, slug, urn.NewAnonymousSubject(uuid.NewString()))
 
 	w := serveAttached(t, context.Background(), attachedMCPMux(ti), http.MethodDelete, "/mcp/"+slug, token, nil, map[string]string{"Mcp-Session-Id": "abc-session"})
+	var gotSession string
 	select {
-	case <-done:
+	case gotSession = <-deleted:
 	case <-time.After(5 * time.Second):
-		t.Fatalf("upstream not invoked; status=%d body=%s", w.Code, w.Body.String())
+		t.Fatalf("upstream not sent a DELETE; status=%d body=%s", w.Code, w.Body.String())
 	}
 	require.Equal(t, http.StatusNoContent, w.Code, "body=%s", w.Body.String())
-	require.Equal(t, http.MethodDelete, gotMethod)
 	require.Equal(t, "abc-session", gotSession)
 }
 

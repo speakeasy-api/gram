@@ -50,16 +50,18 @@ func registerGatewayTools(reg *Registrar, service *GatewayService) {
 			"Supply a name and the exact MCP server IDs from find_mcp in that same project, in the order the gateway should list them. Before calling, tell the user the project, the name, and the servers it will front. " +
 			"The gateway, its default address, and every member are created together, or nothing is: when any server cannot sit behind a gateway, the refusal lists each one with its reason, and the call can be repeated without them. " +
 			"The gateway is private, requires sign-in, and is reachable on the public network only; each person signs in to each member's provider through it. It reaches nobody until it is put into a plugin with distribute_mcp_to_plugin. " +
+			"Browser connections approved through the Tool access picker keep their approved member servers, even with All tools (live); added or previously unavailable servers need new consent. Older connections, management-issued sessions and agents follow current membership and their access grants. " +
 			"Each call creates a new gateway, so after a timeout check find_mcp before calling again. Change its members later with set_gateway_members.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: false, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: false, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, meta, createHandler)
 	addTool(reg, &mcp.Tool{
 		Name:  setGatewayMembersToolName,
 		Title: "Set a Gateway's Members",
 		Description: "Replace the MCP servers behind one gateway in an explicit project with exactly the listed servers, in order: servers not yet on it are added, servers left out are removed, and the rest are reordered. An empty list removes every member. " +
 			"Before calling, tell the user which servers will be added and removed. When the gateway is in a plugin, the change reaches everyone holding that plugin; an organization administrator adding a server here approves it in Shadow MCP for that audience, as distributing it would. " +
+			"Browser connections approved through the Tool access picker keep their approved members and need new consent for added or previously unavailable servers. Cached tool lists need new consent to include new tools. Older connections, management-issued sessions and agents follow current membership and their access grants. " +
 			"The change is applied together or not at all: when any added server cannot sit behind a gateway, the refusal lists each one with its reason. Calling again with the same list changes nothing and reports unchanged.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}, meta, setHandler)
 }
 

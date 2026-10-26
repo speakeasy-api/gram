@@ -3441,9 +3441,11 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3471,9 +3473,11 @@ type toolUsageFilters struct {
 	To                 string
 	TargetTypes        []telem_gen.ToolUsageTargetType
 	HostedToolsetSlugs []string
+	MCPServerIDs       []string
 	ShadowServerNames  []string
 	MetaMcpServerIDs   []string
 	UserFilters        []*telem_gen.ToolUsageUserFilter
+	AgentIDs           []string
 	HookSources        []string
 	ClientKeys         []string
 	AccountType        *string
@@ -3547,6 +3551,8 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		})
 	}
 
+	authorizerUserIDs := s.authorizerUserIDsForUserFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
+
 	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
@@ -3566,9 +3572,12 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: f.HostedToolsetSlugs,
+		MCPServerIDs:       lowerAll(f.MCPServerIDs),
 		ShadowServerNames:  f.ShadowServerNames,
 		MetaMCPServerIDs:   f.MetaMcpServerIDs,
 		UserFilters:        userFilters,
+		AuthorizerUserIDs:  authorizerUserIDs,
+		AgentIDs:           f.AgentIDs,
 		HookSources:        f.HookSources,
 		ClientKeys:         f.ClientKeys,
 		AccountType:        conv.PtrValOr(f.AccountType, ""),
@@ -3597,9 +3606,11 @@ func (s *Service) GetToolUsageTotals(ctx context.Context, payload *telem_gen.Get
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3626,9 +3637,11 @@ func (s *Service) GetToolUsageTargets(ctx context.Context, payload *telem_gen.Ge
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3655,9 +3668,11 @@ func (s *Service) GetToolUsageUsers(ctx context.Context, payload *telem_gen.GetT
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3684,9 +3699,11 @@ func (s *Service) GetToolUsageClients(ctx context.Context, payload *telem_gen.Ge
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3713,9 +3730,11 @@ func (s *Service) GetToolUsageClientToolBreakdown(ctx context.Context, payload *
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3742,9 +3761,11 @@ func (s *Service) GetToolUsageTargetTimeSeries(ctx context.Context, payload *tel
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3771,9 +3792,11 @@ func (s *Service) GetToolUsageUserTimeSeries(ctx context.Context, payload *telem
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3800,9 +3823,11 @@ func (s *Service) GetToolUsageUsersByTarget(ctx context.Context, payload *telem_
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3829,9 +3854,11 @@ func (s *Service) GetToolUsageTargetToolBreakdown(ctx context.Context, payload *
 		To:                 payload.To,
 		TargetTypes:        payload.TargetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3885,6 +3912,8 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		})
 	}
 
+	authorizerUserIDs := s.authorizerUserIDsForUserFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
+
 	cursorTimeUnixNano := int64(0)
 	cursorID := ""
 	if params.cursor != "" {
@@ -3916,10 +3945,13 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       lowerAll(payload.McpServerIds),
 		MCPServerTargetIDs: nil,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMCPServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        userFilters,
+		AuthorizerUserIDs:  authorizerUserIDs,
+		AgentIDs:           payload.AgentIds,
 		// Left literal: the Tool Logs page offers the user filter values this
 		// list produces (GetToolUsageFilterOptions), and those are unfolded, so
 		// folding only one side of that pair would make the page's own chips
@@ -3946,7 +3978,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		rows = rows[:params.limit]
 	}
 
-	return toToolUsageTracesResult(rows, nextCursor, gatewayNames), nil
+	return toToolUsageTracesResult(rows, nextCursor, gatewayNames, s.authorizerLabels(ctx, authCtx.ActiveOrganizationID, rows)), nil
 }
 
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
@@ -3997,6 +4029,9 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
+	}
+	if _, _, _, includeUsers, _ := toolUsageFilterOptionTypeSet(payload.OptionTypes); includeUsers {
+		options.Users = s.authorizerUserOptions(ctx, authCtx.ActiveOrganizationID, options.Users, options.Authorizers)
 	}
 
 	return toToolUsageFilterOptionsResult(options, hostedMCPMatchers, gatewayNames, payload.OptionTypes), nil
@@ -4133,18 +4168,6 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 		return nil, nil, fmt.Errorf("list project toolsets: %w", err)
 	}
 
-	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
-	for _, toolset := range toolsets {
-		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
-			continue
-		}
-		hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
-			ToolsetSlug: toolset.Slug,
-			ToolsetName: toolset.Name,
-			McpSlug:     toolset.McpSlug.String,
-		})
-	}
-
 	// Include soft-deleted servers: tool_source on telemetry rows is the
 	// backend remote/tunneled server id, which outlives the mcp_servers row.
 	// Matching against deleted servers keeps a deleted (or recreated) server's
@@ -4154,6 +4177,33 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	servers, err := mcpserversRepo.New(db).ListMCPServersForTelemetryByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list project MCP servers: %w", err)
+	}
+
+	toolsetServerIDs, err := toolsetHostingServerIDs(ctx, db, projectID, toolsets)
+	if err != nil {
+		return nil, nil, err
+	}
+	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
+	for _, toolset := range toolsets {
+		// The slug is the legacy alias; whether it serves is the server's state, so the slug matches either way.
+		if !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+			// No alias, but its past calls still need their server id.
+			if serverID := toolsetServerIDs[toolset.ID]; serverID != "" {
+				hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
+					ToolsetSlug: toolset.Slug,
+					ToolsetName: toolset.Name,
+					McpSlug:     "",
+					MCPServerID: serverID,
+				})
+			}
+			continue
+		}
+		hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
+			ToolsetSlug: toolset.Slug,
+			ToolsetName: toolset.Name,
+			McpSlug:     toolset.McpSlug.String,
+			MCPServerID: toolsetServerIDs[toolset.ID],
+		})
 	}
 
 	serverMatchers := make([]repo.MCPServerMatcher, 0, len(servers))
@@ -4196,6 +4246,33 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 		})
 	}
 	return hostedMatchers, serverMatchers, nil
+}
+
+// toolsetHostingServerIDs attributes each toolset to its hosting server with
+// the same rule as the MCP servers API: the canonical wrapper whatever its
+// visibility, else the oldest live server with an endpoint. A visibility toggle
+// never moves a toolset's unstamped history to another server.
+func toolsetHostingServerIDs(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, toolsets []toolsetsRepo.Toolset) (map[uuid.UUID]string, error) {
+	if len(toolsets) == 0 {
+		return map[uuid.UUID]string{}, nil
+	}
+	toolsetIDs := make([]uuid.UUID, 0, len(toolsets))
+	for _, toolset := range toolsets {
+		toolsetIDs = append(toolsetIDs, toolset.ID)
+	}
+	hosts, err := mcpserversRepo.New(db).ListToolsetHostingMCPServerIDs(ctx, mcpserversRepo.ListToolsetHostingMCPServerIDsParams{
+		OrganizationID: toolsets[0].OrganizationID,
+		ToolsetIds:     toolsetIDs,
+		ProjectIds:     []uuid.UUID{projectID},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list toolset hosting MCP servers: %w", err)
+	}
+	ids := make(map[uuid.UUID]string, len(hosts))
+	for _, host := range hosts {
+		ids[host.ToolsetID] = host.McpServerID.String()
+	}
+	return ids, nil
 }
 
 // LoadMetaMCPMatchers loads the gateway endpoint URL suffixes (gram.mcp.server_url)
@@ -4272,7 +4349,7 @@ func decodeToolUsageTraceCursor(cursor string) (int64, string, error) {
 	return startTimeUnixNano, parts[1], nil
 }
 
-func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string, gatewayNames map[string]string) *telem_gen.ListToolUsageTracesResult {
+func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string, gatewayNames map[string]string, authorizerLabels map[string]string) *telem_gen.ListToolUsageTracesResult {
 	traces := make([]*telem_gen.ToolUsageTraceSummary, 0, len(rows))
 	for _, row := range rows {
 		// Only a dispatch to a member is routed through a gateway; a call on the gateway is the gateway.
@@ -4300,9 +4377,12 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			TargetKind:           telem_gen.ToolUsageTargetKind(row.TargetKind),
 			TargetID:             row.TargetID,
 			TargetLabel:          row.TargetLabel,
+			McpServerID:          conv.PtrEmpty(row.MCPServerID),
 			UserKey:              row.UserKey,
 			UserLabel:            row.UserLabel,
 			UserKind:             telem_gen.ToolUsageUserKind(row.UserKind),
+			AuthorizerUserID:     conv.PtrEmpty(row.AuthorizerUserID),
+			AuthorizerLabel:      conv.PtrEmpty(authorizerLabels[row.AuthorizerUserID]),
 			HookSource:           row.HookSource,
 			EventSource:          row.EventSource,
 			HTTPStatusCode:       row.HTTPStatusCode,
@@ -4339,16 +4419,27 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 	hostedServers := make([]*telem_gen.ToolUsageHostedServerFilterOption, 0, len(options.HostedServers))
 	if includeHostedServers {
 		hostedCounts := make(map[string]int64, len(options.HostedServers))
+		// Empty when the slug's calls span several servers, so the option filters by slug.
+		hostedServerIDs := make(map[string]string, len(options.HostedServers))
 		for _, row := range options.HostedServers {
 			hostedCounts[row.ToolsetSlug] = uint64ToInt64(row.EventCount)
+			hostedServerIDs[row.ToolsetSlug] = row.MCPServerID
 		}
 
 		seen := make(map[string]struct{}, len(hostedMCPMatchers))
 		for _, matcher := range hostedMCPMatchers {
+			if matcher.McpSlug == "" {
+				continue
+			}
 			seen[matcher.ToolsetSlug] = struct{}{}
+			serverID, observed := hostedServerIDs[matcher.ToolsetSlug]
+			if !observed {
+				serverID = matcher.MCPServerID
+			}
 			hostedServers = append(hostedServers, &telem_gen.ToolUsageHostedServerFilterOption{
 				ToolsetSlug: matcher.ToolsetSlug,
 				ToolsetName: matcher.ToolsetName,
+				McpServerID: conv.PtrEmpty(serverID),
 				EventCount:  hostedCounts[matcher.ToolsetSlug],
 			})
 		}
@@ -4360,6 +4451,7 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hosted
 			hostedServers = append(hostedServers, &telem_gen.ToolUsageHostedServerFilterOption{
 				ToolsetSlug: row.ToolsetSlug,
 				ToolsetName: row.ToolsetSlug,
+				McpServerID: conv.PtrEmpty(row.MCPServerID),
 				EventCount:  uint64ToInt64(row.EventCount),
 			})
 		}
@@ -4472,6 +4564,7 @@ func toToolUsageTargetSummaries(rows []repo.ToolUsageTargetSummaryRow) []*telem_
 			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
 			TargetID:     row.TargetID,
 			TargetLabel:  row.TargetLabel,
+			McpServerID:  conv.PtrEmpty(row.MCPServerID),
 			EventCount:   uint64ToInt64(row.EventCount),
 			UniqueTools:  uint64ToInt64(row.UniqueTools),
 			SuccessCount: uint64ToInt64(row.SuccessCount),
@@ -4801,4 +4894,16 @@ func toLLMClientUsageFromPG(clients []chatRepo.GetLLMClientBreakdownByMessagesRo
 		}
 	}
 	return result
+}
+
+// lowerAll lowercases ids so they compare equal to the stored lowercase UUIDs.
+func lowerAll(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		out = append(out, strings.ToLower(v))
+	}
+	return out
 }

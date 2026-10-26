@@ -63,6 +63,7 @@ type RoleManager struct {
 	audit                   *audit.Logger
 	roleDeliveryPublication plugins.PublicationRequests
 	roleDeliveryGuard       *admission.Guard
+	publisher               plugins.PluginPublishSignaler
 }
 
 // NewRoleManager wires the role manager to the local DB, the WorkOS role client, and the audit logger.
@@ -74,7 +75,16 @@ func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, a
 		logger:                  logger.With(attr.SlogComponent("access.role_manager")),
 		roles:                   roles,
 		audit:                   auditLogger,
+		publisher:               nil,
 	}
+}
+
+// WithPluginPublisher signals a debounced republish of every project whose
+// role plugins a committed role change touched. A nil signaler leaves only the
+// durable publication request, which may wait for the hourly rollout sweep.
+func (r *RoleManager) WithPluginPublisher(publisher plugins.PluginPublishSignaler) *RoleManager {
+	r.publisher = publisher
+	return r
 }
 
 // MutationReady reports whether this manager has every dependency required for
@@ -175,7 +185,8 @@ type MemberListPage struct {
 }
 
 // ListMembers returns locally known organization members with their directly
-// assigned role IDs and the role IDs they hold through directory role mappings.
+// assigned role IDs, the role IDs they hold through directory role mappings,
+// and the mappings those roles come from.
 func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.ListMembersResult, error) {
 	page, err := r.ListMembersFiltered(ctx, gramOrgID, MemberListFilter{Query: "", RoleID: "", Limit: 0})
 	if err != nil {
@@ -187,7 +198,17 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 // ListMembersFiltered uses the dashboard member query with optional filtering
 // and a limit. Exact email matches sort first, then members sort by email and ID.
 func (r *RoleManager) ListMembersFiltered(ctx context.Context, gramOrgID string, filter MemberListFilter) (*MemberListPage, error) {
-	rows, err := repo.New(r.db).ListAccessMembers(ctx, repo.ListAccessMembersParams{
+	// Both reads share one snapshot, so a concurrent directory sync or mapping
+	// change cannot leave directory_role_ids and directory_role_sources
+	// disagreeing.
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin member read").LogError(ctx, r.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := repo.New(tx)
+	rows, err := queries.ListAccessMembers(ctx, repo.ListAccessMembersParams{
 		OrganizationID: gramOrgID,
 		QueryText:      strings.ToLower(strings.Join(strings.Fields(filter.Query), " ")),
 		RoleID:         filter.RoleID,
@@ -196,6 +217,21 @@ func (r *RoleManager) ListMembersFiltered(ctx context.Context, gramOrgID string,
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members").LogError(ctx, r.logger)
 	}
+
+	sourceRows, err := queries.ListAccessMemberDirectoryRoleSources(ctx, gramOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list member directory role sources").LogError(ctx, r.logger)
+	}
+	sourcesByMember := make(map[string][]*gen.AccessMemberDirectoryRoleSource)
+	for _, row := range sourceRows {
+		sourcesByMember[row.UserID] = append(sourcesByMember[row.UserID], &gen.AccessMemberDirectoryRoleSource{
+			RoleID:           row.RoleID,
+			MappingID:        row.MappingID.String(),
+			SourceKind:       row.SourceKind,
+			DirectoryGroupID: conv.FromNullableUUID(row.DirectoryGroupID),
+		})
+	}
+
 	page := &MemberListPage{Members: make([]*gen.AccessMember, 0, len(rows)), TotalMatches: 0, ExactEmailMatches: 0}
 	for _, row := range rows {
 		page.TotalMatches = row.TotalMatches
@@ -209,11 +245,32 @@ func (r *RoleManager) ListMembersFiltered(ctx context.Context, gramOrgID string,
 			RoleIds:          row.RoleIds,
 			DirectoryRoleIds: row.DirectoryRoleIds,
 			JoinedAt:         conv.FromPGTimestamptz(row.JoinedAt),
-			Department:       conv.PtrEmpty(row.Department),
-			Groups:           row.GroupNames,
+			// Null when no directory row was matched, or when the row reports
+			// no non-empty department. The query collapses both to an empty
+			// string, so the two cannot be told apart here.
+			Department:      conv.PtrEmpty(row.Department),
+			Groups:          row.GroupNames,
+			DirectoryGroups: memberDirectoryGroups(row.GroupIds, row.GroupIDNames),
+			InDirectory:     new(row.InDirectory),
+			// Never nil, so a member with no mapped roles says so as an empty
+			// list.
+			DirectoryRoleSources: append([]*gen.AccessMemberDirectoryRoleSource{}, sourcesByMember[row.ID]...),
 		})
 	}
 	return page, nil
+}
+
+// memberDirectoryGroups pairs the parallel group ID and name arrays that
+// ListAccessMembers returns.
+func memberDirectoryGroups(ids []uuid.UUID, names []string) []*gen.AccessMemberDirectoryGroup {
+	groups := make([]*gen.AccessMemberDirectoryGroup, 0, len(ids))
+	for i, id := range ids {
+		if i >= len(names) {
+			break
+		}
+		groups = append(groups, &gen.AccessMemberDirectoryGroup{ID: id.String(), Name: names[i]})
+	}
+	return groups
 }
 
 // memberRoleIDs returns every role a member holds, assigned directly or
@@ -236,7 +293,16 @@ type workosSync func(context.Context)
 // a transactional role mutation. Call ReconcileRole only after committing the
 // transaction passed to CreateRoleTx or UpdateRoleTx.
 type RoleReconciliation struct {
-	syncs []workosSync
+	syncs    []workosSync
+	delivery roleDeliveryPublish
+}
+
+// roleDeliveryPublish names the projects whose role plugins a committed
+// transaction changed, so they can be republished without waiting on the
+// outbox consumer or the hourly rollout sweep.
+type roleDeliveryPublish struct {
+	projectIDs []uuid.UUID
+	actorID    string
 }
 
 // RoleAuditActor identifies the principal responsible for an access role mutation.
@@ -379,7 +445,7 @@ func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	return RoleCreateResult{
 		Role: roleViewFromLocalRoleAndGrants(createdRole, roleGrants),
 		Slug: roleSlug,
-	}, RoleReconciliation{syncs: workosSyncs}, nil
+	}, RoleReconciliation{syncs: workosSyncs, delivery: roleDeliveryPublish{projectIDs: nil, actorID: ""}}, nil
 }
 
 type localRole struct {
@@ -501,6 +567,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 
 	updatedRole := currentRole
 	var workosSyncs []workosSync
+	var delivery roleDeliveryPublish
 	updatedGrants := existingGrants
 	if !sysRole {
 		localRecord := currentRole
@@ -582,6 +649,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 				return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "request role delivery publication").LogError(ctx, r.logger)
 			}
 		}
+		delivery = roleDeliveryPublish{projectIDs: changedProjectIDs, actorID: actorID}
 		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 		for _, grant := range syncedGrants {
 			updatedGrants = append(updatedGrants, scopedGrantToGenRoleGrant(grant))
@@ -627,7 +695,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		Before: existingRole,
 		After:  updatedRoleView,
 		Slug:   updatedRole.Slug,
-	}, RoleReconciliation{syncs: workosSyncs}, nil
+	}, RoleReconciliation{syncs: workosSyncs, delivery: delivery}, nil
 }
 
 // DeleteRole deletes a custom local role, reassignment records, grants, and audit entry atomically, then best-effort syncs WorkOS after commit.
@@ -952,28 +1020,34 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		// roles and nothing the directory owns: a profile this update cannot
 		// alter would read as part of the diff.
 		Before: &gen.AccessMember{
-			ID:               connectedUser.ID,
-			PrincipalUrn:     memberPrincipalURN,
-			Name:             memberName,
-			Email:            connectedUser.Email,
-			PhotoURL:         conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:          existingRoleIDs,
-			JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
-			Department:       nil,
-			Groups:           nil,
-			DirectoryRoleIds: nil,
+			ID:                   connectedUser.ID,
+			PrincipalUrn:         memberPrincipalURN,
+			Name:                 memberName,
+			Email:                connectedUser.Email,
+			PhotoURL:             conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:              existingRoleIDs,
+			JoinedAt:             conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:           nil,
+			Groups:               nil,
+			DirectoryRoleIds:     nil,
+			DirectoryGroups:      nil,
+			InDirectory:          nil,
+			DirectoryRoleSources: nil,
 		},
 		After: &gen.AccessMember{
-			ID:               connectedUser.ID,
-			PrincipalUrn:     memberPrincipalURN,
-			Name:             memberName,
-			Email:            connectedUser.Email,
-			PhotoURL:         conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:          afterRoleIDs,
-			JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
-			Department:       nil,
-			Groups:           nil,
-			DirectoryRoleIds: nil,
+			ID:                   connectedUser.ID,
+			PrincipalUrn:         memberPrincipalURN,
+			Name:                 memberName,
+			Email:                connectedUser.Email,
+			PhotoURL:             conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:              afterRoleIDs,
+			JoinedAt:             conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:           nil,
+			Groups:               nil,
+			DirectoryRoleIds:     nil,
+			DirectoryGroups:      nil,
+			InDirectory:          nil,
+			DirectoryRoleSources: nil,
 		},
 	}
 
@@ -1121,16 +1195,19 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 
 	memberName := conv.Default(connected.DisplayName, connected.Email)
 	after := &gen.AccessMember{
-		ID:               connected.ID,
-		PrincipalUrn:     urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
-		Name:             memberName,
-		Email:            connected.Email,
-		PhotoURL:         conv.FromPGText[string](connected.PhotoUrl),
-		RoleIds:          afterRoleIDs,
-		JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
-		Department:       nil,
-		Groups:           nil,
-		DirectoryRoleIds: nil,
+		ID:                   connected.ID,
+		PrincipalUrn:         urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
+		Name:                 memberName,
+		Email:                connected.Email,
+		PhotoURL:             conv.FromPGText[string](connected.PhotoUrl),
+		RoleIds:              afterRoleIDs,
+		JoinedAt:             conv.FromPGTimestamptz(existing.CreatedAt),
+		Department:           nil,
+		Groups:               nil,
+		DirectoryRoleIds:     nil,
+		DirectoryGroups:      nil,
+		InDirectory:          nil,
+		DirectoryRoleSources: nil,
 	}
 	safeAfter := MemberRoleState{
 		MemberID:         connected.ID,
@@ -1662,6 +1739,30 @@ func (r *RoleManager) assignMembersToRoleTx(ctx context.Context, dbtx repo.DBTX,
 // transaction. The caller must invoke it only after that transaction commits.
 func (r *RoleManager) ReconcileRole(ctx context.Context, reconciliation RoleReconciliation) {
 	r.runWorkOSSyncs(ctx, reconciliation.syncs)
+	r.ReconcileRoleDelivery(ctx, reconciliation)
+}
+
+// ReconcileRoleDelivery republishes the role plugins a committed role
+// transaction changed, without the WorkOS writes. Platform MCP calls it
+// directly because it reapplies role identity separately.
+func (r *RoleManager) ReconcileRoleDelivery(ctx context.Context, reconciliation RoleReconciliation) {
+	r.signalRoleDeliveryPublish(ctx, reconciliation.delivery.projectIDs, reconciliation.delivery.actorID)
+}
+
+// signalRoleDeliveryPublish enqueues a republish for each project whose role
+// plugins changed. Best-effort: the durable publication request and the
+// rollout sweep still cover a failed enqueue, and duplicate signals are
+// debounced per project. Must only be called after the transaction commits.
+func (r *RoleManager) signalRoleDeliveryPublish(ctx context.Context, projectIDs []uuid.UUID, actorID string) {
+	if r == nil || r.publisher == nil {
+		return
+	}
+	for _, projectID := range projectIDs {
+		if err := r.publisher.SignalPluginPublish(context.WithoutCancel(ctx), projectID, actorID); err != nil {
+			r.logger.WarnContext(ctx, "failed to signal role delivery plugin publish",
+				attr.SlogProjectID(projectID.String()), attr.SlogError(err))
+		}
+	}
 }
 
 // ReconcileRoleIdentity reapplies one role's desired WorkOS identity after the

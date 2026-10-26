@@ -633,25 +633,25 @@ export const INSIGHTS_SUGGESTIONS = {
 
   "insights/employees": [
     {
-      title: "Who is enrolled?",
-      label: "Who is enrolled?",
+      title: "Who has been seen?",
+      label: "Who has been seen?",
       icon: "users",
       prompt:
-        "Using the Employees tab context, summarize who is enrolled in this project based on whether they have any platform token usage.",
+        "Using the Employees tab context, summarize who has been seen working in this project based on whether they have any platform token usage.",
     },
     {
-      title: "Who isn't enrolled?",
-      label: "Who is not enrolled?",
+      title: "Who hasn't been seen?",
+      label: "Who has not been seen?",
       icon: "alert",
       prompt:
-        "Which employees are not enrolled because they have no platform token usage in this project?",
+        "Which employees have not been seen working because they have no platform token usage in this project?",
     },
     {
-      title: "How is enrollment going?",
-      label: "Summarize enrollment",
+      title: "How is adoption going?",
+      label: "Summarize adoption",
       icon: "trend",
       prompt:
-        "Summarize project employee enrollment based on whether each employee has platform token usage.",
+        "Summarize project employee adoption based on whether each employee has platform token usage.",
     },
     {
       title: "What's each user's usage?",
@@ -1167,7 +1167,7 @@ export function costExplorerSuggestions(args: {
  * Resolve the route-level suggestions for a project-scoped pathname
  * (`/:orgSlug/projects/:projectSlug/...`). Walks segments longest-first so
  * deeper entries (e.g. `"logs/risk-events"`) beat their parents, and detail
- * pages (`/mcp/x/foo/overview`) inherit from their section (`"mcp"`).
+ * pages (`/mcp/foo/overview`) inherit from their section (`"mcp"`).
  * Function-valued (parameterized) entries are skipped — those need page data
  * and reach the provider via <InsightsConfig> instead. Returns undefined for
  * non-project paths and unknown sections.

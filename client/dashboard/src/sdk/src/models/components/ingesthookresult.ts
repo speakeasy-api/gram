@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -18,7 +19,7 @@ export const IngestHookResultDecision = {
 /**
  * Whether the local hook should allow or deny the action.
  */
-export type IngestHookResultDecision = ClosedEnum<
+export type IngestHookResultDecision = OpenEnum<
   typeof IngestHookResultDecision
 >;
 
@@ -45,9 +46,10 @@ export type IngestHookResult = {
 };
 
 /** @internal */
-export const IngestHookResultDecision$inboundSchema: z.ZodMiniEnum<
-  typeof IngestHookResultDecision
-> = z.enum(IngestHookResultDecision);
+export const IngestHookResultDecision$inboundSchema: z.ZodMiniType<
+  IngestHookResultDecision,
+  unknown
+> = openEnums.inboundSchema(IngestHookResultDecision);
 
 /** @internal */
 export const IngestHookResult$inboundSchema: z.ZodMiniType<

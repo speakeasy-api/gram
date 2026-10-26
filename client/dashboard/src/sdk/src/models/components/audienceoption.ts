@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const AudienceOptionKind = {
 /**
  * What the principal identifies.
  */
-export type AudienceOptionKind = ClosedEnum<typeof AudienceOptionKind>;
+export type AudienceOptionKind = OpenEnum<typeof AudienceOptionKind>;
 
 export type AudienceOption = {
   /**
@@ -47,9 +48,10 @@ export type AudienceOption = {
 };
 
 /** @internal */
-export const AudienceOptionKind$inboundSchema: z.ZodMiniEnum<
-  typeof AudienceOptionKind
-> = z.enum(AudienceOptionKind);
+export const AudienceOptionKind$inboundSchema: z.ZodMiniType<
+  AudienceOptionKind,
+  unknown
+> = openEnums.inboundSchema(AudienceOptionKind);
 
 /** @internal */
 export const AudienceOption$inboundSchema: z.ZodMiniType<

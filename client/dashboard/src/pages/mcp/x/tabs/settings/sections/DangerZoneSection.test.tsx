@@ -77,7 +77,7 @@ describe("DangerZoneSection availability", () => {
 });
 
 describe("DangerZoneSection delete", () => {
-  it("offers no delete for a hosted server", () => {
+  it("offers no server-row delete for a hosted server without its toolset", () => {
     renderSection({
       ...base,
       id: "hosted-1",

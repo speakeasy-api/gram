@@ -65,10 +65,10 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	// must not consume the state the approve POST needs.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -78,10 +78,10 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "invalid consent csrf token").LogWarn(ctx, logger)
 	}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "authn challenge subject is not resolved").LogWarn(ctx, logger)
 	}
 	// Revalidate private authority before retry consumes state or card actions
 	// read or mutate credentials; the resolved endpoint can already be stale.
@@ -90,6 +90,16 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
+	}
+	action := r.PostForm.Get("action")
+	if endpoint.MetaMcpServerID.Valid && (action == "identity_chaining_check" || action == "validate") {
+		lockedDown, err := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
+		if err != nil {
+			return err
+		}
+		if lockedDown {
+			return oops.E(oops.CodeForbidden, nil, "Start authorization from this gateway's custom domain to approve access.").LogWarn(ctx, logger)
+		}
 	}
 	subject := *challengeState.Subject
 
@@ -269,6 +279,21 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	}
 }
 
+// clientServesHostedMember reports whether a hosted member the consent
+// subject is admitted to authenticates through client.
+func (s *Service) clientServesHostedMember(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, client remotesessions.Client) (bool, error) {
+	members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+	if err != nil {
+		return false, err
+	}
+	for _, member := range members {
+		if member.backend != metaMemberBackendProxied && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // buildRemoteConnectURL builds the upstream authorization URL for one remote
 // session client. Shared by the page's explicit Connect action and by the
 // consent page's auto-connect, so both legs resolve the upstream resource
@@ -305,7 +330,20 @@ func (s *Service) buildRemoteConnectURL(
 		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
 	}
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
-	// decided, and falling back would qualify the credential anyway.
+	// decided, and falling back would qualify the credential anyway. A
+	// gateway client no proxied member is associated with serves only the
+	// hosted members that use it, which keep the issuer-derived path; one
+	// that serves no member at all is refused rather than qualified by the
+	// issuer's inventory.
+	if rerr == nil && !claimedByMember && endpoint.MetaMcpServerID.Valid {
+		hosted, herr := s.clientServesHostedMember(ctx, endpoint, challengeState, client)
+		if herr != nil {
+			return "", false, oops.E(oops.CodeUnexpected, herr, "resolve gateway members for connection").LogError(ctx, logger)
+		}
+		if !hosted {
+			return "", false, oops.E(oops.CodeBadRequest, nil, "this connection is not configured for any server this gateway serves").LogWarn(ctx, logger)
+		}
+	}
 	if rerr == nil && !claimedByMember {
 		boundIDs := make([]uuid.UUID, 0, len(bound))
 		for i := range bound {

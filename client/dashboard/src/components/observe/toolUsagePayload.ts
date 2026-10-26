@@ -8,6 +8,7 @@ import {
   selectedTargetValues,
   selectedUserAgentIds,
   selectedUserEmails,
+  splitHostedTargets,
   toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
 import { useSlugs } from "@/contexts/Sdk";
@@ -24,6 +25,11 @@ type ToolUsagePayloadInputs = {
   accountType: string;
   /** Lowercased MCP client names; "unattributed" selects calls with none. */
   clientKeys?: string[];
+  /**
+   * Agent identities. The server ANDs them with the user filters, so an agent
+   * and a person select the calls that agent made on that person's behalf.
+   */
+  agentIds?: string[];
   from: Date;
   to: Date;
 };
@@ -53,6 +59,7 @@ export function useToolUsagePayload({
   selectedHookTypes,
   accountType,
   clientKeys,
+  agentIds,
   from,
   to,
 }: ToolUsagePayloadInputs): ToolUsagePayload {
@@ -64,11 +71,8 @@ export function useToolUsagePayload({
     () => selectedTargetValues(activeFilters).map(parseTargetFilter),
     [activeFilters],
   );
-  const hostedToolsetSlugs = useMemo(
-    () =>
-      serverFilters
-        .filter((filter) => filter.type === "hosted")
-        .map((filter) => filter.id),
+  const { mcpServerIds, hostedToolsetSlugs } = useMemo(
+    () => splitHostedTargets(serverFilters),
     [serverFilters],
   );
   const shadowServerNames = useMemo(
@@ -109,11 +113,16 @@ export function useToolUsagePayload({
     () => (clientKeys && clientKeys.length > 0 ? clientKeys : undefined),
     [clientKeys],
   );
+  const normalizedAgentIds = useMemo(
+    () => (agentIds && agentIds.length > 0 ? agentIds : undefined),
+    [agentIds],
+  );
 
   const summaryPayload = useMemo(
     () => ({
       from,
       to,
+      mcpServerIds: mcpServerIds.length > 0 ? mcpServerIds : undefined,
       hostedToolsetSlugs:
         hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
       shadowServerNames:
@@ -125,10 +134,12 @@ export function useToolUsagePayload({
       hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
       accountType: accountType || undefined,
       clientKeys: normalizedClientKeys,
+      agentIds: normalizedAgentIds,
     }),
     [
       from,
       to,
+      mcpServerIds,
       hostedToolsetSlugs,
       shadowServerNames,
       metaMcpServerIds,
@@ -137,6 +148,7 @@ export function useToolUsagePayload({
       hookSourceFilters,
       accountType,
       normalizedClientKeys,
+      normalizedAgentIds,
     ],
   );
 
@@ -146,6 +158,7 @@ export function useToolUsagePayload({
       projectSlug,
       from.toISOString(),
       to.toISOString(),
+      mcpServerIds,
       hostedToolsetSlugs,
       shadowServerNames,
       metaMcpServerIds,
@@ -154,12 +167,14 @@ export function useToolUsagePayload({
       selectedHookTypes,
       accountType,
       normalizedClientKeys,
+      normalizedAgentIds,
     ],
     [
       orgSlug,
       projectSlug,
       from,
       to,
+      mcpServerIds,
       hostedToolsetSlugs,
       shadowServerNames,
       metaMcpServerIds,
@@ -168,6 +183,7 @@ export function useToolUsagePayload({
       selectedHookTypes,
       accountType,
       normalizedClientKeys,
+      normalizedAgentIds,
     ],
   );
 

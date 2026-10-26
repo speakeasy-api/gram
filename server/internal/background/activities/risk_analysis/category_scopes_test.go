@@ -82,25 +82,7 @@ func masksFor(t *testing.T, specified []DetectionScopeConfig, messages []batchMe
 	require.NoError(t, err)
 	compiled, err := CompileDetectionScopes(eng, specified)
 	require.NoError(t, err)
-	return NewCategoryScopes(mustRecommendedSet(t), compiled, nil).Masks(t.Context(), messages)
-}
-
-func mergeOne(masks CategoryScopeMasks, findings [][]scanners.Finding) [][]scanners.Finding {
-	return mergeFindings(mergeFindingsInput{
-		orgID:                   "",
-		metrics:                 nil,
-		masks:                   masks,
-		exclusions:              NewExclusionSet(nil),
-		builtinEnabled:          false,
-		builtinPresets:          nil,
-		gitleaksFindings:        findings,
-		presidioFindings:        make([][]scanners.Finding, len(findings)),
-		shadowMCPFindings:       make([][]scanners.Finding, len(findings)),
-		destructiveToolFindings: make([][]scanners.Finding, len(findings)),
-		cliDestructiveFindings:  make([][]scanners.Finding, len(findings)),
-		promptInjectionFindings: make([][]scanners.Finding, len(findings)),
-		customFindings:          make([][]scanners.Finding, len(findings)),
-	}, nil)
+	return NewCategoryScopes(mustRecommendedSet(t), compiled).Masks(t.Context(), messages)
 }
 
 func TestRecommendedCategoryScopesPromptInjectionBehavior(t *testing.T) {
@@ -111,16 +93,10 @@ func TestRecommendedCategoryScopesPromptInjectionBehavior(t *testing.T) {
 		msg(message.ToolResponse),
 		msg(message.User),
 	}
-	pi := finding(SourcePromptInjection, promptinjection.Rule)
-
 	masks := masksFor(t, nil, messages)
-	require.False(t, masks.InScope(0, categories.CategoryPromptInjection))
+	require.False(t, masks.InScope(0, categories.CategoryPromptInjection), "assistant_message is out of the prompt_injection recommendation")
 	require.True(t, masks.InScope(1, categories.CategoryPromptInjection))
 	require.True(t, masks.InScope(2, categories.CategoryPromptInjection))
-
-	findings := [][]scanners.Finding{{pi}, {pi}, {pi}}
-	require.Empty(t, mergeOne(masks, findings)[0], "assistant_message is out of the prompt_injection recommendation")
-	require.Len(t, mergeOne(masks, findings)[1], 1)
 }
 
 func TestRecommendedCategoryScopesMultiSourceSameMessage(t *testing.T) {
@@ -128,12 +104,10 @@ func TestRecommendedCategoryScopesMultiSourceSameMessage(t *testing.T) {
 
 	messages := []batchMessage{msg(message.Assistant), msg(message.ToolResponse)}
 	masks := masksFor(t, nil, messages)
-	pi := finding(SourcePromptInjection, promptinjection.Rule)
-	secret := finding(SourceGitleaks, "secret.generic-api-key")
-
-	out := mergeOne(masks, [][]scanners.Finding{{pi, secret}, {pi, secret}})
-	require.Empty(t, out[0], "assistant messages are out of scope for every category")
-	require.Len(t, out[1], 2)
+	require.False(t, masks.InScope(0, categories.CategoryPromptInjection), "assistant messages are out of scope for every category")
+	require.False(t, masks.InScope(0, categories.CategorySecrets))
+	require.True(t, masks.InScope(1, categories.CategoryPromptInjection))
+	require.True(t, masks.InScope(1, categories.CategorySecrets))
 }
 
 func TestDetectionScopeUnrestrictedKeepsPromptInjection(t *testing.T) {
@@ -144,8 +118,7 @@ func TestDetectionScopeUnrestrictedKeepsPromptInjection(t *testing.T) {
 		{Category: string(categories.CategoryPromptInjection), ScopeInclude: "", ScopeExempt: ""},
 	}, messages)
 
-	out := mergeOne(masks, [][]scanners.Finding{{finding(SourcePromptInjection, promptinjection.Rule)}})
-	require.Len(t, out[0], 1)
+	require.True(t, masks.InScope(0, categories.CategoryPromptInjection))
 }
 
 func TestDetectionScopeSpecifiedWinsOverRecommendation(t *testing.T) {
@@ -178,34 +151,6 @@ func TestRecommendedCategoryScopesToolRequestOnlyCategories(t *testing.T) {
 	masks := masksFor(t, nil, messages)
 	require.True(t, masks.InScope(0, categories.CategoryCLIDestructive))
 	require.False(t, masks.InScope(1, categories.CategoryCLIDestructive))
-
-	cli := finding(SourceCLIDestructive, "cli_destructive.rm_rf")
-	out := mergeOne(masks, [][]scanners.Finding{{cli}, {cli}})
-	require.Len(t, out[0], 1)
-	require.Empty(t, out[1])
-}
-
-func TestRecommendedCategoryScopesAccountIdentityUntouched(t *testing.T) {
-	t.Parallel()
-
-	rec := mustRecommendedSet(t)
-	_, ok := rec.scope(categories.CategoryAccountIdentity)
-	require.False(t, ok)
-
-	messageID := uuid.New()
-	ids, findings := mergeSessionFindings(
-		[]batchMessage{},
-		[][]scanners.Finding{},
-		[]sessionFinding{{
-			messageID: messageID,
-			findings:  []scanners.Finding{finding(accountidentity.Source, "identity.unapproved_domain")},
-		}},
-		NewExclusionSet(nil),
-	)
-	require.Len(t, ids, 1)
-	require.Equal(t, messageID, ids[0].ID)
-	require.Len(t, findings, 1)
-	require.Len(t, findings[0], 1)
 }
 
 func TestRecommendedCategoryScopesSubset(t *testing.T) {
@@ -217,33 +162,22 @@ func TestRecommendedCategoryScopesSubset(t *testing.T) {
 		toolReq("Read"),
 		toolReq("Bash"),
 	}
-	contents := messageContents(messages)
 	masks := masksFor(t, nil, messages)
 	require.Equal(t, 2, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
 	require.Equal(t, 1, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
 
-	piMessages, piContents, piIndices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
-	require.Equal(t, []int{1, 3}, piIndices)
-	require.Len(t, piMessages, 2)
-	require.Equal(t, []string{contents[1], contents[3]}, piContents)
-
-	presidioMessages, _, presidioIndices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
-	require.Equal(t, []int{1, 2, 3}, presidioIndices)
-	require.Len(t, presidioMessages, 3)
+	require.Equal(t, []batchMessage{messages[1], messages[3]}, masks.Admitted(messages, sourceCategories[SourcePromptInjection]))
+	require.Equal(t, messages[1:], masks.Admitted(messages, sourceCategories[SourcePresidio]))
 }
 
 func TestSubsetWithoutCategoryMasksScansEverything(t *testing.T) {
 	t.Parallel()
 
 	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
-	contents := messageContents(messages)
 	// No recommendation and no specified scope, so there is no mask at all.
-	masks := NewCategoryScopes(RecommendedSet{scopes: nil}, nil, nil).Masks(t.Context(), messages)
+	masks := NewCategoryScopes(RecommendedSet{scopes: nil}, nil).Masks(t.Context(), messages)
 
-	subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
-	require.Equal(t, []int{0, 1}, indices, "no category mask for presidio: every message reaches the scanner")
-	require.Len(t, subMessages, 2)
-	require.Equal(t, contents, subContents)
+	require.Equal(t, messages, masks.Admitted(messages, sourceCategories[SourcePresidio]), "no category mask for presidio: every message is published")
 	require.Equal(t, 0, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
 }
 
@@ -317,7 +251,7 @@ func TestCategoryScopesApplyTheRecommendation(t *testing.T) {
 	t.Parallel()
 
 	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
-	masks := NewCategoryScopes(mustRecommendedSet(t), nil, nil).Masks(t.Context(), messages)
+	masks := NewCategoryScopes(mustRecommendedSet(t), nil).Masks(t.Context(), messages)
 	// The secrets recommendation exempts assistant messages.
 	require.False(t, masks.InScope(0, categories.CategorySecrets))
 	require.True(t, masks.InScope(1, categories.CategorySecrets))
@@ -330,29 +264,4 @@ func TestPromptPolicyUsesPromptPolicyCategoryMask(t *testing.T) {
 	masks := masksFor(t, nil, messages)
 	require.True(t, masks.InScope(0, categories.CategoryPromptPolicy))
 	require.True(t, masks.AdmitsAny(0, sourceCategories[promptpolicy.Source]))
-}
-
-func TestCategoryScopesDoesNotAffectCustomRegistryScope(t *testing.T) {
-	t.Parallel()
-
-	messages := []batchMessage{msg(message.Assistant)}
-	masks := masksFor(t, nil, messages)
-	custom := finding(SourceCustom, "custom.rule")
-
-	out := mergeFindings(mergeFindingsInput{
-		orgID:                   "",
-		metrics:                 nil,
-		masks:                   masks,
-		exclusions:              NewExclusionSet(nil),
-		builtinEnabled:          false,
-		builtinPresets:          nil,
-		gitleaksFindings:        make([][]scanners.Finding, 1),
-		presidioFindings:        make([][]scanners.Finding, 1),
-		shadowMCPFindings:       make([][]scanners.Finding, 1),
-		destructiveToolFindings: make([][]scanners.Finding, 1),
-		cliDestructiveFindings:  make([][]scanners.Finding, 1),
-		promptInjectionFindings: make([][]scanners.Finding, 1),
-		customFindings:          [][]scanners.Finding{{custom}},
-	}, nil)
-	require.Len(t, out[0], 1)
 }

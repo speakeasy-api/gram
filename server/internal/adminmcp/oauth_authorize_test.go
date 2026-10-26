@@ -129,7 +129,7 @@ func TestStaffOAuthAuthorizationRequiresStaffConsent(t *testing.T) {
 
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Equal(t, 1, store.calls)
 }
 
@@ -206,7 +206,7 @@ func TestStaffOAuthAuthorizationReauthenticatesRevokedBrowserSession(t *testing.
 	verifier.err = oops.C(oops.CodeUnexpected)
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Empty(t, response.Header().Get("Location"), "verification outages must not restart login")
 	require.Zero(t, store.calls)
 }
@@ -228,7 +228,7 @@ func TestStaffOAuthAuthorizationRejectsCopiedBrowserState(t *testing.T) {
 		}
 		response = httptest.NewRecorder()
 		s.ConnectHandler().ServeHTTP(response, request)
-		require.Equal(t, http.StatusUnauthorized, response.Code)
+		require.Equal(t, http.StatusBadRequest, response.Code)
 	}
 	require.Zero(t, verifier.calls)
 	parsed, err := url.Parse(connectURL)
@@ -245,7 +245,7 @@ func TestStaffOAuthAuthorizationRejectsCopiedBrowserState(t *testing.T) {
 		}
 		response = httptest.NewRecorder()
 		s.ConnectHandler().ServeHTTP(response, request)
-		require.Equal(t, http.StatusUnauthorized, response.Code)
+		require.Equal(t, http.StatusBadRequest, response.Code)
 		require.NoError(t, s.cache.Store(t.Context(), challenge))
 	}
 	require.Zero(t, store.calls)
@@ -298,7 +298,7 @@ func TestStaffOAuthAuthorizationRejectsUntrustedRequestAndIdentity(t *testing.T)
 	request.URL.RawQuery = query.Encode()
 	response := httptest.NewRecorder()
 	s.AuthorizeHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Empty(t, response.Header().Get("Location"))
 
 	request = staffAuthorizeRequest(pkce)
@@ -320,7 +320,7 @@ func TestStaffOAuthAuthorizationRejectsUntrustedRequestAndIdentity(t *testing.T)
 	request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "browser-session"})
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Zero(t, store.calls)
 }
 
@@ -349,7 +349,7 @@ func TestStaffOAuthAuthorizationRejectsChangedBrowserSession(t *testing.T) {
 	request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "another-session"})
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Zero(t, store.calls)
 }
 
@@ -374,7 +374,7 @@ func TestStaffOAuthAuthorizationMapsRevokedClient(t *testing.T) {
 	request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "browser-session"})
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
 	require.Equal(t, 1, store.calls)
 
@@ -393,6 +393,6 @@ func TestStaffAuthorizationStateExpires(t *testing.T) {
 	require.NoError(t, s.cache.Store(t.Context(), challenge))
 	response := httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, Path+"/connect?state=expired", nil))
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Zero(t, store.calls)
 }

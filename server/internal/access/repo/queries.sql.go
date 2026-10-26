@@ -217,6 +217,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
 `
 
 type DeletePrincipalGrantsByResourceParams struct {
@@ -245,6 +246,7 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND scope = $2
   AND selectors = $3
+  AND principal_type <> 'api_key'
 `
 
 type DeletePrincipalGrantsByTargetParams struct {
@@ -257,6 +259,34 @@ type DeletePrincipalGrantsByTargetParams struct {
 // replacement writes where the caller supplies the full desired principal set.
 func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeletePrincipalGrantsByTargetParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget, arg.OrganizationID, arg.Scope, arg.Selectors)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deletePrincipalWildcardGrants = `-- name: DeletePrincipalWildcardGrants :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND COALESCE(selectors->>'resource_id', '*') = '*'
+  AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb
+`
+
+type DeletePrincipalWildcardGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+}
+
+// Removes a principal's unrestricted rows for one scope: a selector naming at
+// most a resource kind and the wildcard resource ID. Older writers stored the
+// kind as "*" or under another name, or left out resource_id (which the grant
+// matcher reads as "*"), so matching on the kind the scope implies today would
+// leave those rows granting access after an administrator removed them.
+func (q *Queries) DeletePrincipalWildcardGrants(ctx context.Context, arg DeletePrincipalWildcardGrantsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalWildcardGrants, arg.OrganizationID, arg.PrincipalUrn, arg.Scope)
 	if err != nil {
 		return 0, err
 	}
@@ -310,11 +340,76 @@ func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourc
 	return project_id, err
 }
 
+const findMCPResourceProjects = `-- name: FindMCPResourceProjects :many
+SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
+  SELECT toolsets.id AS resource_id, toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = ANY($2::uuid[])
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.id AS resource_id, mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = ANY($2::uuid[])
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.id AS resource_id, meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = ANY($2::uuid[])
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+`
+
+type FindMCPResourceProjectsParams struct {
+	OrganizationID string
+	ResourceIds    []uuid.UUID
+}
+
+type FindMCPResourceProjectsRow struct {
+	ResourceID uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// FindMCPResourceProject for many resources at once; unknown ids are absent.
+func (q *Queries) FindMCPResourceProjects(ctx context.Context, arg FindMCPResourceProjectsParams) ([]FindMCPResourceProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findMCPResourceProjects, arg.OrganizationID, arg.ResourceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindMCPResourceProjectsRow
+	for rows.Next() {
+		var i FindMCPResourceProjectsRow
+		if err := rows.Scan(&i.ResourceID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findMCPResourceVisibility = `-- name: FindMCPResourceVisibility :one
 SELECT resource_type, visibility FROM (
   SELECT
     'toolset'::text AS resource_type,
     (CASE
+      WHEN cw.id IS NOT NULL AND cw.visibility = (CASE
+        WHEN NOT toolsets.mcp_enabled THEN 'disabled'
+        WHEN toolsets.mcp_is_public THEN 'public'
+        ELSE 'private'
+      END) THEN cw.visibility
+      WHEN cw.id IS NOT NULL THEN 'disabled'
       WHEN NOT toolsets.mcp_enabled THEN 'disabled'
       WHEN toolsets.mcp_is_public THEN 'public'
       ELSE 'private'
@@ -322,6 +417,8 @@ SELECT resource_type, visibility FROM (
     2 AS source_rank
   FROM toolsets
   JOIN projects ON projects.id = toolsets.project_id
+  -- The canonical wrapper owns a hosted toolset's visibility.
+  LEFT JOIN mcp_servers cw ON cw.id = toolsets.id AND cw.toolset_id = toolsets.id AND cw.project_id = toolsets.project_id AND cw.deleted IS FALSE
   WHERE projects.organization_id = $1
     AND toolsets.id = $2::uuid
     AND toolsets.deleted IS FALSE
@@ -361,9 +458,10 @@ type FindMCPResourceVisibilityRow struct {
 // same three-valued visibility mcp_servers stores: 'public' endpoints skip the
 // connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
 // A gateway toolset is public when its MCP endpoint is, and serves nobody
-// while its MCP endpoint is switched off. A hosted wrapper can share its
-// toolset's id; when either row serves nobody, nobody can connect, so
-// 'disabled' wins, and otherwise the wrapper's own visibility does. A gateway
+// while its MCP endpoint is switched off. A hosted toolset reads its
+// canonical wrapper's visibility, or 'disabled' while the two rows disagree,
+// as serving denies them; the wrapper row itself reports the same id, and
+// 'disabled' wins between them. A gateway
 // (meta server) is reported as such: it has no connect check of its own, each
 // member server is checked instead. Resources are found by the same
 // identifiers and tenancy rules as FindMCPResourceProject.
@@ -782,10 +880,19 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 }
 
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT principal_urn, scope, selectors
-FROM principal_grants
-WHERE organization_id = $1
-  AND principal_urn = ANY($2::text[])
+SELECT g.principal_urn, g.scope, g.selectors,
+  EXISTS (
+    SELECT 1
+    FROM auth_permission_provisions p
+    WHERE p.organization_id = g.organization_id
+      AND p.principal_urn = g.principal_urn
+      AND p.scope = g.scope
+      AND p.selectors = g.selectors
+      AND p.taken_over_at IS NULL
+  )::boolean AS inferred
+FROM principal_grants g
+WHERE g.organization_id = $1
+  AND g.principal_urn = ANY($2::text[])
 `
 
 type GetPrincipalGrantsParams struct {
@@ -797,10 +904,13 @@ type GetPrincipalGrantsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
 	Selectors    []byte
+	Inferred     bool
 }
 
 // Returns all grant rows matching a set of principal URNs within an org.
 // Used by the access resolver to load grants for a user+role in a single query.
+// inferred marks a grant the default auth permission backfill wrote that no
+// explicit write has taken over, so it never outranks an inherited block.
 func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrantsParams) ([]GetPrincipalGrantsRow, error) {
 	rows, err := q.db.Query(ctx, getPrincipalGrants, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -810,7 +920,12 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.Inferred,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1007,6 +1122,113 @@ func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPr
 	return result.RowsAffected(), nil
 }
 
+const listAccessMemberDirectoryRoleSources = `-- name: ListAccessMemberDirectoryRoleSources :many
+WITH members AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  JOIN organization_user_relationships AS our
+    ON our.user_id = u.id
+    AND our.organization_id = $1
+    AND our.deleted IS FALSE
+  WHERE u.deleted_at IS NULL
+),
+profiles AS (
+  SELECT members.id AS user_id, p.id AS directory_user_id, p.attributes
+  FROM members
+  CROSS JOIN LATERAL (
+    SELECT d.id, d.attributes
+    FROM directory_users AS d
+    WHERE d.organization_id = $1
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+      AND (d.user_id = members.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(members.email)))
+    ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+    LIMIT 1
+  ) AS p
+)
+SELECT
+  profiles.user_id::text AS user_id,
+  COALESCE(mapped_org_role.id::text, mapped_global_role.id::text)::text AS role_id,
+  drm.id AS mapping_id,
+  drm.source_kind,
+  drm.directory_group_id
+FROM directory_role_mappings AS drm
+JOIN profiles
+  ON (
+    drm.source_kind = 'group'
+    AND EXISTS (
+      SELECT 1
+      FROM directory_user_group_memberships AS m
+      JOIN directory_groups AS dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = drm.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE m.directory_user_id = profiles.directory_user_id
+        AND m.directory_group_id = drm.directory_group_id
+        AND m.deleted IS FALSE
+    )
+  )
+  OR (
+    drm.source_kind = 'attribute'
+    AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+  )
+LEFT JOIN organization_roles AS mapped_org_role
+  ON drm.role_urn = 'role:organization:' || mapped_org_role.id::text
+  AND mapped_org_role.organization_id = drm.organization_id
+  AND mapped_org_role.deleted IS FALSE
+  AND mapped_org_role.workos_deleted IS FALSE
+LEFT JOIN global_roles AS mapped_global_role
+  ON drm.role_urn = 'role:global:' || mapped_global_role.id::text
+  AND mapped_global_role.deleted IS FALSE
+  AND mapped_global_role.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+  AND COALESCE(mapped_org_role.id, mapped_global_role.id) IS NOT NULL
+ORDER BY profiles.user_id, role_id, drm.source_kind, drm.id
+`
+
+type ListAccessMemberDirectoryRoleSourcesRow struct {
+	UserID           string
+	RoleID           string
+	MappingID        uuid.UUID
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+}
+
+// For every active member, the directory role mappings that currently give
+// them a role: one row per member and matching mapping, so a role reached
+// through two groups is listed twice. This is the batch form of
+// ListUserDirectoryRoleMappingSources: each member's directory profile is
+// chosen and matched the same way as in ListUserRolePrincipals, and mappings
+// that point at a deleted role are skipped, as in the mapped half of
+// ListAccessMembers.
+func (q *Queries) ListAccessMemberDirectoryRoleSources(ctx context.Context, organizationID string) ([]ListAccessMemberDirectoryRoleSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMemberDirectoryRoleSources, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessMemberDirectoryRoleSourcesRow
+	for rows.Next() {
+		var i ListAccessMemberDirectoryRoleSourcesRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.RoleID,
+			&i.MappingID,
+			&i.SourceKind,
+			&i.DirectoryGroupID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAccessMembers = `-- name: ListAccessMembers :many
 WITH members AS (
 SELECT
@@ -1021,6 +1243,11 @@ SELECT
   -- attribute, comes back as an empty string.
   COALESCE(du.attributes ->> 'department_name', '')::text AS department,
   COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names,
+  -- The same groups by stable ID. group_ids and group_id_names are parallel
+  -- arrays: entry i of each describes the same group.
+  COALESCE(dg_names.group_ids, '{}'::uuid[])::uuid[] AS group_ids,
+  COALESCE(dg_names.group_id_names, '{}'::text[])::text[] AS group_id_names,
+  (du.id IS NOT NULL)::boolean AS in_directory,
   COALESCE(mapped_roles.role_ids, '{}'::text[])::text[] AS directory_role_ids
 FROM organization_user_relationships AS our
 JOIN users
@@ -1043,7 +1270,10 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) du ON TRUE
 LEFT JOIN LATERAL (
-  SELECT ARRAY_AGG(DISTINCT dg.name) AS group_names
+  SELECT
+    ARRAY_AGG(DISTINCT dg.name) AS group_names,
+    ARRAY_AGG(dg.id ORDER BY dg.name, dg.id) AS group_ids,
+    ARRAY_AGG(dg.name ORDER BY dg.name, dg.id) AS group_id_names
   FROM directory_user_group_memberships m
   INNER JOIN directory_groups dg
     ON dg.id = m.directory_group_id
@@ -1116,7 +1346,7 @@ WHERE our.organization_id = $2
   AND our.deleted IS FALSE
   AND users.deleted_at IS NULL
 ), matched AS (
-  SELECT members.id, members.display_name, members.email, members.photo_url, members.role_ids, members.joined_at, members.department, members.group_names, members.directory_role_ids,
+  SELECT members.id, members.display_name, members.email, members.photo_url, members.role_ids, members.joined_at, members.department, members.group_names, members.group_ids, members.group_id_names, members.in_directory, members.directory_role_ids,
     ($3::text <> '' AND
       LOWER(BTRIM(REGEXP_REPLACE(email, '[[:space:]]+', ' ', 'g'))) = $3) AS exact_email_match
   FROM members
@@ -1138,7 +1368,7 @@ WHERE our.organization_id = $2
       )
     )
 )
-SELECT matched.id, matched.display_name, matched.email, matched.photo_url, matched.role_ids, matched.joined_at, matched.department, matched.group_names, matched.directory_role_ids, matched.exact_email_match,
+SELECT matched.id, matched.display_name, matched.email, matched.photo_url, matched.role_ids, matched.joined_at, matched.department, matched.group_names, matched.group_ids, matched.group_id_names, matched.in_directory, matched.directory_role_ids, matched.exact_email_match,
   COUNT(*) OVER () AS total_matches,
   COUNT(*) FILTER (WHERE exact_email_match) OVER () AS exact_email_matches
 FROM matched
@@ -1162,6 +1392,9 @@ type ListAccessMembersRow struct {
 	JoinedAt          pgtype.Timestamptz
 	Department        string
 	GroupNames        []string
+	GroupIds          []uuid.UUID
+	GroupIDNames      []string
+	InDirectory       bool
 	DirectoryRoleIds  []string
 	ExactEmailMatch   pgtype.Bool
 	TotalMatches      int64
@@ -1191,6 +1424,9 @@ func (q *Queries) ListAccessMembers(ctx context.Context, arg ListAccessMembersPa
 			&i.JoinedAt,
 			&i.Department,
 			&i.GroupNames,
+			&i.GroupIds,
+			&i.GroupIDNames,
+			&i.InDirectory,
 			&i.DirectoryRoleIds,
 			&i.ExactEmailMatch,
 			&i.TotalMatches,
@@ -2091,6 +2327,23 @@ SELECT
   dg.name AS directory_group_name,
   drm.attribute_key,
   drm.attribute_value,
+  -- A missing source matches nobody: a group mapping whose group is gone or
+  -- tombstoned, or an attribute mapping no live directory user carries. The
+  -- group name is still returned so the mapping can be recognised.
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN
+        dg.id IS NULL OR dg.deleted OR dg.workos_deleted
+      ELSE NOT EXISTS (
+        SELECT 1
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::boolean AS source_missing,
   drm.role_urn,
   drm.created_at,
   drm.updated_at
@@ -2110,6 +2363,7 @@ type ListDirectoryRoleMappingsRow struct {
 	DirectoryGroupName pgtype.Text
 	AttributeKey       pgtype.Text
 	AttributeValue     pgtype.Text
+	SourceMissing      bool
 	RoleUrn            string
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
@@ -2131,6 +2385,7 @@ func (q *Queries) ListDirectoryRoleMappings(ctx context.Context, organizationID 
 			&i.DirectoryGroupName,
 			&i.AttributeKey,
 			&i.AttributeValue,
+			&i.SourceMissing,
 			&i.RoleUrn,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -2722,6 +2977,7 @@ type ListPrincipalGrantsByOrgRow struct {
 
 // Queries for managing principal grants (RBAC).
 // principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
+// Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
 // Returns all grant rows for an organization, optionally filtered by principal URN.
 func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipalGrantsByOrgParams) ([]ListPrincipalGrantsByOrgRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalGrantsByOrg, arg.OrganizationID, arg.PrincipalUrn)
@@ -2761,6 +3017,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn
 `
 
@@ -2812,6 +3069,7 @@ WHERE organization_id = $1
     'resource_kind', $3::text
   )
   AND selectors->>'resource_id' = ANY($4::text[])
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn
 `
 
@@ -3130,6 +3388,17 @@ func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRol
 	return err
 }
 
+const lockAuthPermissionBackfill = `-- name: LockAuthPermissionBackfill :exec
+SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
+`
+
+// Takes the organization's auth client backfill lock for the transaction's
+// life; the key must match authclientbackfill's LockOrganizationBackfill.
+func (q *Queries) LockAuthPermissionBackfill(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockAuthPermissionBackfill, organizationID)
+	return err
+}
+
 const lockChallengeResolutions = `-- name: LockChallengeResolutions :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
   jsonb_build_array('access.challenge-resolution', $1::text)::text, 0
@@ -3279,6 +3548,36 @@ func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudi
 	return err
 }
 
+const markAuthPermissionTakenOver = `-- name: MarkAuthPermissionTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+  AND taken_over_at IS NULL
+`
+
+type MarkAuthPermissionTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+}
+
+// An explicit grant write takes the grant over from the default auth
+// permission backfill: a rollback leaves it, and a rerun still never writes it
+// again. Run after the write, so a grant provisioned meanwhile is seen.
+func (q *Queries) MarkAuthPermissionTakenOver(ctx context.Context, arg MarkAuthPermissionTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markAuthPermissionTakenOver,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	return err
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,
@@ -3354,6 +3653,82 @@ func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg Ma
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const markPrincipalAuthPermissionsTakenOver = `-- name: MarkPrincipalAuthPermissionsTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND taken_over_at IS NULL
+`
+
+type MarkPrincipalAuthPermissionsTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// An explicit write of a principal's whole policy takes every grant the
+// backfill provisioned for it over, including ones since removed.
+func (q *Queries) MarkPrincipalAuthPermissionsTakenOver(ctx context.Context, arg MarkPrincipalAuthPermissionsTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markPrincipalAuthPermissionsTakenOver, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const recordAuthPermissionDefault = `-- name: RecordAuthPermissionDefault :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+type RecordAuthPermissionDefaultParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records a default grant written at organization creation.
+func (q *Queries) RecordAuthPermissionDefault(ctx context.Context, arg RecordAuthPermissionDefaultParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionDefault,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
+}
+
+const recordAuthPermissionPolicyTakeover = `-- name: RecordAuthPermissionPolicyTakeover :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind, taken_over_at)
+VALUES ($1, $2, $3, $4, $5, clock_timestamp())
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+SET taken_over_at = COALESCE(auth_permission_provisions.taken_over_at, EXCLUDED.taken_over_at),
+    updated_at = clock_timestamp()
+`
+
+type RecordAuthPermissionPolicyTakeoverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records that an explicit write owns the principal's policy even when it
+// leaves no grant to mark, so the backfill never treats the principal as
+// untouched.
+func (q *Queries) RecordAuthPermissionPolicyTakeover(ctx context.Context, arg RecordAuthPermissionPolicyTakeoverParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionPolicyTakeover,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
 }
 
 const repairOrganizationRoleAssignmentUserLink = `-- name: RepairOrganizationRoleAssignmentUserLink :execrows

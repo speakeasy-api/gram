@@ -134,6 +134,9 @@ func TestGetMemberMCPAccessAdvertisesTableReadyOutput(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(outputSchema), "connection_access")
 	require.Contains(t, string(outputSchema), "can_manage")
+	require.Contains(t, string(outputSchema), "rules")
+	require.Contains(t, string(outputSchema), "source_name")
+	require.Contains(t, string(outputSchema), "effect")
 }
 
 func TestGetMemberMCPAccessStubAdvertisesLiveInputSchema(t *testing.T) {

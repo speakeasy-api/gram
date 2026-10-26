@@ -18,6 +18,8 @@ import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { Icon } from "@/components/ui/Icon";
 import React, { useMemo, useState } from "react";
+import { IdentityLink } from "@/components/identity-link";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { useQueryState } from "nuqs";
 
 const TIMESTAMP_MODE: TimestampMode = "local";
@@ -40,13 +42,23 @@ function formatParams(params: unknown): string | undefined {
 function AssistantAuditLogRow({
   log,
   assistantName,
+  authorizerName,
 }: {
   log: AuditLog;
   assistantName: string;
+  /** Resolves a user id to a name; the row carries only the urn. */
+  authorizerName?: (userId: string) => string | undefined;
 }) {
   const [paramsExpanded, setParamsExpanded] = useState(false);
 
   const toolName = metadataString(log, "tool_name") ?? log.subjectDisplayName;
+  // Written by LogAssistantToolCallEvent. A call with no authorizer ran
+  // under the assistant's own identity, so it names nobody rather than
+  // implying a person we failed to look up.
+  const authorizer = metadataString(log, "authorizer_urn");
+  const authorizerLabel = authorizer?.startsWith("user:")
+    ? authorizerName?.(authorizer.slice("user:".length))
+    : undefined;
   const toolsetSlug = metadataString(log, "toolset_slug") ?? log.subjectSlug;
   const params = formatParams(log.metadata?.["params"]);
   const paramsTruncated = log.metadata?.["params_truncated"] === true;
@@ -58,7 +70,19 @@ function AssistantAuditLogRow({
         <span>
           <strong className="text-foreground font-semibold">
             {assistantName}
-          </strong>{" "}
+          </strong>
+          {/* The one audit family that records who approved the call:
+              `authorizer_urn` is stamped on assistant tool calls and was
+              being thrown away here. Everywhere else the audit log keeps
+              only the actor. */}
+          {authorizer && (
+            <>
+              <span className="text-muted-foreground"> on behalf of </span>
+              <IdentityLink identifier={{ urn: authorizer }}>
+                {authorizerLabel ?? authorizer}
+              </IdentityLink>
+            </>
+          )}{" "}
           <span className="text-muted-foreground">called</span>{" "}
           <span className="text-muted-foreground font-mono text-xs">
             {toolName}
@@ -137,6 +161,9 @@ export function AssistantsAuditLog(): React.JSX.Element {
     [assistantsData?.assistants],
   );
 
+  // Names for the humans whose calls these were. A failed read leaves the
+  // urn, which still identifies them.
+  const members = useMembers(undefined, undefined, { throwOnError: false });
   const assistantNameById = useMemo(
     () =>
       new Map(assistants.map((assistant) => [assistant.id, assistant.name])),
@@ -233,6 +260,11 @@ export function AssistantsAuditLog(): React.JSX.Element {
                     assistantName={
                       assistantNameById.get(log.subjectId) ??
                       "Deleted assistant"
+                    }
+                    authorizerName={(userId) =>
+                      members.data?.members.find(
+                        (member) => member.id === userId,
+                      )?.name
                     }
                   />
                 ))}

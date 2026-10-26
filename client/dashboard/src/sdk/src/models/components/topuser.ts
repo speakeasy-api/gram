@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const UserType = {
 /**
  * Type of user ID
  */
-export type UserType = ClosedEnum<typeof UserType>;
+export type UserType = OpenEnum<typeof UserType>;
 
 /**
  * Top user by activity
@@ -40,9 +41,8 @@ export type TopUser = {
 };
 
 /** @internal */
-export const UserType$inboundSchema: z.ZodMiniEnum<typeof UserType> = z.enum(
-  UserType,
-);
+export const UserType$inboundSchema: z.ZodMiniType<UserType, unknown> =
+  openEnums.inboundSchema(UserType);
 
 /** @internal */
 export const TopUser$inboundSchema: z.ZodMiniType<TopUser, unknown> = z.pipe(

@@ -34,54 +34,6 @@ type McpEndpoint struct {
 	Deleted bool
 }
 
-type McpEnvironmentConfig struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: confidential
-	McpMetadataID uuid.UUID
-	// @access: confidential
-	VariableName string
-	// @access: confidential
-	HeaderDisplayName pgtype.Text
-	// @access: opaque-confidential
-	ProvidedBy string
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-}
-
-type McpMetadatum struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	ToolsetID uuid.NullUUID
-	// @access: confidential
-	McpServerID uuid.NullUUID
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: restricted
-	ExternalDocumentationUrl pgtype.Text
-	// @access: opaque-restricted
-	ExternalDocumentationText pgtype.Text
-	// @access: confidential
-	LogoID uuid.NullUUID
-	// @access: opaque-restricted
-	Instructions pgtype.Text
-	// @access: opaque-restricted
-	HeaderDisplayNames []byte
-	// @access: confidential
-	DefaultEnvironmentID uuid.NullUUID
-	// @access: restricted
-	InstallationOverrideUrl pgtype.Text
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-}
-
 type McpServer struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -99,7 +51,7 @@ type McpServer struct {
 	RemoteSessionIssuerID uuid.NullUUID
 	// @access: confidential
 	RemoteMcpServerID uuid.NullUUID
-	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
+	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, or builtin_backend must be set.
 	// @access: confidential
 	TunneledMcpServerID uuid.NullUUID
 	// @access: confidential
@@ -107,11 +59,16 @@ type McpServer struct {
 	// @access: confidential
 	UnproxiedMcpServerID uuid.NullUUID
 	// @access: confidential
+	BuiltinBackend pgtype.Text
+	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
 	// @access: confidential
 	Visibility string
 	// @access: confidential
 	NetworkAccessMode pgtype.Text
+	// Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
+	// @access: confidential
+	RequiresUpstreamAuth pgtype.Bool
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

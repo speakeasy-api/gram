@@ -45,7 +45,7 @@ type consentChainCheckResult struct {
 // that decides which grants still route. Statuses are empty before the subject
 // is stamped, so every card then reads not connected.
 func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client) (map[uuid.UUID]remotesessions.RemoteSessionState, consentRouting, error) {
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil, projectScoped: false}
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return nil, routing, nil
 	}
@@ -130,12 +130,15 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 // consent pages stored that no grant adopted, as of the denial. An exchange
 // already in flight can still store one afterwards; only another eligible
 // grant of the same sign-in could adopt it, and it expires within the hour.
+// Retirement also clears unadopted credentials from other in-flight consent
+// flows for this issuer, subject and sign-in. Those flows re-exchange on retry;
+// credentials already adopted by a session remain usable.
 func (s *Service) retireDeniedConsentCredentials(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) {
 	subject := challengeState.Subject
 	if s.identityChainer == nil || challengeState.SignInID == nil || subject == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
 		return
 	}
-	if err := s.identityChainer.RetireConsentCredentials(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, *challengeState.SignInID); err != nil {
+	if err := s.identityChainer.RetireConsentCredentials(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject.ID, *challengeState.SignInID); err != nil {
 		logger.WarnContext(ctx, "retire denied consent identity chaining credentials", attr.SlogError(err))
 	}
 }

@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+
+	"github.com/google/uuid"
 )
 
 // gatewayListOpenLimit is the most servers a gateway's page lists open by
@@ -28,6 +30,10 @@ const maxFocusServerLength = 256
 type gatewayServerStatus string
 
 const (
+	// gatewayServerUnavailable is a server that did not complete discovery.
+	gatewayServerUnavailable gatewayServerStatus = "unavailable"
+	// gatewayServerNoAccess is a server the subject cannot access.
+	gatewayServerNoAccess gatewayServerStatus = "no_access"
 	// gatewayServerNoSignIn is a server whose upstream needs no per-person
 	// sign-in, so it works as soon as the gateway is authorized.
 	gatewayServerNoSignIn gatewayServerStatus = "no_sign_in"
@@ -71,7 +77,7 @@ func (g gatewayServer) Ready() bool {
 	switch g.Status {
 	case gatewayServerNoSignIn, gatewayServerConnected, gatewayServerChained:
 		return true
-	case gatewayServerChainPending, gatewayServerReconnect, gatewayServerNotConnected, gatewayServerNotSetUp:
+	case gatewayServerChainPending, gatewayServerReconnect, gatewayServerNotConnected, gatewayServerNotSetUp, gatewayServerUnavailable, gatewayServerNoAccess:
 		return false
 	}
 	return false
@@ -80,6 +86,10 @@ func (g gatewayServer) Ready() bool {
 // StatusLabel is the server's status line.
 func (g gatewayServer) StatusLabel() string {
 	switch g.Status {
+	case gatewayServerUnavailable:
+		return "Unavailable · try again later"
+	case gatewayServerNoAccess:
+		return "No access"
 	case gatewayServerNoSignIn:
 		return "Ready · no sign-in needed"
 	case gatewayServerConnected:
@@ -106,7 +116,7 @@ func (g gatewayServer) NeedsAttention() bool {
 // NeedsSignIn reports whether the server signs in through a service the
 // person can connect.
 func (g gatewayServer) NeedsSignIn() bool {
-	return g.Status != gatewayServerNoSignIn && g.Status != gatewayServerNotSetUp
+	return len(g.cardIDs) > 0 && (g.Status == gatewayServerNotConnected || g.Status == gatewayServerReconnect || g.Status == gatewayServerConnected || g.Status == gatewayServerChained || g.Status == gatewayServerChainPending)
 }
 
 // NotSetUp reports whether no service the person can connect signs in to
@@ -118,6 +128,8 @@ func (g gatewayServer) NotSetUp() bool {
 // gatewayConsentView is what a gateway's consent page renders in place of
 // the flat list of services.
 type gatewayConsentView struct {
+	members []metaMember
+	cards   []remoteSessionCard
 	// Servers are the servers the person can reach through the gateway,
 	// those needing action first.
 	Servers    []gatewayServer
@@ -174,7 +186,7 @@ func (s *Service) gatewayConsent(
 // server, from the member's own project unless no project owns it, the same
 // match clientServesAnyMember makes.
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
-	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false}
+	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, members: members, cards: cards}
 	for _, member := range members {
 		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", cardIDs: nil}
 		for _, card := range cards {
@@ -183,7 +195,7 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 				server.Status = strongerStatus(server.Status, cardStatus(card))
 			}
 		}
-		if member.remoteSessionIssuerID.Valid && len(server.cardIDs) == 0 {
+		if memberNeedsSignIn(member) && len(server.cardIDs) == 0 {
 			server.Status = gatewayServerNotSetUp
 		}
 		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect) {
@@ -200,11 +212,42 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 	return view
 }
 
-func cardServesMember(card remoteSessionCard, member metaMember) bool {
-	if !member.remoteSessionIssuerID.Valid || card.remoteSessionIssuerID != member.remoteSessionIssuerID.UUID {
-		return false
+// applyOutcomes makes discovery authoritative for status, ordering and actions.
+func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
+	v.ReadyCount = 0
+	for i := range v.Servers {
+		server := &v.Servers[i]
+		server.Status = gatewayServerUnavailable
+		for _, outcome := range outcomes {
+			if outcome.Slug == server.Slug {
+				server.Status = outcome.Status
+				break
+			}
+		}
+		server.ConnectClientID = ""
+		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected) {
+			server.ConnectClientID = server.cardIDs[0]
+		}
+		if server.Ready() {
+			v.ReadyCount++
+		}
 	}
-	return !card.projectID.Valid || card.projectID.UUID == member.projectID
+	slices.SortStableFunc(v.Servers, func(a, b gatewayServer) int {
+		return cmp.Or(cmp.Compare(statusOrder(a.Status), statusOrder(b.Status)), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Slug, b.Slug))
+	})
+	v.ListOpen = len(v.Servers) <= gatewayListOpenLimit || v.ReadyCount < len(v.Servers)
+}
+
+func cardServesMember(card remoteSessionCard, member metaMember) bool {
+	clientID := uuid.Nil
+	if member.associatedClients != nil {
+		parsed, err := uuid.Parse(card.ClientID)
+		if err != nil {
+			return false
+		}
+		clientID = parsed
+	}
+	return memberUsesClient(member, clientID, card.remoteSessionIssuerID, card.projectID)
 }
 
 // cardStatus is the status one service gives the servers it signs in to.
@@ -252,7 +295,7 @@ func readiness(status gatewayServerStatus) int {
 		return 2
 	case gatewayServerNotConnected:
 		return 1
-	case gatewayServerNoSignIn, gatewayServerNotSetUp:
+	case gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerUnavailable, gatewayServerNoAccess:
 		return 0
 	}
 	return 0
@@ -265,7 +308,7 @@ func statusOrder(status gatewayServerStatus) int {
 		return 0
 	case gatewayServerNotConnected:
 		return 1
-	case gatewayServerNotSetUp, gatewayServerChainPending:
+	case gatewayServerNotSetUp, gatewayServerChainPending, gatewayServerUnavailable, gatewayServerNoAccess:
 		return 2
 	case gatewayServerChained, gatewayServerConnected:
 		return 3

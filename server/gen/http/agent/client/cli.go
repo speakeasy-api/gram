@@ -73,6 +73,28 @@ func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsDe
 	return v, nil
 }
 
+// BuildGetMyConnectionsPayload builds the payload for the agent
+// getMyConnections endpoint from CLI flags.
+func BuildGetMyConnectionsPayload(agentGetMyConnectionsApikeyToken string, agentGetMyConnectionsEmail string) (*agent.GetMyConnectionsPayload, error) {
+	var apikeyToken *string
+	{
+		if agentGetMyConnectionsApikeyToken != "" {
+			apikeyToken = &agentGetMyConnectionsApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentGetMyConnectionsEmail != "" {
+			email = &agentGetMyConnectionsEmail
+		}
+	}
+	v := &agent.GetMyConnectionsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+
+	return v, nil
+}
+
 // BuildListSyncedUsersPayload builds the payload for the agent listSyncedUsers
 // endpoint from CLI flags.
 func BuildListSyncedUsersPayload(agentListSyncedUsersSessionToken string) (*agent.ListSyncedUsersPayload, error) {
