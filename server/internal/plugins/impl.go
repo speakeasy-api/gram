@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -1532,7 +1533,8 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 // writePluginZip serializes the file map as a deterministic ZIP, marking shell
 // scripts executable so the bootstrapper runs after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
-// thirdparty/github/repo.go; keep them in sync.
+// thirdparty/github/repo.go; keep them in sync. Git has no owner-only mode, so
+// only the ZIP marks speakeasy.json 0600.
 func writePluginZip(w io.Writer, files map[string][]byte) error {
 	zw := zip.NewWriter(w)
 	paths := make([]string, 0, len(files))
@@ -1566,8 +1568,12 @@ func writePluginZip(w io.Writer, files map[string][]byte) error {
 			ExternalAttrs:      0,
 		}
 		var mode os.FileMode = 0o644
-		if strings.HasSuffix(p, ".sh") {
+		switch {
+		case strings.HasSuffix(p, ".sh"):
 			mode = 0o755
+		case path.Base(p) == "speakeasy.json":
+			// Carries the hooks API key, so extraction must leave it owner-only.
+			mode = 0o600
 		}
 		header.SetMode(mode)
 		f, err := zw.CreateHeader(header)
