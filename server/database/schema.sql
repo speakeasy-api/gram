@@ -4676,7 +4676,7 @@ COMMENT ON COLUMN workload_issuers.issuer IS '@access: restricted';
 COMMENT ON COLUMN workload_issuers.jwks_uri IS '@access: restricted';
 COMMENT ON COLUMN workload_issuers.key_source IS '@access: confidential';
 COMMENT ON COLUMN workload_issuers.allow_wildcard_admission IS '@access: confidential';
-COMMENT ON COLUMN workload_issuers.allow_assertion_reuse IS 'Whether valid workload assertions may be exchanged repeatedly. NULL is false.
+COMMENT ON COLUMN workload_issuers.allow_assertion_reuse IS 'Whether assertions carrying a jti or uti may be exchanged repeatedly until expiry. NULL is false.
 @access: confidential';
 COMMENT ON COLUMN workload_issuers.metadata IS '@access: opaque-restricted';
 COMMENT ON COLUMN workload_issuers.created_at IS '@access: confidential';
