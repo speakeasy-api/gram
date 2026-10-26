@@ -28,6 +28,7 @@ import {
   type CoverageDisplay,
   coverageDisplay,
   deviceCoverageKey,
+  matchesCoverageFilter,
   POLICY_STATES,
   UNMANAGED_USERS,
 } from "./coverage-states";
@@ -189,21 +190,18 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           device.userEmail,
           device.externalId,
         ].some((value) => value?.toLowerCase().includes(normalizedSearch));
-      const matchesBucket =
-        !selectedBuckets ||
-        selectedBuckets.length === 0 ||
-        selectedBuckets.includes(deviceCoverageKey(device)) ||
-        (device.coverageBucket === "agent_active" &&
-          selectedBuckets.includes("agent_active"));
-      return matchesSearch && matchesBucket;
+      return matchesSearch && matchesCoverageFilter(device, selectedBuckets);
     });
   }, [devices, deferredSearch, selectedBuckets]);
 
   const columns = useMemo(() => deviceColumns(), []);
   // The device outlives `open`, so the sheet keeps its content while it
-  // slides out.
+  // slides out. A refreshed list replaces the clicked snapshot.
   const [selected, setSelected] = useState<ManagedDevice | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const selectedDevice = selected
+    ? (devices.find((device) => device.id === selected.id) ?? selected)
+    : null;
 
   if (isLoading) return <SkeletonTable />;
   if (isError) {
@@ -266,7 +264,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
         </Stack>
       ) : null}
       <DeviceDetailSheet
-        device={selected}
+        device={selectedDevice}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />

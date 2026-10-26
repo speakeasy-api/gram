@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   coverageDisplay,
   deviceCoverageKey,
+  matchesCoverageFilter,
   toolLabel,
 } from "./coverage-states";
 
@@ -33,6 +34,28 @@ describe("deviceCoverageKey", () => {
         device({ coverageBucket: "agent_stale", policyState: "attested" }),
       ),
     ).toBe("agent_stale");
+  });
+});
+
+describe("matchesCoverageFilter", () => {
+  const outdated = device({ policyState: "outdated" });
+  const noPolicyState = device({});
+  const stale = device({ coverageBucket: "agent_stale" });
+
+  it("matches everything with no selection", () => {
+    expect(matchesCoverageFilter(stale, undefined)).toBe(true);
+    expect(matchesCoverageFilter(stale, [])).toBe(true);
+  });
+
+  it("matches an active device by its policy state", () => {
+    expect(matchesCoverageFilter(outdated, ["outdated"])).toBe(true);
+    expect(matchesCoverageFilter(outdated, ["attested"])).toBe(false);
+  });
+
+  it("matches every active device under agent_active", () => {
+    expect(matchesCoverageFilter(outdated, ["agent_active"])).toBe(true);
+    expect(matchesCoverageFilter(noPolicyState, ["agent_active"])).toBe(true);
+    expect(matchesCoverageFilter(stale, ["agent_active"])).toBe(false);
   });
 });
 

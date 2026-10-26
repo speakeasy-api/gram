@@ -149,6 +149,20 @@ export function deviceCoverageKey(
   return device.coverageBucket;
 }
 
+// The coverage filter matches what the Coverage column shows, and
+// agent_active also matches every active device, whatever its policy state.
+export function matchesCoverageFilter(
+  device: ManagedDevice,
+  selected: readonly string[] | undefined,
+): boolean {
+  if (!selected || selected.length === 0) return true;
+  return (
+    selected.includes(deviceCoverageKey(device)) ||
+    (device.coverageBucket === "agent_active" &&
+      selected.includes("agent_active"))
+  );
+}
+
 // Safe lookup: the SDK enums are open, so a value from a newer server must
 // degrade to a neutral badge, not a crash.
 export function coverageDisplay(key: string): CoverageDisplay {
