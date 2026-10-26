@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	delivery "github.com/speakeasy-api/gram/server/internal/thirdparty/catalogpromotion"
 )
@@ -69,6 +70,8 @@ type Request struct {
 	PublicMetadataConfirmed bool `json:"public_metadata_confirmed"`
 	// OverrideEligibility explicitly accepts insufficient or unhealthy usage evidence.
 	OverrideEligibility bool `json:"override_eligibility,omitempty"`
+	// AuthDiscovery is the server-owned public capability snapshot bound to an Admin MCP proposal.
+	AuthDiscovery catalogauth.Discovery `json:"auth_discovery,omitzero"`
 	// RetryKey identifies one exact requested change.
 	RetryKey string `json:"retry_key"`
 }
@@ -92,6 +95,8 @@ type Candidate struct {
 	CurationRevision string `json:"curation_revision"`
 	// SuggestedMetadata is untrusted draft input, never an approval or published value.
 	SuggestedMetadata *PublicMetadata `json:"suggested_metadata,omitempty"`
+	// AuthDiscovery is public metadata evidence from the reviewed source endpoint.
+	AuthDiscovery *catalogauth.Discovery `json:"auth_discovery,omitempty"`
 	// SourceName is a bounded private label for the staff UI only.
 	SourceName string `json:"source_name,omitempty"`
 	// SourceRevision binds the change to the observed source configuration.
@@ -191,4 +196,11 @@ type CurationRequest struct {
 	Action string `json:"action"`
 	// RetryKey identifies the exact staff request.
 	RetryKey string `json:"retry_key"`
+}
+
+// publicSnapshot persists public metadata and server-owned discovery without changing reviewed input.
+type publicSnapshot struct {
+	PublicMetadata
+	// AuthDiscovery contains only bounded public capability evidence.
+	AuthDiscovery catalogauth.Discovery `json:"auth_discovery,omitzero"`
 }

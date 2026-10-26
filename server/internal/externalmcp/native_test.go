@@ -60,10 +60,12 @@ func TestNativeList(t *testing.T) {
 func TestNativeListSupportsDcr(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name    string
-		catalog map[string]any
-		pulse   bool
-		want    bool
+		name     string
+		catalog  map[string]any
+		pulse    bool
+		want     bool
+		wantCIMD bool
+		setup    string
 	}{
 		{name: "native true", catalog: map[string]any{"supportsDcr": true}, want: true},
 		{name: "native false", catalog: map[string]any{"supportsDcr": false}},
@@ -71,6 +73,9 @@ func TestNativeListSupportsDcr(t *testing.T) {
 		{name: "missing native metadata falls back to Pulse", pulse: true, want: true},
 		{name: "missing native field falls back to Pulse", catalog: map[string]any{}, pulse: true, want: true},
 		{name: "no capability metadata"},
+		{name: "CIMD", catalog: map[string]any{"supportsCimd": true}, wantCIMD: true, setup: "cimd"},
+		{name: "complete manual", catalog: map[string]any{"supportsDcr": false, "supportsCimd": false, "authSetup": "manual"}, setup: "manual"},
+		{name: "explicit no auth", catalog: map[string]any{"authSetup": "none"}, setup: "none"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -97,6 +102,23 @@ func TestNativeListSupportsDcr(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, result.Servers, 1)
 			require.Equal(t, tc.want, result.Servers[0].SupportsDcr)
+			require.Equal(t, tc.wantCIMD, *result.Servers[0].SupportsCimd)
+			expectedSetup := tc.setup
+			if expectedSetup == "" {
+				expectedSetup = "unknown"
+				if tc.want {
+					expectedSetup = "dcr"
+				}
+			}
+			require.Equal(t, expectedSetup, *result.Servers[0].AuthSetup)
+			var detail serverDetailsEntry
+			require.NoError(t, json.Unmarshal(raw, &detail))
+			projected := projectServerDetails(detail, nil)
+			require.Equal(t, tc.wantCIMD, projected.SupportsCIMD)
+			if tc.pulse && tc.want {
+				expectedSetup = "unknown"
+			}
+			require.Equal(t, expectedSetup, projected.AuthSetup)
 		})
 	}
 }

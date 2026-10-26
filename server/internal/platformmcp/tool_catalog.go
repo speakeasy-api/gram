@@ -31,6 +31,13 @@ type InspectCatalogCandidateInput struct {
 // candidate paths. Direct remote URLs are always marked unreviewed and never
 // enter the reviewed catalogue.
 type CandidateInspection struct {
+	// SupportsDCR is advertised dynamic registration support for a reviewed catalogue entry.
+	SupportsDCR bool `json:"supports_dcr"`
+	// SupportsCIMD is advertised compatible metadata-document support for a reviewed catalogue entry.
+	SupportsCIMD bool `json:"supports_cimd"`
+	// AuthSetup is the reviewed catalogue setup classification; unknown is not manual setup.
+	AuthSetup string `json:"auth_setup,omitempty"`
+
 	ProviderKey            string                      `json:"provider_key,omitempty"`
 	CatalogRef             string                      `json:"catalog_ref,omitempty"`
 	CanonicalURL           string                      `json:"canonical_url,omitempty"`
@@ -169,7 +176,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 			}
 			return nil, CandidateInspection{}, ErrCatalogUnavailable
 		}
-		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, ToolNames: details.ToolNames, ToolCount: details.ToolCount, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SetupIntent: details.SetupIntent}, nil
+		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, ToolNames: details.ToolNames, ToolCount: details.ToolCount, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SupportsDCR: details.SupportsDCR, SupportsCIMD: details.SupportsCIMD, AuthSetup: details.AuthSetup, SetupIntent: details.SetupIntent}, nil
 	})
 }
 

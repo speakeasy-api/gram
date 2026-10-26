@@ -35,7 +35,7 @@ func (r *recordingCatalogPromotionReader) ListCandidates(_ context.Context, curs
 	return r.candidates, r.next, r.err
 }
 
-func (r *recordingCatalogPromotionReader) GetCandidate(_ context.Context, target catalogpromotion.Target) (catalogpromotion.Candidate, error) {
+func (r *recordingCatalogPromotionReader) InspectCandidate(_ context.Context, target catalogpromotion.Target) (catalogpromotion.Candidate, error) {
 	r.getCalls++
 	r.target = target
 	return r.candidate, r.err

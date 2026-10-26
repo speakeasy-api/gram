@@ -25785,6 +25785,9 @@ func unmarshalAdminRegistryPromotionCandidateResponseBodyToAdminAdminRegistryPro
 	if v.SuggestedMetadata != nil {
 		res.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(v.SuggestedMetadata)
 	}
+	if v.AuthDiscovery != nil {
+		res.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(v.AuthDiscovery)
+	}
 
 	return res
 }
@@ -25804,6 +25807,23 @@ func unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryP
 		DocumentationURL:  v.DocumentationURL,
 		DocsSlug:          v.DocsSlug,
 		AuthMode:          v.AuthMode,
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery
+// builds a value of type *admin.AdminRegistryPromotionAuthDiscovery from a
+// value of type *AdminRegistryPromotionAuthDiscoveryResponseBody.
+func unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(v *AdminRegistryPromotionAuthDiscoveryResponseBody) *admin.AdminRegistryPromotionAuthDiscovery {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminRegistryPromotionAuthDiscovery{
+		SupportsDcr:  *v.SupportsDcr,
+		SupportsCimd: *v.SupportsCimd,
+		AuthSetup:    *v.AuthSetup,
+		Status:       *v.Status,
 	}
 
 	return res
