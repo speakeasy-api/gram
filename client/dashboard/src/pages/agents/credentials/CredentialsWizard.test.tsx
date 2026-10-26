@@ -727,7 +727,6 @@ describe("Connecting a GKE cluster", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(await screen.findByRole("radio", { name: /Workload/ }));
     fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { name: "Your cluster" });
