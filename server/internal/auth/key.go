@@ -298,6 +298,13 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading api key details")
 	}
 
+	// Managed Kit credentials were replaced by workload identity. Never let a
+	// historical key re-enter through an ordinary API-key transport, regardless
+	// of its runtime state or the binding's revocation timestamp.
+	if apiKey.SupersededKitCredential {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
 	actor, credential, principalBacked, err := classifyPrincipalAPIKey(apiKey, time.Now())
 	if err != nil {
 		return ctx, oops.C(oops.CodeUnauthorized)

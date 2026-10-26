@@ -8228,6 +8228,94 @@ paths:
       x-speakeasy-name-override: blockOnConnection
       x-speakeasy-react-hook:
         name: BlockAgentOnConnection
+  /rpc/agents.checkPolicyGrants:
+    post:
+      description: 'Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.'
+      operationId: checkAgentPolicyGrants
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckAgentPolicyGrantsForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckAgentPolicyGrantsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: checkPolicyGrants agents
+      tags:
+        - agents
+      x-speakeasy-name-override: checkPolicyGrants
+      x-speakeasy-react-hook:
+        name: CheckAgentPolicyGrants
   /rpc/agents.create:
     post:
       operationId: createAgent
@@ -18276,7 +18364,7 @@ paths:
       x-speakeasy-name-override: revoke
   /rpc/cliAuth.authorize:
     post:
-      description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.
+      description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
       operationId: cliAuthAuthorize
       parameters:
         - allowEmptyValue: true
@@ -82659,7 +82747,7 @@ paths:
         name: RegisterWorkloadIssuer
   /rpc/workloadIdentities.updateIssuer:
     post:
-      description: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      description: Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
       operationId: updateWorkloadIssuer
       parameters:
         - allowEmptyValue: true
@@ -84558,6 +84646,21 @@ components:
         - selector
         - created_at
         - updated_at
+    AgentPolicyGrantCheck:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+          description: Whether the grant fits within the caller's and the owner's permissions.
+        limited_by:
+          type: string
+          description: Whose permissions the grant exceeds; absent when allowed.
+          enum:
+            - caller
+            - owner
+      description: Whether one policy grant could be written, by the same rule agents.create and agents.createPolicyGrant enforce.
+      required:
+        - allowed
     AgentPolicyGrantForm:
       type: object
       properties:
@@ -87771,6 +87874,35 @@ components:
         - tool_calls
         - tool_results
         - risk_only
+    CheckAgentPolicyGrantsForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent the grants would be written to. Omit for an agent the caller would create.
+          format: uuid
+        owner_user_id:
+          type: string
+          description: Owner of the agent the caller would create, as agents.create takes it; defaults to the caller. Not allowed with agent_id, whose owner is its own.
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantForm'
+          description: The grants to check, answered in the same order.
+          minItems: 1
+          maxItems: 100
+      required:
+        - policy_grants
+    CheckAgentPolicyGrantsResult:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPolicyGrantCheck'
+          description: One answer per requested grant, in request order.
+      required:
+        - results
     CimdClientPreset:
       type: object
       properties:
@@ -104388,6 +104520,9 @@ components:
     RegisterWorkloadIssuerForm:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
@@ -116709,6 +116844,9 @@ components:
     UpdateWorkloadIssuerForm:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Omit to preserve the current setting; false disables this opt-in. Tokens without replay identifiers retain existing exact-token compatibility.
         description:
           type: string
           description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.
@@ -118414,6 +118552,9 @@ components:
     WorkloadIssuer:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule.
@@ -118460,6 +118601,7 @@ components:
         - jwks_uri
         - description
         - allow_wildcard_admission
+        - allow_assertion_reuse
         - tags
         - created_at
         - updated_at

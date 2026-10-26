@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type WorkloadIssuer = {
   /**
+   * Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
+   */
+  allowAssertionReuse: boolean;
+  /**
    * Whether subjects under this issuer may be admitted by a wildcard rule.
    */
   allowWildcardAdmission: boolean;
@@ -58,6 +62,7 @@ export const WorkloadIssuer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    allow_assertion_reuse: z.boolean(),
     allow_wildcard_admission: z.boolean(),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -78,6 +83,7 @@ export const WorkloadIssuer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "allow_assertion_reuse": "allowAssertionReuse",
       "allow_wildcard_admission": "allowWildcardAdmission",
       "created_at": "createdAt",
       "jwks_uri": "jwksUri",

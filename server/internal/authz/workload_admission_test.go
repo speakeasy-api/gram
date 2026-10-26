@@ -2,8 +2,10 @@ package authz
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -98,6 +100,70 @@ func TestWorkloadAdmissionRetainsOnlyValidAgentPrincipal(t *testing.T) {
 				require.Error(t, err)
 				_, ok := AdmittedWorkloadAgent(ctx)
 				require.False(t, ok)
+			}
+		})
+	}
+}
+
+// Embedding the interface gives the test a distinct transaction without a pool.
+type workloadAdmissionTestTx struct{ pgx.Tx }
+
+func TestWorkloadAdmissionInTxRequiresConfiguredAdmitter(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), nil, EngineOpts{
+		AdmitWorkloadSession: func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error) {
+			t.Fatal("transaction admission must not acquire a second pool connection")
+			return WorkloadSessionAdmission{}, nil
+		},
+	})
+	ctx := t.Context()
+	got, err := engine.AdmitWorkloadSessionInTx(ctx, &workloadAdmissionTestTx{})
+	require.Error(t, err)
+	require.Equal(t, ctx, got)
+}
+
+func TestWorkloadAdmissionInTxUsesConfiguredAdmitter(t *testing.T) {
+	t.Parallel()
+	sentinel := errors.New("admission refused")
+	for _, outcome := range []string{"success", "error", "invalid"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			tx := &workloadAdmissionTestTx{}
+			ctx := principalPolicyTestContext(t, nil, nil, nil)
+			check := Check{Scope: ScopeProjectRead, ResourceID: "project-one"}
+			allow := []Grant{NewGrant(check.Scope, check.ResourceID)}
+			calls := 0
+			engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), nil, EngineOpts{
+				AdmitWorkloadSession: func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error) {
+					t.Fatal("transaction admission must not acquire a second pool connection")
+					return WorkloadSessionAdmission{}, nil
+				},
+				AdmitWorkloadSessionInTx: func(received context.Context, receivedTx pgx.Tx) (WorkloadSessionAdmission, error) {
+					calls++
+					require.Equal(t, ctx, received)
+					require.Same(t, tx, receivedTx)
+					if outcome == "error" {
+						return WorkloadSessionAdmission{}, sentinel
+					}
+					if outcome == "invalid" {
+						return WorkloadSessionAdmission{}, nil
+					}
+					return WorkloadSessionAdmission{AgentPrincipal: "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001", OwnerUserID: "user_test", Ceiling: allow, Agent: allow, Owner: allow}, nil
+				},
+			})
+			got, err := engine.AdmitWorkloadSessionInTx(ctx, tx)
+			require.Equal(t, 1, calls)
+			if outcome == "success" {
+				require.NoError(t, err)
+				require.NoError(t, engine.Require(got, check))
+				_, ok := AdmittedWorkloadAgent(got)
+				require.True(t, ok)
+			} else {
+				require.Error(t, err)
+				require.Equal(t, ctx, got)
+				if outcome == "error" {
+					require.ErrorIs(t, err, sentinel)
+				}
 			}
 		})
 	}

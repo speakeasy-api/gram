@@ -1,4 +1,5 @@
 import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { RequireScope } from "@/components/require-scope";
 import {
@@ -19,6 +20,8 @@ import {
 import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 import { useOrganization } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
+import { mcpServerUpdateForm } from "@/lib/mcpServerUpdateForm";
 import {
   endpointUsesPrivateIngress,
   privateMcpEndpointUrls,
@@ -49,7 +52,6 @@ import { useListDomains } from "@gram/client/react-query/listDomains.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -80,7 +82,7 @@ type NetworkAccessProps =
       toolset?: never;
     }
   | {
-      mcpServer?: never;
+      mcpServer: McpServer;
       metaMcpServer?: never;
       endpoints?: never;
       toolset: Toolset & {
@@ -97,8 +99,8 @@ export function NetworkAccessSection({
   const { status: rolloutStatus, canManageIngress } =
     useNetworkIngressRollout();
   const hasStoredPrivateMode =
-    (mcpServer ?? metaMcpServer ?? toolset)?.networkAccessMode !== undefined &&
-    (mcpServer ?? metaMcpServer ?? toolset)?.networkAccessMode !==
+    (toolset ?? mcpServer ?? metaMcpServer)?.networkAccessMode !== undefined &&
+    (toolset ?? mcpServer ?? metaMcpServer)?.networkAccessMode !==
       McpServerNetworkAccessMode.PublicOnly;
 
   if (
@@ -183,6 +185,8 @@ function NetworkAccessSectionContent({
       ));
   const [draft, setDraft] = useState<McpServerNetworkAccessMode>(currentMode);
   const [confirmPrivateOnlyOpen, setConfirmPrivateOnlyOpen] = useState(false);
+  const [loadingLatest, setLoadingLatest] = useState(false);
+  const client = useSdkClient();
 
   useEffect(() => {
     setDraft(currentMode);
@@ -293,18 +297,25 @@ function NetworkAccessSectionContent({
     setConfirmPrivateOnlyOpen(false);
     toast.error(error.message || "Failed to update network access");
   };
+  const followRenamedServer = useFollowRenamedServer();
   const update = useUpdateMcpServerMutation({
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
       setConfirmPrivateOnlyOpen(false);
+      followRenamedServer(updated);
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        ...(toolset
+          ? [
+              invalidateAllToolset(queryClient, { refetchType: "all" }),
+              invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+            ]
+          : []),
       ]);
       toast.success("Network access updated");
     },
     onError,
   });
-  const updateHostedToolset = useUpdateToolsetMutation();
   const updateGateway = useUpdateMetaMcpServerMutation({
     onSuccess: async () => {
       setConfirmPrivateOnlyOpen(false);
@@ -316,11 +327,9 @@ function NetworkAccessSectionContent({
     },
     onError,
   });
-  const isUpdating = toolset
-    ? updateHostedToolset.isPending
-    : mcpServer
-      ? update.isPending
-      : updateGateway.isPending;
+  const isUpdating = mcpServer
+    ? loadingLatest || update.isPending
+    : updateGateway.isPending;
 
   const save = () => {
     if (
@@ -337,36 +346,36 @@ function NetworkAccessSectionContent({
       return;
     }
 
-    if (toolset) {
-      updateHostedToolset.mutate(
-        {
-          request: {
-            slug: toolset.slug,
-            updateToolsetRequestBody: {
-              networkAccessMode: requireKnownEnumValue(
-                UpdateMcpServerFormNetworkAccessMode,
-                draft,
-              ),
-            },
-          },
-        },
-        {
-          onSuccess: () => {
-            setConfirmPrivateOnlyOpen(false);
-            void Promise.all([
-              invalidateAllToolset(queryClient, { refetchType: "all" }),
-              invalidateAllListToolsets(queryClient, { refetchType: "all" }),
-              invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-              invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-            ])
-              .then(() => {
-                toast.success("Network access updated");
-              })
-              .catch(onError);
-          },
-          onError,
-        },
+    if (toolset && mcpServer) {
+      const networkAccessMode = requireKnownEnumValue(
+        UpdateMcpServerFormNetworkAccessMode,
+        draft,
       );
+      setLoadingLatest(true);
+      void client.mcpServers
+        .get({ id: mcpServer.id })
+        .then((latest) => {
+          update.mutate({
+            request: {
+              updateMcpServerForm: {
+                ...mcpServerUpdateForm(latest),
+                networkAccessMode,
+                visibility: requireKnownEnumValue(
+                  KnownUpdateMcpServerFormVisibility,
+                  latest.visibility,
+                ),
+              },
+            },
+          });
+        })
+        .catch((error: unknown) => {
+          onError(
+            error instanceof Error
+              ? error
+              : new Error("Failed to update network access"),
+          );
+        })
+        .finally(() => setLoadingLatest(false));
     } else if (metaMcpServer) {
       updateGateway.mutate({
         request: {

@@ -24,6 +24,11 @@ type ToolUsagePayloadInputs = {
   accountType: string;
   /** Lowercased MCP client names; "unattributed" selects calls with none. */
   clientKeys?: string[];
+  /**
+   * Agent identities. The server ANDs them with the user filters, so an agent
+   * and a person select the calls that agent made on that person's behalf.
+   */
+  agentIds?: string[];
   from: Date;
   to: Date;
 };
@@ -53,6 +58,7 @@ export function useToolUsagePayload({
   selectedHookTypes,
   accountType,
   clientKeys,
+  agentIds,
   from,
   to,
 }: ToolUsagePayloadInputs): ToolUsagePayload {
@@ -100,6 +106,10 @@ export function useToolUsagePayload({
     () => (clientKeys && clientKeys.length > 0 ? clientKeys : undefined),
     [clientKeys],
   );
+  const normalizedAgentIds = useMemo(
+    () => (agentIds && agentIds.length > 0 ? agentIds : undefined),
+    [agentIds],
+  );
 
   const summaryPayload = useMemo(
     () => ({
@@ -117,6 +127,7 @@ export function useToolUsagePayload({
       hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
       accountType: accountType || undefined,
       clientKeys: normalizedClientKeys,
+      agentIds: normalizedAgentIds,
     }),
     [
       from,
@@ -130,6 +141,7 @@ export function useToolUsagePayload({
       hookSourceFilters,
       accountType,
       normalizedClientKeys,
+      normalizedAgentIds,
     ],
   );
 
@@ -148,6 +160,7 @@ export function useToolUsagePayload({
       selectedHookTypes,
       accountType,
       normalizedClientKeys,
+      normalizedAgentIds,
     ],
     [
       orgSlug,
@@ -163,6 +176,7 @@ export function useToolUsagePayload({
       selectedHookTypes,
       accountType,
       normalizedClientKeys,
+      normalizedAgentIds,
     ],
   );
 

@@ -124,8 +124,8 @@ function recipes(url: string, key: string, secret: string | null): Recipe[] {
 
 /**
  * Exchanges the key for a single-use install code. The key never goes into the
- * command that way: a one-liner ends up in shell history and pasted into
- * threads, and a code that dies on first use is worthless there.
+ * command that way. Until redeemed or expired, the code can retrieve the
+ * key and must stay out of chat and shared transcripts.
  */
 async function mintInstallCommand(
   gatewayURL: string,
@@ -160,6 +160,7 @@ export function AgentGatewayInstall({
 }): JSX.Element {
   const [tab, setTab] = useState("url");
   const [copied, setCopied] = useState<string | null>(null);
+  const [copyFailed, setCopyFailed] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [minting, setMinting] = useState(false);
@@ -168,6 +169,22 @@ export function AgentGatewayInstall({
   const key = secret ?? `<your ${KEY_ENV}>`;
   const url = agentGatewayURL(agentID);
   const all = recipes(url, key, secret);
+
+  // The clipboard can refuse (permissions, an insecure context), and the key
+  // and install code are shown once, so a refusal has to be visible.
+  const copy = async (id: string, text: string) => {
+    setCopyFailed(null);
+    setCopied(null);
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+      setCopied(id);
+    } catch {
+      setCopyFailed(id);
+    }
+  };
+  const copyLabel = (id: string) =>
+    copied === id ? "Copied" : copyFailed === id ? "Copy failed" : "Copy";
 
   // These recipes put a bearer credential on the wire, so a plaintext endpoint
   // would hand the key to anyone on the path. Loopback is exempt: it never
@@ -206,13 +223,9 @@ export function AgentGatewayInstall({
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => {
-                  void navigator.clipboard
-                    .writeText(command)
-                    .then(() => setCopied("command"));
-                }}
+                onClick={() => void copy("command", command)}
               >
-                {copied === "command" ? "Copied" : "Copy"}
+                {copyLabel("command")}
               </Button>
             </div>
           )}
@@ -239,10 +252,12 @@ export function AgentGatewayInstall({
           </Button>
           <Text muted small>
             Connects Claude Code, Codex and OpenClaw on a machine in one step.
-            On OpenClaw it also installs Speakeasy hooks, so this agent&apos;s
-            sessions appear in Agent Sessions under its name. The command
-            carries a single-use code, not the key, and the code expires in 15
-            minutes.
+            On OpenClaw it also installs Speakeasy hooks when this agent has a
+            project. Session attribution depends on the active hooks credential.
+            Models OpenClaw routes through the Claude CLI bypass those hooks and
+            are recorded only if Claude Code hooks are installed too. The
+            command carries a single-use code that can retrieve the key for 15
+            minutes. Run it in a trusted shell; do not paste it into chat.
           </Text>
           {command && (
             <Text muted small>
@@ -259,28 +274,25 @@ export function AgentGatewayInstall({
           {command && (
             <>
               <Text small className="font-medium">
-                Or paste into OpenClaw
+                After installation, ask OpenClaw to check
               </Text>
               <div className="border-border flex items-start gap-2 border p-3">
                 <pre className="min-w-0 flex-1 whitespace-pre-wrap break-all text-xs">
-                  {openClawInstallMessage(command)}
+                  {openClawInstallMessage()}
                 </pre>
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => {
-                    void navigator.clipboard
-                      .writeText(openClawInstallMessage(command))
-                      .then(() => setCopied("openclaw"));
-                  }}
+                  onClick={() =>
+                    void copy("openclaw", openClawInstallMessage())
+                  }
                 >
-                  {copied === "openclaw" ? "Copied" : "Copy"}
+                  {copyLabel("openclaw")}
                 </Button>
               </div>
               <Text muted small>
-                OpenClaw runs the command in its own shell and reports whether
-                its hooks passed the check. Use this or the command above, not
-                both: the code works once.
+                Run the command yourself and restart the OpenClaw Gateway before
+                sending this message. It contains no install code or key.
               </Text>
             </>
           )}
@@ -297,13 +309,9 @@ export function AgentGatewayInstall({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => {
-                void navigator.clipboard
-                  .writeText(secret)
-                  .then(() => setCopied("secret"));
-              }}
+              onClick={() => void copy("secret", secret)}
             >
-              {copied === "secret" ? "Copied" : "Copy"}
+              {copyLabel("secret")}
             </Button>
           </div>
           <Text muted small>
@@ -341,13 +349,9 @@ export function AgentGatewayInstall({
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => {
-                    void navigator.clipboard
-                      .writeText(recipe.body)
-                      .then(() => setCopied(recipe.id));
-                  }}
+                  onClick={() => void copy(recipe.id, recipe.body)}
                 >
-                  {copied === recipe.id ? "Copied" : "Copy"}
+                  {copyLabel(recipe.id)}
                 </Button>
               </div>
             </TabsContent>
@@ -363,6 +367,12 @@ export function AgentGatewayInstall({
         the gateway URL above and to nothing else — never to a model provider,
         and never on to an upstream MCP server.
       </Text>
+      {copyFailed && (
+        <Text role="alert" small>
+          The browser did not allow copying to the clipboard. Select the text
+          and copy it manually.
+        </Text>
+      )}
       {!secret && (
         <Text muted small>
           Your key is shown only once. Replace the placeholder with the key you

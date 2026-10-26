@@ -821,20 +821,15 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if codeModeUnavailable {
 		prefillDiscoveryMode = metamcp.DiscoveryModeProgressive
 	}
-	if endpoint.IsOrganizationGateway() && focusServer == "" {
-		// The organization gateway has no stored default.
-		gatewayDefaultMode = "Progressive"
-	} else if endpoint.MetaMcpServerID.Valid && focusServer == "" {
-		metaServer, readErr := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
-			ID: endpoint.MetaMcpServerID.UUID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
-		})
+	if (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) && focusServer == "" {
+		defaultMode, readErr := s.gatewayDefaultDiscoveryMode(ctx, endpoint)
 		// Display only: an unreadable default leaves the page without it.
 		if readErr != nil {
 			logger.WarnContext(ctx, "read gateway discovery mode", attr.SlogError(readErr))
 		}
 		switch {
 		case readErr != nil:
-		case metaServer.DiscoveryMode == "code_mode":
+		case defaultMode == metamcp.DiscoveryModeCode:
 			gatewayDefaultMode = "Code Mode"
 			// admitMetaGate serves Code Mode gateways as Progressive while the
 			// runtime is off or the organization is not entitled to Code Mode.
@@ -842,7 +837,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 				gatewayDefaultMode = "Progressive"
 				codeModeUnavailable = true
 			}
-		case metaServer.DiscoveryMode == "direct":
+		case defaultMode == metamcp.DiscoveryModeDirect:
 			gatewayDefaultMode = "Direct"
 		default:
 			gatewayDefaultMode = "Progressive"
@@ -1208,8 +1203,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			}
 			return oops.E(oops.CodeUnavailable, err, "could not save the approved tool catalog; retry consent").LogError(ctx, logger)
 		}
+		// consentGatewayPolicy records a mode for every connection that
+		// materializes a gateway catalog, and the selection rides inside it.
 		if toolPolicy == nil {
-			toolPolicy = &toolfilter.SessionPolicy{Resource: endpointToolSelectionResource(endpoint), Selection: toolSelection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: nil}, Catalog: nil}
+			return oops.E(oops.CodeUnexpected, nil, "gateway approval carries no connection options").LogError(ctx, logger)
 		}
 		toolPolicy.Selection = toolSelection
 		toolPolicy.Catalog = reference

@@ -59,7 +59,7 @@ type agentInstallCode struct {
 	OrganizationID string `json:"organization_id"`
 
 	// ProjectSlug is the project the agent's hooks are recorded in, empty
-	// when the agent belongs to no project.
+	// when the agent has no live project.
 	ProjectSlug string `json:"project_slug"`
 
 	// InstallFailOpen is the organization's hooks install-failure policy when
@@ -133,7 +133,9 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 }
 
 // agentHooksProjectSlug returns the slug of the project the agent's hooks are
-// recorded in, or "" when the agent belongs to no project.
+// recorded in, or "" when the agent has no project or its project is deleted.
+// Neither fails the install: the gateway still works without hooks, and the
+// script says why they are missing.
 func (s *Service) agentHooksProjectSlug(ctx context.Context, organizationID string, agentID uuid.UUID) (string, error) {
 	agent, err := agentsrepo.New(s.db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agentID})
 	if err != nil {
