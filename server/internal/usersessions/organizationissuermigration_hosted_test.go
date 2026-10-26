@@ -182,6 +182,14 @@ func TestOrganizationUserSessionIssuerMigrateSkipsDeletedHostedServerAudit(t *te
 	require.NoError(t, err)
 	live := seedMigrationToolset(t, ctx, ti, "live-migrate", "live-migrate-mcp", sourceID)
 	syncMigrationWrapper(t, ctx, ti, live)
+	backing := seedMigrationToolset(t, ctx, ti, "free-migrate-backing", "free-migrate-backing-mcp", sourceID)
+	freeID := uuid.New()
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: freeID, ProjectID: projectID, Name: conv.ToPGText("Free migrate server"), Slug: conv.ToPGText("free-migrate-server"),
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: conv.ToNullUUID(sourceID), RemoteMcpServerID: uuid.NullUUID{},
+		ToolsetID: conv.ToNullUUID(backing.ID), ToolVariationsGroupID: uuid.NullUUID{}, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
 	updatesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
 	require.NoError(t, err)
 
@@ -190,7 +198,10 @@ func TestOrganizationUserSessionIssuerMigrateSkipsDeletedHostedServerAudit(t *te
 
 	updatesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
 	require.NoError(t, err)
-	require.Equal(t, updatesBefore+1, updatesAfter, "only the live hosted server's move is audited")
+	require.Equal(t, updatesBefore+1, updatesAfter, "only the live canonical hosted server's move is audited")
+	free, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: freeID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(targetID), free.UserSessionIssuerID, "a non-canonical server still moves")
 	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionMcpServerUpdate, live.ID.String())
 	require.NoError(t, err)
 	before, err := audittest.DecodeAuditData(record.BeforeSnapshot)

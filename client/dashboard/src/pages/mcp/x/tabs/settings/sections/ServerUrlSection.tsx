@@ -46,6 +46,8 @@ import { getServerURL } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
 import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
+import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
 import { useOrgRoutes } from "@/routes";
 import { usePrivateMcpServerUrls } from "@/hooks/usePrivateMcpServerUrls";
@@ -108,6 +110,7 @@ export function ServerUrlSection({
   const hostedServerId =
     mcpServer && isCanonicalHostedWrapper(mcpServer) ? mcpServer.id : undefined;
   const client = useSdkClient();
+  const serverQueryClient = useQueryClient();
   const followRenamedServer = useFollowRenamedServer();
   const followHostedServer = useCallback(async () => {
     if (!hostedServerId) return;
@@ -116,7 +119,11 @@ export function ServerUrlSection({
     } catch {
       followRenamedServer({ id: hostedServerId });
     }
-  }, [client, followRenamedServer, hostedServerId]);
+    await Promise.all([
+      invalidateAllGetMcpServer(serverQueryClient, { refetchType: "all" }),
+      invalidateAllMcpServers(serverQueryClient, { refetchType: "all" }),
+    ]);
+  }, [client, followRenamedServer, hostedServerId, serverQueryClient]);
   // A private hosted address only moves within the private ingress namespace, which the server enforces.
   const { canManageIngress } = useNetworkIngressRollout();
   const ingressQuery = useNetworkIngress(undefined, undefined, {

@@ -226,6 +226,27 @@ func requireDomainLeavable(ctx context.Context, tx pgx.Tx, logger *slog.Logger, 
 	return nil
 }
 
+// requireEndpointCreateWrite authorizes an endpoint create: mcp:write on the server for a canonical hosted
+// server, otherwise on the project. It reports whether the server was hosted when authorized.
+func (s *Service) requireEndpointCreateWrite(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, mcpServerID uuid.NullUUID) (bool, error) {
+	if mcpServerID.Valid {
+		server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID.UUID, ProjectID: *authCtx.ProjectID})
+		switch {
+		case err == nil && isCanonicalHosted(server):
+			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, server.ID.String(), authCtx.ProjectID.String())); err != nil {
+				return false, err
+			}
+			return true, nil
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return false, oops.E(oops.CodeUnexpected, err, "get endpoint backing server").LogError(ctx, logger)
+		}
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
 // isCanonicalHosted reports whether server is a toolset's canonical hosted wrapper.
 func isCanonicalHosted(server mcpserversrepo.McpServer) bool {
 	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID

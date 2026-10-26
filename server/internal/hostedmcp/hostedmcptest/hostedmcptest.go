@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -75,14 +74,20 @@ func requireMirrored(t *testing.T, ctx context.Context, db *pgxpool.Pool, projec
 	t.Helper()
 
 	state := load(t, ctx, db, projectID, toolsetID)
-	want := hostingstate.MirrorOf(state.toolset, state.server, state.endpoints)
-	require.Equal(t, want.Name, state.toolset.Name, "name")
-	require.Equal(t, want.McpSlug, state.toolset.McpSlug, "mcp_slug")
-	require.Equal(t, want.CustomDomainID, state.toolset.CustomDomainID, "custom_domain_id")
-	require.Equal(t, want.McpEnabled, state.toolset.McpEnabled, "mcp_enabled")
-	require.Equal(t, want.McpIsPublic, state.toolset.McpIsPublic, "mcp_is_public")
-	require.Equal(t, want.UserSessionIssuerID, state.toolset.UserSessionIssuerID, "user_session_issuer_id")
-	require.Equal(t, want.ToolVariationsGroupID, state.toolset.ToolVariationsGroupID, "tool_variations_group_id")
+	// Expected columns come from the rows directly, not from the mirror under test.
+	if state.server.Name.Valid && state.server.Name.String != "" {
+		require.Equal(t, state.server.Name.String, state.toolset.Name, "name")
+	}
+	require.Equal(t, state.server.Visibility != visibility.Disabled, state.toolset.McpEnabled, "mcp_enabled")
+	if state.server.Visibility != visibility.Disabled {
+		require.Equal(t, state.server.Visibility == visibility.Public, state.toolset.McpIsPublic, "mcp_is_public")
+	}
+	require.Equal(t, state.server.UserSessionIssuerID, state.toolset.UserSessionIssuerID, "user_session_issuer_id")
+	require.Equal(t, state.server.ToolVariationsGroupID, state.toolset.ToolVariationsGroupID, "tool_variations_group_id")
+	if len(state.endpoints) == 1 {
+		require.Equal(t, state.endpoints[0].Slug, state.toolset.McpSlug.String, "mcp_slug")
+		require.Equal(t, state.endpoints[0].CustomDomainID, state.toolset.CustomDomainID, "custom_domain_id")
+	}
 	require.Equal(t, oldVisibility(state.toolset), state.server.Visibility, "an older pod's drift check sees the server in step")
 	require.Equal(t, state.toolset.McpSlug, state.server.Slug, "the server slug follows its single address")
 	require.Len(t, state.endpoints, endpoints, "a hosted server keeps at most a single address")

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -138,6 +144,21 @@ describe("ServerUrlSection", () => {
     expect(screen.queryByLabelText("Remove address")).toBeNull();
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
     expect(screen.queryByText("Custom Address")).toBeNull();
+
+    fireEvent.change(screen.getByDisplayValue("example"), {
+      target: { value: "renamed" },
+    });
+    fireEvent.click(screen.getByLabelText("Save address"));
+    expect(updateEndpoint).toHaveBeenCalledWith({
+      request: {
+        updateMcpEndpointForm: {
+          id: "endpoint-1",
+          mcpServerId: "toolset-1",
+          slug: "acme-renamed",
+          customDomainId: undefined,
+        },
+      },
+    });
   });
 
   it("hides add and remove for a canonical server on a custom domain", () => {
@@ -154,10 +175,15 @@ describe("ServerUrlSection", () => {
   it("offers to add an address to a canonical server that has none", () => {
     renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), []);
 
-    expect(screen.getByText("No hosted address")).toBeTruthy();
+    const hostedEmptyState = screen
+      .getByText("No hosted address")
+      .closest("div")?.parentElement;
+    expect(hostedEmptyState).toBeTruthy();
     expect(
-      screen.getAllByRole("button", { name: "Add" }).length,
-    ).toBeGreaterThan(0);
+      within(hostedEmptyState as HTMLElement).getByRole("button", {
+        name: "Add",
+      }),
+    ).toBeTruthy();
   });
 
   it("keeps add and remove for other servers", () => {

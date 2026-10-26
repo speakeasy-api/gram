@@ -1,6 +1,6 @@
 # Hosted MCP wrappers backfill
 
-Gives every live hosted toolset (non-empty `mcp_slug`) that still has no canonical wrapper one: an `mcp_servers` row with `id = toolset.id` and `toolset_id = toolset.id`, plus exactly one `mcp_endpoints` row at the toolset's address. Each row is written by `hostedmcp.BackfillSync` from the toolset's frozen hosting columns. A toolset that already has a canonical wrapper is left untouched: the wrapper owns its hosting state. Postgres only; connects with `$GRAM_DATABASE_URL`.
+Gives every live hosted toolset (non-empty `mcp_slug`) that still has no canonical wrapper one: an `mcp_servers` row with `id = toolset.id` and `toolset_id = toolset.id`, plus exactly one live `mcp_endpoints` row at the toolset's address when its custom domain (if any) is live. A toolset bound to a soft-deleted custom domain gets no live endpoint (reported as `dead_custom_domain`). Each row is written by `hostedmcp.BackfillSync` from the toolset's frozen hosting columns. A toolset that already has a canonical wrapper is left untouched: the wrapper owns its hosting state. Postgres only; connects with `$GRAM_DATABASE_URL`.
 
 ```
 go run ./server/cmd/tools/migrations hosted-mcp-wrappers -h

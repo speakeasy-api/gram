@@ -131,3 +131,27 @@ func TestHostedWritesLeavePlatformAliasWithoutEndpoint(t *testing.T) {
 	require.Equal(t, f.toolset.CustomDomainID, toolset.CustomDomainID)
 	require.Equal(t, "Renamed without address", toolset.Name)
 }
+
+func TestHostedServerAddressRecoveryChecksServerScopedWrite(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	domain := f.activeDomain(t, ctx, "mcp.scoped.example.com")
+	_, err := f.ti.service.UpdateMcpEndpoint(ctx, f.payload("on-domain", func(p *gen.UpdateMcpEndpointPayload) {
+		p.CustomDomainID = new(domain.ID.String())
+	}))
+	require.NoError(t, err)
+	f.deleteDomain(t, ctx)
+	require.Empty(t, f.endpoints(t, ctx))
+
+	payload := &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-recovered")}
+	projectOnly := withExactAuthzGrants(t, ctx, f.ti.conn, authz.NewGrant(authz.ScopeMCPWrite, f.projectID.String()))
+	_, err = f.ti.service.CreateMcpEndpoint(projectOnly, payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Empty(t, f.endpoints(t, ctx))
+
+	scoped := withExactAuthzGrants(t, ctx, f.ti.conn, authz.NewGrant(authz.ScopeMCPWrite, f.toolset.ID.String()))
+	_, err = f.ti.service.CreateMcpEndpoint(scoped, payload)
+	require.NoError(t, err)
+	require.Equal(t, string(payload.Slug), f.requireProjected(t, ctx).Slug)
+	f.requireMirrored(t, ctx)
+}

@@ -273,6 +273,10 @@ type hostedServerWrite struct {
 // applyHostedServerChange writes a change to the canonical wrapper of a locked toolset, never to the toolset,
 // under hostedmcp.LockServer's locks.
 func applyHostedServerChange(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor hostedmcp.Actor, toolset repo.Toolset, change hostedServerChange) (hostedServerWrite, error) {
+	actorPrincipal, ok := actor.Principal(ctx)
+	if !ok || auditLogger == nil {
+		return hostedServerWrite{}, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
+	}
 	endpoints, canonical, err := hostedmcp.LockServer(ctx, tx, toolset.OrganizationID, toolset.ProjectID, toolset.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -380,10 +384,6 @@ func applyHostedServerChange(ctx context.Context, tx pgx.Tx, auditLogger *audit.
 	if !enabled && slices.ContainsFunc(endpoints, func(endpoint mcpendpointsrepo.McpEndpoint) bool {
 		return endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool
 	}) {
-		actorPrincipal, ok := actor.Principal(ctx)
-		if !ok {
-			return hostedServerWrite{}, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
-		}
 		cleared, err := endpointRepo.ClearRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ClearRootMCPEndpointsByMCPServerIDParams{McpServerID: toolset.ID, ProjectID: toolset.ProjectID})
 		if err != nil {
 			return hostedServerWrite{}, oops.E(oops.CodeUnexpected, err, "clear hosted MCP root endpoints")
