@@ -111605,6 +111605,9 @@ components:
         MetaMcpServer:
             type: object
             properties:
+                code_mode_enabled:
+                    type: boolean
+                    description: Whether this gateway can select Code Mode. True only when the code runtime is available, the organization has Code Mode, and the gateway requires sign-in through a user session issuer.
                 created_at:
                     type: string
                     description: When the meta MCP server was created
@@ -111615,6 +111618,7 @@ components:
                     enum:
                         - progressive
                         - direct
+                        - code_mode
                 id:
                     type: string
                     description: The ID of the meta MCP server
@@ -111949,6 +111953,7 @@ components:
                     enum:
                         - progressive
                         - direct
+                        - code_mode
                 mcp_server_id:
                     type: string
                     description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -114676,6 +114681,9 @@ components:
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
+                code_mode_enabled:
+                    type: boolean
+                    description: Whether the organization has the staff-managed gateway Code Mode entitlement
                 custom_model_keys_enabled:
                     type: boolean
                     description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -114754,6 +114762,7 @@ components:
                 - network_ingress_enabled
                 - signals_intelligence_enabled
                 - organization_gateway_disabled
+                - code_mode_enabled
                 - device_agent
         Project:
             type: object
@@ -121083,6 +121092,7 @@ components:
                         - network_ingress
                         - signals_intelligence
                         - organization_gateway_disabled
+                        - code_mode
                     maxLength: 60
                 organization_id:
                     type: string
@@ -121197,6 +121207,7 @@ components:
                         - network_ingress
                         - signals_intelligence
                         - organization_gateway_disabled
+                        - code_mode
                     maxLength: 60
                 organization_id:
                     type: string
@@ -128097,6 +128108,7 @@ components:
                     enum:
                         - progressive
                         - direct
+                        - code_mode
                 id:
                     type: string
                     description: The ID of the meta MCP server to update

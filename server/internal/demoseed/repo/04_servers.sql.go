@@ -248,6 +248,84 @@ func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg Ser
 	return err
 }
 
+const serversInsertCodeGateway = `-- name: ServersInsertCodeGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id) VALUES
+  ($1::uuid, $2::text, $3::uuid, 'Python Code Gateway',
+   $4::uuid)
+`
+
+type ServersInsertCodeGatewayParams struct {
+	ID                  uuid.UUID
+	OrgID               string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Stored as Progressive (the column default) because the shared demo org has
+// no code runtime; local fixtures switch it to code_mode (RunLocalFixtures).
+func (q *Queries) ServersInsertCodeGateway(ctx context.Context, arg ServersInsertCodeGatewayParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCodeGateway,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+	)
+	return err
+}
+
+const serversInsertCodeGatewayEndpoint = `-- name: ServersInsertCodeGatewayEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, $3::uuid, NULL, $4::text)
+`
+
+type ServersInsertCodeGatewayEndpointParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	MetaID    uuid.UUID
+	Slug      string
+}
+
+func (q *Queries) ServersInsertCodeGatewayEndpoint(ctx context.Context, arg ServersInsertCodeGatewayEndpointParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCodeGatewayEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.MetaID,
+		arg.Slug,
+	)
+	return err
+}
+
+const serversInsertCodeGatewayMembers = `-- name: ServersInsertCodeGatewayMembers :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  ($1::uuid, $2::uuid,
+   $3::uuid, $4::uuid, 0),
+  ($5::uuid, $2::uuid,
+   $3::uuid, $6::uuid, 1)
+`
+
+type ServersInsertCodeGatewayMembersParams struct {
+	SupportMemberID uuid.UUID
+	ProjectID       uuid.UUID
+	MetaID          uuid.UUID
+	SupportServerID uuid.UUID
+	OpsMemberID     uuid.UUID
+	OpsServerID     uuid.UUID
+}
+
+func (q *Queries) ServersInsertCodeGatewayMembers(ctx context.Context, arg ServersInsertCodeGatewayMembersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCodeGatewayMembers,
+		arg.SupportMemberID,
+		arg.ProjectID,
+		arg.MetaID,
+		arg.SupportServerID,
+		arg.OpsMemberID,
+		arg.OpsServerID,
+	)
+	return err
+}
+
 const serversInsertEMABindings = `-- name: ServersInsertEMABindings :exec
 INSERT INTO remote_session_ema_bindings
   (id, project_id, organization_id, user_session_issuer_id,
@@ -1652,16 +1730,19 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
   ($5::uuid, $4::uuid, $2::text, 'slack',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   ($6::uuid, $4::uuid, $2::text, 'acme-agent-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+  ($7::uuid, $4::uuid, $2::text, 'python-code-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
 `
 
 type ServersInsertUserSessionIssuersParams struct {
-	WorkforceID uuid.UUID
-	OrgID       string
-	LinearID    uuid.UUID
-	ProjectID   uuid.UUID
-	SlackID     uuid.UUID
-	GatewayID   uuid.UUID
+	WorkforceID   uuid.UUID
+	OrgID         string
+	LinearID      uuid.UUID
+	ProjectID     uuid.UUID
+	SlackID       uuid.UUID
+	GatewayID     uuid.UUID
+	CodeGatewayID uuid.UUID
 }
 
 // Remote-backed servers must carry a Speakeasy-as-AS issuer for their lifetime
@@ -1681,6 +1762,7 @@ func (q *Queries) ServersInsertUserSessionIssuers(ctx context.Context, arg Serve
 		arg.ProjectID,
 		arg.SlackID,
 		arg.GatewayID,
+		arg.CodeGatewayID,
 	)
 	return err
 }
