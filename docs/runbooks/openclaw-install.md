@@ -36,23 +36,31 @@ customer whose models all route through the Claude CLI.
    (**Plugins → Observability → OpenClaw**). This mints a hooks API key and
    bakes it into the package's `speakeasy.json`. Requires `OrgAdmin`.
 
-2. Install it. `openclaw plugins install` accepts an archive path directly, so
-   the download works as-is:
+2. Check the installed command's flags first:
 
    ```sh
-   openclaw plugins install ./<org>-observability-openclaw.zip
+   openclaw plugins install --help
    ```
 
-   Or extract first and point at the directory:
+   OpenClaw 2026.8.1 and later require `--force` to confirm a local source and
+   `--accept-capabilities` to accept the plugin's declared capabilities.
+   Older releases differ, including backports: omit each flag that is absent
+   from your command's help. Do not infer support from the version alone.
+   OpenClaw's own [compatibility helper](https://github.com/openclaw/openclaw/blob/v2026.10.6/scripts/e2e/lib/package-compat.mjs)
+   also probes help for capability-consent support.
+
+   Install the ZIP directly; no extraction tool is needed:
 
    ```sh
-   unzip <org>-observability-openclaw.zip
-   openclaw plugins install ./<org>-observability-openclaw
+   openclaw plugins install --force --accept-capabilities './<org>-observability-openclaw.zip'
    ```
 
-   Add `--force` to replace an existing install — without it the command
-   refuses rather than upgrading. This copies the package to
-   `<profile>/extensions/speakeasy-observability`.
+   For a release whose help lists neither flag, use
+   `openclaw plugins install './<org>-observability-openclaw.zip'`.
+   A directory path works too, with the same supported flags. `--force` also
+   replaces an existing installation. The package is copied to
+   `<profile>/extensions/speakeasy-observability`. Check the actual download
+   filename: browsers may append a suffix.
 
 3. Enable conversation-scope hooks in the OpenClaw config:
 
@@ -80,7 +88,11 @@ customer whose models all route through the Claude CLI.
    and `before_agent_finalize` among them), but the plugin does not subscribe
    those and never reports them.
 
-4. Restart the Gateway. Plugin changes are not hot-loaded.
+4. Follow the install command’s restart instructions. Restart the Gateway
+   after the current turn if requested, so the agent can finish reporting the
+   installation result. On 2026.10.6, changing conversation access reports
+   that it applies without a restart; a fresh install with no running Gateway
+   is saved for the next start.
 
 5. Verify — see below.
 
@@ -98,10 +110,12 @@ environment instead of the key baked into the download.
    above. It is the same artifact; the baked key is simply overridden at run
    time by the variables below.
 
-2. Install it into the image:
+2. Check `openclaw plugins install --help` inside the image, then install it
+   with only the flags that command lists, as in the laptop instructions.
+   On 2026.8.1 and later:
 
    ```sh
-   openclaw plugins install ./<org>-observability-openclaw.zip
+   openclaw plugins install --force --accept-capabilities './<org>-observability-openclaw.zip'
    ```
 
 3. Optionally preinstall the `speakeasy-hooks` binary. The plugin's bootstrap
@@ -154,7 +168,9 @@ Per-user attribution on shared gateways is tracked separately in DNO-971.
 4. If **no session appears at all**, check in order:
    - `openclaw plugins doctor` — reports plugin load issues directly, and is
      the fastest way to tell "failed to load" from "loaded but not reporting".
-   - Gateway restarted after install?
+   - `openclaw plugins inspect speakeasy-observability` shows the plugin?
+     Follow the install command’s restart instructions. On 2026.10.6,
+     changing conversation access can apply without a restart.
    - `openclaw plugins list` shows `speakeasy-observability` enabled?
    - Is the model on the Claude CLI harness? (see the coverage table above)
    - Gateway logs for `speakeasy-observability` errors.
@@ -205,6 +221,14 @@ supported range is whatever we have actually qualified.
 Note the drift: the fixtures our decoder is tested against were captured from
 2026.6.34, and nothing in the repo records that. Treat the fixture corpus as
 version-stamped evidence, not as a permanent contract.
+
+For 2026.10.6, the generated ZIP was checked in an isolated container: both
+install flags are accepted, installation succeeds, and `plugins inspect`
+reports the plugin enabled with conversation access. This is an **install-only
+check**, not full hook-payload or end-to-end capture qualification. The latter
+remains required by the procedure below. A local archive also retains a
+provenance warning; accepting its capabilities does not make it a verified
+ClawHub package.
 
 ### Qualification procedure (manual)
 
