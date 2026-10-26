@@ -178,9 +178,14 @@ func TestAuditLogEntriesListedSchema(t *testing.T) {
 		require.True(t, tool.Annotations.ReadOnly)
 		inputs, ok := tool.InputSchema["properties"].(map[string]any)
 		require.True(t, ok)
-		require.Len(t, inputs, 2)
-		require.Contains(t, inputs, "organization_id")
-		require.Contains(t, inputs, "cursor")
+		require.Len(t, inputs, 10)
+		for _, name := range []string{"organization_id", "cursor", "project_id", "actor_id", "action", "subject_type", "subject_id", "acting_surface", "from", "to"} {
+			require.Contains(t, inputs, name)
+			field, ok := inputs[name].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "string", field["type"])
+		}
+		require.Equal(t, []any{"organization_id"}, tool.InputSchema["required"])
 		properties, ok := tool.OutputSchema["properties"].(map[string]any)
 		require.True(t, ok)
 		require.Len(t, properties, 3)

@@ -106,6 +106,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	projectReader, _ := reader.(ProjectReader)
 	configurationReader, _ := reader.(ConfigurationReader)
 	activityReader, _ := reader.(ActivityReader)
+	filteredActivityReader, _ := reader.(FilteredActivityReader)
 	usageReader, _ := reader.(UsageReader)
 	coverageReader, _ := reader.(CoverageReader)
 	issuerReader, _ := reader.(IssuerReader)
@@ -125,13 +126,13 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 		promotions = provider.CatalogPromotionService()
 	}
 	runtime := &Runtime{catalogPromotions: promotions, authenticator: authenticator, server: server, resourceURL: resourceURL}
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, runtime)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, reader != nil && filteredActivityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, runtime)
 	registerOrganizationTools(server, reader)
 	registerUserTools(server, userReader)
 	registerProjectTools(server, reader, projectReader)
 	registerConfigurationTools(server, reader, configurationReader)
 	registerActivityTools(server, reader, activityReader)
-	registerAuditLogTools(server, reader, activityReader)
+	registerAuditLogTools(server, reader, filteredActivityReader)
 	registerUsageTools(server, reader, usageReader)
 	registerCoverageTools(server, reader, coverageReader)
 	registerIssuerTools(server, issuerReader)
