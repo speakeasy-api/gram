@@ -486,6 +486,16 @@ func TestDescribeMcpServerHealth_CanonicalWrapperOwnsToolsetSlug(t *testing.T) {
 	require.Nil(t, got.Correlation.ToolsetSlug, "another server over the toolset must not claim its legacy calls")
 }
 
+// A toolset without a hosted MCP server is not a server.
+func TestDescribeMcpServerHealth_ToolsetWithoutServerNotFound(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "unhosted", false)
+	_, err := f.describe(t, toolsetID, 30)
+	requireHealthCode(t, err, oops.CodeNotFound)
+}
+
 // A canonical wrapper without an issuer reports the authentication its toolset relies on.
 func TestDescribeMcpServerHealth_CanonicalWrapperLegacyModes(t *testing.T) {
 	t.Parallel()

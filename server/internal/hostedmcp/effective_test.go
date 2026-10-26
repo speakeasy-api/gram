@@ -16,7 +16,8 @@ func TestServerHosting(t *testing.T) {
 
 	toolsetID := uuid.New()
 	issuer := uuid.NullUUID{UUID: uuid.New(), Valid: true}
-	toolset := toolsetsrepo.Toolset{ID: toolsetID}
+	// Stale columns that the derivation must ignore.
+	toolset := toolsetsrepo.Toolset{ID: toolsetID, McpEnabled: true, McpIsPublic: true, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	canonical := func(vis string) *mcpserversrepo.McpServer {
 		return &mcpserversrepo.McpServer{ID: toolsetID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: vis, UserSessionIssuerID: issuer}

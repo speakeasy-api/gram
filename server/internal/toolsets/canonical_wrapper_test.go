@@ -580,7 +580,7 @@ func TestToolsetViewsFallBackToFrozenAlias(t *testing.T) {
 	alias := authCtx.OrganizationSlug + "-frozen-alias"
 	testenv.SetLegacyAlias(t, ctx, ti.conn, *authCtx.ProjectID, legacy.ID, alias, uuid.NullUUID{})
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: legacy.ID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText(legacy.Name), Slug: conv.ToPGText(alias),
+		ID: legacy.ID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText(legacy.Name),
 		ToolsetID: conv.ToNullUUID(legacy.ID), Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)

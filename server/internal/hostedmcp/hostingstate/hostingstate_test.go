@@ -16,7 +16,7 @@ func TestDerive(t *testing.T) {
 	issuer := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	domain := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	none := Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	alias := Address{Slug: pgtype.Text{String: "alias", Valid: true}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+	alias := Address{Slug: pgtype.Text{String: "alias", Valid: true}, CustomDomainID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	endpoint := Address{Slug: pgtype.Text{String: "endpoint", Valid: true}, CustomDomainID: domain}
 	canonical := func(vis string, hasEndpoint bool) *Row {
 		return &Row{Canonical: true, Visibility: vis, UserSessionIssuerID: issuer, HasEndpoint: hasEndpoint, EndpointSlug: endpoint.Slug.String, EndpointCustomDomainID: domain}

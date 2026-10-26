@@ -14,7 +14,7 @@ toolset_metrics AS (
     COUNT(CASE WHEN w.visibility = 'public' THEN 1 END) as public_mcp_servers,
     COUNT(CASE WHEN w.visibility = 'private' THEN 1 END) as private_mcp_servers,
     -- Matches GetEnabledServerCount.
-    COUNT(CASE WHEN w.visibility <> 'disabled' THEN 1 END)::bigint as total_enabled_servers,
+    COUNT(CASE WHEN w.visibility IN ('public', 'private') THEN 1 END)::bigint as total_enabled_servers,
     COUNT(t.id) as total_toolsets
   FROM projects p
   LEFT JOIN toolsets t ON p.id = t.project_id AND t.deleted = false
