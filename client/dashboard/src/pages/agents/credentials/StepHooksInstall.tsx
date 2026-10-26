@@ -37,6 +37,7 @@ export function StepHooksInstall({
   projectSlug,
   onIssue,
   issuing,
+  deviceSync = true,
 }: {
   secret: string | null;
   /** The project the agent's hook grant is bound to. */
@@ -44,6 +45,7 @@ export function StepHooksInstall({
   /** Issue a key, for a step reached without one to show. */
   onIssue: () => void;
   issuing: boolean;
+  deviceSync?: boolean;
 }): JSX.Element {
   const routes = useRoutes();
   // Absolute, always: the runtime runs outside the browser. An empty build
@@ -130,8 +132,11 @@ export function StepHooksInstall({
         </Text>
       </section>
       <Text muted small className="block">
-        This key sends hook events to {projectSlug} and lets the device agent
-        sync this agent's plugins. It cannot call any MCP server.
+        This key sends hook events to {projectSlug}
+        {deviceSync
+          ? " and lets the device agent sync this agent’s plugins"
+          : ""}
+        . It cannot call any MCP server.
       </Text>
     </div>
   );

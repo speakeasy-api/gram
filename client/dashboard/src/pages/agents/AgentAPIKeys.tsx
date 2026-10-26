@@ -1,3 +1,4 @@
+import { StepHooksInstall } from "./credentials/StepHooksInstall";
 import { AgentGatewayInstall } from "./AgentGatewayInstall";
 import { sessionAccountIdentity } from "@/components/sessions/session-account-identity";
 import { useEffect, useRef, useState } from "react";
@@ -154,6 +155,7 @@ function AgentAPIKeysContent({
   const canIssue = issuanceBlocked === null;
   const [open, setOpen] = useState(creation);
   const [step, setStep] = useState(0);
+  const [hooksOnly, setHooksOnly] = useState(false);
   const [inventory, setInventory] = useState<KeyServer[]>([]);
   const [servers, setServers] = useState<KeyServer[]>([]);
   const [accountsReady, setAccountsReady] = useState(false);
@@ -251,9 +253,11 @@ function AgentAPIKeysContent({
     // ask discovery for an agent that has no project to bound hooks to.
     if (agentProjectId !== undefined) void hookDiscovery.refetch();
   };
-  const agentProjectName =
-    organization.projects?.find((project) => project.id === agentProjectId)
-      ?.name ?? "the agent's project";
+  const agentProject = organization.projects?.find(
+    (project) => project.id === agentProjectId,
+  );
+  const agentProjectName = agentProject?.name ?? "the agent's project";
+  const canIssueHooksOnly = hookGrants.length > 0 && agentProject !== undefined;
   let hasSelections = false;
   try {
     hasSelections =
@@ -316,6 +320,7 @@ function AgentAPIKeysContent({
     setName("");
     setNarrowings({});
     setHookEvents(true);
+    setHooksOnly(false);
     setExpiryDays("90");
     setCustomExpiry("");
     setError(null);
@@ -348,15 +353,15 @@ function AgentAPIKeysContent({
   // to grant) to the ones they can (pick a server, name the key).
   const blockedReason: string | null = !canIssue
     ? "You cannot issue keys for this agent."
-    : !discoveryComplete
+    : !hooksOnly && !discoveryComplete
       ? "Loading what this agent can be delegated…"
       : serversBusy
         ? "Checking the servers you selected…"
-        : !servers.length
+        : !hooksOnly && !servers.length
           ? "Select at least one MCP server."
-          : scopedGrants.length === 0
+          : !hooksOnly && scopedGrants.length === 0
             ? "The agent's policy delegates nothing on these servers."
-            : step >= 1 && !accountsReady
+            : !hooksOnly && step >= 1 && !accountsReady
               ? "Connect an account for every server that needs one."
               : step >= 2 && !hookDiscoverySettled
                 ? "Loading what this agent can be delegated…"
@@ -364,7 +369,10 @@ function AgentAPIKeysContent({
                   ? "Name this key."
                   : step >= 2 && expiryReason
                     ? expiryReason
-                    : step >= 2 && !hasSelections
+                    : step >= 2 &&
+                        (hooksOnly
+                          ? !hookEvents || !canIssueHooksOnly
+                          : !hasSelections)
                       ? "Select at least one permission."
                       : null;
   // A name is required, so the wizard offers one rather than blocking on an
@@ -386,6 +394,7 @@ function AgentAPIKeysContent({
     });
   }, [step, agent.name, takenNames, keys.isPending]);
   const returnToStep = (next: number) => {
+    if (next < 2) setHooksOnly(false);
     setStep(next);
     setNarrowings({});
     setReviewGrants([]);
@@ -399,8 +408,7 @@ function AgentAPIKeysContent({
       !canIssue ||
       create.isPending ||
       issued ||
-      !accountsReady ||
-      !servers.length ||
+      (!hooksOnly && (!accountsReady || !servers.length)) ||
       (!review && step !== 3)
     )
       return;
@@ -413,7 +421,7 @@ function AgentAPIKeysContent({
       );
       return;
     }
-    if (!discoveryComplete || !hookDiscoverySettled) {
+    if ((!hooksOnly && !discoveryComplete) || !hookDiscoverySettled) {
       setError("Load available permissions before continuing.");
       return;
     }
@@ -421,14 +429,14 @@ function AgentAPIKeysContent({
     try {
       // Only candidates discovery actually returned can be requested, so a
       // failed read yields no permissions rather than a hand-written request.
-      const selections = scopedGrants
+      const selections = (hooksOnly ? [] : scopedGrants)
         .map((grant) => ({ grant, key: delegableGrantKey(grant) }))
         .filter(({ key }) => narrowings[key] !== undefined)
         .map(({ grant, key }) => ({ grant, narrowing: narrowings[key] ?? {} }));
       const serverGrants = buildRequestedGrants(selections);
-      // The servers chosen are what this key is for, so hook events ride
-      // along with a server permission rather than standing in for one.
-      if (!serverGrants.length)
+      // Server-backed keys must retain server access; the explicit hooks-only
+      // path requests only the discovered hook grant.
+      if (hooksOnly ? !hookEvents || !canIssueHooksOnly : !serverGrants.length)
         throw new Error("Select at least one permission to continue.");
       requestedGrants = [...serverGrants, ...(hookEvents ? hookGrants : [])];
     } catch (error) {
@@ -763,8 +771,20 @@ function AgentAPIKeysContent({
                   from the agent page before creating another.
                 </Text>
               )}
-              <h2 className="text-lg font-semibold">Connect your agent</h2>
-              <AgentGatewayInstall agentID={agent.id} secret={secret} />
+              {!hooksOnly && (
+                <h2 className="text-lg font-semibold">Connect your agent</h2>
+              )}
+              {hooksOnly && agentProject && secret ? (
+                <StepHooksInstall
+                  secret={secret}
+                  projectSlug={agentProject.slug}
+                  onIssue={() => issue()}
+                  issuing={false}
+                  deviceSync={false}
+                />
+              ) : (
+                <AgentGatewayInstall agentID={agent.id} secret={secret} />
+              )}
               <div className="flex justify-end border-t pt-5">
                 <Button variant="secondary" onClick={close}>
                   Done
@@ -783,7 +803,9 @@ function AgentAPIKeysContent({
                 <>
                   <h2 className="text-lg font-semibold">Choose access</h2>
                   <Text small muted>
-                    Pick what this key may do on the servers you chose.
+                    {hooksOnly
+                      ? "Give this key permission to send hook events."
+                      : "Pick what this key may do on the servers you chose."}
                   </Text>
                   <label className="block space-y-2 text-sm font-medium">
                     Key name
@@ -833,15 +855,17 @@ function AgentAPIKeysContent({
                       your local time zone.
                     </Text>
                   </div>
-                  <DelegableGrantSection
-                    isFetching={delegable.isFetching}
-                    isComplete={discoveryComplete}
-                    grants={scopedGrants}
-                    narrowings={narrowings}
-                    onChangeNarrowings={setNarrowings}
-                    disabled={create.isPending}
-                    onRetry={() => void delegable.refetch()}
-                  />
+                  {!hooksOnly && (
+                    <DelegableGrantSection
+                      isFetching={delegable.isFetching}
+                      isComplete={discoveryComplete}
+                      grants={scopedGrants}
+                      narrowings={narrowings}
+                      onChangeNarrowings={setNarrowings}
+                      disabled={create.isPending}
+                      onRetry={() => void delegable.refetch()}
+                    />
+                  )}
                   <HookEventsSection
                     offered={hookGrants.length > 0}
                     failed={hookDiscovery.isError && !hookDiscovery.isFetching}
@@ -891,6 +915,22 @@ function AgentAPIKeysContent({
                 </Button>
               </div>
               <div className="flex items-center gap-3">
+                {step === 0 && canIssueHooksOnly && (
+                  <Button
+                    variant="secondary"
+                    disabled={create.isPending || serversBusy}
+                    onClick={() => {
+                      setError(null);
+                      setHooksOnly(true);
+                      setServers([]);
+                      setNarrowings({});
+                      setHookEvents(true);
+                      setStep(2);
+                    }}
+                  >
+                    Continue without servers
+                  </Button>
+                )}
                 {/* A disabled primary with no stated reason is the wizard's
                     commonest dead end, so the gate says what it is waiting
                     for rather than leaving the button silently inert. */}

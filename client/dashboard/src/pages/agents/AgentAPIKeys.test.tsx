@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router";
 import { queryKeyRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { queryKeyRemoteSessions } from "@gram/client/react-query/remoteSessions.js";
 import { queryKeyRemoteSessionsListBindings } from "@gram/client/react-query/remoteSessionsListBindings.js";
@@ -49,6 +50,9 @@ vi.mock("./agent-key-server-grants", async (importOriginal) => {
       mocks.serverScoping ? actual.narrowGrantsToServers(...args) : args[0],
   };
 });
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({ plugins: { href: () => "/plugins" } }),
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.org, projects: mocks.projects }),
   useSession: () => ({ user: { id: mocks.user } }),
@@ -227,10 +231,12 @@ function setup(current = agent) {
   const view = (value: ManagedAgent) => (
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <KeyPage
-          key={`${mocks.org}:${mocks.user}:${value.id}:${value.permissions.authorize}`}
-          agent={value}
-        />
+        <MemoryRouter>
+          <KeyPage
+            key={`${mocks.org}:${mocks.user}:${value.id}:${value.permissions.authorize}`}
+            agent={value}
+          />
+        </MemoryRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );
@@ -1032,6 +1038,34 @@ describe("Hook events on a key", () => {
         request.toolsetIds ? Promise.resolve([creationGrant]) : unscoped(),
     );
   }
+
+  it("replaces a hooks-only key without selecting an MCP server", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([hooksIngestGrant]);
+    setup(projectAgent);
+    fireEvent.click(await screen.findByRole("button", { name: "Issue a key" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue without servers" }),
+    );
+    fireEvent.change(screen.getByLabelText("Key name"), {
+      target: { value: "Replacement hooks key" },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Review key" })).toHaveProperty(
+        "disabled",
+        false,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    const environment = await screen.findByLabelText("Hooks environment");
+    await waitFor(() =>
+      expect(environment.textContent).toContain("SPEAKEASY_AI_HOOKS_API_KEY"),
+    );
+    expect(
+      mocks.create.mock.calls[0]?.[0].request.createKeyForm.requestedGrants,
+    ).toEqual([hooksIngestGrant]);
+    expect(screen.queryByText(/lets the device agent sync/)).toBeNull();
+  });
 
   it("offers hook events selected by default, reviews them and requests them", async () => {
     discover(async () => [creationGrant, hooksIngestGrant]);

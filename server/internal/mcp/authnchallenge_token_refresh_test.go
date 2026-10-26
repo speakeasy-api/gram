@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +14,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 
 	"github.com/go-chi/chi/v5"
 	redisCache "github.com/go-redis/cache/v9"

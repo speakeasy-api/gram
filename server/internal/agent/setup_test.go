@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -87,6 +88,8 @@ type testInstance struct {
 	blobs assets.BlobStore
 	// deviceAgentTokens mints the device-agent tokens the service accepts.
 	deviceAgentTokens *deviceagenttoken.Issuer
+	// redis backs rate limiters a test attaches to the service.
+	redis *redis.Client
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -147,6 +150,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		features:          features,
 		blobs:             blobs,
 		deviceAgentTokens: deviceAgentTokens,
+		redis:             redisClient,
 	}
 }
 

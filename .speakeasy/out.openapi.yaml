@@ -7285,6 +7285,97 @@ paths:
       x-speakeasy-name-override: getConfiguration
       x-speakeasy-react-hook:
         name: DeviceAgentConfiguration
+  /rpc/agent.getMyConnections:
+    get:
+      description: Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.
+      operationId: getAgentMyConnections
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+          example: dev@acme.corp
+          in: header
+          name: Gram-User-Email
+          schema:
+            description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+            example: dev@acme.corp
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMyConnectionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getMyConnections agent
+      tags:
+        - agent
+      x-speakeasy-name-override: getMyConnections
+      x-speakeasy-react-hook:
+        name: AgentMyConnections
   /rpc/agent.getPlugins:
     get:
       description: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
@@ -8405,7 +8496,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AgentPolicyGrantIDForm'
+              $ref: '#/components/schemas/DeleteAgentPolicyGrantForm'
         required: true
       responses:
         "204":
@@ -56608,6 +56699,113 @@ paths:
       x-speakeasy-react-hook:
         name: RiskCreatePolicyBypassRequest
         type: mutation
+  /rpc/risk.decideApproval:
+    post:
+      description: Approve or deny a pending tool approval request. Only a listed approver may decide, and never the person who made the call. An approval releases one retry of the exact call.
+      operationId: decideRiskPolicyApproval
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskPolicyApprovalDecisionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskPolicyApproval'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: decideRiskPolicyApproval risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.approvals
+      x-speakeasy-name-override: decide
+      x-speakeasy-react-hook:
+        name: RiskDecideApproval
+        type: mutation
   /rpc/risk.declinePolicyChallenge:
     post:
       description: 'Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.'
@@ -57217,6 +57415,115 @@ paths:
       x-speakeasy-name-override: analysisStatus
       x-speakeasy-react-hook:
         name: RiskAnalysisStatus
+  /rpc/risk.getApproval:
+    get:
+      description: Get one tool approval request, including a preview of the call's arguments.
+      operationId: getRiskPolicyApproval
+      parameters:
+        - allowEmptyValue: true
+          description: The approval request ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The approval request ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskPolicyApproval'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getRiskPolicyApproval risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.approvals
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: RiskGetApproval
   /rpc/risk.getBlock:
     get:
       description: Get a tool call block by its risk result ID for the durable block page.
@@ -58097,6 +58404,139 @@ paths:
       x-speakeasy-name-override: userBreakdown
       x-speakeasy-react-hook:
         name: RiskUserBreakdown
+  /rpc/risk.listApprovals:
+    get:
+      description: List tool approval requests held by require_approval policies, newest first. Org admins see every request; others see requests they can approve and their own.
+      operationId: listRiskPolicyApprovals
+      parameters:
+        - allowEmptyValue: true
+          description: Optional status filter. An open request past its window counts as expired.
+          in: query
+          name: status
+          schema:
+            description: Optional status filter. An open request past its window counts as expired.
+            enum:
+              - blocked
+              - pending
+              - approved
+              - denied
+              - consumed
+              - expired
+            type: string
+        - allowEmptyValue: true
+          description: Continue after this approval request ID.
+          in: query
+          name: cursor
+          schema:
+            description: Continue after this approval request ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Maximum number of requests to return.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Maximum number of requests to return.
+            format: int32
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRiskPolicyApprovalsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listRiskPolicyApprovals risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.approvals
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: RiskListApprovals
   /rpc/risk.listBuiltinExclusions:
     get:
       description: List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
@@ -82219,7 +82659,7 @@ paths:
         name: RegisterWorkloadIssuer
   /rpc/workloadIdentities.updateIssuer:
     post:
-      description: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      description: Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
       operationId: updateWorkloadIssuer
       parameters:
         - allowEmptyValue: true
@@ -83872,7 +84312,7 @@ components:
           minLength: 1
         project_scoped:
           type: boolean
-          description: Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+          description: Admit the subject for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
           default: false
         subject:
           type: string
@@ -83943,6 +84383,18 @@ components:
       required:
         - requested
         - effective
+    AgentExpectedPolicy:
+      type: object
+      properties:
+        scope:
+          type: string
+          description: Scope of the grant originally read
+          minLength: 1
+        selector:
+          $ref: '#/components/schemas/AgentPolicySelector'
+      required:
+        - scope
+        - selector
     AgentIDForm:
       type: object
       properties:
@@ -84071,6 +84523,9 @@ components:
           type: string
           description: Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.
           format: uri
+        id:
+          type: string
+          description: Stable identifier of the server, the same in every plugin that contains it. Matches the id getMyConnections reports the server's sign-in state under. Absent from servers predating the field.
         name:
           type: string
           description: Display name of the server within its plugin.
@@ -84121,20 +84576,6 @@ components:
         - scope
         - effect
         - selector
-    AgentPolicyGrantIDForm:
-      type: object
-      properties:
-        agent_id:
-          type: string
-          description: First-class agent identifier
-          format: uuid
-        grant_id:
-          type: string
-          description: Direct policy grant identifier
-          format: uuid
-      required:
-        - grant_id
-        - agent_id
     AgentPolicySelector:
       type: object
       properties:
@@ -84161,7 +84602,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
+          description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -84177,6 +84618,7 @@ components:
             - assistant
             - risk_policy
             - chat
+            - inference
             - agent
             - mcp_auth_client
             - '*'
@@ -84209,6 +84651,34 @@ components:
       required:
         - urn
         - display_name
+    AgentServerConnection:
+      type: object
+      properties:
+        connect_url:
+          type: string
+          description: Page that signs the user in to this server in the browser. Present when state is not_connected or reauthorization_required.
+          format: uri
+        id:
+          type: string
+          description: The server's id, as getPlugins reports it on each plugin server.
+        request_access_url:
+          type: string
+          description: Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.
+          format: uri
+        state:
+          type: string
+          description: '`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server''s sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can''t be determined, for example for a gateway.'
+          enum:
+            - connected
+            - not_connected
+            - reauthorization_required
+            - not_required
+            - setup_required
+            - no_access
+            - unknown
+      required:
+        - id
+        - state
     AgentSession:
       type: object
       properties:
@@ -89109,13 +89579,16 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+          description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
           default: flag
           enum:
             - flag
             - warn
             - block
             - quarantine
+            - require_approval
+        approval_config:
+          $ref: '#/components/schemas/RiskPolicyApprovalConfig'
         approved_email_domains:
           type: array
           items:
@@ -89640,6 +90113,13 @@ components:
           enum:
             - chain
             - interactive
+        authorization_server_mode:
+          type: string
+          description: Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+          default: endpoint
+          enum:
+            - endpoint
+            - shared
         session_duration_hours:
           type: integer
           description: Maximum issued user session lifetime, in hours.
@@ -90152,6 +90632,22 @@ components:
       required:
         - status
         - count
+    DeleteAgentPolicyGrantForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: First-class agent identifier
+          format: uuid
+        expected_policy:
+          $ref: '#/components/schemas/AgentExpectedPolicy'
+        grant_id:
+          type: string
+          description: Direct policy grant identifier
+          format: uuid
+      required:
+        - grant_id
+        - agent_id
     DeleteAiScanTargetRequestBody:
       type: object
       properties:
@@ -93652,6 +94148,16 @@ components:
       description: Result of metrics summary query
       required:
         - metrics
+    GetMyConnectionsResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentServerConnection'
+          description: One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user can neither read nor connect to are omitted; a server the user can read but not connect to is reported as no_access.
+      required:
+        - servers
     GetObservabilityOverviewPayload:
       type: object
       properties:
@@ -97728,6 +98234,19 @@ components:
           description: The list of risk policies.
       required:
         - policies
+    ListRiskPolicyApprovalsResult:
+      type: object
+      properties:
+        approvals:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskPolicyApproval'
+          description: Approval requests, newest first.
+        next_cursor:
+          type: string
+          description: Pass as cursor to fetch the next page. Absent on the last page.
+      required:
+        - approvals
     ListRiskPolicyBypassRequestsResult:
       type: object
       properties:
@@ -97834,6 +98353,7 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - inference:execute
             - log:read
             - agent:read
             - agent:write
@@ -97890,6 +98410,7 @@ components:
               - risk_policy:block
               - chat:read
               - chat:write
+              - inference:execute
               - log:read
               - agent:read
               - agent:write
@@ -99384,6 +99905,11 @@ components:
     McpServer:
       type: object
       properties:
+        builtin_backend:
+          type: string
+          description: A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
+          enum:
+            - approvals
         created_at:
           type: string
           description: When the MCP server was created
@@ -99672,6 +100198,9 @@ components:
     MetaMcpServer:
       type: object
       properties:
+        code_mode_enabled:
+          type: boolean
+          description: Whether this gateway can select Code Mode. True only when the code runtime is available, the organization has Code Mode, and the gateway requires sign-in through a user session issuer.
         created_at:
           type: string
           description: When the meta MCP server was created
@@ -99682,6 +100211,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         id:
           type: string
           description: The ID of the meta MCP server
@@ -100004,6 +100534,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         mcp_server_id:
           type: string
           description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -102688,6 +103219,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        code_mode_enabled:
+          type: boolean
+          description: Whether the organization has the staff-managed gateway Code Mode entitlement
         custom_model_keys_enabled:
           type: boolean
           description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -102766,6 +103300,7 @@ components:
         - network_ingress_enabled
         - signals_intelligence_enabled
         - organization_gateway_disabled
+        - code_mode_enabled
         - device_agent
     Project:
       type: object
@@ -103853,6 +104388,9 @@ components:
     RegisterWorkloadIssuerForm:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
@@ -103874,7 +104412,7 @@ components:
           maxLength: 100
         project_scoped:
           type: boolean
-          description: Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+          description: Register the issuer for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
           default: false
         tags:
           type: array
@@ -104789,6 +105327,7 @@ components:
             - risk_policy:bypass
             - chat:read
             - chat:write
+            - inference:execute
             - log:read
             - agent:read
             - agent:write
@@ -105830,13 +106369,18 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
           default: flag
           enum:
             - flag
             - warn
             - block
             - quarantine
+            - require_approval
+        approval_config:
+          $ref: '#/components/schemas/RiskPolicyApprovalConfig'
+        approvals_server_setup:
+          $ref: '#/components/schemas/RiskPolicyApprovalsServerSetup'
         approved_email_domains:
           type: array
           items:
@@ -105966,6 +106510,169 @@ components:
         - version
         - created_at
         - updated_at
+    RiskPolicyApproval:
+      type: object
+      properties:
+        arguments_preview:
+          type: object
+          description: 'A shortened preview of the call''s arguments: long strings are cut and only the first keys are kept.'
+          additionalProperties: true
+        can_decide:
+          type: boolean
+          description: Whether the caller can decide this request now.
+        chat_id:
+          type: string
+          description: The chat the call belongs to, when known.
+          format: uuid
+        consumed_at:
+          type: string
+          description: When a retry used the approval.
+          format: date-time
+        created_at:
+          type: string
+          description: When the call was first held.
+          format: date-time
+        decided_at:
+          type: string
+          description: When an approver decided.
+          format: date-time
+        decided_by_urn:
+          type: string
+          description: The approver who decided.
+        decided_via:
+          type: string
+          description: Where the decision came from.
+          enum:
+            - slack
+            - dashboard
+            - api
+        decision_note:
+          type: string
+          description: The approver's message for the agent.
+        expires_at:
+          type: string
+          description: When the request stops waiting for a decision, or the approval stops covering a retry.
+          format: date-time
+        granted_scope:
+          type: string
+          description: What the approver granted, once approved.
+        id:
+          type: string
+          description: The approval request ID.
+          format: uuid
+        policy_id:
+          type: string
+          description: The require_approval risk policy that held the call.
+          format: uuid
+        policy_name:
+          type: string
+          description: The policy's name.
+        policy_version:
+          type: integer
+          description: The policy version when the call was held.
+          format: int64
+        reason:
+          type: string
+          description: The agent's reason, once it requested approval.
+        requested_at:
+          type: string
+          description: When the agent requested approval.
+          format: date-time
+        requested_scope:
+          type: string
+          description: What the agent asked to be approved, such as exact_once.
+        requester_urn:
+          type: string
+          description: 'The principal that made the call: agent:<id> or user:<id>.'
+        status:
+          type: string
+          description: The request's status. An open request past its window is expired.
+          enum:
+            - blocked
+            - pending
+            - approved
+            - denied
+            - consumed
+            - expired
+        surface:
+          type: string
+          description: The MCP surface that received the call.
+        tool_name:
+          type: string
+          description: The tool that was called.
+        toolset_id:
+          type: string
+          description: The hosted toolset that served the call, when known.
+          format: uuid
+        updated_at:
+          type: string
+          description: Last update timestamp.
+          format: date-time
+      required:
+        - id
+        - policy_id
+        - policy_name
+        - policy_version
+        - status
+        - requester_urn
+        - surface
+        - tool_name
+        - arguments_preview
+        - can_decide
+        - created_at
+        - updated_at
+    RiskPolicyApprovalConfig:
+      type: object
+      properties:
+        approvers:
+          type: array
+          items:
+            type: string
+          description: 'Principal URNs that may approve held calls: specific users (user:...) or roles (role:...). Everyone is not allowed.'
+          minItems: 1
+      required:
+        - approvers
+    RiskPolicyApprovalDecisionRequestBody:
+      type: object
+      properties:
+        decision:
+          type: string
+          description: The decision.
+          enum:
+            - approve
+            - deny
+        id:
+          type: string
+          description: The approval request ID.
+          format: uuid
+        note:
+          type: string
+          description: Optional message for the agent.
+          maxLength: 500
+      required:
+        - id
+        - decision
+    RiskPolicyApprovalsServerSetup:
+      type: object
+      properties:
+        added_to_default_plugin:
+          type: boolean
+          description: Whether the server joined the project's Default plugin, which republishes so agents that use the plugin get it.
+        mcp_server_id:
+          type: string
+          description: The approvals server Speakeasy created in the project.
+          format: uuid
+        mcp_server_slug:
+          type: string
+          description: The approvals server's slug.
+        plugin_server_name:
+          type: string
+          description: How plugins name the server, and how held calls refer to it.
+      required:
+        - mcp_server_id
+        - mcp_server_slug
+        - plugin_server_name
+        - added_to_default_plugin
     RiskPolicyBypassApprovalRequestBody:
       type: object
       properties:
@@ -106906,6 +107613,7 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - inference:execute
             - log:read
             - agent:read
             - agent:write
@@ -107249,6 +107957,7 @@ components:
             - assistant
             - risk_policy
             - chat
+            - inference
             - agent
             - workload
             - mcp_auth_client
@@ -107291,6 +108000,7 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - inference:execute
             - log:read
             - agent:read
             - agent:write
@@ -107785,7 +108495,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
+          description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -107801,6 +108511,7 @@ components:
             - assistant
             - risk_policy
             - chat
+            - inference
             - agent
             - workload
             - mcp_auth_client
@@ -108581,6 +109292,7 @@ components:
             - network_ingress
             - signals_intelligence
             - organization_gateway_disabled
+            - code_mode
           maxLength: 60
         organization_id:
           type: string
@@ -110469,6 +111181,11 @@ components:
           type: integer
           description: Members observed in the last complete snapshot, including guests and bots.
           format: int64
+        missing_scopes:
+          type: array
+          items:
+            type: string
+          description: Permissions Speakeasy asks for that this install has not granted. Reinstalling the app grants them. Without chat:write, approval requests do not reach approvers in Slack.
         status:
           type: string
           description: Authorization status, independent of directory sync.
@@ -110515,6 +111232,7 @@ components:
         - status
         - generation
         - granted_scopes
+        - missing_scopes
         - updated_at
         - member_count
         - directory_status
@@ -114920,6 +115638,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         id:
           type: string
           description: The ID of the meta MCP server to update
@@ -115379,12 +116098,15 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+          description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
           enum:
             - flag
             - warn
             - block
             - quarantine
+            - require_approval
+        approval_config:
+          $ref: '#/components/schemas/RiskPolicyApprovalConfig'
         approved_email_domains:
           type: array
           items:
@@ -115990,6 +116712,9 @@ components:
     UpdateWorkloadIssuerForm:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Omit to preserve the current setting; false disables this opt-in. Tokens without replay identifiers retain existing exact-token compatibility.
         description:
           type: string
           description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.
@@ -117695,6 +118420,9 @@ components:
     WorkloadIssuer:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule.
@@ -117741,6 +118469,7 @@ components:
         - jwks_uri
         - description
         - allow_wildcard_admission
+        - allow_assertion_reuse
         - tags
         - created_at
         - updated_at

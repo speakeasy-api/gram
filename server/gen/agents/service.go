@@ -99,6 +99,13 @@ type AgentConnectionBlock struct {
 	CreatedAt             string
 }
 
+type AgentExpectedPolicy struct {
+	// Scope of the grant originally read
+	Scope string
+	// Selector of the grant originally read
+	Selector *AgentPolicySelector
+}
+
 type AgentLifecycle string
 
 type AgentOwnerProfile struct {
@@ -155,8 +162,8 @@ type AgentPolicySelector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
-	// scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string
@@ -227,6 +234,9 @@ type DeletePayload struct {
 // deletePolicyGrant method.
 type DeletePolicyGrantPayload struct {
 	SessionToken *string
+	// Optional delete precondition. Returns conflict if the current scope or
+	// selector differs; omission preserves unconditional deletion.
+	ExpectedPolicy *AgentExpectedPolicy
 	// Direct policy grant identifier
 	GrantID string
 	// First-class agent identifier

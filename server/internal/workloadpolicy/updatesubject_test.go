@@ -596,3 +596,25 @@ func TestUpdateSubject_RollsBackWhenTheAuditEntryFails(t *testing.T) {
 	require.Equal(t, original, onlyAdmission(t, policy))
 	require.Equal(t, firstAgent, resolvedAgent(t, ctx, ti, original))
 }
+
+func TestUpdateSubject_LegacyAPIKeyRetainsAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	registerAnthropic(t, ctx, ti, false)
+	first := newAgent(t, ctx, ti, "first-workload")
+	second := newAgent(t, ctx, ti, "second-workload")
+	original := admitLabelled(t, ctx, ti, first)
+	writer := withScopes(t, ctx, ti, authz.ScopeWorkloadRead, authz.ScopeWorkloadWrite)
+	payload := updateSubjectPayload(original.ID)
+	payload.AgentID = new(second.String())
+	_, err := ti.service.UpdateSubject(asAPIKey(t, writer), payload)
+	require.NoError(t, err)
+	require.Equal(t, second, resolvedAgent(t, ctx, ti, original))
+
+	// Editing labels does not delegate the agent to a new workload.
+	payload.AgentID = nil
+	payload.Name = new("Updated label")
+	policy, err := ti.service.UpdateSubject(asAPIKey(t, writer), payload)
+	require.NoError(t, err)
+	require.Equal(t, second.String(), onlyAdmission(t, policy).AgentID)
+}

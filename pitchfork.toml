@@ -23,6 +23,7 @@ daemons = [
   "assistant-runtime",
   "assistant-relay",
   "tunnel-gateway",
+  "code-runtime",
 ]
 
 [groups.default]
@@ -134,6 +135,12 @@ ready_output = "Assistant relay ready:"
 [daemons.tunnel-gateway]
 run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
+
+# Started by start only when the local code provider is configured.
+[daemons.code-runtime]
+run = "exec mise run start:code-runtime"
+ready_output = "gram-code-runner protocol 1 listening on"
+retry = 0
 
 # Not a service: a cron that checks, every five minutes, whether this
 # worktree's stack has gone unused, and pauses it if so (see

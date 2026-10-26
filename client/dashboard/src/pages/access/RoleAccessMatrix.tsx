@@ -1228,6 +1228,7 @@ function PlatformMatrix({
                 <AppliesTo
                   grants={grants}
                   defs={[scope]}
+                  permissionLabel={copy.label}
                   resourceType={area.resourceType}
                   projects={projects}
                   onEditRule={onEditRule}
@@ -1248,6 +1249,7 @@ function PlatformMatrix({
  * own remove button, since the Blocked column only blocks everywhere.
  */
 function AppliesTo({
+  permissionLabel,
   grants,
   defs,
   resourceType,
@@ -1255,6 +1257,7 @@ function AppliesTo({
   onEditRule,
   onRemoveRule,
 }: {
+  permissionLabel?: string;
   grants: Grants;
   defs: (ScopeDefinition | undefined)[];
   resourceType: ScopeDefinition["resourceType"];
@@ -1270,7 +1273,7 @@ function AppliesTo({
       scope: def.slug as Scope,
       index,
       blocked: rule.effect === "deny",
-      level: position === 0 ? "View" : "Manage",
+      level: permissionLabel ?? (position === 0 ? "View" : "Manage"),
       label: computeRuleLabel(rule.selectors, type, projects),
       everywhere: rule.selectors === null,
     }));

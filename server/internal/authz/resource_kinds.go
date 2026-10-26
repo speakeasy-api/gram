@@ -10,6 +10,7 @@ const (
 	ResourceKindAssistant   = "assistant"
 	ResourceKindRiskPolicy  = "risk_policy"
 	ResourceKindChat        = "chat"
+	ResourceKindInference   = "inference"
 	ResourceKindAgent       = "agent"
 	// ResourceKindWorkload scopes managing an organization's workload identity
 	// trust policy: its issuers, its admitted subjects, and which agent each

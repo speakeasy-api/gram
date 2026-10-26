@@ -5,14 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
