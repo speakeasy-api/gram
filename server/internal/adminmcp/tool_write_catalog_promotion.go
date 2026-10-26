@@ -38,8 +38,8 @@ type PrepareCatalogPromotionInput struct {
 	Public catalogpromotion.PublicMetadata `json:"public" jsonschema:"Independently reviewed public metadata; never copy customer endpoints, credentials, names or configuration"`
 	// PublicMetadataConfirmed attests that these fields can be publicly distributed.
 	PublicMetadataConfirmed bool `json:"public_metadata_confirmed" jsonschema:"Confirm every public field is suitable for the public catalogue and setup docs"`
-	// OverrideEligibility explicitly accepts health evidence that does not meet the criteria.
-	OverrideEligibility bool `json:"override_eligibility,omitempty" jsonschema:"Explicit staff decision to promote despite insufficient, failed, or unavailable health evidence; never bypasses source safety checks"`
+	// OverrideEligibility permits promotion if health evidence does not meet the criteria.
+	OverrideEligibility bool `json:"override_eligibility,omitempty" jsonschema:"Explicit staff permission to promote if health evidence is insufficient, failed, or unavailable; never bypasses source safety checks"`
 	// RetryKey deduplicates preparation of this exact change.
 	RetryKey string `json:"retry_key" jsonschema:"Unique retry key for this exact change, at most 128 characters"`
 }
@@ -100,14 +100,14 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
-	validated, err := w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public, request.OverrideEligibility)
+	_, err = w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public, request.OverrideEligibility)
 	if err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
-	request.OverrideEligibility = request.OverrideEligibility && !validated.Eligible
+	// Approval binds the staff permission, not changing health evidence, so identical retries retain the same digest.
 	args, err := json.Marshal(request)
 	if err != nil {
 		return ProposalOutput{}, fmt.Errorf("encode promotion proposal: %w", err)
@@ -161,13 +161,13 @@ func (w *catalogPromotionWriter) view(proposal Proposal) (proposalView, error) {
 	}
 	override := "No"
 	if request.OverrideEligibility {
-		override = "Yes — promote anyway despite insufficient, failed, or unavailable health evidence"
+		override = "Yes — allow promotion if health evidence does not meet the criteria"
 	}
 	return proposalView{
 		Summary:        "Publish reviewed remote MCP server to the catalogue",
 		PlatformGlobal: false, OrganizationID: request.Target.OrganizationID, OrganizationName: "", OrganizationSlug: "",
 		Changes: []proposalViewChange{
-			{Setting: "Override health eligibility", Before: "", After: override},
+			{Setting: "Allow health eligibility override", Before: "", After: override},
 			{Setting: "Source project", Before: "", After: request.Target.ProjectID.String()},
 			{Setting: "Source server", Before: "", After: request.Target.MCPServerID.String()},
 			{Setting: "Public catalogue name", Before: "", After: request.Public.Name},
@@ -215,7 +215,7 @@ func (w *catalogPromotionWriter) registerPrepare(server *mcp.Server) {
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 		Name:        "prepare_registry_promotion", Title: "Prepare Catalogue Promotion",
-		Description: "Prepare publication of a remote MCP source using exact organization, project, server and current source and curation revisions. Supply independently reviewed public metadata only. Set override_eligibility only for an explicit staff decision to promote despite insufficient, failed, or unavailable health evidence; source safety checks still apply. Creates a stored preview for same-staff browser approval; execute_admin_proposal publishes and queues setup docs. Requires admin:write. Does not publish during preparation.",
+		Description: "Prepare publication of a remote MCP source using exact organization, project, server and current source and curation revisions. Supply independently reviewed public metadata only. Set override_eligibility only for explicit staff permission to promote if health evidence is insufficient, failed, or unavailable; source safety checks still apply. Creates a stored preview for same-staff browser approval; execute_admin_proposal publishes and queues setup docs. Requires admin:write. Does not publish during preparation.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareCatalogPromotionInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err

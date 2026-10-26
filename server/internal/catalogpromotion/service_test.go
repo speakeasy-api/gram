@@ -577,3 +577,52 @@ func TestCandidateOverrideCapability(t *testing.T) {
 		})
 	}
 }
+
+func TestCandidateDetailRefreshRevokesOverrideForChangedSource(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"disabled", "header"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			f.service.features = fakePromotionFeatures{enabled: false}
+			before, err := f.service.GetCandidate(t.Context(), f.target)
+			require.NoError(t, err)
+			require.True(t, before.CanOverrideEligibility())
+			q := repo.New(f.db)
+			if kind == "disabled" {
+				require.NoError(t, q.ChangePromotionSourceFixture(t.Context(), repo.ChangePromotionSourceFixtureParams{ProjectID: f.target.ProjectID, ID: f.target.MCPServerID, Visibility: "disabled"}))
+			} else {
+				_, err = remoterepo.New(f.db).CreateServerHeader(t.Context(), remoterepo.CreateServerHeaderParams{ProjectID: f.target.ProjectID, RemoteMcpServerID: uuid.MustParse(before.RemoteMCPServerID), Name: "X-API-Key", IsRequired: true, IsSecret: true, Value: conv.ToPGText("synthetic")})
+				require.NoError(t, err)
+			}
+			f.service.now = func() time.Time { return f.health.now.Add(time.Second) }
+			refreshed, err := f.service.GetCandidate(t.Context(), f.target)
+			require.NoError(t, err)
+			require.False(t, refreshed.CanOverrideEligibility())
+			require.False(t, refreshed.Eligible)
+			require.NotEqual(t, before.SourceRevision, refreshed.SourceRevision)
+			if kind == "disabled" {
+				require.Equal(t, "disabled", refreshed.Reason)
+			} else {
+				require.Equal(t, "unsupported_configuration", refreshed.Reason)
+			}
+		})
+	}
+}
+
+func TestPromotionUnusedHealthOverrideAudit(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	f.request.OverrideEligibility = true
+	_, err := f.promote(t)
+	require.NoError(t, err)
+	event, err := audittest.LatestAuditLogByAction(t.Context(), f.db, audit.ActionMcpServerPromoteCatalogue)
+	require.NoError(t, err)
+	var metadata struct {
+		EligibilityOverridden bool   `json:"eligibility_overridden"`
+		EligibilityReason     string `json:"eligibility_reason"`
+	}
+	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
+	require.False(t, metadata.EligibilityOverridden)
+	require.Equal(t, "eligible", metadata.EligibilityReason)
+}
