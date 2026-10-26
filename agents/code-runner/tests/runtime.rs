@@ -673,8 +673,9 @@ async fn a_failed_run_still_delivers_every_issued_callback() {
     )
     .await
     .unwrap();
-    // Read nothing until the run has failed behind the stalled writer.
-    tokio::time::timeout(Duration::from_secs(5), async {
+    // Read nothing until the run has failed behind the stalled writer. This
+    // wait also covers admission and checkout, so it outlasts the wall time.
+    tokio::time::timeout(Duration::from_secs(10), async {
         while state.ended_executions() == 0 {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
