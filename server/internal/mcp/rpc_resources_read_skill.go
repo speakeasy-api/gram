@@ -70,11 +70,15 @@ func handleSkillResourceRead(
 		)
 	}
 	metrics.RecordSkillRead(ctx, mcpmetrics.SurfaceHosting, mcpmetrics.SkillOriginDistribution)
-	logSkillRead(ctx, logger, telemLogger, clientInfoStore, payload, *entry, now)
 
 	// Whether the URI resolves at all depends on the caller's organization
 	// membership, so the content is private to the caller.
-	return marshalSkillRead(ctx, logger, req.ID, *entry, serverInfoHostedToolset)
+	bs, err := marshalSkillRead(ctx, logger, req.ID, *entry, serverInfoHostedToolset)
+	if err != nil {
+		return nil, err
+	}
+	logSkillRead(ctx, logger, telemLogger, clientInfoStore, payload, *entry, len(bs), now)
+	return bs, nil
 }
 
 // skillToolName is the tool name a skill activation is logged under. The
@@ -95,11 +99,9 @@ func logSkillRead(
 	clientInfoStore sessionClientInfoStore,
 	payload *mcpInputs,
 	entry mcpskills.Entry,
+	responseBytes int,
 	now time.Time,
 ) {
-	if telemLogger == nil {
-		return
-	}
 
 	// Only the name is recorded as the argument: the content is not tool IO
 	// the caller sent, and the scrub keeps exactly this shape for Skill rows.
@@ -120,7 +122,7 @@ func logSkillRead(
 	logAttrs[attr.McpSkillVersionIDKey] = entry.VersionID.String()
 	logAttrs[attr.McpSkillDigestKey] = entry.Digest()
 	logAttrs.RecordStatusCode(http.StatusOK)
-	logAttrs.RecordResponseBody(int64(entry.Size()))
+	logAttrs.RecordResponseBody(int64(responseBytes))
 	logAttrs.RecordTraceContext(ctx)
 	logAttrs.RecordAuthenticatedActor(ctx)
 	if payload.chatID != "" {

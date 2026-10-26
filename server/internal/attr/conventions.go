@@ -3204,6 +3204,17 @@ func SlogMcpSkillPinConflictCount(v int) slog.Attr {
 	return slog.Int(string(McpSkillPinConflictCountKey), v)
 }
 
+func McpSkillID(v string) attribute.KeyValue { return McpSkillIDKey.String(v) }
+func SlogMcpSkillID(v string) slog.Attr      { return slog.String(string(McpSkillIDKey), v) }
+
+func McpSkillVersionID(v string) attribute.KeyValue { return McpSkillVersionIDKey.String(v) }
+func SlogMcpSkillVersionID(v string) slog.Attr {
+	return slog.String(string(McpSkillVersionIDKey), v)
+}
+
+func McpSkillDigest(v string) attribute.KeyValue { return McpSkillDigestKey.String(v) }
+func SlogMcpSkillDigest(v string) slog.Attr      { return slog.String(string(McpSkillDigestKey), v) }
+
 func McpSkillTargetKind[V ~string](v V) attribute.KeyValue {
 	return McpSkillTargetKindKey.String(string(v))
 }

@@ -827,6 +827,7 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 				`,"gram.mcp.skill.digest":"sha256:` + hex.EncodeToString(digest[:]) + `"` +
 				`,"gram.toolset.slug":"acme-support-tools"` +
 				`,"gram.mcp_server.id":"` + s.det("mcpserver-support").String() + `"` +
+				`,"gram.mcp_endpoint.id":"` + s.det("endpoint-hosted-acme-support-tools").String() + `"` +
 				`,"http.response.status_code":200` +
 				`,"http.response.body":` + strconv.Itoa(len(content)) +
 				`,"gram.mcp.client.name":"` + chClientNames[cidx-1] + `"` +
