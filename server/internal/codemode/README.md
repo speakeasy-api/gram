@@ -361,6 +361,13 @@ member prefixes and the Python helper workflow. Tools chosen on the consent
 screen limit the underlying tools that search, describe and calls can reach, not
 the native execute tool.
 
+A connection approved with "Gateway default" records the default in effect at
+consent and keeps it until it reconnects, as does an explicit choice, so a
+change to the gateway's default reaches only new connections. Clients cache
+`tools/list` and the gateway advertises no `listChanged`, so a call for a tool
+the connection's mode does not serve, such as `execute` after leaving Code
+Mode, is refused with a message to reconnect and refresh the tool list.
+
 The organization gateway has no stored default: its connections choose Code
 Mode on the consent page, the default stays Progressive, and agent gateways
 never use Code Mode.
