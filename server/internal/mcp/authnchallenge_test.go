@@ -102,7 +102,7 @@ func seedPrivateToolsetWithIssuer(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
-) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient) {
+) (hostedToolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -110,7 +110,7 @@ func seedPrivateToolsetWithIssuer(
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "private-authn-" + uuid.New().String()[:8]
-	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Authn MCP",
@@ -119,7 +119,7 @@ func seedPrivateToolsetWithIssuer(
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, slug, "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, slug, "private", noIssuer())
 
 	issuer, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
@@ -1563,7 +1563,7 @@ func TestHandleRegister_UnknownSlug_ReturnsNotFound(t *testing.T) {
 
 // seedConsentChallenge stores a ready-to-consent AuthnChallengeState and
 // returns its state id and CSRF token.
-func seedConsentChallenge(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, client usersessions_repo.UserSessionClient) (string, string) {
+func seedConsentChallenge(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, client usersessions_repo.UserSessionClient) (string, string) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

@@ -38,39 +38,20 @@ SELECT (
           AND s.toolset_id = $5::uuid
       )
     )
-) AND NOT EXISTS (
-  SELECT 1
-  FROM toolsets t
-  WHERE t.mcp_slug = $4
-    AND t.custom_domain_id IS NOT DISTINCT FROM $2::uuid
-    AND t.deleted IS FALSE
-    AND (
-      $5::uuid IS NULL
-      OR t.id <> $5::uuid
-    )
-    AND (
-      $6::uuid IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM mcp_servers s
-        WHERE s.id = $6::uuid
-          AND s.toolset_id = t.id
-      )
-    )
 )
 `
 
 type CheckUnifiedSlugAvailabilityParams struct {
-	SkipDomainCheck    bool
-	CustomDomainID     uuid.NullUUID
-	OrganizationID     string
-	Slug               string
-	ExcludeToolsetID   uuid.NullUUID
-	ExcludeMcpServerID uuid.NullUUID
+	SkipDomainCheck  bool
+	CustomDomainID   uuid.NullUUID
+	OrganizationID   string
+	Slug             string
+	ExcludeToolsetID uuid.NullUUID
 }
 
-// True when no live mcp_endpoints.slug or toolsets.mcp_slug holds the slug in
-// the namespace (platform when custom_domain_id is NULL, else that domain).
+// True when no live mcp_endpoints.slug holds the slug in the namespace
+// (platform when custom_domain_id is NULL, else that domain). Callers also
+// check the legacy toolset alias (legacyalias.Taken).
 // Not project-scoped, mirroring the partial unique indexes. Owner exclusions:
 // exclude_toolset_id discounts that toolset's row and its wrapper's endpoints;
 // exclude_mcp_server_id discounts the toolset backing that server. Unless
@@ -83,7 +64,6 @@ func (q *Queries) CheckUnifiedSlugAvailability(ctx context.Context, arg CheckUni
 		arg.OrganizationID,
 		arg.Slug,
 		arg.ExcludeToolsetID,
-		arg.ExcludeMcpServerID,
 	)
 	var column_1 pgtype.Bool
 	err := row.Scan(&column_1)

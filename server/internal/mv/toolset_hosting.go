@@ -3,12 +3,14 @@ package mv
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -50,4 +52,24 @@ func deriveToolsetHosting(alias hostingstate.Address, externalOAuthServerID uuid
 		McpIsPublic:         hosting.Public,
 		UserSessionIssuerID: hosting.UserSessionIssuerID,
 	}
+}
+
+// toolsetAliases loads the legacy alias of each canonically hosted toolset without a servable endpoint, the only
+// toolsets whose view reports it; toolsetProjects maps toolset ids to their projects.
+func toolsetAliases(ctx context.Context, db tsr.DBTX, hostingByID map[uuid.UUID]hostingstate.Row, toolsetProjects map[uuid.UUID]uuid.UUID) (map[uuid.UUID]hostingstate.Address, error) {
+	byProject := make(map[uuid.UUID][]uuid.UUID)
+	for id, projectID := range toolsetProjects {
+		if row, ok := hostingByID[id]; ok && row.Canonical && !row.HasEndpoint {
+			byProject[projectID] = append(byProject[projectID], id)
+		}
+	}
+	aliases := make(map[uuid.UUID]hostingstate.Address)
+	for projectID, ids := range byProject {
+		listed, err := legacyalias.List(ctx, db, projectID, ids)
+		if err != nil {
+			return nil, fmt.Errorf("load legacy toolset aliases: %w", err)
+		}
+		maps.Copy(aliases, listed)
+	}
+	return aliases, nil
 }

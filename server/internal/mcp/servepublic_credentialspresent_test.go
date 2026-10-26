@@ -123,7 +123,7 @@ func TestServePublicAuth_PrivateServer_NoToken_LogsNoError(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Auth Log Test MCP",
@@ -132,7 +132,7 @@ func TestServePublicAuth_PrivateServer_NoToken_LogsNoError(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "priv-auth-log-test", "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "priv-auth-log-test", "private", noIssuer())
 
 	// Fixture setup shares the service logger; only the request matters here.
 	logs.reset()
@@ -166,7 +166,7 @@ func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Auth Test MCP",
@@ -175,7 +175,7 @@ func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "priv-auth-test", "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "priv-auth-test", "private", noIssuer())
 
 	unauthCtx := context.Background()
 	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
@@ -203,7 +203,7 @@ func TestServePublicOAuth_ExternalNoSecurityDefs_NoToken_Returns401(t *testing.T
 		IsPublic: true,
 	})
 
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 	_, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unauthorized", "should return unauthorized when no token provided for external OAuth server")
@@ -242,7 +242,7 @@ func TestServePublic_DeniesUnauthenticatedAccessToPrivateMCP(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Create a PRIVATE toolset
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Unauthenticated MCP",
@@ -252,7 +252,7 @@ func TestServePublic_DeniesUnauthenticatedAccessToPrivateMCP(t *testing.T) {
 		// McpIsPublic defaults to false
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "private-unauth-mcp", "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-unauth-mcp", "private", noIssuer())
 
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",
@@ -292,7 +292,7 @@ func TestServePublic_PrivateWithoutOAuth_InvalidAPIKey_Returns401(t *testing.T) 
 
 	// Create private toolset WITHOUT OAuth proxy server
 	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private No-OAuth MCP",
@@ -301,7 +301,7 @@ func TestServePublic_PrivateWithoutOAuth_InvalidAPIKey_Returns401(t *testing.T) 
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
 
 	mcpSlug := toolset.McpSlug.String
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(makeInitializeBody()))
@@ -334,7 +334,7 @@ func TestServePublic_PrivateWithoutOAuth_BearerTokenFails(t *testing.T) {
 
 	// Create private toolset WITHOUT OAuth proxy server
 	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private No-OAuth MCP",
@@ -343,7 +343,7 @@ func TestServePublic_PrivateWithoutOAuth_BearerTokenFails(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
 
 	mcpSlug := toolset.McpSlug.String
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(makeInitializeBody()))

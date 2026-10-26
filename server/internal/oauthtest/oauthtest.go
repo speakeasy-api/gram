@@ -22,7 +22,9 @@ import (
 
 // ExternalOAuthToolsetResult holds the objects created by CreateExternalOAuthToolset.
 type ExternalOAuthToolsetResult struct {
-	Toolset        toolsets_repo.Toolset
+	Toolset toolsets_repo.Toolset
+	// McpSlug is the toolset's legacy /mcp/<slug> alias, which serves it.
+	McpSlug        string
 	ServerMetadata oauth_repo.ExternalOauthServerMetadatum
 }
 
@@ -101,6 +103,7 @@ func CreateExternalOAuthToolset(
 
 	return ExternalOAuthToolsetResult{
 		Toolset:        toolset,
+		McpSlug:        slug,
 		ServerMetadata: serverMetadata,
 	}
 }

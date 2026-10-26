@@ -154,8 +154,9 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: CheckUnifiedSlugAvailability :one
--- True when no live mcp_endpoints.slug or toolsets.mcp_slug holds the slug in
--- the namespace (platform when custom_domain_id is NULL, else that domain).
+-- True when no live mcp_endpoints.slug holds the slug in the namespace
+-- (platform when custom_domain_id is NULL, else that domain). Callers also
+-- check the legacy toolset alias (legacyalias.Taken).
 -- Not project-scoped, mirroring the partial unique indexes. Owner exclusions:
 -- exclude_toolset_id discounts that toolset's row and its wrapper's endpoints;
 -- exclude_mcp_server_id discounts the toolset backing that server. Unless
@@ -184,25 +185,6 @@ SELECT (
         FROM mcp_servers s
         WHERE s.id = e.mcp_server_id
           AND s.toolset_id = sqlc.narg('exclude_toolset_id')::uuid
-      )
-    )
-) AND NOT EXISTS (
-  SELECT 1
-  FROM toolsets t
-  WHERE t.mcp_slug = @slug
-    AND t.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
-    AND t.deleted IS FALSE
-    AND (
-      sqlc.narg('exclude_toolset_id')::uuid IS NULL
-      OR t.id <> sqlc.narg('exclude_toolset_id')::uuid
-    )
-    AND (
-      sqlc.narg('exclude_mcp_server_id')::uuid IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM mcp_servers s
-        WHERE s.id = sqlc.narg('exclude_mcp_server_id')::uuid
-          AND s.toolset_id = t.id
       )
     )
 );

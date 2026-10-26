@@ -6616,50 +6616,6 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 	return err
 }
 
-const setToolsetCustomDomain = `-- name: SetToolsetCustomDomain :exec
-UPDATE toolsets
-SET
-    custom_domain_id = $1
-  , updated_at = clock_timestamp()
-WHERE slug = $2 AND project_id = $3
-`
-
-type SetToolsetCustomDomainParams struct {
-	CustomDomainID uuid.NullUUID
-	Slug           string
-	ProjectID      uuid.UUID
-}
-
-// Points a toolset's legacy alias at a custom domain; the canonical wrapper's endpoints are left as they are.
-func (q *Queries) SetToolsetCustomDomain(ctx context.Context, arg SetToolsetCustomDomainParams) error {
-	_, err := q.db.Exec(ctx, setToolsetCustomDomain, arg.CustomDomainID, arg.Slug, arg.ProjectID)
-	return err
-}
-
-const setToolsetLegacyAliasFixture = `-- name: SetToolsetLegacyAliasFixture :exec
-UPDATE toolsets
-SET mcp_slug = $1::text, custom_domain_id = $2::uuid, updated_at = clock_timestamp()
-WHERE id = $3 AND project_id = $4
-`
-
-type SetToolsetLegacyAliasFixtureParams struct {
-	McpSlug        pgtype.Text
-	CustomDomainID uuid.NullUUID
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-}
-
-// Sets the legacy /mcp/<slug> alias a toolset created before hosted servers owned their endpoints still carries.
-func (q *Queries) SetToolsetLegacyAliasFixture(ctx context.Context, arg SetToolsetLegacyAliasFixtureParams) error {
-	_, err := q.db.Exec(ctx, setToolsetLegacyAliasFixture,
-		arg.McpSlug,
-		arg.CustomDomainID,
-		arg.ID,
-		arg.ProjectID,
-	)
-	return err
-}
-
 const setUserLifecycleFixture = `-- name: SetUserLifecycleFixture :exec
 UPDATE users
 SET deleted_at = $1::timestamptz,

@@ -26,12 +26,6 @@ SELECT *
 FROM toolsets
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
 
--- name: GetToolsetByMCPSlug :one
--- project_id is required to ensure uniqueness since mcp_slug is only unique within a project
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug AND project_id = @project_id AND deleted IS FALSE;
-
 -- name: CreateToolset :one
 INSERT INTO toolsets (
     organization_id
@@ -139,35 +133,6 @@ WHERE key = ANY(@security_keys::TEXT[])
     OR openapiv3_document_id = ANY(@openapiv3_document_ids::UUID[])
   );
 
--- name: GetToolsetByMcpSlug :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND deleted IS FALSE
-ORDER BY (custom_domain_id IS NULL) DESC
-LIMIT 1;
-
--- name: GetToolsetByPlatformMcpSlug :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND custom_domain_id IS NULL
-  AND deleted IS FALSE;
-
--- name: GetToolsetByMcpSlugAndCustomDomain :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND custom_domain_id = @custom_domain_id
-  AND deleted IS FALSE;
-
--- name: GetToolsetByMcpSlugAndProject :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND project_id = @project_id
-  AND deleted IS FALSE;
-
 -- name: GetPromptTemplatesForToolset :many
 WITH ranked_templates AS (
   SELECT
@@ -241,8 +206,6 @@ SELECT
   t.slug,
   t.description,
   t.default_environment_slug,
-  -- The legacy alias, the address of a hosted server without a servable endpoint.
-  t.mcp_slug,
   t.tool_selection_mode,
   t.external_oauth_server_id,
   t.created_at,
@@ -273,15 +236,6 @@ WHERE slug = @slug
   AND deleted IS FALSE
   AND external_oauth_server_id IS NULL
 RETURNING *;
-
--- name: MoveToolsetMCPAlias :exec
--- Moves a legacy toolset's MCP alias to the hosted endpoint that now holds its address.
-UPDATE toolsets
-SET
-    mcp_slug = @mcp_slug
-  , custom_domain_id = @custom_domain_id
-  , updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE AND mcp_slug IS NOT NULL;
 
 -- name: UpdateToolsetToolVariationsGroup :one
 UPDATE toolsets
@@ -400,12 +354,6 @@ WHERE t.project_id = @project_id
 SELECT *
 FROM toolsets
 WHERE id = @id AND project_id = @project_id;
-
--- name: GetToolsetByMcpSlugAndProjectAndCustomDomain :one
-SELECT * FROM toolsets
-WHERE mcp_slug = @mcp_slug AND project_id = @project_id
-  AND organization_id = @organization_id
-  AND custom_domain_id IS NOT DISTINCT FROM @custom_domain_id AND deleted IS FALSE;
 
 -- name: ListCanonicalHostingByToolsetIDs :many
 -- The server row holding each toolset's id: its hosting state when it is the canonical wrapper, its preferred

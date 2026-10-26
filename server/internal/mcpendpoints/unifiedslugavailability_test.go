@@ -19,7 +19,6 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -45,17 +44,12 @@ func seedHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 	return toolset
 }
 
-// bindToolsetCustomDomain moves a fixture toolset's mcp_slug into a custom
-// domain's address namespace.
-func bindToolsetCustomDomain(t *testing.T, ctx context.Context, conn *pgxpool.Pool, toolset toolsetsrepo.Toolset, customDomainID uuid.UUID) {
+// bindToolsetCustomDomain moves a fixture toolset's alias at mcpSlug into a
+// custom domain's address namespace.
+func bindToolsetCustomDomain(t *testing.T, ctx context.Context, conn *pgxpool.Pool, toolset toolsetsrepo.Toolset, mcpSlug string, customDomainID uuid.UUID) {
 	t.Helper()
 
-	err := testrepo.New(conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
-		CustomDomainID: uuid.NullUUID{UUID: customDomainID, Valid: true},
-		Slug:           toolset.Slug,
-		ProjectID:      toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, conn, toolset.ProjectID, toolset.ID, mcpSlug, uuid.NullUUID{UUID: customDomainID, Valid: true})
 }
 
 // seedToolsetBackedMcpServer wraps a toolset in an mcp_servers row, the way
@@ -150,7 +144,7 @@ func TestCheckSlugAvailable_ToolsetCustomDomainSlugBlocksEndpoint(t *testing.T) 
 	domainID := seedCustomDomain(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 	slug := "unified-domain-" + uuid.NewString()[:8]
 	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, domainID)
+	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, slug, domainID)
 
 	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
 		Slug:               slug,
@@ -309,7 +303,7 @@ func TestCheckSlugAvailable_CustomDomainDoesNotCollideWithPlatform(t *testing.T)
 	domainID := seedCustomDomain(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 	slug := "scoped-" + uuid.NewString()[:8]
 	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, domainID)
+	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, slug, domainID)
 
 	// The custom-domain address does not block the same slug on the platform
 	// scope.

@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/identity"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcpRepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -4182,6 +4183,10 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	if err != nil {
 		return nil, nil, fmt.Errorf("load hosted MCP state: %w", err)
 	}
+	aliases, err := legacyalias.List(ctx, db, projectID, toolsetIDs)
+	if err != nil {
+		return nil, nil, err //nolint:wrapcheck // legacyalias names the failing query.
+	}
 
 	// Include soft-deleted servers: tool_source on telemetry rows is the
 	// backend remote/tunneled server id, which outlives the mcp_servers row.
@@ -4202,7 +4207,7 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	for _, toolset := range toolsets {
 		// Traffic can arrive through the frozen alias or any of the canonical server's endpoints.
 		var slugs []string
-		if alias := hostingstate.LegacyAlias(toolset).Slug; alias.Valid && alias.String != "" {
+		if alias := aliases[toolset.ID].Slug; alias.Valid && alias.String != "" {
 			slugs = append(slugs, alias.String)
 		}
 		if row := hostingstate.For(hosting, toolset.ID); row != nil && row.Canonical {
@@ -4313,6 +4318,19 @@ func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	anchoredMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	platformMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	for _, endpoint := range endpoints {
+		if endpoint.Deleted {
+			// A deleted endpoint stops matching once a legacy toolset alias holds its address.
+			taken, err := legacyalias.Taken(ctx, db, legacyalias.TakenCheck{
+				Slug: endpoint.Slug, CustomDomainID: endpoint.CustomDomainID,
+				ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			})
+			if err != nil {
+				return nil, err //nolint:wrapcheck // legacyalias names the failing query.
+			}
+			if taken {
+				continue
+			}
+		}
 		matcher := repo.MetaMCPMatcher{
 			URLSuffix:    "/mcp/" + endpoint.Slug,
 			TargetID:     endpoint.MetaMcpServerID.String(),

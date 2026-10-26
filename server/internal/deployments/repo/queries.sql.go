@@ -1841,7 +1841,9 @@ SELECT
     t.id
   , t.name
   , t.slug
-  , COALESCE(addr.slug, CASE WHEN cw.id IS NOT NULL THEN t.mcp_slug END, '')::text AS mcp_slug
+  , COALESCE(addr.slug, '')::text AS mcp_slug
+  -- A hosted toolset without a servable endpoint takes its legacy alias (legacyalias) as its address.
+  , (cw.id IS NOT NULL)::BOOLEAN AS hosted
   , (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::BOOLEAN AS mcp_enabled
   , (t.external_oauth_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
   , ARRAY(
@@ -1886,6 +1888,7 @@ type ListToolsetsUsingOpenAPIv3SourceRow struct {
 	Name            string
 	Slug            string
 	McpSlug         string
+	Hosted          bool
 	McpEnabled      bool
 	OauthConfigured bool
 	SourceToolUrns  []string
@@ -1905,6 +1908,7 @@ func (q *Queries) ListToolsetsUsingOpenAPIv3Source(ctx context.Context, arg List
 			&i.Name,
 			&i.Slug,
 			&i.McpSlug,
+			&i.Hosted,
 			&i.McpEnabled,
 			&i.OauthConfigured,
 			&i.SourceToolUrns,

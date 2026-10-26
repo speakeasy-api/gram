@@ -153,13 +153,6 @@ func (f hostedAttachmentFixture) updateWrapper(t *testing.T, ms mcpserversrepo.M
 	require.NoError(t, err)
 }
 
-func (f hostedAttachmentFixture) toolset(t *testing.T) toolsetsrepo.Toolset {
-	t.Helper()
-	ts, err := toolsetsrepo.New(f.db).GetToolsetByIDAndProject(t.Context(), toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.hosted.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
-	return ts
-}
-
 func (f hostedAttachmentFixture) wrapper(t *testing.T) mcpserversrepo.McpServer {
 	t.Helper()
 	ms, err := mcpserversrepo.New(f.db).GetMCPServerByIDAndProjectID(t.Context(), mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.hosted.ID, ProjectID: f.projectID})
@@ -358,7 +351,7 @@ func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.ErrorIs(t, err, errAssistantValidation)
 		require.ErrorContains(t, err, "is disabled")
-		require.False(t, f.toolset(t).McpEnabled)
+		require.Equal(t, "disabled", f.wrapper(t).Visibility)
 		require.Equal(t, wrapper.Visibility, f.wrapper(t).Visibility)
 		require.Zero(t, f.counts(t))
 	})
@@ -373,7 +366,7 @@ func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 		_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil, nil,
 			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
-		require.False(t, f.toolset(t).McpEnabled)
+		require.Equal(t, "disabled", f.wrapper(t).Visibility)
 		require.Equal(t, wrapper.Visibility, f.wrapper(t).Visibility)
 		require.EqualValues(t, 1, f.counts(t))
 	})

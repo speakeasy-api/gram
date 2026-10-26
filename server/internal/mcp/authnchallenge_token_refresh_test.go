@@ -80,7 +80,7 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	require.NotEmpty(t, response["refresh_token"])
 
 	otherSlug := "refresh-replay-other-" + uuid.NewString()[:8]
-	otherToolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	otherToolsetRow, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         toolset.OrganizationID,
 		ProjectID:              toolset.ProjectID,
 		Name:                   "Refresh replay alternate endpoint",
@@ -89,7 +89,7 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	otherToolset = hostLegacyToolset(t, ctx, ti, otherToolset, otherSlug, "private", noIssuer())
+	otherToolset := hostLegacyToolset(t, ctx, ti, otherToolsetRow, otherSlug, "private", noIssuer())
 	otherToolset = setToolsetIssuer(t, ctx, ti.conn, otherToolset.ProjectID, otherToolset, issuer.ID)
 
 	otherEndpoint := performRefresh(otherSlug, client.ClientID, refreshToken)
@@ -931,7 +931,7 @@ func seedRefreshReplaySession(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
-) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string) {
+) (hostedToolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string) {
 	t.Helper()
 	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 	return toolset, issuer, client, refreshToken
@@ -942,7 +942,7 @@ func seedRefreshReplaySessionDetails(
 	ctx context.Context,
 	ti *testInstance,
 	refreshExpiresAt time.Time,
-) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string, string) {
+) (hostedToolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string, string) {
 	t.Helper()
 
 	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)

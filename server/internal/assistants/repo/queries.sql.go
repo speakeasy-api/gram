@@ -3154,7 +3154,8 @@ SELECT
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
   ms.visibility::text AS visibility,
-  COALESCE(ep.slug, t.mcp_slug, '')::text AS endpoint_slug,
+  COALESCE(ep.slug, '')::text AS endpoint_slug,
+  (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
   ams.environment_id,
@@ -3204,6 +3205,7 @@ type LoadAssistantMcpServersRow struct {
 	ToolsetSlug            pgtype.Text
 	Visibility             string
 	EndpointSlug           string
+	HostedToolset          bool
 	EndpointDomain         string
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
@@ -3214,8 +3216,8 @@ type LoadAssistantMcpServersRow struct {
 // default environment, and sort first so they win runtime id
 // collisions. The address is the server's own endpoint: platform first, else
 // one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
-// A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias until the
-// toolset slug fallback is removed.
+// A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
+// caller fills in from legacyalias until the toolset slug fallback is removed.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.ProjectID, arg.AssistantIds)
 	if err != nil {
@@ -3232,6 +3234,7 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 			&i.ToolsetSlug,
 			&i.Visibility,
 			&i.EndpointSlug,
+			&i.HostedToolset,
 			&i.EndpointDomain,
 			&i.DefaultEnvironmentSlug,
 			&i.EnvironmentID,
@@ -4528,11 +4531,16 @@ SELECT t.id, t.slug, EXISTS (
     AND w.project_id = t.project_id
     AND w.visibility = 'disabled'
     AND w.deleted IS FALSE
-    AND (
-      t.mcp_slug IS NOT NULL
-      OR EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
-    )
-)::bool AS enables_mcp
+    AND EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
+)::bool AS enables_mcp, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+)::bool AS disabled_wrapper
 FROM toolsets t
 WHERE t.project_id = $1
   AND t.deleted IS FALSE
@@ -4559,13 +4567,15 @@ type ResolveToolsetsForWriteParams struct {
 }
 
 type ResolveToolsetsForWriteRow struct {
-	ID         uuid.UUID
-	Slug       string
-	EnablesMcp bool
+	ID              uuid.UUID
+	Slug            string
+	EnablesMcp      bool
+	DisabledWrapper bool
 }
 
 // Also locks the toolsets behind canonical wrappers named by slug, so server
 // attachments take the toolset lock before the server lock, as deletion does.
+// enables_mcp needs an endpoint; disabled_wrapper lets the caller count the legacy alias instead.
 // Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
 // locks when an MCP server concurrently switches to this toolset backend.
 func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolsetsForWriteParams) ([]ResolveToolsetsForWriteRow, error) {
@@ -4577,7 +4587,12 @@ func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolse
 	var items []ResolveToolsetsForWriteRow
 	for rows.Next() {
 		var i ResolveToolsetsForWriteRow
-		if err := rows.Scan(&i.ID, &i.Slug, &i.EnablesMcp); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.EnablesMcp,
+			&i.DisabledWrapper,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

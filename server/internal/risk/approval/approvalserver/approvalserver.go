@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	endpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -187,17 +188,22 @@ func createEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, a
 			return "", fmt.Errorf("lock approvals endpoint slug: %w", err)
 		}
 		available, err := endpoints.CheckUnifiedSlugAvailability(ctx, endpointsrepo.CheckUnifiedSlugAvailabilityParams{
-			Slug:               slug,
-			CustomDomainID:     noDomain,
-			OrganizationID:     authCtx.ActiveOrganizationID,
-			ExcludeToolsetID:   noDomain,
-			ExcludeMcpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
-			SkipDomainCheck:    false,
+			Slug:             slug,
+			CustomDomainID:   noDomain,
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ExcludeToolsetID: noDomain,
+			SkipDomainCheck:  false,
 		})
 		if err != nil {
 			return "", fmt.Errorf("check approvals endpoint slug: %w", err)
 		}
-		if !available.Bool {
+		aliasTaken, err := legacyalias.Taken(ctx, tx, legacyalias.TakenCheck{
+			Slug: slug, CustomDomainID: noDomain, ExcludeToolsetID: noDomain, ExcludeMcpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+		})
+		if err != nil {
+			return "", fmt.Errorf("check approvals endpoint slug: %w", err)
+		}
+		if !available.Bool || aliasTaken {
 			continue
 		}
 		endpoint, err := endpoints.CreateMCPEndpoint(ctx, endpointsrepo.CreateMCPEndpointParams{
