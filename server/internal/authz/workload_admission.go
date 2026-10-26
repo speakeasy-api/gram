@@ -51,6 +51,13 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 	if err != nil {
 		return ctx, err
 	}
+	return WithWorkloadSessionAdmission(ctx, admission)
+}
+
+// WithWorkloadSessionAdmission installs a freshly verified, application-owned
+// admission, including all three independent policy sets. Callers must never
+// supply cached or client-controlled admission results.
+func WithWorkloadSessionAdmission(ctx context.Context, admission WorkloadSessionAdmission) (context.Context, error) {
 	// An admission naming no agent authorizes nothing. Checked here as well as
 	// in the admitter so a future admitter cannot widen the boundary by
 	// returning a zero value.

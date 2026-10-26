@@ -82659,7 +82659,7 @@ paths:
         name: RegisterWorkloadIssuer
   /rpc/workloadIdentities.updateIssuer:
     post:
-      description: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      description: Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
       operationId: updateWorkloadIssuer
       parameters:
         - allowEmptyValue: true
@@ -104388,6 +104388,9 @@ components:
     RegisterWorkloadIssuerForm:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
@@ -116709,6 +116712,9 @@ components:
     UpdateWorkloadIssuerForm:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Omit to preserve the current setting; false disables this opt-in. Tokens without replay identifiers retain existing exact-token compatibility.
         description:
           type: string
           description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.
@@ -118414,6 +118420,9 @@ components:
     WorkloadIssuer:
       type: object
       properties:
+        allow_assertion_reuse:
+          type: boolean
+          description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule.
@@ -118460,6 +118469,7 @@ components:
         - jwks_uri
         - description
         - allow_wildcard_admission
+        - allow_assertion_reuse
         - tags
         - created_at
         - updated_at

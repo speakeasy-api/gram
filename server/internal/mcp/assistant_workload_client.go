@@ -209,7 +209,7 @@ func (i *registeredAssistantWorkloadIssuer) IssueAssistantWorkloadToken(ctx cont
 	issuance := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: r.IssuerID, projectID: r.ProjectID, organizationID: r.OrganizationID, issuer: issuer, audience: r.Resource}, subject, credential)
 	issuance.Resource = r.Resource
 	grant := workloadGrantIssuance{
-		client: r.client, presented: presentedWorkload{issuerID: identity.IssuerID, subject: identity.Subject, issuerURL: ""},
+		client: r.client, presented: presentedWorkload{issuerID: identity.IssuerID, subject: identity.Subject, issuerURL: "", assertionPolicyChecked: false, allowAssertionReuse: false},
 		credential: credential, projectID: &r.ProjectID, endpoint: r.endpoint, session: issuance,
 		beforeCommit: func(ctx context.Context, tx pgx.Tx, minted *mintedSession) error {
 			// Re-read the exact binding before persistence commits. Live use repeats
