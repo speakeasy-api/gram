@@ -180,7 +180,7 @@ function fill() {
   fireEvent.change(screen.getByLabelText("Agent identity name"), {
     target: { value: "Inference worker" },
   });
-  fireEvent.change(screen.getByLabelText("Workload issuer"), {
+  fireEvent.change(screen.getByLabelText("Token issuer"), {
     target: { value: "issuer_one" },
   });
   fireEvent.change(screen.getByLabelText("Subject"), {
@@ -507,11 +507,9 @@ it.each(["connected", "partial"])(
 it("creates issuer trust separately before provisioning an inference identity", async () => {
   mocks.emptyIssuers = true;
   setup();
-  expect(
-    screen.queryByRole("combobox", { name: "Workload issuer" }),
-  ).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "Token issuer" })).toBeNull();
   fireEvent.click(
-    screen.getByRole("button", { name: "Create new workload issuer" }),
+    screen.getByRole("button", { name: "Create new token issuer" }),
   );
   for (const [label, value] of [
     ["Name", "Workload issuer"],
@@ -520,12 +518,10 @@ it("creates issuer trust separately before provisioning an inference identity", 
   ]) {
     fireEvent.change(screen.getByLabelText(label!), { target: { value } });
   }
-  fireEvent.click(
-    screen.getByRole("button", { name: "Create workload issuer" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Create token issuer" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(
-    (screen.getByLabelText("Workload issuer") as HTMLSelectElement).value,
+    (screen.getByLabelText("Token issuer") as HTMLSelectElement).value,
   ).toBe("issuer_one");
   expect(mocks.register).toHaveBeenCalledWith({
     request: {
@@ -573,7 +569,7 @@ it("offers only organization and current-project trust and scopes project admiss
     screen.queryByRole("option", { name: /Other organization issuer/ }),
   ).toBeNull();
   fill();
-  fireEvent.change(screen.getByLabelText("Workload issuer"), {
+  fireEvent.change(screen.getByLabelText("Token issuer"), {
     target: { value: "issuer_project" },
   });
   fireEvent.click(
@@ -613,7 +609,7 @@ it.each([
     mocks.duplicateProject = existingTier;
     setup();
     fill();
-    fireEvent.change(screen.getByLabelText("Workload issuer"), {
+    fireEvent.change(screen.getByLabelText("Token issuer"), {
       target: { value: selected },
     });
     fireEvent.click(

@@ -254,8 +254,8 @@ function AgentAuthorizers({ agent }: { agent: ManagedAgent }): JSX.Element {
         </IdentityPanelEmpty>
       ) : ranked.length === 0 ? (
         <IdentityPanelEmpty>
-          No one has authorized a session as this agent. A key or a federated
-          platform signs in as the agent alone.
+          No one has authorized a session as this agent. A key or a trusted
+          platform&apos;s token signs in as the agent alone.
         </IdentityPanelEmpty>
       ) : (
         ranked

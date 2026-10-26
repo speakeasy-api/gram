@@ -50,6 +50,17 @@ An agent's grants — its own and the ones it inherits from its roles — are fi
 
 Widening an agent through a role does not raise its ceiling. A request authenticated as an agent still evaluates the intersection of its credential's delegated policy, its agent policy (now including role grants), and its owner's grants.
 
+The dashboard names workload identity in plain terms, while the API, scopes and code keep the original names. Use the product terms in user-facing text:
+
+| Product term      | API and code term                 | One-line explanation                                                                                       |
+| ----------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Platform token    | workload identity                 | The agent signs in with a short-lived token its platform already issues for each run, so no key is minted. |
+| Platform sign-in  | federation, federated access      | Speakeasy trusts a platform's tokens and trades each one for a short-lived session as the agent.           |
+| Job               | workload                          | The thing running on that platform, such as a CI job, a pod or a Claude Tag session.                       |
+| Token issuer      | workload issuer                   | The service that signs the platform's tokens, identified by its issuer URL and signing keys (JWKS).        |
+| Access rule       | admission, subject rule           | Which jobs, by the token's `sub` claim, may sign in, and which agent they act as.                          |
+| Trusted platforms | `workload:read`, `workload:write` | The permission area for managing token issuers, access rules and the agents jobs act as.                   |
+
 Workload sessions use the same three independent boundaries: the session's immutable approved policy, the assigned agent's current policy, and the current owner's effective permissions. Admission reads the assignment, agent, owner membership, and policies in one database snapshot on every request. It does not cache owner permissions between requests. Owner permissions include role and `user:all` grants, exclusions, and direct-grant precedence; they do not become grants held by the workload itself.
 
 This restricts existing workload sessions without changing workload authentication. Removing an owner's permission prevents the next operation from using it. Restoring permission can restore access only within the original session ceiling and the current agent policy. Transfers immediately use the new owner's permissions, not the former owner's. A missing or inactive owner, an unresolved assignment, or an unusable agent fails admission with the ordinary unauthorized response. An eligible owner who lacks a required permission produces a forbidden operation instead.

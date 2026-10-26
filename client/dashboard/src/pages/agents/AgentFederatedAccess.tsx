@@ -58,7 +58,7 @@ export function AgentFederatedAccess({
   return (
     <>
       <IdentityPanel
-        title="Federated access"
+        title="Platform sign-in"
         loading={identities.isPending}
         error={identities.isError}
         onRetry={identities.refetch}
@@ -72,8 +72,8 @@ export function AgentFederatedAccess({
         {mine.length === 0 ? (
           <IdentityPanelEmpty>
             No platform signs in as this agent. A platform that already mints
-            tokens for its workloads can sign in as it, with no key to mint or
-            store.
+            tokens for the jobs it runs can sign in as it, with no key to mint
+            or store.
           </IdentityPanelEmpty>
         ) : (
           mine.map((admission) => (
@@ -85,11 +85,11 @@ export function AgentFederatedAccess({
               // the rule covers instead of printing it.
               detail={enumPresentation(
                 {
-                  wildcard: "Any workload in the connected organization",
-                  exact: "One workload",
+                  wildcard: "Any job in the connected organization",
+                  exact: "One job",
                 },
                 admission.matchKind,
-                "Unknown workload coverage",
+                "Unknown job coverage",
               )}
               // A wildcard rule the platform has not enabled admits nothing.
               // That is indistinguishable from working until a sign-in fails.

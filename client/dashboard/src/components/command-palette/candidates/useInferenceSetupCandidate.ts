@@ -43,10 +43,18 @@ export function useInferenceSetupCandidate({
       candidates.push({
         id: "inference-workload-setup",
         kind: "page",
-        title: "Set up inference workload identity",
+        title: "Set up inference with platform tokens",
         detail:
           "Trust an external JWT issuer and grant project-scoped inference",
-        keywords: ["inference", "workload", "JWT", "OIDC", "federation"],
+        keywords: [
+          "inference",
+          "platform token",
+          "workload identity",
+          "workload",
+          "JWT",
+          "OIDC",
+          "federation",
+        ],
         verbs: ["open"],
         group: "Identities",
         run: () => {

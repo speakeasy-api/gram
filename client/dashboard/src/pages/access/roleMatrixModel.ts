@@ -550,8 +550,8 @@ const PLATFORM_AREAS: {
   },
   {
     resourceType: "workload",
-    label: "Workload identities",
-    description: "Which workloads can act as which agents",
+    label: "Trusted platforms",
+    description: "Which platforms' jobs can sign in as which agents",
   },
 ];
 

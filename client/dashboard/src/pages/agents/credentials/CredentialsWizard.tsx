@@ -1047,7 +1047,7 @@ export function CredentialsWizard({
         },
         {
           label: "Credential",
-          value: credential === "api-key" ? "API key" : "Workload identity",
+          value: credential === "api-key" ? "API key" : "Platform token",
         },
         // The platform, and what it was pinned to, are decisions like the
         // others: they belong on the rail rather than only on the step that
@@ -1374,7 +1374,7 @@ export function CredentialsWizard({
           const refused = !editing && !canFederate;
           if (refused) {
             note =
-              "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead.";
+              "Using a platform's tokens needs permission to manage trusted platforms. Choose an API key instead.";
           }
           return (
             <WizardFooter

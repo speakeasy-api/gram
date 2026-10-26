@@ -134,7 +134,7 @@ export function customSetupInstructions(inference = false): PlatformSetup {
       {
         id: "subject",
         short: "Subject",
-        title: "Which workloads",
+        title: "Which jobs",
         phase: "create",
         complete: ({ values }) => {
           const subject = (values["subject"] ?? "").trim();
@@ -174,7 +174,7 @@ export function customSetupInstructions(inference = false): PlatformSetup {
                 </SelectContent>
               </Select>
               <Text muted small>
-                A prefix admits every workload under it, so end it where the
+                A prefix accepts every job under it, so end it where the
                 platform&apos;s own separator falls.
               </Text>
             </Stack>
@@ -242,9 +242,9 @@ export function customSetupInstructions(inference = false): PlatformSetup {
         phase: "connect",
         body: () => (
           <p className="text-sm">
-            Run the exchange once from the platform. A workload that signs in
-            appears under this agent&apos;s sessions. If it is refused, compare
-            the token&apos;s <code className="text-xs">iss</code> and{" "}
+            Run the exchange once from the platform. A job that signs in appears
+            under this agent&apos;s sessions. If it is refused, compare the
+            token&apos;s <code className="text-xs">iss</code> and{" "}
             <code className="text-xs">sub</code> with the values you entered — a
             mismatch in either is the usual cause.
           </p>

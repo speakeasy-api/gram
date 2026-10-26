@@ -166,9 +166,9 @@ it("flags a wildcard rule the platform has not turned on", () => {
 });
 
 it.each([
-  ["exact", "One workload"],
-  ["wildcard", "Any workload in the connected organization"],
-  [unrecognized("future_match"), "Unknown workload coverage"],
+  ["exact", "One job"],
+  ["wildcard", "Any job in the connected organization"],
+  [unrecognized("future_match"), "Unknown job coverage"],
 ] as const)(
   "describes %s admission coverage without guessing",
   (matchKind, label) => {
@@ -177,9 +177,9 @@ it.each([
     expect(screen.getByText(label)).toBeTruthy();
     expect(container.querySelector(".bg-warning")).toBeNull();
     if (matchKind !== "exact" && matchKind !== "wildcard") {
-      expect(screen.queryByText("One workload")).toBeNull();
+      expect(screen.queryByText("One job")).toBeNull();
       expect(
-        screen.queryByText("Any workload in the connected organization"),
+        screen.queryByText("Any job in the connected organization"),
       ).toBeNull();
       expect(screen.queryByText("future_match")).toBeNull();
     }

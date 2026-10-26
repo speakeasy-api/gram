@@ -31,7 +31,7 @@ export function inferenceSetupInstructions(
       {
         id: "inference-exchange",
         short: "Exchange",
-        title: "Exchange a workload JWT for inference",
+        title: "Exchange a platform token for inference",
         phase: "connect",
         body: ({ computed }) => (
           <div className="space-y-4">
