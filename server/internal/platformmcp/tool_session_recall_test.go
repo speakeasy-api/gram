@@ -486,3 +486,20 @@ func TestMaskFindingSpansSkipsToolAndDerivedSurfaces(t *testing.T) {
 		})
 	}
 }
+
+// A surface the masker cannot place, such as a json_path span whose offsets
+// index an extracted sub-value, withholds the message rather than serving it.
+func TestMaskFindingSpansWithholdsOnUnknownSurface(t *testing.T) {
+	t.Parallel()
+
+	messageID := uuid.New()
+	content := "aaaaSECRETbbbb"
+
+	masks := maskFindingSpans(
+		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, "json_path", "SECRET", 4)},
+	)
+
+	require.Equal(t, 1, masks.withheld)
+	require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
+}

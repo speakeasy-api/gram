@@ -25,8 +25,8 @@ import (
 
 // maxFalsePositiveBatch bounds a single mark/unmark request to what a UI
 // multiselect can realistically produce (a page of results, generously). It
-// is not a pattern-match sweep like exclusions, so there is no batch job —
-// just a single UPDATE ... WHERE id = ANY(@ids).
+// is not a pattern-match sweep like exclusions, so one request appends the
+// ClickHouse state copies for every id in a single call.
 const maxFalsePositiveBatch = 500
 
 // parseResultIDs converts the payload's result_ids strings to uuid.UUID,
