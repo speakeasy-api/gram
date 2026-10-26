@@ -13,7 +13,7 @@ import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQ
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/Dropdown";
 import { type IconName } from "@/components/ui/Icon/names";
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -1165,24 +1166,30 @@ function shortenPrincipal(bucket: ChallengeBucket): string {
 
 function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
   const orgRoutes = useOrgRoutes();
-  const label = shortenPrincipal(bucket);
   const isApiKey = bucket.principalType === "api_key";
-  // An agent is neither a key nor a person: the key icon claimed the first and
-  // a round avatar would claim the second. It goes to the shared renderer,
-  // which names it beside its own square face — and that face replaces the
-  // row's tile, because two marks side by side read as two actors.
-  const agentId =
-    bucket.principalType === "agent"
-      ? bucket.principalUrn.replace(/^agent:/, "")
-      : null;
+  const isAgent = bucket.principalType === "agent";
+  const agentId = isAgent ? bucket.principalUrn.replace(/^agent:/, "") : null;
+  // An agent label uses the shared text helper for consistent naming.
+  const label = agentId
+    ? actingPrincipalText({ id: agentId })
+    : shortenPrincipal(bucket);
   const lastSeen = new Date(bucket.lastSeen);
   const count = Number(bucket.challengeCount);
 
   return (
     <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-3 px-6 py-3 text-xs no-underline transition-colors hover:no-underline">
       {/* Sized to match the ActionIconTile in Recent activity below, so the two
-          rail cards line up row for row. */}
-      {agentId === null ? (
+          rail cards line up row for row. Agents render a square face to
+          distinguish them from round user avatars. */}
+      {isAgent ? (
+        <span
+          role="img"
+          aria-label="Agent"
+          className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center"
+        >
+          <Bot aria-hidden="true" className="size-4" />
+        </span>
+      ) : (
         <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
           {isApiKey || !bucket.userEmail ? (
             <KeyRound className="size-4" />
@@ -1197,28 +1204,13 @@ function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
             </Avatar>
           )}
         </div>
-      ) : (
-        // The agent draws its own square face inside the text below, so this
-        // slot carries no second mark — but it keeps its width, or the agent
-        // rows sit a tile to the left of every row around them.
-        <div aria-hidden="true" className="size-8 shrink-0" />
       )}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Text small className="truncate leading-snug">
           <span className="text-destructive mr-1.5 font-mono text-[10px] font-medium uppercase">
             deny
           </span>
-          {agentId === null ? (
-            <span className="text-foreground font-medium">{label}</span>
-          ) : (
-            // The whole row is one link already, so neither half adds its own:
-            // a nested anchor swallows the click the row wanted.
-            <ActingPrincipal
-              agent={{ id: agentId }}
-              linked={false}
-              className="text-foreground inline-flex align-middle font-medium"
-            />
-          )}
+          <span className="text-foreground font-medium">{label}</span>
         </Text>
         <Text muted small className="truncate text-[11px]">
           <span className="font-mono">{bucket.scope}</span>
