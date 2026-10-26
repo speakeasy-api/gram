@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -286,4 +287,108 @@ func TestGatewayConsent_HidingEveryReadyServerKeepsApproval(t *testing.T) {
 	hiddenStart := strings.Index(page, "data-gateway-hidden-list")
 	require.Positive(t, hiddenStart)
 	require.Contains(t, page[hiddenStart:], `name="server_id" value="`+serverID.String()+`"`)
+}
+
+func TestResolveGateMembers_AssistantRunIgnoresOwnersHiddenServers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, "meta-"+uuid.NewString(), uuid.Nil)
+	hiddenSlug, keptSlug := "hidden-"+uuid.NewString()[:8], "kept-"+uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "hidden member", hiddenSlug, 0, mcpservers.VisibilityPublic)
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "kept member", keptSlug, 1, mcpservers.VisibilityPublic)
+	require.NoError(t, hiddenmcpservers.Hide(ctx, ti.conn, orgID, authCtx.UserID, mcpServerBySlug(t, ctx, ti, projectID, hiddenSlug)))
+
+	served, hidden := mcp.ResolveStoredGatewayMemberSlugsForTest(t, ctx, ti.service.Service, orgID, projectID, meta.ID, authCtx.UserID)
+	require.Equal(t, []string{keptSlug}, served)
+	require.Equal(t, []string{hiddenSlug}, hidden)
+
+	assistantCtx := contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()})
+	served, hidden = mcp.ResolveStoredGatewayMemberSlugsForTest(t, assistantCtx, ti.service.Service, orgID, projectID, meta.ID, authCtx.UserID)
+	require.ElementsMatch(t, []string{hiddenSlug, keptSlug}, served)
+	require.Empty(t, hidden)
+}
+
+func TestServePublic_StoredGatewayHiddenMemberLeavesListServers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-hidden-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	hiddenSlug, keptSlug := "hidden-"+uuid.NewString()[:8], "kept-"+uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "hidden member", hiddenSlug, 0, mcpservers.VisibilityPublic)
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "kept member", keptSlug, 1, mcpservers.VisibilityPublic)
+	subject := createTestUser(t, ctx, ti, "hidden-user-"+uuid.NewString())
+	other := createTestUser(t, ctx, ti, "other-user-"+uuid.NewString())
+	require.NoError(t, hiddenmcpservers.Hide(ctx, ti.conn, orgID, subject.ID, mcpServerBySlug(t, ctx, ti, projectID, hiddenSlug)))
+
+	listServers := func(bearer string) metamcp.ListServersResult {
+		w, err := servePublicHTTP(t, context.Background(), ti, metaSlug, listServersBody(t), bearer, nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var envelope struct {
+			StructuredContent metamcp.ListServersResult `json:"structuredContent"`
+		}
+		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, w)["result"], &envelope))
+		return envelope.StructuredContent
+	}
+
+	result := listServers(mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject))
+	require.Equal(t, []string{keptSlug}, listedServerSlugs(result))
+	require.Equal(t, []metamcp.HiddenServer{{Slug: hiddenSlug, Name: "hidden member"}}, result.Hidden)
+	require.True(t, strings.HasSuffix(result.ConnectURL, "/mcp/"+metaSlug+"/connect/first-party"), "connectUrl %q", result.ConnectURL)
+
+	result = listServers(mintMetaIssuerBearer(t, ti, metaSlug, issuerID, other))
+	require.ElementsMatch(t, []string{hiddenSlug, keptSlug}, listedServerSlugs(result))
+	require.Empty(t, result.Hidden)
+}
+
+func TestServeOrganizationGateway_DirectModeOmitsHiddenMemberTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedHiddenGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	hosted := seedHostedMetaMember(t, ctx, ti, decoy.ID, "Hosted tools", 3, mcpservers.VisibilityPublic, "alpha")
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx.organizationGatewayFixture, metamcp.DiscoveryModeDirect)
+	listTools := makeMetaRPCBody(t, "tools/list", map[string]any{})
+
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, listTools)
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), `"name":"`+hosted.slug+`--alpha"`)
+
+	require.NoError(t, hiddenmcpservers.Hide(ctx, ti.conn, fx.organizationID, fx.subject.ID, hosted.serverID))
+	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, listTools)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NotContains(t, w.Body.String(), hosted.slug+"--alpha")
+}
+
+func TestServeOrganizationGateway_HideAndUnhideWithinOneSession(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedHiddenGateway(t, ctx, ti)
+	bearer := mintOrganizationGatewayBearer(t, ti, fx.organizationGatewayFixture)
+	listServers := func() metamcp.ListServersResult {
+		w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, listServersBody(t))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var envelope struct {
+			StructuredContent metamcp.ListServersResult `json:"structuredContent"`
+		}
+		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, w)["result"], &envelope))
+		return envelope.StructuredContent
+	}
+
+	require.ElementsMatch(t, []string{fx.granted, fx.open}, listedServerSlugs(listServers()))
+	require.NoError(t, hiddenmcpservers.Hide(ctx, ti.conn, fx.organizationID, fx.subject.ID, fx.openServerID))
+	require.Equal(t, []string{fx.granted}, listedServerSlugs(listServers()))
+	require.NoError(t, hiddenmcpservers.Unhide(ctx, ti.conn, fx.organizationID, fx.subject.ID, fx.openServerID))
+	require.ElementsMatch(t, []string{fx.granted, fx.open}, listedServerSlugs(listServers()))
 }
