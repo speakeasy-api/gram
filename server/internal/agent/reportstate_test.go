@@ -16,6 +16,7 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	agentserver "github.com/speakeasy-api/gram/server/gen/http/agent/server"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -267,6 +268,55 @@ func TestReportState_RateLimitedPerDevice(t *testing.T) {
 	requireCode(t, err, oops.CodeRateLimitExceeded)
 	_, err = ti.service.ReportState(ctx, stateReport(mockidp.MockUserEmail, "OTHERSERIAL1"))
 	require.NoError(t, err, "another machine has its own budget")
+	_, err = ti.service.ReportState(ctx, stateReport("someone-else@example.com", "C02XL0GZJGH5"))
+	// A new vouched email must not reset the machine's budget.
+	requireCode(t, err, oops.CodeRateLimitExceeded)
+}
+
+// A report that is acknowledged but not stored still spends the budget.
+func TestReportState_NonEndpointReportsAreRateLimited(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ti.service.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(ti.redis), "test-report-state-"+uuid.NewString(), ratelimit.PerMinute(1)))
+
+	report := stateReport(mockidp.MockUserEmail, "C02XL0GZJGH5")
+	report.Environment = new("ephemeral")
+	_, err := ti.service.ReportState(ctx, report)
+	require.NoError(t, err)
+	_, err = ti.service.ReportState(ctx, report)
+	requireCode(t, err, oops.CodeRateLimitExceeded)
+}
+
+func TestReportState_RefusesAgentKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx, _ = withAgentKeyAuth(t, ctx, ti, "Report bot")
+
+	_, err := ti.service.ReportState(ctx, stateReport(mockidp.MockUserEmail, "C02XL0GZJGH5"))
+	requireCode(t, err, oops.CodeForbidden)
+	require.Empty(t, stateReports(t, ti))
+}
+
+func TestReportState_RefusesDeviceAgentToken(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	device := newWorkloadDevice(t, ctx, ti, []authz.Grant{authz.NewGrant(authz.ScopeOrgDeviceAgentSync, ti.orgID)})
+	admitted, err := ti.service.JWTAuth(getPluginsContext(t), device.token, deviceAgentTokenScheme)
+	require.NoError(t, err)
+
+	_, err = ti.service.ReportState(admitted, stateReport(mockidp.MockUserEmail, "C02XL0GZJGH5"))
+	requireCode(t, err, oops.CodeForbidden)
+	require.Empty(t, stateReports(t, ti))
+}
+
+func TestReportState_RejectsBlankWithheldSlug(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	report := stateReport(mockidp.MockUserEmail, "C02XL0GZJGH5")
+	report.Policy.WithheldPlugins = []*gen.AgentStateWithheldPlugin{{Marketplace: nil, Slug: "   ", Reason: "user_disabled"}}
+	_, err := ti.service.ReportState(ctx, report)
+	requireCode(t, err, oops.CodeBadRequest)
 }
 
 func TestGetPlugins_RecordsServedEtag(t *testing.T) {
@@ -289,4 +339,16 @@ func TestGetPlugins_RecordsServedEtag(t *testing.T) {
 	again, err := testrepo.New(ti.conn).GetDeviceAgentServedEtagFixture(ctx, testrepo.GetDeviceAgentServedEtagFixtureParams{OrganizationID: ti.orgID, Email: email})
 	require.NoError(t, err)
 	require.Equal(t, served.ServedEtagChangedAt.Time, again.ServedEtagChangedAt.Time)
+
+	// A new plugin changes the etag inside the heartbeat throttle window, and
+	// the write must land anyway, or the device would read outdated.
+	extra := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "extra-tool")
+	assignPlugin(t, ctx, ti.conn, extra, ti.orgID, "user:"+mockidp.MockUserID)
+	changed, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
+	require.NoError(t, err)
+	require.NotEqual(t, res.Etag, changed.Etag)
+	updated, err := testrepo.New(ti.conn).GetDeviceAgentServedEtagFixture(ctx, testrepo.GetDeviceAgentServedEtagFixtureParams{OrganizationID: ti.orgID, Email: email})
+	require.NoError(t, err)
+	require.Equal(t, changed.Etag, updated.ServedEtag.String)
+	require.True(t, updated.ServedEtagChangedAt.Time.After(served.ServedEtagChangedAt.Time))
 }

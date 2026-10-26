@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -20,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
-// StateReportRate bounds stored state reports per device. The agent sends at
+// StateReportRate bounds state reports per device. The agent sends at
 // most once a reconcile tick (~60s); the limit stops a leaked org key from
 // churning one device's attested state. Keyed per device, not per key,
 // because a fleet shares one org key.
@@ -66,6 +67,20 @@ type stateWithheldPlugin struct {
 	Reason      string `json:"reason"`
 }
 
+// maxStateReportBytes bounds a reportState body before Goa decodes it. The
+// declared caps (32 tools, 500 withheld plugins, short strings) fit in well
+// under 256 KiB; unknown fields from newer agents are tolerated, not unbounded.
+const maxStateReportBytes = 512 << 10
+
+// limitStateReportBody caps the request body, so the decoder fails on an
+// oversized report instead of buffering it.
+func limitStateReportBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxStateReportBytes)
+		next.ServeHTTP(w, r)
+	})
+}
+
 // ReportState stores the latest applied state a device agent reports. The
 // reporting identity mirrors ReportAIScan; agent identities are refused
 // because attestation is about a person's endpoint. A non-endpoint box is
@@ -84,14 +99,16 @@ func (s *Service) ReportState(ctx context.Context, payload *gen.ReportStatePaylo
 		return nil, err
 	}
 
-	receivedAt := time.Now().UTC()
-	if deviceidentity.NormalizeEnvironment(payload.Environment) != deviceidentity.EnvironmentEndpoint {
-		return &gen.ReportStateResult{Stored: false, AppliedEtag: nil, ReceivedAt: receivedAt.Format(time.RFC3339)}, nil
-	}
-
+	// Charged before the environment check, so a report that is not stored
+	// still spends the device's budget.
 	serial := deviceidentity.NormalizeSerial(payload.SerialNumber)
 	if err := s.allowStateReport(ctx, authCtx.ActiveOrganizationID, serial, email); err != nil {
 		return nil, err
+	}
+
+	receivedAt := time.Now().UTC()
+	if deviceidentity.NormalizeEnvironment(payload.Environment) != deviceidentity.EnvironmentEndpoint {
+		return &gen.ReportStateResult{Stored: false, AppliedEtag: nil, ReceivedAt: receivedAt.Format(time.RFC3339)}, nil
 	}
 
 	params, err := stateReportParams(authCtx.ActiveOrganizationID, email, serial, payload)
@@ -110,13 +127,19 @@ func (s *Service) ReportState(ctx context.Context, payload *gen.ReportStatePaylo
 	}, nil
 }
 
-// allowStateReport charges one report to the device's budget. A limiter
-// store outage fails open: it isn't a throttle.
+// allowStateReport charges one report to the device's budget. The budget is
+// per serial when there is one, so a caller cannot reset it by changing the
+// vouched email; two people sharing a Mac share it, well inside the limit.
+// A limiter store outage fails open: it isn't a throttle.
 func (s *Service) allowStateReport(ctx context.Context, organizationID, serial, email string) error {
 	if s.stateReportLimiter == nil {
 		return nil
 	}
-	res, err := s.stateReportLimiter.Allow(ctx, organizationID+":"+serial+":"+email)
+	key := organizationID + ":serial:" + serial
+	if serial == "" {
+		key = organizationID + ":email:" + email
+	}
+	res, err := s.stateReportLimiter.Allow(ctx, key)
 	switch {
 	case err != nil:
 		s.logger.WarnContext(ctx, "reportState rate limit unavailable", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
@@ -188,9 +211,13 @@ func stateReportParams(organizationID, email, serial string, payload *gen.Report
 		if p == nil {
 			return zero, oops.E(oops.CodeBadRequest, nil, "withheld_plugins must not contain null entries")
 		}
+		slug := strings.TrimSpace(p.Slug)
+		if slug == "" {
+			return zero, oops.E(oops.CodeBadRequest, nil, "withheld_plugins slug must not be blank")
+		}
 		withheld = append(withheld, stateWithheldPlugin{
 			Marketplace: strings.TrimSpace(conv.PtrValOr(p.Marketplace, "")),
-			Slug:        strings.TrimSpace(p.Slug),
+			Slug:        slug,
 			Reason:      normalizeStateValue(p.Reason, stateWithheldReason),
 		})
 	}

@@ -166,6 +166,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	// Only getPlugins accepts device-agent tokens.
 	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
+	server.ReportState = limitStateReportBody(server.ReportState)
 	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
