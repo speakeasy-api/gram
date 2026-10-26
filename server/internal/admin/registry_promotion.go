@@ -55,6 +55,10 @@ func promotionError(err error) error {
 		return oops.C(oops.CodeNotFound)
 	case errors.Is(err, catalogpromotion.ErrStale), errors.Is(err, catalogpromotion.ErrConflict):
 		return oops.E(oops.CodeConflict, nil, "promotion source changed or was already promoted; refresh before retrying")
+	case errors.Is(err, catalogpromotion.ErrPublicTitleTooLong):
+		return oops.E(oops.CodeBadRequest, nil, "%s", catalogpromotion.ErrPublicTitleTooLong.Error())
+	case errors.Is(err, catalogpromotion.ErrPublicDescriptionTooLong):
+		return oops.E(oops.CodeBadRequest, nil, "%s", catalogpromotion.ErrPublicDescriptionTooLong.Error())
 	case errors.Is(err, catalogpromotion.ErrInvalid):
 		return oops.E(oops.CodeBadRequest, nil, "invalid catalogue promotion input; check target identifiers, pagination cursor, retry key, and reviewed public metadata")
 	case errors.Is(err, catalogpromotion.ErrIneligible):

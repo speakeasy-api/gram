@@ -12,11 +12,18 @@ import (
 )
 
 var (
-	ErrNotFound    = errors.New("promotion candidate not found")
-	ErrStale       = errors.New("promotion source or evidence changed; refresh the candidate")
-	ErrIneligible  = errors.New("remote server is not eligible for promotion")
-	ErrConflict    = errors.New("this source, endpoint, name, or retry key already belongs to a promotion")
-	ErrInvalid     = errors.New("invalid public catalogue metadata")
+	ErrNotFound   = errors.New("promotion candidate not found")
+	ErrStale      = errors.New("promotion source or evidence changed; refresh the candidate")
+	ErrIneligible = errors.New("remote server is not eligible for promotion")
+	ErrConflict   = errors.New("this source, endpoint, name, or retry key already belongs to a promotion")
+	ErrInvalid    = errors.New("invalid public catalogue metadata")
+
+	// ErrPublicTitleTooLong identifies the bounded public-title validation failure.
+	ErrPublicTitleTooLong = errors.New("public title must be 100 characters or fewer")
+
+	// ErrPublicDescriptionTooLong identifies the bounded public-description validation failure.
+	ErrPublicDescriptionTooLong = errors.New("public description must be 100 characters or fewer")
+
 	ErrUnavailable = errors.New("catalogue promotion validation temporarily unavailable")
 )
 
@@ -34,10 +41,10 @@ type Target struct {
 type PublicMetadata struct {
 	// Name is the reviewed registry identity.
 	Name string `json:"public_name"`
-	// Title is the reviewed public display name.
-	Title string `json:"public_title"`
-	// Description is the reviewed public service description.
-	Description string `json:"public_description"`
+	// Title is the reviewed public display name, at most 100 Unicode code points.
+	Title string `json:"public_title" jsonschema:"Public title, at most 100 Unicode code points"`
+	// Description is the reviewed public service description, at most 100 Unicode code points.
+	Description string `json:"public_description" jsonschema:"Public description, at most 100 Unicode code points"`
 	// URL is the reviewed canonical public MCP endpoint.
 	URL string `json:"public_url"`
 	// DocumentationURL is the reviewed primary setup reference.
