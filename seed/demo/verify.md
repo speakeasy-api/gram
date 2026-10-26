@@ -195,19 +195,25 @@ open their effective assignments; the dropdown always offers compact member sear
     proving each page is filtered to its canonical enrolled-user identity.
 
 16. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
-    The Activity section shows non-zero tool calls over the last 7 days, a
-    Gateway tool usage chart with all four tools populated, the three discovery tools
-    decreasing (list_servers > describe_server > describe_tools) and
-    execute_tool counting the member calls, and a Calls-by-member
-    table listing Acme Support Tools, Acme Ops, Linear, and Slack with Acme Ops
-    carrying most of the errors — and no GitHub row, even though GitHub's
-    dispatches from before it left the gateway still count in the totals.
-    The "Dispatched calls over time" title opens Tool Logs and the "Gateway
-    tool usage" title opens MCP & Tools, both with the Acme Agent Gateway
-    server filter applied; on Tool Logs the hook-observed rows are tagged
-    Gateway (not Shadow MCP) and link back to the gateway, and each member
-    dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
-    listing, the gateway card shows no "never used" marker.
+    Over the last 7 days the Activity section shows one tile each for
+    Progressive, Code Mode and Direct with its execution share (Direct at
+    100%) and a change in points against the previous period for Progressive
+    and Code Mode; Code Mode's tile also counts code runs. "Execution share
+    as sessions progress" draws one line per mode: Direct at 100% from the
+    first call, Progressive and Code Mode at 0% for the first two calls and
+    rising after, with a note excluding the calls that carried no session.
+    "Calls over time" stacks discovery and tool calls per day, and its mode
+    filter narrows the bars to one mode. The Tool calls table lists Acme
+    Support Tools, Acme Ops, Linear, and Slack with Acme Ops carrying most of
+    the errors — and no GitHub row, even though GitHub's dispatches from
+    before it left the gateway still count in the totals. The "Calls over
+    time" title opens Tool Logs and the "Tool calls" title opens MCP & Tools,
+    both with the Acme Agent Gateway server filter applied; on Tool Logs the
+    hook-observed rows are tagged Gateway (not Shadow MCP) and link back to
+    the gateway, and each member dispatch carries a "via Acme Agent Gateway"
+    marker. Back on the MCP listing, the gateway card shows no "never used"
+    marker. **Python Code Gateway** → Overview shows only the Code Mode tile
+    and line.
 17. **Organization setup wizard** — open `/acme-demo/setup` (no setup feature
     flag required). Confirm the task rail shows the 9 visible seeded tasks.
     **Set up identity provider** contains the nested **Verify domain**,

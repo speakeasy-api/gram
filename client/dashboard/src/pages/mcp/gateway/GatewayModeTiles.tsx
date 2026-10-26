@@ -6,6 +6,11 @@ import { useIsDarkTheme } from "@/lib/theme";
 import { GATEWAY_MODE_DESCRIPTIONS, type ModeShare } from "./gatewayActivity";
 import { gatewayModeColor } from "./gatewayActivityColors";
 
+// Side by side only with room for each tile's figure and change; narrow
+// containers stack them.
+const TILE_GROUP_CLASS =
+  "flex-col divide-x-0 divide-y @3xl:flex-row @3xl:divide-x @3xl:divide-y-0";
+
 function percent(share: number): string {
   return `${Math.round(share * 100)}%`;
 }
@@ -16,14 +21,15 @@ function percent(share: number): string {
 function pointChange(mode: ModeShare): string | undefined {
   if (mode.share === null || mode.previousShare === null) return undefined;
   const points = Math.round((mode.share - mode.previousShare) * 100);
-  if (points === 0) return undefined;
+  if (points === 0) return "No change";
   return `${points > 0 ? "+" : "−"}${Math.abs(points)} pts`;
 }
 
+// The counts behind the share, in the words the charts' legends use.
 function describeCalls(mode: ModeShare): string {
-  const calls = mode.discoveryCalls + mode.executionCalls;
   const parts = [
-    `${mode.executionCalls.toLocaleString()} of ${calls.toLocaleString()} calls ran a tool`,
+    `${mode.executionCalls.toLocaleString()} tool ${mode.executionCalls === 1 ? "call" : "calls"}`,
+    `${mode.discoveryCalls.toLocaleString()} discovery`,
   ];
   if (mode.executeRuns > 0) {
     parts.push(
@@ -47,7 +53,7 @@ export function GatewayModeTiles({
   const isDark = useIsDarkTheme();
   if (loading) {
     return (
-      <StatTileGroup>
+      <StatTileGroup className={TILE_GROUP_CLASS}>
         {Array.from({ length: 3 }).map((_, i) => (
           <StatTileSkeleton key={i} />
         ))}
@@ -55,7 +61,7 @@ export function GatewayModeTiles({
     );
   }
   return (
-    <StatTileGroup>
+    <StatTileGroup className={TILE_GROUP_CLASS}>
       {modes.map((mode) => {
         const change = pointChange(mode);
         return (

@@ -22,8 +22,7 @@ func (s *seeder) chDetectionsAndFindings(ctx context.Context, ch driver.Conn) er
 		s.chfRiskFindings,
 		s.chfSkillSessionVersions,
 		s.chfSkillEfficacyScores,
-		s.chfGatewayDiscovery,
-		s.chfGatewayMemberCalls,
+		s.chfGatewaySessions,
 		s.chfGatewayGoneCalls,
 		s.chfGatewayHooks,
 		s.chfBillingMeterReadings,
@@ -789,58 +788,6 @@ func chfEmailClient(email string) string {
 	return chfClientAttrs(hash64("gwcli", email), hash64("gwcliv", email), hash64("gwcliseen", email))
 }
 
-// chfGatewayDiscovery is gateway (meta MCP) traffic for the Acme Agent
-// Gateway, which fronts the four mcp_servers seeded in postgres.sql. Ids
-// reproduce s.det("metamcp-1") / ("mcpserver-<member>") /
-// ("remotemcp-<member>") so ClickHouse rows join the Postgres rows.
-//
-// Discovery calls (list_servers / describe_server / describe_tools) land under
-// gram.event.source = meta_discovery with a "metamcp:" urn: the runtime never
-// gives them a "tools:" urn, so they cannot count as tool calls (the query
-// layer's classifier), and the seed mirrors that. execute_tool writes no row
-// of its own: the member call below IS the row, stamped with the gateway id.
-func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error {
-	gateway := s.det("metamcp-1").String()
-	rows := make([]chfTelemetryRow, 0, 150)
-	for n := range 150 {
-		i := n + 1
-		email := s.email(demoUsers[hash64("gwu", n)%6].handle)
-		// Funnel shape: every walk lists, most describe a server, fewer pull
-		// schemas.
-		tool := "describe_tools"
-		switch {
-		case n%10 < 5:
-			tool = "list_servers"
-		case n%10 < 8:
-			tool = "describe_server"
-		}
-		ts := s.chfNoFuture(s.chfDay(n % 12).
-			Add(time.Duration(8+hash64("gwh", n)%11) * time.Hour).
-			Add(time.Duration(hash64("gwm", n)%60) * time.Minute))
-		attrs := `{"gram.event.source":"meta_discovery"` +
-			`,"gram.meta_mcp_server.id":"` + gateway + `"` +
-			`,"gram.tool.name":"` + tool + `"` +
-			`,"gram.tool.urn":"metamcp:` + gateway + `:` + tool + `"` +
-			`,"http.response.status_code":200` +
-			`,"http.server.request.duration":` + chfRound3(0.02+float64(hash64("gwd", i)%40)/100) +
-			`,"gram.project.id":"` + s.projectID().String() + `"` +
-			`,"user.email":"` + email + `"` +
-			`,"gram.external_user.id":"` + email + `"` +
-			chfEmailClient(email) +
-			`,"gram.hook.source":"claude-code"}`
-		rows = append(rows, chfTelemetryRow{
-			ts:      ts,
-			body:    "Gateway discovery: " + tool,
-			traceID: md5Hex(s.name("gwdisc-" + strconv.Itoa(i))),
-			attrs:   attrs,
-			urn:     "metamcp:" + gateway + ":" + tool,
-			service: "gram-mcp-gateway",
-			chatID:  nil,
-		})
-	}
-	return s.chfInsertTelemetry(ctx, ch, "gateway discovery telemetry", rows)
-}
-
 var (
 	// Weighted member pick: support 5, ops 3, linear 1, slack 1 of every 10.
 	chfGatewayMembers = [10]string{"support", "support", "support", "support", "support", "ops", "ops", "ops", "linear", "slack"}
@@ -853,45 +800,214 @@ var (
 	chfGatewayToolsets = map[string]string{"support": "acme-support-tools", "ops": "acme-ops"}
 )
 
-// chfGatewayMemberCalls: member calls dispatched through the gateway. They
-// are ordinary tool_call rows for the member (hosted members keep the
+// chfGatewayMode is the discovery mode a gateway connection was served in, as
+// the gateway stamps it on every row.
+type chfGatewayMode string
+
+const (
+	chfGatewayProgressive chfGatewayMode = "progressive"
+	chfGatewayDirect      chfGatewayMode = "direct"
+	chfGatewayCode        chfGatewayMode = "code_mode"
+)
+
+// chfGatewaySession is one client session against a gateway. A gateway serves
+// each connection in the mode it was approved with, so one gateway carries
+// sessions in every mode at once.
+type chfGatewaySession struct {
+	gateway string
+	mode    chfGatewayMode
+	// members are the member keys the session's calls reach, drawn by weight.
+	members []string
+	// key names the session in its hash draws, trace ids, and session id.
+	key string
+	day int
+}
+
+// chfGatewayStep is one row of a session: a discovery tool or Code Mode
+// helper (member empty), a Code Mode execute run, or a member tool call.
+type chfGatewayStep struct {
+	tool   string
+	member string
+}
+
+// chfGatewaySessions is gateway (meta MCP) traffic: sessions on the Acme
+// Agent Gateway in all three discovery modes, and Code Mode sessions on the
+// Python Code Gateway. Ids reproduce s.det("metamcp-1") / ("metamcp-code") /
+// ("mcpserver-<member>") / ("remotemcp-<member>") so ClickHouse rows join the
+// Postgres rows.
+//
+// Each session walks the way its mode does. Progressive lists servers, reads
+// one server and its tool schemas, then calls; later tasks re-read schemas
+// now and then. Code Mode runs execute, whose first run searches and
+// describes before calling and whose later runs mostly call directly. Direct
+// only calls. Older sessions re-discover more, so each mode's share of tool
+// calls rises against the previous week.
+//
+// Discovery steps and execute runs land under gram.event.source =
+// meta_discovery with a "metamcp:" urn: the runtime never gives them a
+// "tools:" urn, so they cannot count as tool calls (the query layer's
+// classifier), and the seed mirrors that. Progressive execute_tool and Code
+// Mode tools.call write no row of their own: the member call IS the row, an
+// ordinary tool_call for the member (hosted members keep the
 // "tools:http:acme:" urn + toolset slug the direct path emits; remote members
-// the "tools:externalmcp:<remote id>:" urn the proxy emits), plus
-// gram.meta_mcp_server.id. One row serves the member's own usage, the gateway
-// Activity section, and the MCP listing marker alike, so call totals never
-// double. Ops carries most of the failures.
-func (s *seeder) chfGatewayMemberCalls(ctx context.Context, ch driver.Conn) error {
-	gateway := s.det("metamcp-1").String()
-	rows := make([]chfTelemetryRow, 0, 240)
-	for n := range 240 {
-		i := n + 1
-		mkey := chfGatewayMembers[hash64("gwmem", n)%10]
-		member := s.det("mcpserver-" + mkey).String()
-		remote := s.det("remotemcp-" + mkey).String()
-		toolsetSlug := chfGatewayToolsets[mkey]
-		tools := chfGatewayTools[mkey]
-		tool := tools[hash64("gwt", n)%uint64(len(tools))]
-		toolURNStr := "tools:externalmcp:" + remote + ":" + tool
+// the "tools:externalmcp:<remote id>:" urn the proxy emits) stamped with the
+// gateway id. One row serves the member's own usage, the gateway Activity
+// section, and the MCP listing marker alike, so call totals never double. Ops
+// carries most of the failures. Every row carries the connection's mode and,
+// apart from the sessions of a client that sends none, its MCP session.
+func (s *seeder) chfGatewaySessions(ctx context.Context, ch driver.Conn) error {
+	agentGateway := s.det("metamcp-1").String()
+	codeGateway := s.det("metamcp-code").String()
+	sessions := make([]chfGatewaySession, 0, 46)
+	for n := range 40 {
+		mode := chfGatewayProgressive
+		switch n % 5 {
+		case 1, 3:
+			mode = chfGatewayCode
+		case 4:
+			mode = chfGatewayDirect
+		}
+		sessions = append(sessions, chfGatewaySession{gateway: agentGateway, mode: mode, members: chfGatewayMembers[:], key: "agw-" + strconv.Itoa(n), day: n % 12})
+	}
+	for n := range 6 {
+		sessions = append(sessions, chfGatewaySession{gateway: codeGateway, mode: chfGatewayCode, members: []string{"support", "support", "ops"}, key: "cgw-" + strconv.Itoa(n), day: (n * 2) % 12})
+	}
+
+	rows := make([]chfTelemetryRow, 0, 600)
+	for _, session := range sessions {
+		rows = append(rows, s.chfGatewaySessionRows(session)...)
+	}
+	return s.chfInsertTelemetry(ctx, ch, "gateway session telemetry", rows)
+}
+
+// chfGatewaySessionSteps scripts one session's rows in order.
+func chfGatewaySessionSteps(session chfGatewaySession) []chfGatewayStep {
+	key := session.key
+	// The previous week re-discovers more than this one.
+	older := session.day >= 7
+	member := func(i int) string {
+		return session.members[hash64("gwmem", key, i)%uint64(len(session.members))]
+	}
+	steps := []chfGatewayStep{}
+	call := func(m string) { steps = append(steps, chfGatewayStep{tool: "", member: m}) }
+	switch session.mode {
+	case chfGatewayProgressive:
+		rediscover := uint64(2)
+		if older {
+			rediscover = 6
+		}
+		steps = append(steps, chfGatewayStep{tool: "list_servers", member: ""})
+		for task := range 2 + int(hash64("gwtasks", key)%5) {
+			m := member(task)
+			switch draw := hash64("gwredisc", key, task) % 10; {
+			case task == 0 || draw < rediscover:
+				steps = append(steps, chfGatewayStep{tool: "describe_server", member: ""}, chfGatewayStep{tool: "describe_tools", member: ""})
+			case draw < rediscover+3:
+				steps = append(steps, chfGatewayStep{tool: "describe_tools", member: ""})
+			}
+			for range 1 + int(hash64("gwcalls", key, task)%3) {
+				call(m)
+			}
+		}
+	case chfGatewayCode:
+		search := uint64(2)
+		if older {
+			search = 5
+		}
+		for run := range 2 + int(hash64("gwruns", key)%4) {
+			steps = append(steps, chfGatewayStep{tool: "execute", member: ""})
+			switch {
+			case run == 0:
+				steps = append(steps, chfGatewayStep{tool: "tools.search", member: ""}, chfGatewayStep{tool: "tools.describe", member: ""})
+				if hash64("gwdesc", key)%2 == 0 {
+					steps = append(steps, chfGatewayStep{tool: "tools.describe", member: ""})
+				}
+			case hash64("gwsearch", key, run)%10 < search:
+				steps = append(steps, chfGatewayStep{tool: "tools.search", member: ""})
+			}
+			for range 1 + int(hash64("gwcalls", key, run)%3) {
+				call(member(run))
+			}
+		}
+	case chfGatewayDirect:
+		for i := range 4 + int(hash64("gwcalls", key)%14) {
+			call(member(i))
+		}
+	}
+	return steps
+}
+
+// chfGatewaySessionRows renders one session's steps as telemetry rows a few
+// seconds to a minute apart.
+func (s *seeder) chfGatewaySessionRows(session chfGatewaySession) []chfTelemetryRow {
+	key := session.key
+	email := s.email(demoUsers[hash64("gwsu", key)%6].handle)
+	// One client in nine sends no MCP session, so its calls cannot be ordered.
+	sessionAttr := ""
+	if hash64("gwnosess", key)%9 != 0 {
+		sessionAttr = `,"mcp.session.id":"` + s.det("gwsess-"+key).String() + `"`
+	}
+	common := `,"gram.meta_mcp_server.id":"` + session.gateway + `"` +
+		`,"gram.meta_mcp_server.discovery_mode":"` + string(session.mode) + `"` +
+		sessionAttr +
+		`,"gram.project.id":"` + s.projectID().String() + `"` +
+		`,"user.email":"` + email + `"` +
+		`,"gram.external_user.id":"` + email + `"` +
+		chfEmailClient(email) +
+		`,"gram.hook.source":"claude-code"}`
+
+	// The whole session stays at least an hour in the past, so no row is in
+	// the future and its order holds.
+	at := s.chfDay(session.day).
+		Add(time.Duration(8+hash64("gwh", key)%10) * time.Hour).
+		Add(time.Duration(hash64("gwm", key)%60) * time.Minute)
+	if at.After(s.now.UTC().Add(-time.Hour)) {
+		at = at.AddDate(0, 0, -1)
+	}
+
+	steps := chfGatewaySessionSteps(session)
+	rows := make([]chfTelemetryRow, 0, len(steps))
+	for i, step := range steps {
+		at = at.Add(time.Duration(5+hash64("gwgap", key, i)%55) * time.Second)
+		if step.member == "" {
+			rows = append(rows, chfTelemetryRow{
+				ts:      at,
+				body:    "Gateway discovery: " + step.tool,
+				traceID: md5Hex(s.name("gwdisc-" + key + "-" + strconv.Itoa(i))),
+				attrs: `{"gram.event.source":"meta_discovery"` +
+					`,"gram.tool.name":"` + step.tool + `"` +
+					`,"gram.tool.urn":"metamcp:` + session.gateway + `:` + step.tool + `"` +
+					`,"http.response.status_code":200` +
+					`,"http.server.request.duration":` + chfRound3(0.02+float64(hash64("gwd", key, i)%40)/100) +
+					common,
+				urn:     "metamcp:" + session.gateway + ":" + step.tool,
+				service: "gram-mcp-gateway",
+				chatID:  nil,
+			})
+			continue
+		}
+
+		mserver := s.det("mcpserver-" + step.member).String()
+		remote := s.det("remotemcp-" + step.member).String()
+		toolsetSlug := chfGatewayToolsets[step.member]
+		tools := chfGatewayTools[step.member]
+		tool := tools[hash64("gwt", key, i)%uint64(len(tools))]
+		urn := "tools:externalmcp:" + remote + ":" + tool
 		if toolsetSlug != "" {
-			toolURNStr = toolURN(tool)
+			urn = toolURN(tool)
 		}
 		status := 200
-		if (mkey == "ops" && hash64("gwerr", n)%5 == 0) || hash64("gwbg", n)%40 == 0 {
+		if (step.member == "ops" && hash64("gwerr", key, i)%5 == 0) || hash64("gwbg", key, i)%40 == 0 {
 			status = 500
 		}
-		// Gateway endpoints see more kinds of client than a hosted server
-		// does: agent harnesses plus the MCP Inspector someone left open.
-		// Keyed on the person so a caller presents the same client here as in
-		// discovery.
-		email := s.email(demoUsers[hash64("gwu2", n)%6].handle)
 		var sb strings.Builder
-		sb.WriteString(`{"gram.tool.urn":"` + toolURNStr + `"`)
+		sb.WriteString(`{"gram.tool.urn":"` + urn + `"`)
 		sb.WriteString(`,"gram.tool.name":"` + tool + `"`)
 		if toolsetSlug != "" {
 			sb.WriteString(`,"gram.toolset.slug":"` + toolsetSlug + `"`)
 		}
 		sb.WriteString(`,"gram.event.source":"tool_call"`)
-		sb.WriteString(`,"gram.mcp_server.id":"` + member + `"`)
+		sb.WriteString(`,"gram.mcp_server.id":"` + mserver + `"`)
 		if toolsetSlug == "" {
 			sb.WriteString(`,"gram.remote_mcp_server.id":"` + remote + `"`)
 			// The proxy stamps the urn's source segment as the tool call
@@ -899,34 +1015,26 @@ func (s *seeder) chfGatewayMemberCalls(ctx context.Context, ch driver.Conn) erro
 			// to the member.
 			sb.WriteString(`,"gram.tool_call.source":"` + remote + `"`)
 		}
-		sb.WriteString(`,"gram.meta_mcp_server.id":"` + gateway + `"`)
 		sb.WriteString(`,"http.response.status_code":` + strconv.Itoa(status))
-		sb.WriteString(`,"http.server.request.duration":` + chfRound3(0.05+float64(hash64("gwc", i)%300)/100))
-		sb.WriteString(`,"gram.project.id":"` + s.projectID().String() + `"`)
-		sb.WriteString(`,"user.email":"` + email + `"`)
-		sb.WriteString(`,"gram.external_user.id":"` + email + `"`)
-		sb.WriteString(chfEmailClient(email))
-		sb.WriteString(`,"gram.hook.source":"claude-code"}`)
-		ts := s.chfNoFuture(s.chfDay(n % 12).
-			Add(time.Duration(8+hash64("gwh2", n)%11) * time.Hour).
-			Add(time.Duration(hash64("gwm2", n)%60) * time.Minute))
+		sb.WriteString(`,"http.server.request.duration":` + chfRound3(0.05+float64(hash64("gwc", key, i)%300)/100))
+		sb.WriteString(common)
 		rows = append(rows, chfTelemetryRow{
-			ts:      ts,
+			ts:      at,
 			body:    "Tool call: " + tool,
-			traceID: md5Hex(s.name("gwcall-" + strconv.Itoa(i))),
+			traceID: md5Hex(s.name("gwcall-" + key + "-" + strconv.Itoa(i))),
 			attrs:   sb.String(),
-			urn:     toolURNStr,
+			urn:     urn,
 			service: "gram-mcp-gateway",
 			chatID:  nil,
 		})
 	}
-	return s.chfInsertTelemetry(ctx, ch, "gateway member call telemetry", rows)
+	return rows
 }
 
 // chfGatewayGoneCalls: dispatches to GitHub from before it left the gateway
 // (its membership is soft-deleted in Postgres three days ago). They count
-// toward the gateway's dispatched-call totals but must not appear in Calls by
-// member.
+// toward the gateway's call totals but must not appear in its Tool calls
+// table. They came from a Progressive client that sent no MCP session.
 func (s *seeder) chfGatewayGoneCalls(ctx context.Context, ch driver.Conn) error {
 	gateway := s.det("metamcp-1").String()
 	member := s.det("mcpserver-github").String()
@@ -950,6 +1058,7 @@ func (s *seeder) chfGatewayGoneCalls(ctx context.Context, ch driver.Conn) error 
 			`,"gram.remote_mcp_server.id":"` + remote + `"` +
 			`,"gram.tool_call.source":"` + remote + `"` +
 			`,"gram.meta_mcp_server.id":"` + gateway + `"` +
+			`,"gram.meta_mcp_server.discovery_mode":"` + string(chfGatewayProgressive) + `"` +
 			`,"http.response.status_code":` + strconv.Itoa(status) +
 			`,"http.server.request.duration":` + chfRound3(0.08+float64(hash64("gwgc", i)%200)/100) +
 			`,"gram.project.id":"` + s.projectID().String() + `"` +

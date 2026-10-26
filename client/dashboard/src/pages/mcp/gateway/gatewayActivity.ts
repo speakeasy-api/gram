@@ -42,12 +42,12 @@ function gatewayMode(value: string): GatewayMode {
 // calls from its first.
 export const CALL_POSITIONS = ["1", "2", "3-5", "6-10", "11-20", "21+"];
 export const CALL_POSITION_LABELS: Record<string, string> = {
-  "1": "1st",
-  "2": "2nd",
-  "3-5": "3rd–5th",
-  "6-10": "6th–10th",
-  "11-20": "11th–20th",
-  "21+": "21st+",
+  "1": "1",
+  "2": "2",
+  "3-5": "3–5",
+  "6-10": "6–10",
+  "11-20": "11–20",
+  "21+": "21+",
 };
 
 /** The share of calls that were tool calls, or null with no calls to divide. */
@@ -149,6 +149,8 @@ export function positionLines(phases: MetaMcpCallPhases): PositionLine[] {
   });
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export interface PhaseTimeSeries {
   bucketMs: number;
   timestamps: number[];
@@ -191,23 +193,28 @@ export function phaseTimeSeries(
     executionCalls[index]! += bucket.executionCalls;
     executeRuns[index]! += bucket.executeRuns;
   }
-  const daily = bucketMs >= 24 * 60 * 60 * 1000;
+  // Buckets start at the range start, not at midnight, so a tooltip names
+  // both ends rather than a day the bucket only partly covers.
+  const format = (t: number) =>
+    new Date(t).toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
   return {
     bucketMs,
     timestamps,
-    labels: timestamps.map((t) => formatChartLabel(new Date(t), rangeMs)),
-    tooltipLabels: timestamps.map((t) =>
-      new Date(t).toLocaleString(
-        [],
-        daily
-          ? { month: "short", day: "numeric" }
-          : {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            },
+    // A day-wide bucket starting mid-afternoon is mostly the next day, so a
+    // day bucket is labeled by its middle.
+    labels: timestamps.map((t) =>
+      formatChartLabel(
+        new Date(bucketMs >= DAY_MS ? t + bucketMs / 2 : t),
+        rangeMs,
       ),
+    ),
+    tooltipLabels: timestamps.map(
+      (t) => `${format(t)} – ${format(Math.min(t + bucketMs, to.getTime()))}`,
     ),
     discoveryCalls,
     executionCalls,

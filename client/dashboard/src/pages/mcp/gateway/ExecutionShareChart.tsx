@@ -12,12 +12,14 @@ import {
   Tooltip,
   type ChartData,
   type ChartOptions,
+  type PointStyle,
 } from "chart.js";
 import { useMemo } from "react";
 import { Line } from "react-chartjs-2";
 import {
   CALL_POSITION_LABELS,
   CALL_POSITIONS,
+  type GatewayMode,
   type PositionLine,
 } from "./gatewayActivity";
 import { gatewayModeColor } from "./gatewayActivityColors";
@@ -32,6 +34,22 @@ ChartJS.register(
 );
 
 const CHART_ID = "gateway-execution-share";
+
+// Each mode also has its own marker, so lines that meet (every mode starts
+// at a lookup or a call) stay apart without relying on color.
+const MODE_POINT_STYLES: Record<GatewayMode, PointStyle> = {
+  progressive: "circle",
+  code_mode: "rect",
+  direct: "triangle",
+  unrecorded: "crossRot",
+};
+
+function positionTitle(position: string): string {
+  const label = CALL_POSITION_LABELS[position]!;
+  return position.includes("-") || position.endsWith("+")
+    ? `Calls ${label} in a session`
+    : `Call ${label} in a session`;
+}
 
 /**
  * How the share of calls that ran a tool grows with each call in a session,
@@ -58,29 +76,42 @@ export function ExecutionShareChart({
   const colors = useMemo(() => chartColors(isDark), [isDark]);
   const isExpanded = expandedChart === CHART_ID;
   const hasData = lines.length > 0;
+  // Positions past the longest session's last call are left off the axis.
+  const positions = useMemo(() => {
+    const reached = Math.max(
+      0,
+      ...lines.map((line) => line.shares.findLastIndex((s) => s !== null) + 1),
+    );
+    return CALL_POSITIONS.slice(0, reached);
+  }, [lines]);
 
   const data = useMemo<ChartData<"line", (number | null)[], string>>(
     () => ({
-      labels: CALL_POSITIONS.map((position) => CALL_POSITION_LABELS[position]!),
+      labels: positions.map((position) => CALL_POSITION_LABELS[position]!),
       datasets: lines.map((line) => {
         const color = gatewayModeColor(line.mode, isDark);
         return {
           label: line.label,
-          data: line.shares.map((share) =>
-            share === null ? null : Math.round(share * 1000) / 10,
-          ),
+          data: line.shares
+            .slice(0, positions.length)
+            .map((share) =>
+              share === null ? null : Math.round(share * 1000) / 10,
+            ),
           borderColor: color,
           backgroundColor: color,
           borderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 6,
+          pointStyle: MODE_POINT_STYLES[line.mode],
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          // Points on 100% sit on the chart's edge; keep them whole.
+          clip: false,
           // A position no call reached is a gap, not a zero.
           spanGaps: false,
           tension: 0,
         };
       }),
     }),
-    [lines, isDark],
+    [lines, positions, isDark],
   );
 
   const options = useMemo<ChartOptions<"line">>(
@@ -88,15 +119,14 @@ export function ExecutionShareChart({
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
+      layout: { padding: { top: 8 } },
       plugins: {
         legend: { display: false },
         tooltip: {
           ...SHARED_TOOLTIP,
           callbacks: {
-            title: (items) => {
-              const position = CALL_POSITIONS[items[0]?.dataIndex ?? 0]!;
-              return `${CALL_POSITION_LABELS[position]} call in a session`;
-            },
+            title: (items) =>
+              positionTitle(positions[items[0]?.dataIndex ?? 0] ?? "1"),
             label: (item) => {
               const line = lines[item.datasetIndex];
               if (!line) return "";
@@ -111,10 +141,10 @@ export function ExecutionShareChart({
         x: {
           grid: { display: false },
           border: { display: true, color: colors.gridLine },
-          ticks: { color: colors.labelFaded },
+          ticks: { color: colors.labelFaded, maxRotation: 0 },
           title: {
             display: true,
-            text: "Call in session",
+            text: "Call number in session",
             color: colors.labelFaded,
           },
         },
@@ -130,7 +160,7 @@ export function ExecutionShareChart({
         },
       },
     }),
-    [lines, colors],
+    [lines, positions, colors],
   );
 
   const height = isExpanded ? 420 : 260;
@@ -141,17 +171,19 @@ export function ExecutionShareChart({
         <div style={{ height }}>
           <Line data={data} options={options} />
         </div>
-        <SeriesLegend
-          items={lines.map((line) => ({
-            label: line.label,
-            color: gatewayModeColor(line.mode, isDark),
-          }))}
-        />
+        {/* One line is named by the tile above; several need a key. */}
+        {lines.length > 1 && (
+          <SeriesLegend
+            items={lines.map((line) => ({
+              label: line.label,
+              color: gatewayModeColor(line.mode, isDark),
+            }))}
+          />
+        )}
         {callsWithoutSession > 0 && (
           <Text muted small>
-            {callsWithoutSession.toLocaleString()}{" "}
-            {callsWithoutSession === 1 ? "call" : "calls"} without a session are
-            left out.
+            Excludes {callsWithoutSession.toLocaleString()}{" "}
+            {callsWithoutSession === 1 ? "call" : "calls"} with no session.
           </Text>
         )}
       </div>

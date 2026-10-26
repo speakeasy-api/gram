@@ -11,7 +11,7 @@ import {
   type GatewayMode,
   type ModeShare,
 } from "./gatewayActivity";
-import { gatewayPhaseColors } from "./gatewayActivityColors";
+import { gatewayModeColor, gatewayPhaseColors } from "./gatewayActivityColors";
 import { SeriesLegend } from "./SeriesLegend";
 
 const CHART_ID = "gateway-calls-over-time";
@@ -125,7 +125,18 @@ export function CallsOverTimeChart({
                 },
                 ...modes.map((m) => ({
                   value: m.mode,
-                  label: SEGMENT_LABELS[m.mode],
+                  label: (
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                      <span
+                        aria-hidden="true"
+                        className="inline-block size-2 shrink-0"
+                        style={{
+                          backgroundColor: gatewayModeColor(m.mode, isDark),
+                        }}
+                      />
+                      {SEGMENT_LABELS[m.mode]}
+                    </span>
+                  ),
                   tooltip: GATEWAY_MODE_DESCRIPTIONS[m.mode],
                 })),
               ]}

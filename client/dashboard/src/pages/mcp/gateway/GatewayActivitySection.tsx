@@ -36,7 +36,13 @@ const memberColumns: Column<MemberUsageRow>[] = [
     key: "label",
     header: "Member",
     width: "2fr",
-    render: (row) => <Text className="truncate">{row.label}</Text>,
+    // The minimum keeps a name readable at narrow widths, where the table
+    // scrolls instead of crushing it.
+    render: (row) => (
+      <Text className="block min-w-32 truncate" title={row.label}>
+        {row.label}
+      </Text>
+    ),
   },
   {
     key: "toolCalls",
@@ -261,8 +267,8 @@ export function GatewayActivitySection({
       </Page.Section.Title>
       <Page.Section.Description>
         How much of the gateway's traffic is agents finding tools versus calling
-        them, by discovery mode. Each connection keeps the mode it was approved
-        with.
+        them, by discovery mode. Execution share is the part of those calls that
+        ran a tool.
       </Page.Section.Description>
       <Page.Section.CTA>
         <TimeRangePicker
