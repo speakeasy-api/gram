@@ -771,6 +771,7 @@ trackedFiles:
   src/funcs/toolsetsListToolSchemaStaticValues.ts: {}
   src/funcs/toolsetsRemoveOAuthServer.ts: {}
   src/funcs/toolsetsSetToolVariationsGroup.ts: {}
+  src/funcs/toolsetsSetUserSessionIssuer.ts: {}
   src/funcs/toolsetsUpdateBySlug.ts: {}
   src/funcs/toolsetsUpdateExternalOAuthServer.ts: {}
   src/funcs/triggersCreate.ts: {}
@@ -1870,6 +1871,7 @@ trackedFiles:
   src/models/components/setuptask.ts: {}
   src/models/components/setuptaskassignee.ts: {}
   src/models/components/setuptaskassigneeinput.ts: {}
+  src/models/components/setusersessionissuerrequestbody.ts: {}
   src/models/components/shadowmcpaccesssummary.ts: {}
   src/models/components/shadowmcpinventoryapprovalrequest.ts: {}
   src/models/components/shadowmcpinventoryrequestsummary.ts: {}
@@ -2870,6 +2872,7 @@ trackedFiles:
   src/models/operations/setspendcap.ts: {}
   src/models/operations/settoolsetenvironmentlink.ts: {}
   src/models/operations/settoolsettoolvariationsgroup.ts: {}
+  src/models/operations/settoolsetusersessionissuer.ts: {}
   src/models/operations/shareskill.ts: {}
   src/models/operations/skillfeedback.ts: {}
   src/models/operations/startmcpresearch.ts: {}
@@ -3954,6 +3957,7 @@ trackedFiles:
   src/react-query/setSpendCap.ts: {}
   src/react-query/setToolsetEnvironmentLink.ts: {}
   src/react-query/setToolsetToolVariationsGroup.ts: {}
+  src/react-query/setToolsetUserSessionIssuer.ts: {}
   src/react-query/shadowMCPInventory.core.ts: {}
   src/react-query/shadowMCPInventory.ts: {}
   src/react-query/shadowMCPInventoryServer.core.ts: {}

@@ -13,6 +13,7 @@ import { toolsetsListToolFilters } from "../funcs/toolsetsListToolFilters.js";
 import { toolsetsListToolSchemaStaticValues } from "../funcs/toolsetsListToolSchemaStaticValues.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
 import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
+import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { toolsetsUpdateExternalOAuthServer } from "../funcs/toolsetsUpdateExternalOAuthServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -65,6 +66,10 @@ import {
   SetToolsetToolVariationsGroupRequest,
   SetToolsetToolVariationsGroupSecurity,
 } from "../models/operations/settoolsettoolvariationsgroup.js";
+import {
+  SetToolsetUserSessionIssuerRequest,
+  SetToolsetUserSessionIssuerSecurity,
+} from "../models/operations/settoolsetusersessionissuer.js";
 import {
   UpdateExternalOAuthServerRequest,
   UpdateExternalOAuthServerSecurity,
@@ -278,6 +283,29 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsSetToolVariationsGroup(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setUserSessionIssuer toolsets
+   *
+   * @remarks
+   * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
+   *
+   * Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.
+   *
+   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
+   */
+  async setUserSessionIssuer(
+    request: SetToolsetUserSessionIssuerRequest,
+    security?: SetToolsetUserSessionIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Toolset> {
+    return unwrapAsync(toolsetsSetUserSessionIssuer(
       this,
       request,
       security,
