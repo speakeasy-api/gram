@@ -213,7 +213,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled,
 		toolIOLogsEnabled, tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	r.cleanup = append(r.cleanup, stop)
-	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture), posthogClient, authzEngine, featureFlags)
+	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture), posthogClient, authzEngine, featureFlags)
 	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
 	r.cleanup = append(r.cleanup, stop)
 	chatWriter = chatWriter.WithTurnStream(chat.NewTurnStream(redisClient))

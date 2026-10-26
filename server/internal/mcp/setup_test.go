@@ -644,6 +644,7 @@ func buildTestMCPService(
 		tracerProvider,
 		conn,
 		chConn,
+		chConn,
 		sessionManager,
 		chatSessions,
 		logsEnabled,

@@ -178,6 +178,16 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 	return policy, nil
 }
 
+const (
+	// clickhousePoolMaxOpenConns bounds one ClickHouse pool. Ingest and
+	// dashboard reads run on separate pools, so each gets the whole budget
+	// the primary pool has always had rather than a share of one.
+	clickhousePoolMaxOpenConns = 32
+
+	// clickhousePoolMaxIdleConns keeps half the pool warm between bursts.
+	clickhousePoolMaxIdleConns = 16
+)
+
 type clickhouseClientOptions struct {
 	component    string
 	host         string
@@ -200,8 +210,8 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		password:     c.String("clickhouse-password"),
 		nativePort:   c.String("clickhouse-native-port"),
 		insecure:     c.Bool("clickhouse-insecure"),
-		maxOpenConns: 32,
-		maxIdleConns: 16,
+		maxOpenConns: clickhousePoolMaxOpenConns,
+		maxIdleConns: clickhousePoolMaxIdleConns,
 		rootCAFile:   "",
 	})
 }
@@ -215,8 +225,8 @@ func newClickhouseReadClient(ctx context.Context, logger *slog.Logger, c *cli.Co
 		password:     c.String("clickhouse-read-password"),
 		nativePort:   c.String("clickhouse-read-native-port"),
 		rootCAFile:   c.Path("clickhouse-read-ca-file"),
-		maxOpenConns: 8,
-		maxIdleConns: 4,
+		maxOpenConns: clickhousePoolMaxOpenConns,
+		maxIdleConns: clickhousePoolMaxIdleConns,
 		insecure:     false,
 	})
 }
