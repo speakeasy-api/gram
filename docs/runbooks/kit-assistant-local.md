@@ -10,8 +10,8 @@ history. Runtime selection does not migrate v1/v2 transcripts.
 Before starting, obtain:
 
 - A configured development checkout and a running Docker-compatible engine.
-- Unmodified Kit commit `2c4a35e` and image
-  `localhost/kit-control-plane:2c4a35e`.
+- Kit release `v0.2.19` and image
+  `localhost/kit-control-plane:v0.2.19`.
 - A development assistant with an active agent-backed workload identity and one
   attached, issuer-gated HTTPS `/mcp/<slug>` resource.
 - The resource's persisted user-session issuer UUID and advertised OAuth issuer.
@@ -34,7 +34,7 @@ absent, build it from the matching Kit checkout:
 ```sh
 cd <KIT_WORKTREE>
 KIT_IMAGE=localhost/kit-control-plane mise run docker:build -- slim --load \
-  --tag localhost/kit-control-plane:2c4a35e
+  --tag localhost/kit-control-plane:v0.2.19
 ```
 
 Use an explicit non-`latest` image tag or a digest. Untagged images and `:latest`
@@ -53,11 +53,13 @@ files or command output.
 
    ```toml
    GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
-   GRAM_ASSISTANT_KIT_IMAGE = "localhost/kit-control-plane:2c4a35e"
+   GRAM_ASSISTANT_KIT_IMAGE = "localhost/kit-control-plane:v0.2.19"
    GRAM_ASSISTANT_KIT_NETWORK = "<ISOLATED_NETWORK>"
    GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE = "<ABSOLUTE_CA_BUNDLE_PATH>"
-   # Default is client_secret_basic; use private_key_jwt to test ES256 startup.
-   GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD = "client_secret_basic"
+   GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER = "<EXTERNAL_ISSUER_URL>"
+   GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL = "<EXTERNAL_JWKS_URL>"
+   GRAM_ASSISTANT_KIT_WORKLOAD_SUBJECT = "<EXACT_SUBJECT>"
+   GRAM_ASSISTANT_KIT_WORKLOAD_ASSERTION_FILE = "<ABSOLUTE_DEDICATED_DIRECTORY>/assertion"
    GRAM_ASSISTANT_KIT_MCP_RESOURCE = "https://<RESOURCE_HOST>/mcp/<SLUG>"
    GRAM_ASSISTANT_KIT_MCP_ISSUER = "https://<EXPECTED_OAUTH_ISSUER>"
    GRAM_ASSISTANT_KIT_MCP_ISSUER_ID = "<PERSISTED_ISSUER_UUID>"
@@ -85,18 +87,30 @@ files or command output.
    enabled and retain the development CA in the bundle. A relay sharing an old
    gateway's namespace does not configure a newly provisioned gateway.
 
-   Startup provisions Kit's native API-key credential file, not an inference
-   bearer or a configurable provider origin. The control plane rotates that key
-   and binds it to the runtime. Never print its contents. The saved assistant
-   model is also written to Kit's startup configuration; it must remain allowed
-   by the authoritative catalog.
-
-   For `private_key_jwt`, trusted startup generates a fresh P-256 key, registers
-   only public JWKS against the runtime workload identity, and provisions the
-   private PKCS#8 PEM through the mode-0600 credential archive. The MCP config
-   contains only its absolute file path and `ES256`. Never reuse a human client
-   registration or embed private key bytes in MCP JSON. Changing this setting
-   affects future startup; it does not convert credentials in a running guest.
+   Supply a short-lived assertion through the configured read-only file. The
+   external issuer must rotate it before renewal. Use a dedicated host directory
+   containing no unrelated files, with owner-only directory permissions (`0700`)
+   and assertion-file permissions (`0600`). The host-side issuer must retain these
+   permissions during rotation. The directory and every replacement assertion
+   must be owned by the host identity that the configured container daemon maps
+   to guest UID `1000`; do not assume this is host UID `1000`. Rootless Docker
+   normally maps the invoking host owner to container root, which is not enough.
+   Configure projection ownership using the daemon's actual user-namespace
+   mapping, or use an engine whose supported mapping permits this ownership.
+   Do not run Kit as root, disable namespace isolation, or widen permissions.
+   Before gateway creation, a disposable probe in the pinned image verifies
+   access as `1000:1000` through the actual daemon. It has no network, uses a
+   read-only root filesystem and assertion mount, and only opens the file; it
+   does not copy or print assertion contents. A failed probe blocks creation
+   with ownership guidance. Keep this ownership invariant during rotation.
+   The image must provide `/bin/sh` for this check.
+   The assertion directory is mounted read-only so atomic token replacement remains
+   visible. Each cold startup requires a new external
+   subject: previously admitted subjects cannot authorize a new generation.
+   Local development uses the
+   same workload exchange as GKE; there is no secret-authentication fallback.
+   Keep the projected file outside the workspace and snapshot roots. The owner
+   and agent must have explicit inference permission for the project.
 
 3. Apply the configuration to both services:
 
@@ -152,8 +166,8 @@ appropriate for the attached resource, for example:
 Check the following results:
 
 1. Verify the control-plane authenticated `GET /chat/models` contract separately.
-   Kit `2c4a35e` fetches public OpenRouter model metadata and has an offline
-   fallback; it does not authenticate through Speakeasy's catalog endpoint.
+   Workload grants do not imply catalog access; configure the model explicitly
+   rather than relying on authenticated discovery or model fallback.
    Provision the saved model explicitly and retain authoritative model-allowlist
    enforcement on completion. A model menu or session creation does not prove
    authenticated inference.
@@ -164,51 +178,6 @@ Check the following results:
 3. The canonical chat contains the user message, assistant text, assistant
    tool-call records, and the corresponding tool results. Inspect the saved chat,
    not only streamed text or inference request logs.
-
-### Current-image verification status
-
-The native-key image has passed focused bootstrap, rotation, local composition,
-and GKE provisioning tests. Isolated hostname routing and certificate verification
-have also been exercised. Real inference succeeded through the native API-key
-completion path on unmodified Kit `2c4a35e`; the canonical chat contained one user
-row and one assistant row with the requested `KIT_NATIVE_AUTH_OK` marker.
-Completion-only principal admission has database-backed regression coverage;
-unbound keys and transcript access remain rejected. Native MCP `client_secret`
-machine authentication and catalog discovery also succeeded: the intentionally
-empty fixture reported `authenticated`, zero tools, and no stale/error flags.
-Same-conversation continuation preserved canonical user, assistant, tool-call,
-and tool-result rows. A subsequently attached parameterless read-only health tool
-was discovered and invoked successfully through native MCP. The canonical chat
-contains completed tool results and the final `KIT_NATIVE_TOOL_OK` marker.
-This required preserving the admitted agent for workload kill-switch enforcement
-and encoding empty tool responses as `content: []`, not `content: [null]`.
-A separately provisioned runtime also passed native `private_key_jwt` (ES256)
-discovery and health-tool execution, with completed canonical tool records and
-`KIT_JWT_VERIFIED_TOOL`. An earlier model reply claimed success after rejected
-Runlet programs; that reply is not evidence. Always require completed tool
-records, not a marker alone. Resident replay after a control-plane worker restart
-also passed: all 18 original canonical rows remained exactly once, followed by
-only the new user/assistant pair and `KIT_RESIDENT_REPLAY_OK`. Cold-process restore
-still needs verification; request acceptance is not success.
-
-Earlier reports of successful inference and resident replay used the historical
-bearer-based integration image. They do not establish compatibility with this
-native-key image.
-
-The optional real-image smoke now uses a fresh internal network, a generated
-trusted certificate for `ai.speakeasy.com`, and a synthetic local streaming
-completion. It verifies native API-key/project headers, ACP authentication,
-session creation, prompt execution, authoritative settlement, and close. It
-passed against unmodified `2c4a35e`. External routing is blocked; no paid model
-is called. This complements, but does not replace, the live inference evidence.
-
-```sh
-SPEAKEASY_KIT_IMAGE_SMOKE=1 mise run test:server ./internal/assistants \
-  -run '^TestKitLocalExactImageGatewaySmoke$' -count=1
-```
-
-`SPEAKEASY_KIT_SMOKE_IMAGE` can select another already-built image. Do not
-interpret a synthetic completion as real provider or workload MCP verification.
 
 ## Session and transcript rules
 
@@ -229,15 +198,7 @@ results before retrying or retiring the runtime; do not stop the projector or
 use replacement resume to take control away from it. Natural completion is not
 reported as successful cancellation.
 
-Focused mailbox and cancellation-state tests have passed. Live foreground
-cancellation on Kit `2c4a35e` also passed: after observing a harmless `sleep 90`
-tool call, the control-plane interrupt returned `interrupted: true`, the canonical
-chat recorded interrupted tool terminals, and the child sleep process was gone.
-A second interrupt returned `stopped: false` and `interrupted: false`. This does
-not establish cancellation of detached background work.
-
-Resident-session replay and cold-process restore are different operations.
-Kit `2c4a35e` persists ACP message IDs for newly written v2 transcripts; older
+Kit `v0.2.19` persists ACP message IDs for newly written v2 transcripts; older
 unstamped transcripts can reconstruct different replay IDs and remain unsafe
 for deduplication. Our live cold-process projection still needs verification.
 The legacy idle-expiry path deliberately excludes Kit because it lacks an
@@ -268,7 +229,7 @@ automatically posted to Slack.
 
 ## Troubleshoot local setup and missing results
 
-Kit `2c4a35e` retains failed MCP initialization as an error. Repeating
+Kit `v0.2.19` retains failed MCP initialization as an error. Repeating
 `tool_search` or touching an unchanged config file does not retry initialization:
 reload compares parsed entries. Repair transport before first discovery. For an
 isolated fixture already in this state, a deliberate server-key rename can
@@ -292,8 +253,8 @@ credential revocation or a general retry API.
 
 Provisioning writes private credentials before the gateway starts. Do not print,
 copy into transcripts, or commit those files. Fresh process starts require
-revoked/reissued native inference API keys; a key recovered from a snapshot must
-not be reused. This startup requirement does not establish cold-restore correctness.
+a fresh externally projected workload assertion; a token recovered from a snapshot
+must not be reused. This startup requirement does not establish cold-restore correctness.
 
 Adapter maintainers can find the exact file names, permissions, control-plane chat binding,
 projection rules, and restore constraints in the
@@ -302,8 +263,8 @@ projection rules, and restore constraints in the
 ## Platform MCP parity
 
 An authorized administrator already uses `select_assistant_runtime` to preview
-and confirm the runtime choice for an exact project and assistant. Native-key
-issuance, model bootstrap configuration, and local TLS routing are internal
+and confirm the runtime choice for an exact project and assistant. Workload
+admission, model bootstrap configuration, and local TLS routing are internal
 provisioning details, not new administrator outcomes; no additional Platform MCP
 tool is needed for these changes. Keep credential bytes out of tool results.
 The existing tool retains project authorization, explicit confirmation,
