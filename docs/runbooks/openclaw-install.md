@@ -11,10 +11,11 @@ packages are generated and published.
 OpenClaw coverage is **not** uniform — it depends on how the customer's models
 authenticate. Establish this first, because it changes what you promise them.
 
-| Model auth mode                                       | What OpenClaw runs                                        | Hooks that fire                                                                                                   | Speakeasy coverage                                                                                                                                                              |
-| ----------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Embedded runtime (`agentRuntime: { id: "openclaw" }`) | Model + tool loop in-process                              | Full set: `before_agent_run`, `before_tool_call`, `after_tool_call`, `llm_output`, `agent_end`, session lifecycle | Full — capture **and** real-time tool blocking                                                                                                                                  |
-| Claude CLI harness (`agentRuntime: claude-cli`)       | Delegates the loop to the Claude Code CLI, out-of-process | Only `agent_turn_prepare`, `before_prompt_build`, `before_message_write`                                          | Partial from OpenClaw. Tool and LLM activity is captured **only if Claude Code hooks are separately deployed on the same machine**; without that, these sessions are unobserved |
+| Model auth mode                                                    | What OpenClaw runs                                        | Hooks that fire                                                                                                   | Speakeasy coverage                                                                                                                                                              |
+| ------------------------------------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Embedded runtime (`agentRuntime: { id: "openclaw" }`)              | Model + tool loop in-process                              | Full set: `before_agent_run`, `before_tool_call`, `after_tool_call`, `llm_output`, `agent_end`, session lifecycle | Full: capture **and** real-time tool blocking                                                                                                                                   |
+| Claude CLI harness (`agentRuntime: claude-cli`)                    | Delegates the loop to the Claude Code CLI, out-of-process | Only `agent_turn_prepare`, `before_prompt_build`, `before_message_write`                                          | Partial from OpenClaw. Tool and LLM activity is captured **only if Claude Code hooks are separately deployed on the same machine**; without that, these sessions are unobserved |
+| Codex app-server harness (`openai/*` models after a Codex sign-in) | Runs the turn on the Codex app server                     | `llm_input`, the tool hooks, `llm_output`, `agent_end`. **No `before_agent_run`**                                 | Prompt, tool calls and assistant reply are captured. The prompt comes from `llm_input`, which OpenClaw does not await, so **prompt policies cannot block these turns**          |
 
 The trap: `openclaw models auth login` writes `agentRuntime: {id: "claude-cli"}`
 **by default for every model** when a claude-cli profile exists on the machine.
@@ -71,13 +72,14 @@ customer whose models all route through the Claude CLI.
 
    **This step is not optional.** Without `allowConversationAccess`, the
    conversation-scope hooks the plugin subscribes (`before_agent_run`,
-   `llm_output`, `agent_end`) silently never fire — no error, no warning, just
-   no prompts, no assistant responses and no usage. Tool hooks still fire, so a
+   `llm_input`, `llm_output`, `agent_end`) silently never fire. There is no
+   error and no warning, just no prompts, no assistant responses and no usage.
+   Tool hooks still fire, so a
    half-configured install looks _partly_ working, which is the most confusing
    failure mode we have here.
 
-   OpenClaw gates further conversation hooks behind the same flag (`llm_input`
-   and `before_agent_finalize` among them), but the plugin does not subscribe
+   OpenClaw gates further conversation hooks behind the same flag
+   (`before_agent_finalize` among them), but the plugin does not subscribe
    those and never reports them.
 
 4. Restart the Gateway. Plugin changes are not hot-loaded.

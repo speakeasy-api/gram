@@ -44,15 +44,20 @@ type Relay struct {
 	// that triggered the backfill in this same process. It was the turn's
 	// only prompt-policy check, so the deny gates that event instead.
 	backfillDeny string
+
+	// openclawPrompts records the OpenClaw runs whose user prompt was already
+	// reported, so that before_agent_run and llm_input report it once per run.
+	openclawPrompts *openclawPromptRuns
 }
 
 // NewRelay builds a Relay from the resolved config.
 func NewRelay(cfg Config) *Relay {
 	return &Relay{
-		cfg:          cfg,
-		client:       newClient(cfg.ServerURL),
-		login:        newLoginFlow(cfg),
-		backfillDeny: "",
+		cfg:             cfg,
+		client:          newClient(cfg.ServerURL),
+		login:           newLoginFlow(cfg),
+		backfillDeny:    "",
+		openclawPrompts: newOpenclawPromptRuns(),
 	}
 }
 
@@ -102,6 +107,9 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 	runner.OnModelResponse(func(ctx context.Context, e *agenthooks.ModelEvent) error {
 		return r.onObserve(ctx, e)
 	})
+	// OpenClaw's Codex app-server harness fires no before_agent_run, so the
+	// relay reports the user prompt of those runs from llm_input.
+	runner.OnModelRequest(r.onModelRequest)
 
 	return runner
 }
@@ -327,6 +335,7 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 }
 
 func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenthooks.PromptDecision, error) {
+	r.noteOpenclawPrompt(e)
 	v := r.evaluate(ctx, e)
 	if e.Backfilled {
 		if v.block {

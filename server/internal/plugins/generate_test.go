@@ -2401,6 +2401,46 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	}
 }
 
+// OpenClaw's Codex app-server harness fires llm_input but no before_agent_run,
+// so the shim must forward llm_input for the daemon to report the prompt of
+// those runs. OpenClaw does not await llm_input, so the shim registers it
+// observe-only, without a gate deadline that could fail a turn closed.
+func TestGenerateOpenClawShimObservesLLMInputWithoutGate(t *testing.T) {
+	t.Parallel()
+	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}, "openclaw")
+	require.NoError(t, err)
+	shim, ok := files["index.js"]
+	require.True(t, ok, "openclaw package must ship the index.js shim")
+
+	shimConst := func(name string) string {
+		for line := range strings.SplitSeq(string(shim), "\n") {
+			if value, ok := strings.CutPrefix(line, "const "+name+" = "); ok {
+				return value
+			}
+		}
+		t.Fatalf("shim declares no %s", name)
+		return ""
+	}
+
+	var hooks []string
+	require.NoError(t, json.Unmarshal([]byte(shimConst("HOOKS")), &hooks))
+	require.Contains(t, hooks, "llm_input")
+	require.Contains(t, hooks, "before_agent_run", "built-in harnesses still report and gate the prompt on before_agent_run")
+
+	gates := shimConst("GATE_TIMEOUT_MS")
+	require.NotContains(t, gates, "llm_input", "llm_input must not get a gate deadline")
+	require.Contains(t, string(shim), "if (gateTimeoutMs === undefined) {\n          void call(hook, event, sanitizeCtx(hook, ctx))\n          return\n        }",
+		"hooks without a gate deadline must be forwarded fire-and-forget")
+
+	// The daemon reads only the prompt and the run identity from llm_input.
+	require.Contains(t, string(shim), `if (hook === "llm_input") {`)
+	require.Contains(t, string(shim), "const { historyMessages, systemPrompt, tools, ...rest } = event")
+}
+
 type codexOTLPHTTPExporter struct {
 	Endpoint string            `toml:"endpoint"`
 	Protocol string            `toml:"protocol"`

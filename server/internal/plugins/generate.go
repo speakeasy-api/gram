@@ -385,7 +385,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "51"
+const hooksGeneratorVersion = "52"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -2077,7 +2077,10 @@ const COMMAND =
   process.platform === "win32"
     ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "hooks", "bootstrap.ps1"), ...SERVE_ARGS]
     : ["bash", join(ROOT, "hooks", "bootstrap.sh"), ...SERVE_ARGS]
-const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "session_start", "session_end", "agent_end", "llm_output", "gateway_start", "gateway_stop"]
+// llm_input is observe-only. OpenClaw's Codex app-server harness fires no
+// before_agent_run, so the daemon reports those runs' user prompt from
+// llm_input. No gate fires there, so prompt policies cannot block those runs.
+const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "session_start", "session_end", "agent_end", "llm_input", "llm_output", "gateway_start", "gateway_stop"]
 // 10s gate wall: the daemon's deadline is 90% of this and the relay's
 // network budget is 5s, so a fail-closed verdict always lands first and
 // no hook stalls the agent longer than ~10s.
@@ -2142,13 +2145,16 @@ export default {
 
     // The daemon never reads these history-sized fields (finalMessage/usage
     // ride the llm_output splice), and an oversized frame is dropped at the
-    // serve loop's size cap — strip them before they reach the pipe. The
-    // canonical shim also strips llm_input.historyMessages; this shim never
-    // subscribes llm_input, so that branch is omitted here.
+    // serve loop's size cap, so strip them before they reach the pipe. From
+    // llm_input the daemon reads only the prompt and the run identity.
     const slimEvent = (hook, event) => {
       if (event == null || typeof event !== "object") return event
       if (hook === "agent_end" || hook === "before_agent_run") {
         const { messages, ...rest } = event
+        return rest
+      }
+      if (hook === "llm_input") {
+        const { historyMessages, systemPrompt, tools, ...rest } = event
         return rest
       }
       return event

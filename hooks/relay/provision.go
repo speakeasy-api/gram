@@ -134,6 +134,11 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 	if provider == agenthooks.ProviderCodex || provider == agenthooks.ProviderOpenCode || provider == agenthooks.ProviderCopilot {
 		hooks = append(hooks, gate(agenthooks.KindPermission, 60*time.Second))
 	}
+	// OpenClaw's Codex app-server harness fires llm_input but no
+	// before_agent_run; the relay reports the user prompt from llm_input.
+	if provider == agenthooks.ProviderOpenClaw {
+		hooks = append(hooks, observe(agenthooks.KindModelRequest))
+	}
 	return install.Manifest{
 		Command:  []string{cfg.BinaryPath, "--config=" + filepath.Join(dir, configFileName)},
 		Hooks:    hooks,
