@@ -19,6 +19,7 @@ import type { ListBindingsResponseBody } from "@gram/client/models/components/li
 import { queryKeyRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { queryKeyRemoteSessions } from "@gram/client/react-query/remoteSessions.js";
 import { queryKeyRemoteSessionsListBindings } from "@gram/client/react-query/remoteSessionsListBindings.js";
+import { Alert } from "@/components/ui/Alert";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
@@ -39,20 +40,28 @@ import {
   validateAgentAPIKeyName,
 } from "./agent-api-key-grants";
 import { AgentGrantSelector, type GrantNarrowings } from "./AgentGrantSelector";
-import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useKeysRotateMutation } from "@gram/client/react-query/keysRotate.js";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 
 import { AgentKeyServers, type KeyServer } from "./AgentKeyServers";
 
 import { narrowGrantsToServers } from "./agent-key-server-grants";
-import { discoverKeyServerGrants } from "./agent-key-discovery";
+import { discoverKeyGrants } from "./agent-key-discovery";
+import { AgentKeyPermissions } from "./AgentKeyPermissions";
+import { useAgentKeys, useAgentPolicyGrants } from "./useAgentKeyPermissions";
+import {
+  isAgentWidePermission,
+  permissionsMissingFromKey,
+  uniqueGrants,
+} from "./agent-key-permissions";
 
 const security = { sessionHeaderGramSession: "" };
 
 export function AgentAPIKeys({
   agent,
   creation = false,
+  replaceKeyId,
   federated = false,
   onCreate,
   onDone,
@@ -60,6 +69,8 @@ export function AgentAPIKeys({
 }: {
   agent: ManagedAgent;
   creation?: boolean;
+  /** In creation mode, the key the new one replaces once it is issued. */
+  replaceKeyId?: string;
   /**
    * The agent signs in with a platform's tokens, so a key is optional.
    * "unknown" where the caller's own read of that has not settled: the panel
@@ -67,7 +78,8 @@ export function AgentAPIKeys({
    * authenticate.
    */
   federated?: boolean | "unknown";
-  onCreate?: () => void;
+  /** Opens issuance; with a key id, issuance replaces that key. */
+  onCreate?: (replaceKeyId?: string) => void;
   onDone?: () => void;
   onBusy?: (busy: boolean) => void;
 }): JSX.Element {
@@ -81,11 +93,12 @@ export function AgentAPIKeys({
   if (creation)
     return (
       <AgentAPIKeysContent
-        key={`creation:${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
+        key={`creation:${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}:${replaceKeyId ?? ""}`}
         agent={agent}
         organizationId={organization.id}
         userId={user.id}
         creation
+        replaceKeyId={replaceKeyId}
         onDone={onDone}
         onBusy={onBusy}
       />
@@ -126,6 +139,7 @@ function AgentAPIKeysContent({
   organizationId,
   userId,
   creation = false,
+  replaceKeyId,
   federated = false,
   onCreate,
   onDone,
@@ -135,8 +149,9 @@ function AgentAPIKeysContent({
   organizationId: string;
   userId: string;
   creation?: boolean;
+  replaceKeyId?: string;
   federated?: boolean | "unknown";
-  onCreate?: () => void;
+  onCreate?: (replaceKeyId?: string) => void;
   onDone?: () => void;
   onBusy?: (busy: boolean) => void;
 }) {
@@ -162,12 +177,13 @@ function AgentAPIKeysContent({
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revoke, setRevoke] = useState<Key | null>(null);
-  const keys = useListAPIKeys({ agentId: agent.id }, security, {
-    queryKeyHashFn: (key) => JSON.stringify([organizationId, key]),
-    enabled: canManage,
-    retry: false,
-    throwOnError: false,
-  });
+  const keys = useAgentKeys(agent);
+  const policy = useAgentPolicyGrants(agent);
+  const canReadPolicy = agent.permissions.write;
+  const agentGrants =
+    canReadPolicy && policy.data && !policy.isError && !keys.isError
+      ? policy.data
+      : [];
   // Discovery is authorize-gated and already intersects the live agent, owner
   // and caller, so credential issuance never depends on reading agent policy.
   const resources = inventory.map((server) => ({
@@ -185,7 +201,7 @@ function AgentAPIKeysContent({
       agent.ownerUserId,
     ],
     queryFn: ({ signal }) =>
-      discoverKeyServerGrants(sdk.agents, agent.id, inventory, signal),
+      discoverKeyGrants(sdk.agents, agent.id, inventory, signal),
     enabled: open && canIssue && resources.length > 0,
     retry: false,
     throwOnError: false,
@@ -199,10 +215,11 @@ function AgentAPIKeysContent({
     delegable.isSuccess &&
     !delegable.isFetching &&
     Array.isArray(delegable.data);
-  const scopedGrants = narrowGrantsToServers(
-    discoveryComplete ? delegable.data : [],
-    servers,
-  );
+  const discovered = discoveryComplete ? delegable.data : [];
+  const scopedGrants = uniqueGrants([
+    ...narrowGrantsToServers(discovered, servers),
+    ...discovered.filter((grant) => isAgentWidePermission(grant)),
+  ]);
   let hasSelections = false;
   try {
     hasSelections =
@@ -225,10 +242,41 @@ function AgentAPIKeysContent({
     setReviewAccounts([]);
     setStep((current) => (current === 3 ? 2 : current));
   }, [discoveryComplete, delegable.dataUpdatedAt]);
-  const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
+  const refresh = () => {
+    // Mutation-level callbacks still run after this view unmounts.
+    void queryClient.invalidateQueries({
+      queryKey: ["@gram/client", "keys", "list"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["agent-key-search", organizationId],
+    });
+    if (mounted.current) void keys.refetch();
+  };
+  const create = useCreateAPIKeyMutation({
+    gcTime: 0,
+    retry: false,
+    onSuccess: refresh,
+  });
+  const rotate = useKeysRotateMutation({
+    gcTime: 0,
+    retry: false,
+    onSuccess: refresh,
+  });
+  const isIssuing = create.isPending || rotate.isPending;
+  // Read once the list has loaded: a key revoked or expired since the reissue
+  // link was followed is no longer there to replace, and issuance then
+  // creates a new key instead of failing at the last step.
+  const replacementReady =
+    !replaceKeyId || (keys.isSuccess && !keys.isFetching);
+  const replacing = replaceKeyId
+    ? keys.data?.keys.find((key) => key.id === replaceKeyId)
+    : undefined;
+  const replacementGone =
+    !!replaceKeyId && replacementReady && !replacing && !issued;
+  const issuance = replacing ? rotate : create;
   // Resetting mutation state after issuance must not unlock header navigation
   // while the post-issue inventory refresh is still in flight.
-  const navigationBusy = create.isPending || (issued && keys.isFetching);
+  const navigationBusy = isIssuing || (issued && keys.isFetching);
   useEffect(() => {
     onBusy?.(navigationBusy);
   }, [navigationBusy, onBusy]);
@@ -244,14 +292,10 @@ function AgentAPIKeysContent({
   const knownKeys = keys.data?.keys.filter(
     (key) => !revokedIds.includes(key.id),
   );
-  const revocation = useRevokeAPIKeyMutation({ retry: false });
-  const refresh = () => {
-    if (!mounted.current) return;
-    void keys.refetch();
-    void queryClient.invalidateQueries({
-      queryKey: ["@gram/client", "keys", "list"],
-    });
-  };
+  const revocation = useRevokeAPIKeyMutation({
+    retry: false,
+    onSuccess: refresh,
+  });
   const close = () => {
     setOpen(false);
     setSecret(null);
@@ -261,7 +305,7 @@ function AgentAPIKeysContent({
     setExpiryDays("90");
     setCustomExpiry("");
     setError(null);
-    create.reset();
+    issuance.reset();
     onDone?.();
   };
   const expiryValidation = (now: number) => {
@@ -290,27 +334,32 @@ function AgentAPIKeysContent({
   // to grant) to the ones they can (pick a server, name the key).
   const blockedReason: string | null = !canIssue
     ? "You cannot issue keys for this agent."
-    : !discoveryComplete
-      ? "Loading what this agent can be delegated…"
-      : serversBusy
-        ? "Checking the servers you selected…"
-        : !servers.length
-          ? "Select at least one MCP server."
-          : scopedGrants.length === 0
-            ? "The agent's policy delegates nothing on these servers."
-            : step >= 1 && !accountsReady
-              ? "Connect an account for every server that needs one."
-              : step >= 2 && !name.trim()
-                ? "Name this key."
-                : step >= 2 && expiryReason
-                  ? expiryReason
-                  : step >= 2 && !hasSelections
-                    ? "Select at least one permission."
-                    : null;
+    : !replacementReady
+      ? keys.isError
+        ? "Could not load the key you are replacing. Retry before continuing."
+        : "Loading the key you are replacing…"
+      : !discoveryComplete
+        ? "Loading what this agent can be delegated…"
+        : serversBusy
+          ? "Checking the servers you selected…"
+          : !servers.length
+            ? "Select at least one MCP server."
+            : scopedGrants.length === 0
+              ? "The agent's policy delegates nothing on these servers."
+              : step >= 1 && !accountsReady
+                ? "Connect an account for every server that needs one."
+                : step >= 2 && !name.trim()
+                  ? "Name this key."
+                  : step >= 2 && expiryReason
+                    ? expiryReason
+                    : step >= 2 && !hasSelections
+                      ? "Select at least one permission."
+                      : null;
   // A name is required, so the wizard offers one rather than blocking on an
   // empty field. Names are unique per organization, so a name already in the
   // list is dated to keep the suggestion usable as typed.
   const takenNames = (knownKeys ?? []).map((key) => key.name).join("\u0000");
+  const replacingName = replacing?.name;
   useEffect(() => {
     // Nothing is suggested until the list has been read once: a name chosen
     // against an empty list sticks, because the effect leaves a name the user
@@ -318,13 +367,16 @@ function AgentAPIKeysContent({
     if (step !== 2 || keys.isPending) return;
     setName((current) => {
       if (current.trim()) return current;
+      // The replacement takes over the name: the old key is revoked in the
+      // same step, so the name is free by the time the new one is created.
+      if (replacingName) return replacingName;
       const base = `${agent.name} key`;
       const taken = new Set(takenNames.split("\u0000"));
       if (!taken.has(base)) return base;
       const dated = `${base} ${new Date().toISOString().slice(0, 10)}`;
       return taken.has(dated) ? "" : dated;
     });
-  }, [step, agent.name, takenNames, keys.isPending]);
+  }, [step, agent.name, takenNames, keys.isPending, replacingName]);
   const returnToStep = (next: number) => {
     setStep(next);
     setNarrowings({});
@@ -336,7 +388,8 @@ function AgentAPIKeysContent({
   const issue = (review = false) => {
     if (
       !canIssue ||
-      create.isPending ||
+      !replacementReady ||
+      isIssuing ||
       issued ||
       !accountsReady ||
       !servers.length ||
@@ -475,52 +528,56 @@ function AgentAPIKeysContent({
       setStep(2);
       return;
     }
-    create.mutate(
-      {
-        security,
-        request: {
-          createKeyForm: {
-            agentId: agent.id,
-            name: validatedName,
-            expiresAt,
-            delegatedGrantsVersion: 3,
-            requestedGrants,
-            scopes: [],
-          },
-        },
+    const callbacks = {
+      onSuccess: (key: Key) => {
+        if (mounted.current) {
+          setIssued(true);
+          setSecret(key.key ?? null);
+        }
+        issuance.reset();
       },
-      {
-        onSuccess: (key) => {
-          if (mounted.current) {
-            setIssued(true);
-            setSecret(key.key ?? null);
-          }
-          create.reset();
-          refresh();
-        },
-        onError: (failure) => {
-          // A failed issuance may reflect a live policy change. Withdraw the
-          // reviewed ceiling even when the error does not identify its cause.
-          setNarrowings({});
-          setReviewGrants([]);
-          setReviewAccounts([]);
-          setStep(2);
-          if (mounted.current) void delegable.refetch();
-          // A name already in use is the one failure the caller can fix from
-          // this screen, and the server names it. Everything else keeps the
-          // policy explanation, which is what the other causes have in common.
-          const conflict =
-            failure instanceof GramError &&
-            failure.statusCode === 409 &&
-            failure.message;
-          setError(
-            conflict ||
-              "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
-          );
-          create.reset();
-        },
+      onError: (failure: unknown) => {
+        // A failed issuance may reflect a live policy change. Withdraw the
+        // reviewed ceiling even when the error does not identify its cause.
+        setNarrowings({});
+        setReviewGrants([]);
+        setReviewAccounts([]);
+        setStep(2);
+        if (mounted.current) void delegable.refetch();
+        // A name already in use is the one failure the caller can fix from
+        // this screen, and the server names it. Everything else keeps the
+        // policy explanation, which is what the other causes have in common.
+        const conflict =
+          failure instanceof GramError &&
+          failure.statusCode === 409 &&
+          failure.message;
+        setError(
+          conflict ||
+            `Could not ${replacing ? "reissue" : "create"} API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.`,
+        );
+        issuance.reset();
       },
-    );
+    };
+    const form = {
+      name: validatedName,
+      expiresAt,
+      delegatedGrantsVersion: 3,
+      requestedGrants,
+      scopes: [],
+    };
+    if (replacing)
+      rotate.mutate(
+        { security, request: { rotateKeyForm: { id: replacing.id, ...form } } },
+        callbacks,
+      );
+    else
+      create.mutate(
+        {
+          security,
+          request: { createKeyForm: { agentId: agent.id, ...form } },
+        },
+        callbacks,
+      );
   };
   if (!canManage)
     return (
@@ -560,43 +617,65 @@ function AgentAPIKeysContent({
           }
         >
           {knownKeys?.length ? (
-            knownKeys.map((key) => (
-              <IdentityPanelRow
-                key={key.id}
-                title={key.name}
-                // Prefix, issue date and expiry together: which key a machine
-                // holds is remembered as the one issued then, and the expiry
-                // is the next thing anyone asks of it.
-                detail={
-                  <span className="flex flex-wrap items-center gap-x-2">
-                    <span className="font-mono">{key.keyPrefix}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>
-                      Issued{" "}
-                      {key.createdAt ? <KeyDate date={key.createdAt} /> : "—"}
+            knownKeys.map((key) => {
+              const missing = permissionsMissingFromKey(key, agentGrants);
+              return (
+                <IdentityPanelRow
+                  key={key.id}
+                  title={key.name}
+                  accent={missing.length > 0 ? "warning" : undefined}
+                  // Prefix, issue date and expiry together: which key a machine
+                  // holds is remembered as the one issued then, and the expiry
+                  // is the next thing anyone asks of it.
+                  detail={
+                    <span className="flex flex-wrap items-center gap-x-2">
+                      <span className="font-mono">{key.keyPrefix}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        Issued{" "}
+                        {key.createdAt ? <KeyDate date={key.createdAt} /> : "—"}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        Expires{" "}
+                        {key.expiresAt ? <KeyDate date={key.expiresAt} /> : "—"}
+                      </span>
                     </span>
-                    <span aria-hidden="true">·</span>
-                    <span>
-                      Expires{" "}
-                      {key.expiresAt ? <KeyDate date={key.expiresAt} /> : "—"}
+                  }
+                  trailing={
+                    <span className="flex items-center gap-2">
+                      {canReadPolicy && missing.length > 0 && canIssue && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => onCreate?.(key.id)}
+                          aria-label={`Reissue API key ${key.name}`}
+                        >
+                          Reissue
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="destructive-secondary"
+                        onClick={() => {
+                          setError(null);
+                          setRevoke(key);
+                        }}
+                        aria-label={`Revoke API key ${key.name}`}
+                      >
+                        Revoke
+                      </Button>
                     </span>
-                  </span>
-                }
-                trailing={
-                  <Button
-                    size="sm"
-                    variant="destructive-secondary"
-                    onClick={() => {
-                      setError(null);
-                      setRevoke(key);
-                    }}
-                    aria-label={`Revoke API key ${key.name}`}
-                  >
-                    Revoke
-                  </Button>
-                }
-              />
-            ))
+                  }
+                >
+                  <AgentKeyPermissions
+                    apiKey={key}
+                    missing={missing}
+                    canReadPolicy={canReadPolicy}
+                  />
+                </IdentityPanelRow>
+              );
+            })
           ) : (
             // The state that matters most on this page: an identity nothing
             // is holding yet, and the one step that changes that.
@@ -633,6 +712,38 @@ function AgentAPIKeysContent({
               {error}
             </p>
           )}
+          {replaceKeyId && keys.isError && !issued && (
+            <Alert
+              variant="warning"
+              title="Could not load the key you are replacing"
+            >
+              <Button variant="secondary" onClick={() => void keys.refetch()}>
+                Retry key
+              </Button>
+            </Alert>
+          )}
+          {replacing && !issued && (
+            <Alert variant="warning" title={`Replacing ${replacing.name}`}>
+              <div className="space-y-2">
+                <AgentKeyPermissions
+                  apiKey={replacing}
+                  canReadPolicy={canReadPolicy}
+                  missing={permissionsMissingFromKey(replacing, agentGrants)}
+                />
+                <p>
+                  Choose what the new key may do. Reissuing revokes{" "}
+                  {replacing.name} at once, so whatever uses it stops signing in
+                  until you install the new key.
+                </p>
+              </div>
+            </Alert>
+          )}
+          {replacementGone && (
+            <Text muted>
+              The key you chose to reissue has been revoked or has expired, so
+              this issues a new key instead.
+            </Text>
+          )}
           {!issued && (
             <ol
               aria-label="Creation steps"
@@ -644,7 +755,7 @@ function AgentAPIKeysContent({
                     <button
                       type="button"
                       aria-current={step === index ? "step" : undefined}
-                      disabled={index >= step || create.isPending}
+                      disabled={index >= step || isIssuing}
                       onClick={() => {
                         returnToStep(index);
                         setError(null);
@@ -737,7 +848,7 @@ function AgentAPIKeysContent({
                     <Select
                       value={expiryDays}
                       onValueChange={setExpiryDays}
-                      disabled={create.isPending}
+                      disabled={isIssuing}
                     >
                       <SelectTrigger id="agent-key-expiry">
                         <SelectValue />
@@ -758,7 +869,7 @@ function AgentAPIKeysContent({
                           type="date"
                           value={customExpiry}
                           onChange={setCustomExpiry}
-                          disabled={create.isPending}
+                          disabled={isIssuing}
                         />
                       </label>
                     )}
@@ -773,7 +884,7 @@ function AgentAPIKeysContent({
                     grants={scopedGrants}
                     narrowings={narrowings}
                     onChangeNarrowings={setNarrowings}
-                    disabled={create.isPending}
+                    disabled={isIssuing}
                     onRetry={() => void delegable.refetch()}
                   />
                 </>
@@ -781,12 +892,17 @@ function AgentAPIKeysContent({
                 <AgentKeyReview
                   name={name}
                   servers={servers}
-                  grants={reviewGrants}
+                  grants={reviewGrants.filter(
+                    (grant) => !isAgentWidePermission(grant),
+                  )}
+                  otherGrants={reviewGrants.filter((grant) =>
+                    isAgentWidePermission(grant),
+                  )}
                   accounts={reviewAccounts}
                   onEditServers={() => returnToStep(0)}
                   onEditAccounts={() => returnToStep(1)}
                   onEditAccess={() => returnToStep(2)}
-                  disabled={create.isPending}
+                  disabled={isIssuing}
                 />
               )}
             </form>
@@ -797,7 +913,7 @@ function AgentAPIKeysContent({
                 {step > 0 && (
                   <Button
                     variant="secondary"
-                    disabled={create.isPending}
+                    disabled={isIssuing}
                     onClick={() => {
                       returnToStep(step - 1);
                       setError(null);
@@ -806,11 +922,7 @@ function AgentAPIKeysContent({
                     Back
                   </Button>
                 )}
-                <Button
-                  variant="tertiary"
-                  disabled={create.isPending}
-                  onClick={close}
-                >
+                <Button variant="tertiary" disabled={isIssuing} onClick={close}>
                   Cancel
                 </Button>
               </div>
@@ -818,25 +930,29 @@ function AgentAPIKeysContent({
                 {/* A disabled primary with no stated reason is the wizard's
                     commonest dead end, so the gate says what it is waiting
                     for rather than leaving the button silently inert. */}
-                {blockedReason && !create.isPending && (
+                {blockedReason && !isIssuing && (
                   <Text muted small>
                     {blockedReason}
                   </Text>
                 )}
                 <Button
                   title={blockedReason ?? undefined}
-                  disabled={!!blockedReason || create.isPending}
+                  disabled={!!blockedReason || isIssuing}
                   onClick={() =>
                     step < 2 ? setStep(step + 1) : issue(step === 2)
                   }
                 >
-                  {create.isPending
-                    ? "Creating…"
+                  {isIssuing
+                    ? replacing
+                      ? "Reissuing…"
+                      : "Creating…"
                     : step < 2
                       ? "Continue"
                       : step === 2
                         ? "Review key"
-                        : "Create key"}
+                        : replacing
+                          ? "Reissue key"
+                          : "Create key"}
                 </Button>
               </div>
             </div>
@@ -881,7 +997,6 @@ function AgentAPIKeysContent({
                       setRevokedIds((ids) => [...ids, revoke.id]);
                       setRevoke(null);
                       setError(null);
-                      refresh();
                     },
                     onError: () =>
                       setError("Could not revoke API key. Try again."),

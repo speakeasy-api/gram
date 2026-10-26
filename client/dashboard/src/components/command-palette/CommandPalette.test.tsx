@@ -25,6 +25,8 @@ const slugs = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   candidates: [] as unknown[],
+  keySearchFailed: false,
+  retryKeySearch: vi.fn(),
   judgeState: {
     judgment: null,
     fresh: false,
@@ -55,7 +57,11 @@ vi.mock("./recentlyVisited", () => ({
   useRecentsUserId: () => "user_1",
 }));
 vi.mock("./candidates", () => ({
-  useLauncherCandidates: () => mocks.candidates,
+  useLauncherCandidates: () => ({
+    candidates: mocks.candidates,
+    keySearchFailed: mocks.keySearchFailed,
+    retryKeySearch: mocks.retryKeySearch,
+  }),
 }));
 vi.mock("./useLauncherJudge", () => ({
   useLauncherJudge: () => ({
@@ -192,6 +198,8 @@ const input = () =>
   screen.getByPlaceholderText("Ask AI or search resources and pages…");
 
 beforeEach(() => {
+  mocks.keySearchFailed = false;
+  mocks.retryKeySearch.mockReset();
   slugs.orgSlug = "acme";
   slugs.projectSlug = "widgets";
   mocks.candidates = [SETTINGS, SLACK];
@@ -587,4 +595,16 @@ describe("CommandPalette", () => {
     expect(screen.queryByLabelText("Ready")).toBeNull();
     expect(screen.queryByText(/ ms$/)).toBeNull();
   });
+});
+
+it("shows a recoverable key lookup failure even for an unmatched key name", async () => {
+  mocks.keySearchFailed = true;
+  render(<CommandPalette />);
+  const user = userEvent.setup();
+  await user.type(screen.getByRole("combobox"), "unknown credential name");
+  expect(screen.getByRole("status").textContent).toContain(
+    "API key names could not be loaded",
+  );
+  await user.click(screen.getByRole("button", { name: "Retry key search" }));
+  expect(mocks.retryKeySearch).toHaveBeenCalledOnce();
 });

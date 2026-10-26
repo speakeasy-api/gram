@@ -252,22 +252,25 @@ vi.mock("./useSkillCandidates", () => ({
   ),
 }));
 vi.mock("./useAgentIdentityCandidates", () => ({
-  useAgentIdentityCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
-    enabled && mocks.includeNewResourceFixtures
-      ? [
-          {
-            id: "agent-identity:test",
-            kind: "person",
-            title: "Test agent",
-            detail: "Agent identity",
-            keywords: [],
-            verbs: ["open"],
-            group: "Identities",
-            run: () => {},
-          },
-        ]
-      : [],
-  ),
+  useAgentIdentityCandidates: vi.fn(({ enabled }: { enabled: boolean }) => ({
+    candidates:
+      enabled && mocks.includeNewResourceFixtures
+        ? [
+            {
+              id: "agent-identity:test",
+              kind: "person",
+              title: "Test agent",
+              detail: "Agent identity",
+              keywords: [],
+              verbs: ["open"],
+              group: "Identities",
+              run: () => {},
+            },
+          ]
+        : [],
+    keySearchFailed: false,
+    retryKeySearch: vi.fn(),
+  })),
 }));
 vi.mock("@/contexts/CommandPalette", () => ({
   useCommandPalette: () => ({ actions: mocks.actions }),
@@ -369,15 +372,16 @@ function requestOf(args: unknown): { gramProject?: string } | undefined {
 function renderCandidates(
   overrides: Partial<Parameters<typeof useLauncherCandidates>[0]> = {},
 ) {
-  return renderHook(() =>
-    useLauncherCandidates({
-      enabled: true,
-      inProject: mocks.inProject,
-      recentsUserId: "user_1",
-      orgSlug: "acme",
-      projectSlug: mocks.inProject ? "default" : undefined,
-      ...overrides,
-    }),
+  return renderHook(
+    () =>
+      useLauncherCandidates({
+        enabled: true,
+        inProject: mocks.inProject,
+        recentsUserId: "user_1",
+        orgSlug: "acme",
+        projectSlug: mocks.inProject ? "default" : undefined,
+        ...overrides,
+      }).candidates,
   );
 }
 

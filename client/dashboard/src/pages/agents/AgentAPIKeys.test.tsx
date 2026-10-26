@@ -27,8 +27,11 @@ const mocks = vi.hoisted(() => ({
   selectedIssuerId: undefined as string | undefined,
   list: vi.fn(),
   create: vi.fn(),
+  rotate: vi.fn(),
   revoke: vi.fn(),
   listDelegableGrants: vi.fn(),
+  listAgentWideGrants: vi.fn(),
+  listPolicyGrants: vi.fn(),
   toolsets: vi.fn(),
   mcpServers: vi.fn(),
   toolMetadata: vi.fn(),
@@ -51,9 +54,28 @@ vi.mock("./agent-key-server-grants", async (importOriginal) => {
 });
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.org, projects: mocks.projects }),
-  useSession: () => ({ user: { id: mocks.user } }),
+  useSession: () => ({
+    user: { id: mocks.user },
+    organization: { id: mocks.org, projects: mocks.projects },
+  }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ agents: mocks }) }));
+// Unscoped discovery (no `toolsetIds`) offers the permissions that are not
+// tied to a server. It is routed to its own mock so the server-scoped call
+// counts below stay about server discovery alone.
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    agents: {
+      ...mocks,
+      listDelegableGrants: (
+        request: { toolsetIds?: string[] },
+        ...rest: unknown[]
+      ) =>
+        request.toolsetIds
+          ? mocks.listDelegableGrants(request, ...rest)
+          : mocks.listAgentWideGrants(request, ...rest),
+    },
+  }),
+}));
 vi.mock("@gram/client/react-query/listAPIKeys", () => ({
   useListAPIKeys: (request: unknown, security: unknown, options: object) =>
     useQuery({
@@ -65,6 +87,10 @@ vi.mock("@gram/client/react-query/listAPIKeys", () => ({
 vi.mock("@gram/client/react-query/createAPIKey", () => ({
   useCreateAPIKeyMutation: (options: object) =>
     useMutation({ mutationFn: mocks.create, ...options }),
+}));
+vi.mock("@gram/client/react-query/keysRotate.js", () => ({
+  useKeysRotateMutation: (options: object) =>
+    useMutation({ mutationFn: mocks.rotate, ...options }),
 }));
 vi.mock("@gram/client/react-query/revokeAPIKey", () => ({
   useRevokeAPIKeyMutation: (options: object) =>
@@ -172,6 +198,7 @@ function KeyPage({
   federated?: boolean | "unknown";
 }) {
   const [creation, setCreation] = useState(false);
+  const [replaceKeyId, setReplaceKeyId] = useState<string>();
   const [busy, setBusy] = useState(false);
   return (
     <>
@@ -184,7 +211,11 @@ function KeyPage({
         agent={agent}
         federated={federated}
         creation={creation}
-        onCreate={() => setCreation(true)}
+        replaceKeyId={replaceKeyId}
+        onCreate={(id) => {
+          setReplaceKeyId(id);
+          setCreation(true);
+        }}
         onDone={() => setCreation(false)}
         onBusy={setBusy}
       />
@@ -298,8 +329,11 @@ beforeEach(() => {
   ];
   mocks.list.mockResolvedValue({ keys: [key] });
   mocks.create.mockResolvedValue({ ...key, key: "secret_example_once" });
+  mocks.rotate.mockResolvedValue({ ...key, key: "secret_replacement" });
   mocks.revoke.mockResolvedValue(undefined);
   mocks.listDelegableGrants.mockResolvedValue([creationGrant]);
+  mocks.listAgentWideGrants.mockResolvedValue([]);
+  mocks.listPolicyGrants.mockResolvedValue([]);
   mocks.toolsets.mockResolvedValue({
     toolsets: [
       {
@@ -1009,6 +1043,268 @@ describe("Agent API keys", () => {
       expect(mocks.create).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+describe("what each key can do", () => {
+  const issuedAt = new Date("2026-01-10T00:00:00Z");
+  const agentWideGrant = {
+    effect: "allow",
+    scope: "project:read",
+    selector: { resourceKind: "project", resourceId: "*" },
+  };
+  const issuedKey = {
+    ...key,
+    createdAt: issuedAt,
+    delegatedGrantsVersion: 3,
+    delegatedGrants: {
+      requested: [
+        {
+          scope: "mcp:connect",
+          selector: {
+            resourceKind: "mcp",
+            resourceId: "server_one",
+            projectId: "project_one",
+          },
+        },
+      ],
+      effective: [],
+    },
+  };
+  const manager = {
+    ...agent,
+    permissions: { ...agent.permissions, write: true },
+  };
+  const policyGrant = (scope: string, createdAt: Date, resourceId = "*") => ({
+    id: `${scope}:${resourceId}`,
+    effect: "allow",
+    scope,
+    selector: {
+      resourceKind: scope.startsWith("mcp:") ? "mcp" : "project",
+      resourceId,
+    },
+    createdAt,
+    updatedAt: createdAt,
+  });
+
+  it("lists the permissions a key was issued with, by name", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    setup();
+    expect(
+      await screen.findByText("Use tools on Server one", { exact: false }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Missing:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^Reissue API key/ }),
+    ).toBeNull();
+  });
+
+  it("says a key without stored grants follows the agent's permissions", async () => {
+    setup();
+    expect(
+      await screen.findByText("Uses the agent’s current permissions."),
+    ).toBeTruthy();
+  });
+
+  it("flags only permissions added to the agent after the key was issued", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    mocks.listPolicyGrants.mockResolvedValue([
+      // Already there at issuance and held by the key.
+      policyGrant("mcp:connect", new Date("2026-01-01"), "server_one"),
+      // Already there at issuance and left off on purpose.
+      policyGrant("environment:read", new Date("2026-01-01")),
+      // Added afterwards: the key never sees it.
+      policyGrant("project:read", new Date("2026-02-01")),
+    ]);
+    setup(manager);
+    const missing = await screen.findByText(/Missing:/);
+    expect(missing.parentElement?.textContent).toContain(
+      "View projects on all projects",
+    );
+    expect(missing.parentElement?.textContent).not.toContain("environments");
+    expect(
+      screen.getByRole("button", { name: "Reissue API key Example key" }),
+    ).toBeTruthy();
+  });
+
+  it("hides policy-derived warnings when a key refresh fails with cached rows", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    mocks.listPolicyGrants.mockResolvedValue([
+      policyGrant("project:read", new Date("2026-02-01")),
+    ]);
+    const { client } = setup(manager);
+    await screen.findByText(/Missing:/);
+    mocks.list.mockRejectedValue(new Error("read refused"));
+    await client.invalidateQueries({
+      queryKey: ["@gram/client", "keys", "list"],
+    });
+    await waitFor(() => expect(screen.queryByText(/Missing:/)).toBeNull());
+    expect(
+      screen.queryByRole("button", { name: "Reissue API key Example key" }),
+    ).toBeNull();
+  });
+
+  it("invalidates named-key search when revocation finishes after unmount", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    let finish!: () => void;
+    mocks.revoke.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { client, unmount } = setup(manager);
+    const searchKey = ["agent-key-search", mocks.org, mocks.user, [manager.id]];
+    client.setQueryData(searchKey, [
+      { id: issuedKey.id, name: issuedKey.name },
+    ]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Revoke API key Example key" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
+    await waitFor(() => expect(mocks.revoke).toHaveBeenCalledOnce());
+    unmount();
+    finish();
+    await waitFor(() =>
+      expect(client.getQueryState(searchKey)?.isInvalidated).toBe(true),
+    );
+  });
+
+  it("does not flag a later permission the key already holds", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    mocks.listPolicyGrants.mockResolvedValue([
+      {
+        ...policyGrant("mcp:connect", new Date("2026-02-01"), "server_one"),
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_one",
+          projectId: "project_one",
+        },
+      },
+    ]);
+    setup(manager);
+    await screen.findByText("Use tools on Server one", { exact: false });
+    await waitFor(() => expect(mocks.listPolicyGrants).toHaveBeenCalled());
+    expect(screen.queryByText(/Missing:/)).toBeNull();
+  });
+
+  it("reissues a key with the new permissions and revokes the old one", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    mocks.listPolicyGrants.mockResolvedValue([
+      policyGrant("project:read", new Date("2026-02-01")),
+    ]);
+    mocks.listAgentWideGrants.mockResolvedValue([agentWideGrant]);
+    setup(manager);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Reissue API key Example key",
+      }),
+    );
+    expect(await screen.findByText("Replacing Example key")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose fixture server" }),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    // The replacement keeps the old key's name.
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Key name") as HTMLInputElement).value,
+      ).toBe("Example key"),
+    );
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /View projects/ }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /Use tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Review key" }));
+    expect(
+      screen.getByRole("region", { name: "Other permissions" }).textContent,
+    ).toContain("View projects on all projects");
+    fireEvent.click(screen.getByRole("button", { name: "Reissue key" }));
+    await screen.findByText("secret_replacement");
+    expect(mocks.create).not.toHaveBeenCalled();
+    const form = mocks.rotate.mock.calls[0]?.[0].request.rotateKeyForm;
+    expect(form).toMatchObject({
+      id: issuedKey.id,
+      name: "Example key",
+      delegatedGrantsVersion: 3,
+      scopes: [],
+    });
+    expect(form.requestedGrants).toEqual(
+      expect.arrayContaining([agentWideGrant, creationGrant]),
+    );
+  });
+
+  it("hides cached missing permissions and Reissue after policy access is removed", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    mocks.listPolicyGrants.mockResolvedValue([
+      policyGrant("project:read", new Date("2026-02-01")),
+    ]);
+    const { change } = setup(manager);
+    await screen.findByText(/Missing:/);
+    change(agent);
+    expect(screen.queryByText(/Missing:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Reissue API key/ }),
+    ).toBeNull();
+    expect(screen.getByText("Issued grants:")).toBeTruthy();
+  });
+
+  it("blocks replacement issuance when the key lookup fails until a successful retry", async () => {
+    mocks.list.mockRejectedValue(new Error("unavailable"));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <AgentAPIKeys agent={agent} creation replaceKeyId={issuedKey.id} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("button", { name: "Retry key" });
+    expect(screen.queryByText(/has been revoked or has expired/)).toBeNull();
+    const next = screen.getByRole("button", {
+      name: "Continue",
+    }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    fireEvent.click(next);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.rotate).not.toHaveBeenCalled();
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    fireEvent.click(screen.getByRole("button", { name: "Retry key" }));
+    expect(await screen.findByText("Replacing Example key")).toBeTruthy();
+    expect(screen.queryByText(/has been revoked or has expired/)).toBeNull();
+  });
+
+  it("issues a new key when the key to reissue is gone", async () => {
+    mocks.list.mockResolvedValue({ keys: [] });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <AgentAPIKeys agent={agent} creation replaceKeyId="key_revoked" />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByText(/has been revoked or has expired/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/^Replacing/)).toBeNull();
+  });
 });
 
 describe("the empty state, while the credential is unknown", () => {
