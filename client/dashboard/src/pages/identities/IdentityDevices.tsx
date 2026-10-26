@@ -354,7 +354,13 @@ export default function IdentityDevices(): JSX.Element {
               return (
                 <IdentityPanelRow
                   key={device.id}
-                  accent={coverage?.flag ? "warning" : undefined}
+                  accent={
+                    coverage?.flag ||
+                    device.policyState === "outdated" ||
+                    device.policyState === "halted"
+                      ? "warning"
+                      : undefined
+                  }
                   leading={osLogo(device.osName)}
                   title={
                     device.hostname ?? device.serialNumber ?? device.externalId
