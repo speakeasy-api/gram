@@ -1238,6 +1238,36 @@ func (q *Queries) ServersInsertPrivateInventoryTunnel(ctx context.Context, arg S
 	return err
 }
 
+const serversInsertRegistryPromotionCandidate = `-- name: ServersInsertRegistryPromotionCandidate :exec
+INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, curation_status, created_at)
+VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, $5::uuid, 'unobserved', false, 'insufficient_evidence', $6::text, clock_timestamp() - make_interval(days => $7::integer))
+ON CONFLICT (project_id,mcp_server_id) DO NOTHING
+`
+
+type ServersInsertRegistryPromotionCandidateParams struct {
+	ID                uuid.UUID
+	OrgID             string
+	ProjectID         uuid.UUID
+	McpServerID       uuid.UUID
+	RemoteMcpServerID uuid.UUID
+	CurationStatus    string
+	AgeDays           int32
+}
+
+// Synthetic evidence stays ineligible and queues no public publication or messages.
+func (q *Queries) ServersInsertRegistryPromotionCandidate(ctx context.Context, arg ServersInsertRegistryPromotionCandidateParams) error {
+	_, err := q.db.Exec(ctx, serversInsertRegistryPromotionCandidate,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.RemoteMcpServerID,
+		arg.CurationStatus,
+		arg.AgeDays,
+	)
+	return err
+}
+
 const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
 
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
