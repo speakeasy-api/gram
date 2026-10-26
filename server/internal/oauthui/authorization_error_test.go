@@ -1,6 +1,7 @@
 package oauthui_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/html"
 
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
@@ -60,6 +62,38 @@ func TestAuthorizationErrorPageRejectsUnsafeSchemes(t *testing.T) {
 			require.Empty(t, response.Header().Get("Location"))
 		})
 	}
+}
+
+func TestAuthorizationErrorPageFallbackSurvivesCanceledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	response := httptest.NewRecorder()
+	err := oauthui.WriteAuthorizationError(ctx, response, oauthui.AuthorizationError{
+		Status:      http.StatusForbidden,
+		Code:        `<script>alert("code")</script>`,
+		Description: `<img src=x onerror="alert('description')">`,
+		CallbackURL: "https://client.example/callback",
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, http.StatusForbidden, response.Code)
+	require.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, "no-referrer", response.Header().Get("Referrer-Policy"))
+	require.Equal(t, "nosniff", response.Header().Get("X-Content-Type-Options"))
+	require.Equal(t, "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", response.Header().Get("Content-Security-Policy"))
+	require.Empty(t, response.Header().Get("Location"))
+	body := response.Body.String()
+	require.Contains(t, body, string(consentpage.Styles))
+	require.Contains(t, body, "<svg")
+	require.Contains(t, body, "Secured by Speakeasy.")
+	require.Contains(t, body, "Request could not be completed")
+	require.Contains(t, body, "&lt;script&gt;")
+	require.Contains(t, body, "&lt;img")
+	require.NotContains(t, body, "<script")
+	require.NotContains(t, body, "<img")
+	require.NotContains(t, body, "href=")
+	require.NotContains(t, body, "https://client.example/callback")
 }
 
 func TestAuthorizationErrorPageExplainsErrorForEndUsers(t *testing.T) {

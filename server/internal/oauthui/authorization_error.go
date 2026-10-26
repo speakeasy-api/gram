@@ -35,6 +35,23 @@ var Script string
 
 var authorizationErrorTemplate = template.Must(template.Must(template.New("authorization-error").Parse(authorizationErrorHTML)).Parse(consentpage.LogoTemplate))
 
+//go:embed authorization_error_fallback.html
+var authorizationErrorFallbackHTML string
+
+// Pre-render the static shell so the fallback needs no template execution,
+// script nonce, or request context when the normal renderer fails.
+var authorizationErrorFallbackStart, authorizationErrorFallbackEnd = func() (string, string) {
+	tmpl := template.Must(template.Must(template.New("authorization-error-fallback").Parse(authorizationErrorFallbackHTML)).Parse(consentpage.LogoTemplate))
+	var start, end bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&start, "start", consentpage.Styles); err != nil {
+		panic(fmt.Sprintf("render authorization error fallback start: %v", err))
+	}
+	if err := tmpl.ExecuteTemplate(&end, "end", nil); err != nil {
+		panic(fmt.Sprintf("render authorization error fallback end: %v", err))
+	}
+	return start.String(), end.String()
+}()
+
 // AuthorizationError describes a refused browser authorization or approval
 // request. Protocol values only appear under Technical details.
 type AuthorizationError struct {
@@ -215,7 +232,7 @@ func technicalDetailsText(view authorizationErrorView) string {
 }
 
 // WriteAuthorizationError renders a terminal error page with an optional callback
-// link. Rendering failures produce a minimal HTML page before returning the error.
+// link. Rendering failures produce a static branded page before returning the error.
 // Callers must build CallbackURL only after matching the client's registered
 // redirect URI. Scheme validation here protects the HTML link even for stored
 // registrations created before the current redirect validation rules.
@@ -231,10 +248,10 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("Pragma", "no-cache")
 			w.Header().Set("Referrer-Policy", "no-referrer")
-			w.Header().Set("Content-Security-Policy", "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.WriteHeader(status)
-			_, _ = fmt.Fprintf(w, "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Request could not be completed · Speakeasy</title><h1>Request could not be completed</h1><p>Close this tab and start again from your MCP client.</p><details><summary>Technical details</summary><p>%s</p><p>%s</p></details></html>", html.EscapeString(page.Code), html.EscapeString(page.Description))
+			_, _ = fmt.Fprintf(w, "%s<p class=\"font-mono text-sm break-all\">%s</p><p class=\"text-sm text-muted-foreground break-words\">%s</p>%s", authorizationErrorFallbackStart, html.EscapeString(page.Code), html.EscapeString(page.Description), authorizationErrorFallbackEnd)
 		}
 	}()
 	if err := ctx.Err(); err != nil {
