@@ -454,7 +454,9 @@ func TestDispatchCapsPresidioMeteringAtEngineLimit(t *testing.T) {
 	gitleaksPub := &captureEnforcementPublisher{}
 	presidioPub := &capturePresidioPublisher{}
 	presidioPub.onPublish = replyOK[*riskv1.PresidioEnforcement](te, presidioLane)
-	dispatcher := testDispatcherWithPresidio(te, gitleaksPub, presidioPub, 5*time.Second)
+	// Counting the 50 KiB prefix runs inside the lane wait; a loaded CI shard
+	// needs well over 5s for it.
+	dispatcher := testDispatcherWithPresidio(te, gitleaksPub, presidioPub, 60*time.Second)
 	content := strings.Repeat("x", presidioEngineMaxContentBytes*2)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
