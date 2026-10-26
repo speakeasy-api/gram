@@ -35,6 +35,15 @@ export type PromotionTarget = {
   mcpServerId: string;
 };
 
+const MAX_PUBLIC_TEXT_CHARACTERS = 100;
+const INPUT_MAX_LENGTHS = {
+  publicName: 200,
+  publicTitle: undefined,
+  publicUrl: 2048,
+  documentationUrl: 2048,
+  docsSlug: 80,
+};
+
 export function RegistryPromotionSheet({
   target,
   onClose,
@@ -56,6 +65,11 @@ export function RegistryPromotionSheet({
     documentationUrl: "",
     docsSlug: "",
   });
+  const titleLength = Array.from(form.publicTitle).length;
+  const descriptionLength = Array.from(form.publicDescription).length;
+  const titleTooLong = titleLength > MAX_PUBLIC_TEXT_CHARACTERS;
+  const descriptionTooLong = descriptionLength > MAX_PUBLIC_TEXT_CHARACTERS;
+  const metadataTooLong = titleTooLong || descriptionTooLong;
   const [authMode, setAuthMode] = useState<"" | "none" | "oauth">("");
   const [initialMetadata, setInitialMetadata] = useState<{
     form: typeof form;
@@ -81,6 +95,13 @@ export function RegistryPromotionSheet({
     setAuthMode(initialAuth);
   }
   const [confirmed, setConfirmed] = useState(false);
+  const [overrideEligibility, setOverrideEligibility] = useState(false);
+  const canOverride =
+    candidate?.status === "candidate" &&
+    !candidate.eligible &&
+    candidate.canOverrideEligibility;
+  const canPromote =
+    candidate?.eligible || (canOverride && overrideEligibility);
   const [reviewedRevision, setReviewedRevision] = useState("");
   const [reviewedCurationRevision, setReviewedCurationRevision] = useState("");
   const [failure, setFailure] = useState(false);
@@ -114,10 +135,12 @@ export function RegistryPromotionSheet({
   };
   const submit = async (): Promise<void> => {
     if (
-      !candidate?.eligible ||
+      !candidate ||
+      !canPromote ||
       candidate.status !== "candidate" ||
       !authMode ||
       !confirmed ||
+      metadataTooLong ||
       inFlight.current ||
       refreshRequired
     )
@@ -133,6 +156,7 @@ export function RegistryPromotionSheet({
           sourceRevision: reviewedRevision,
           curationRevision: reviewedCurationRevision,
           publicMetadataConfirmed: true,
+          overrideEligibility: canOverride && overrideEligibility,
           retryKey: retryKey.current,
         },
       });
@@ -166,6 +190,7 @@ export function RegistryPromotionSheet({
     const fresh = await query.refetch();
     if (!fresh.error) {
       setRefreshRequired(false);
+      setOverrideEligibility(false);
       setConfirmed(false);
       retryKey.current = crypto.randomUUID();
     }
@@ -254,6 +279,27 @@ export function RegistryPromotionSheet({
               promotion queue before reviewing it for publication.
             </p>
           )}
+          {canOverride && (
+            <div className="space-y-2 rounded-md border border-amber-500/40 p-3 text-sm">
+              <p>
+                This server does not meet the health criteria. You can promote
+                it anyway after reviewing the evidence and verifying the public
+                listing. This override is recorded in the audit log.
+              </p>
+              <label className="flex items-start gap-2">
+                <Checkbox
+                  checked={overrideEligibility}
+                  disabled={mutation.isPending || query.isFetching}
+                  onCheckedChange={(value) => {
+                    setOverrideEligibility(value === true);
+                    setConfirmed(false);
+                    retryKey.current = crypto.randomUUID();
+                  }}
+                />
+                <span>Promote anyway despite the health criteria</span>
+              </label>
+            </div>
+          )}
           {candidate?.status === "promoted" ? (
             <div className="space-y-2">
               <div className="space-y-1">
@@ -281,7 +327,7 @@ export function RegistryPromotionSheet({
                 Refresh delivery status
               </Button>
             </div>
-          ) : candidate?.status === "candidate" && candidate.eligible ? (
+          ) : candidate?.status === "candidate" && canPromote ? (
             <form
               className="space-y-3"
               onSubmit={(event) => {
@@ -299,37 +345,71 @@ export function RegistryPromotionSheet({
                 </p>
               </div>
               {fields.map(([field, label, placeholder]) => (
-                <label key={field} className="block space-y-1 text-sm">
-                  <span>{label}</span>
-                  <Input
+                <div key={field}>
+                  <label className="block space-y-1 text-sm">
+                    <span>{label}</span>
+                    <Input
+                      required
+                      value={form[field]}
+                      placeholder={placeholder}
+                      disabled={mutation.isPending}
+                      type={field.endsWith("Url") ? "url" : "text"}
+                      aria-invalid={field === "publicTitle" && titleTooLong}
+                      aria-describedby={
+                        field === "publicTitle"
+                          ? "promotion-title-length"
+                          : undefined
+                      }
+                      maxLength={INPUT_MAX_LENGTHS[field]}
+                      onChange={(event) => change(field, event.target.value)}
+                    />
+                  </label>
+                  {field === "publicTitle" && (
+                    <div
+                      id="promotion-title-length"
+                      className="text-muted-foreground text-xs"
+                    >
+                      <p>
+                        {titleLength} / {MAX_PUBLIC_TEXT_CHARACTERS} characters.
+                      </p>
+                      {titleTooLong && (
+                        <p role="alert">
+                          Public title must be 100 characters or fewer.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div>
+                <label className="block space-y-1 text-sm">
+                  <span>Public description</span>
+                  <Textarea
                     required
-                    value={form[field]}
-                    placeholder={placeholder}
+                    aria-invalid={descriptionTooLong}
+                    aria-describedby="promotion-description-length"
+                    value={form.publicDescription}
                     disabled={mutation.isPending}
-                    type={field.endsWith("Url") ? "url" : "text"}
-                    maxLength={
-                      field === "publicName" || field === "publicTitle"
-                        ? 200
-                        : field === "docsSlug"
-                          ? 80
-                          : 2048
+                    onChange={(event) =>
+                      change("publicDescription", event.target.value)
                     }
-                    onChange={(event) => change(field, event.target.value)}
                   />
                 </label>
-              ))}
-              <label className="block space-y-1 text-sm">
-                <span>Public description</span>
-                <Textarea
-                  required
-                  maxLength={2000}
-                  value={form.publicDescription}
-                  disabled={mutation.isPending}
-                  onChange={(event) =>
-                    change("publicDescription", event.target.value)
-                  }
-                />
-              </label>
+                <div
+                  id="promotion-description-length"
+                  className="text-muted-foreground text-xs"
+                >
+                  <p>
+                    {descriptionLength} / {MAX_PUBLIC_TEXT_CHARACTERS}{" "}
+                    characters.
+                  </p>
+                  {descriptionTooLong && (
+                    <p role="alert">
+                      Public description must be 100 characters or fewer.
+                    </p>
+                  )}
+                </div>
+              </div>
               <div className="space-y-1 text-sm">
                 <span id="promotion-auth-label">Public authentication</span>
                 <Select
@@ -390,13 +470,18 @@ export function RegistryPromotionSheet({
                 type="submit"
                 disabled={
                   !confirmed ||
+                  metadataTooLong ||
                   !authMode ||
                   mutation.isPending ||
                   refreshRequired ||
                   query.isFetching
                 }
               >
-                {mutation.isPending ? "Promoting…" : "Publish catalog entry"}
+                {mutation.isPending
+                  ? "Promoting…"
+                  : canOverride
+                    ? "Promote anyway"
+                    : "Publish catalog entry"}
               </Button>
             </form>
           ) : null}

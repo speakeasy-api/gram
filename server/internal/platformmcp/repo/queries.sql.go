@@ -8226,6 +8226,30 @@ func (q *Queries) ResolvePlatformMCPProjectBySlug(ctx context.Context, arg Resol
 	return i, err
 }
 
+const retirePlatformMCPCatalogRegistration = `-- name: RetirePlatformMCPCatalogRegistration :exec
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type RetirePlatformMCPCatalogRegistrationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Retires a registration whose MCP server was deleted outside Platform MCP, so
+// adding the same catalogue server again creates a fresh registration instead
+// of reusing one that points at a deleted server.
+func (q *Queries) RetirePlatformMCPCatalogRegistration(ctx context.Context, arg RetirePlatformMCPCatalogRegistrationParams) error {
+	_, err := q.db.Exec(ctx, retirePlatformMCPCatalogRegistration, arg.ID, arg.OrganizationID, arg.ProjectID)
+	return err
+}
+
 const revokePlatformMCPConnection = `-- name: RevokePlatformMCPConnection :one
 UPDATE platform_mcp_connections
 SET revoked_at = $1,

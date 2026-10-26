@@ -166,7 +166,7 @@ func TestCodeModeRequiresOrganizationEntitlement(t *testing.T) { //nolint:parall
 		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &refused))
-	require.Equal(t, `unknown tool "execute"`, refused.Error.Message, "a Progressive gateway does not offer execute")
+	require.Contains(t, refused.Error.Message, `tool "execute" is not available on this connection`, "a Progressive gateway does not offer execute")
 	require.Empty(t, executor.callers(), "an organization without Code Mode never reaches the runtime")
 
 	enableCodeMode(t, ctx, ti)
@@ -226,7 +226,7 @@ func TestCodeModeNeverServesAnonymousCallers(t *testing.T) {
 		w, err := servePublicHTTP(t, t.Context(), ti, slug, execute, bearer, map[string]string{"Mcp-Session-Id": uuid.NewString()})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-		require.Contains(t, w.Body.String(), `"error":{"code":-32002,"message":"unknown tool \"execute\""}`, "execute is refused, not run")
+		require.Contains(t, w.Body.String(), `"error":{"code":-32002,"message":"tool \"execute\" is not available on this connection`, "execute is refused, not run")
 	}
 	require.Empty(t, executor.callers(), "an anonymous caller never reaches the code runtime")
 }

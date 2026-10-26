@@ -302,9 +302,8 @@ func kitResourceAttached(a assistantRecord, serverURL, resource *url.URL) bool {
 	// Endpoint slugs are deployment-local, not authority for an arbitrary origin.
 	// Match the same canonical URL used by resolveAssistantMCPServers before
 	// provisioning any workload credentials.
-	slug := strings.TrimPrefix(resource.Path, "/mcp/")
 	for _, attached := range a.MCPServers {
-		if attached.EndpointSlug == slug && attached.Visibility != "disabled" &&
+		if attached.EndpointSlug != "" && attached.Visibility != "disabled" &&
 			resource.String() == attached.endpointURL(serverURL).String() {
 			return true
 		}
