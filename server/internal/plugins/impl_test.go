@@ -1378,7 +1378,7 @@ func TestPluginsService_PublishAgentPluginCompatibilityTransitions(t *testing.T)
 		}
 		require.Equal(t, cursorSource, actualCursorSource)
 		require.Equal(t, codexSource, actualCodexSource)
-		require.Equal(t, sharedPackage, len(filesWithPrefix(mock.lastPushedFiles, "copilot-plugins/portable-transition/")) > 0)
+		require.Equal(t, sharedPackage, len(filesWithPrefix(mock.lastPushedFiles, "agent-plugins/portable-transition/")) > 0)
 	}
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
@@ -2277,7 +2277,7 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
 	require.False(t, fetched.AgentPluginsV1Compatible, "an active attachment whose backing was disabled must fail closed")
-	require.NotContains(t, mock.lastPushedFiles, "copilot-plugins/mixed/plugin.json")
+	require.NotContains(t, mock.lastPushedFiles, "agent-plugins/mixed/plugin.json")
 }
 
 // A public toolset with no mcp_metadata row should publish cleanly. The
@@ -3069,8 +3069,8 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 	require.False(t, first.Skipped)
 	hooksBefore := hooksFilesOf(mock.lastPushedFiles)
 	require.NotEmpty(t, hooksBefore)
-	copilotPluginBefore := filesWithPrefix(mock.lastPushedFiles, "copilot-plugins/carry-agent-plugin/")
-	require.NotEmpty(t, copilotPluginBefore)
+	agentPluginBefore := filesWithPrefix(mock.lastPushedFiles, "agent-plugins/carry-agent-plugin/")
+	require.NotEmpty(t, agentPluginBefore)
 	versionBefore := observabilityManifestVersion(t, mock.lastPushedFiles)
 
 	_, pfErr := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
@@ -3087,8 +3087,8 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 		"hooks subtree must be regenerated, not carried, after a settings flip")
 	require.NotEqual(t, versionBefore, observabilityManifestVersion(t, mock.lastPushedFiles),
 		"the observability plugin.json version must move on a settings flip, or installed copies never refresh")
-	require.Equal(t, copilotPluginBefore, filesWithPrefix(mock.lastPushedFiles, "copilot-plugins/carry-agent-plugin/"),
-		"a hooks-only publish must carry the Copilot feature package byte-for-byte")
+	require.Equal(t, agentPluginBefore, filesWithPrefix(mock.lastPushedFiles, "agent-plugins/carry-agent-plugin/"),
+		"a hooks-only publish must carry the shared feature package byte-for-byte")
 
 	// The regenerated config is persisted, so the next unchanged rollout skips.
 	third, err := ti.service.PublishProject(ctx, input)

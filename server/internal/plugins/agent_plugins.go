@@ -20,6 +20,7 @@ import (
 const (
 	agentPluginSchemaID = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
 	agentMCPSchemaID    = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
+	agentPluginRoot     = "agent-plugins"
 )
 
 //go:embed agent_plugins_schema/plugin.schema.json
@@ -29,6 +30,13 @@ var agentPluginSchemaJSON []byte
 var agentMCPSchemaJSON []byte
 
 var ErrAgentPluginsV1Incompatible = errors.New("plugin is not compatible with Agent Plugins 1.0")
+
+type agentPluginCredentialMode uint8
+
+const (
+	agentPluginCredentialsPackage agentPluginCredentialMode = iota
+	agentPluginCredentialsKeyless
+)
 
 type agentPluginCompatibility struct {
 	Compatible bool
@@ -199,12 +207,7 @@ func validateAgentPluginDocument(schemaID string, document any) error {
 	return nil
 }
 
-// compileAgentPlugin builds the credential-free Agent Plugins 1.0 package served
-// only by the explicit `agent-plugin` ZIP download. Never publish it into a
-// marketplace repository: Codex loads any package whose root plugin.json
-// declares the Agent Plugins schema as an Agent Plugin and then silently hides
-// every MCP tool beyond a shared 64,000-byte budget (8,000 bytes per tool).
-func compileAgentPlugin(p PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCredentialMode) (map[string][]byte, error) {
 	if compatibility := classifyAgentPlugin(p); !compatibility.Compatible {
 		return nil, fmt.Errorf("%w: %s", ErrAgentPluginsV1Incompatible, strings.Join(compatibility.Reasons, ", "))
 	}
@@ -237,6 +240,22 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig) (map[string][]byte, er
 	}
 	files["mcp.json"] = mcpJSON
 	emitPluginSkills(files, "", p)
+
+	if mode == agentPluginCredentialsPackage {
+		cursorJSON, err := marshalJSON(cursorPluginMeta{Name: p.Slug + "-cursor", DisplayName: p.Name + " (Cursor)", Description: p.Description, Version: pluginManifestVersion(cfg), Author: cursorAuthor{Name: cfg.OrgName, Email: ""}, Homepage: "https://getgram.ai"})
+		if err != nil {
+			return nil, fmt.Errorf("marshal shared Cursor plugin.json: %w", err)
+		}
+		files[".cursor-plugin/plugin.json"] = cursorJSON
+
+		// Retain the native MCP config for Cursor, but not a Codex manifest.
+		// Codex must use its dedicated native package, not this AP1.0 root.
+		cursorMCPFiles := make(map[string][]byte)
+		if err := generateCodexPluginInDir(cursorMCPFiles, "", p.Slug+"-codex", p, cfg); err != nil {
+			return nil, fmt.Errorf("generate shared Cursor MCP config: %w", err)
+		}
+		files[".mcp.json"] = cursorMCPFiles[".mcp.json"]
+	}
 
 	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {
 		return nil, err

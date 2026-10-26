@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -56,7 +55,7 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 	}
 	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "org-example", ServerURL: "https://app.getgram.ai", APIKey: "consumer-secret", HooksAPIKey: "hooks-secret", ProjectSlug: "default", IsDefaultProject: true, Version: "1", MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
 
-	files, err := compileAgentPlugin(plugin, cfg)
+	files, err := compileAgentPlugin(plugin, cfg, agentPluginCredentialsKeyless)
 	require.NoError(t, err)
 	require.Contains(t, files, "plugin.json")
 	require.Contains(t, files, "mcp.json")
@@ -75,6 +74,16 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 		require.NotContains(t, string(files["mcp.json"]), forbidden)
 	}
 	require.NotContains(t, mcp.MCPServers, "speakeasy-skill-feedback")
+
+	published, err := compileAgentPlugin(plugin, cfg, agentPluginCredentialsPackage)
+	require.NoError(t, err)
+	require.Contains(t, published, ".cursor-plugin/plugin.json")
+	require.NotContains(t, published, ".codex-plugin/plugin.json")
+	require.Contains(t, published, ".mcp.json")
+	for path, content := range published {
+		require.NotContains(t, string(content), cfg.APIKey, path)
+		require.NotContains(t, string(content), cfg.HooksAPIKey, path)
+	}
 }
 
 func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
@@ -105,14 +114,14 @@ func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
 	require.Equal(t, "./tools-codex", sharedCodex.Plugins[0].Source.Path)
 	require.Equal(t, "./tools-codex", legacyCodex.Plugins[0].Source.Path)
 
-	// Copilot serves feature plugins only through the credential-free Copilot
-	// package, so its manifest — unlike the three native ones above — does
-	// track compatibility: an incompatible plugin is omitted rather than
-	// pointed at a directory generateMCPFiles never wrote.
+	// Copilot serves feature plugins only through the Agent Plugins package, so
+	// its manifest — unlike the three native ones above — does track
+	// compatibility: an incompatible plugin is omitted rather than pointed at a
+	// directory generateMCPFiles never wrote.
 	var sharedCopilot, legacyCopilot marketplaceManifest
 	require.NoError(t, json.Unmarshal(sharedFiles["marketplace.json"], &sharedCopilot))
 	require.NoError(t, json.Unmarshal(legacyFiles["marketplace.json"], &legacyCopilot))
-	require.Equal(t, "./copilot-plugins/tools", sharedCopilot.Plugins[0].Source)
+	require.Equal(t, "./agent-plugins/tools", sharedCopilot.Plugins[0].Source)
 	require.Empty(t, legacyCopilot.Plugins)
 
 	sharedFingerprint, err := MCPFingerprints([]PluginInfo{compatible}, cfg, true)
@@ -124,50 +133,6 @@ func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
 	// portability republishes the catalog — which is the point: the entry has to
 	// appear or disappear for Copilot to see the change.
 	require.NotEqual(t, sharedFingerprint[mcpSharedFingerprintKey], legacyFingerprint[mcpSharedFingerprintKey])
-}
-
-// Codex loads any package whose root plugin.json declares the Agent Plugins
-// schema as an Agent Plugin and hides MCP tools beyond a shared 64 KB budget,
-// so no published marketplace repository may carry that schema anywhere.
-func TestPublishedPackagesCarryNoAgentPluginsManifest(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "it@example.com", OrgID: "org-example", ServerURL: "https://app.getgram.ai", APIKey: "consumer-secret", HooksAPIKey: "hooks-secret", ProjectSlug: "default", IsDefaultProject: true, Version: "3", MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
-	compatible := PluginInfo{
-		Name:                 "Tools",
-		Slug:                 "tools",
-		Description:          "Team tools",
-		Servers:              []PluginServerInfo{{DisplayName: "tools", Policy: "required", MCPURL: "https://example.com/mcp", IsPublic: false, IsOAuth: true, IsUnproxied: false, EnvConfigs: nil}},
-		Skills:               []PluginSkillInfo{{Name: "review", Content: "---\nname: review\ndescription: Review code.\n---\n"}},
-		AgentPluginsV1Issues: nil,
-	}
-	require.True(t, classifyAgentPlugin(compatible).Compatible)
-
-	published, err := GeneratePluginPackages([]PluginInfo{compatible}, cfg)
-	require.NoError(t, err)
-	public, err := PublicPlatformMCPFiles("https://app.getgram.ai", "17")
-	require.NoError(t, err)
-	for name, files := range map[string]map[string][]byte{"organization repository": published, "public marketplace": public} {
-		for filePath, content := range files {
-			require.False(t, strings.HasPrefix(filePath, "agent-plugins/"), "%s: %s", name, filePath)
-			require.NotContains(t, string(content), "agent-plugins.org/schemas", "%s: %s", name, filePath)
-		}
-	}
-
-	var meta map[string]any
-	require.NoError(t, json.Unmarshal(published["copilot-plugins/tools/plugin.json"], &meta))
-	require.Equal(t, map[string]any{"name": "tools", "version": pluginManifestVersion(cfg), "description": "Team tools"}, meta)
-	var mcp claudeMCPConfig
-	require.NoError(t, json.Unmarshal(published["copilot-plugins/tools/.mcp.json"], &mcp))
-	require.Equal(t, map[string]claudeMCPServer{"tools": {Type: "http", Command: "", Args: nil, URL: "https://example.com/mcp", Headers: nil}}, mcp.MCPServers)
-	require.Equal(t, compatible.Skills[0].Content, string(published["copilot-plugins/tools/skills/review/SKILL.md"]))
-	require.NotContains(t, published, "copilot-plugins/tools/mcp.json")
-	for filePath, content := range published {
-		if strings.HasPrefix(filePath, "copilot-plugins/") {
-			require.NotContains(t, string(content), cfg.APIKey, filePath)
-			require.NotContains(t, string(content), cfg.HooksAPIKey, filePath)
-		}
-	}
 }
 
 func TestAgentPluginZipIsDeterministicAndExecutable(t *testing.T) {
@@ -193,7 +158,7 @@ func TestAgentPluginZipIsDeterministicAndExecutable(t *testing.T) {
 func TestCompileAgentPluginFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	_, err := compileAgentPlugin(PluginInfo{Name: "Broken", Slug: "broken", Description: "", Servers: nil, Skills: nil, AgentPluginsV1Issues: []string{"backing unresolved"}}, GenerateConfig{})
+	_, err := compileAgentPlugin(PluginInfo{Name: "Broken", Slug: "broken", Description: "", Servers: nil, Skills: nil, AgentPluginsV1Issues: []string{"backing unresolved"}}, GenerateConfig{}, agentPluginCredentialsKeyless)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrAgentPluginsV1Incompatible)
 	require.Contains(t, err.Error(), "backing unresolved")

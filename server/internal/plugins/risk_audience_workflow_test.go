@@ -14,7 +14,7 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 	const path = "skills/manage-risk-policy-audience/SKILL.md"
 	workflow := files["speakeasy/"+path]
 	require.NotEmpty(t, workflow)
-	require.Equal(t, workflow, files["speakeasy-codex/"+path])
+	require.Equal(t, workflow, files["agent-plugins/speakeasy/"+path])
 	text := string(workflow)
 	cursor := 0
 	for _, name := range []string{"list_projects", "list_risk_policies", "get_risk_policy", "remove_self_from_risk_policy", "change_risk_policy_audience", "get_risk_policy", "change_risk_policy_audience", "update_risk_policy", "get_risk_policy"} {

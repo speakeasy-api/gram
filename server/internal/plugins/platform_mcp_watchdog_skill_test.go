@@ -19,7 +19,7 @@ func TestGeneratePlatformMCPPackageEmitsWatchdogSummaryWorkflow(t *testing.T) {
 	claudeSkill := files["speakeasy/"+skillPath]
 	require.NotEmpty(t, claudeSkill)
 	require.Equal(t, source, claudeSkill)
-	require.Equal(t, claudeSkill, files["speakeasy-codex/"+skillPath])
+	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
 
 	workflow := string(claudeSkill)
 	cursor := 0

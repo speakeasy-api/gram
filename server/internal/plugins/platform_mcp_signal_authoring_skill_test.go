@@ -18,7 +18,7 @@ func TestGeneratePlatformMCPPackageEmitsSignalAuthoringWorkflow(t *testing.T) {
 	source, err := platformMCPSkillsFS.ReadFile("platform_mcp_" + path)
 	require.NoError(t, err)
 	require.Equal(t, source, files["speakeasy/"+path])
-	require.Equal(t, source, files["speakeasy-codex/"+path])
+	require.Equal(t, source, files["agent-plugins/speakeasy/"+path])
 
 	for _, tool := range []string{"list_projects", "find_signals", "find_sensors", "get_sensor", "create_sensor", "create_signal", "update_sensor", "update_signal", "preview_sensor_match"} {
 		require.Contains(t, string(source), "`"+tool+"`")

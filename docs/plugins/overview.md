@@ -43,7 +43,7 @@ Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect
 
 **Pi.** Pi has no hook configuration, so its observability package is a Pi extension (`extensions/speakeasy-observability/index.ts`) that spawns `speakeasy-hooks pi serve`. It installs by extracting the package into `~/.pi/agent/` or a repository's `.pi/`. See [Package format](./package-format.md#pi-observability).
 
-**GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the credential-free Copilot package (`copilot-plugins/<plugin-slug>/`), which Copilot loads in the CLI, VS Code and the Copilot app. Hooks ship through the Copilot observability package and run in **Copilot CLI only** — VS Code and the Copilot app load the plugin but never fire its hooks. See [Package format](./package-format.md#copilot-observability).
+**GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`), which Copilot loads in the CLI, VS Code and the Copilot app. Hooks ship through the Copilot observability package and run in **Copilot CLI only** — VS Code and the Copilot app load the plugin but never fire its hooks. See [Package format](./package-format.md#copilot-observability).
 
 **Scoped API keys.** At publish time, Speakeasy mints two API keys and embeds them in the generated configs:
 

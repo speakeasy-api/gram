@@ -24,12 +24,12 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 		"speakeasy/.claude-plugin/plugin.json",
 		"speakeasy/skills/manage-mcp-access/SKILL.md",
 		"speakeasy/skills/add-existing-mcp-servers/SKILL.md",
-		"speakeasy-codex/skills/add-existing-mcp-servers/SKILL.md",
-		"speakeasy-codex/skills/manage-mcp-access/SKILL.md",
+		"agent-plugins/speakeasy/skills/add-existing-mcp-servers/SKILL.md",
+		"agent-plugins/speakeasy/skills/manage-mcp-access/SKILL.md",
 		"speakeasy/skills/migrate-mcp-between-projects/SKILL.md",
-		"speakeasy-codex/skills/migrate-mcp-between-projects/SKILL.md",
+		"agent-plugins/speakeasy/skills/migrate-mcp-between-projects/SKILL.md",
 		"speakeasy/skills/expose-tools-on-mcp/SKILL.md",
-		"speakeasy-codex/skills/expose-tools-on-mcp/SKILL.md",
+		"agent-plugins/speakeasy/skills/expose-tools-on-mcp/SKILL.md",
 		"cursor-plugins/speakeasy-cursor/.cursor-plugin/plugin.json",
 		"speakeasy-codex/.codex-plugin/plugin.json",
 	} {
@@ -48,7 +48,7 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	require.Len(t, codex.Plugins, 1)
 
 	claudeSkill := files["speakeasy/skills/manage-mcp-access/SKILL.md"]
-	require.Equal(t, claudeSkill, files["speakeasy-codex/skills/manage-mcp-access/SKILL.md"])
+	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/skills/manage-mcp-access/SKILL.md"])
 	for _, tool := range []string{"get_mcp_access", "list_access_roles", "list_access_members", "create_mcp_access_role", "update_mcp_access_role", "assign_mcp_access_role"} {
 		require.Contains(t, string(claudeSkill), tool)
 	}
@@ -89,9 +89,6 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	for _, forbidden := range []string{"API key", "client secret", "password", "Gram", "WorkOS", "with the selected role and the user's exact identity query", "verify the member's effective access"} {
 		require.NotContains(t, string(claudeSkill), forbidden)
 	}
-
-	require.NotContains(t, string(files["README.md"]), "agent-plugins/")
-	require.Contains(t, string(files["README.md"]), "`opencode-plugins/speakeasy/`")
 
 	require.Contains(t, string(files["LICENSE"]), "MIT License")
 	require.Contains(t, string(files["LICENSE"]), "Speakeasy Development, Inc.")

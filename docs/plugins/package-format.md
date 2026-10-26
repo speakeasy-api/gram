@@ -76,9 +76,11 @@ When plugins are published, all platform configs land in a single repo. The root
 │       ├── bootstrap.sh
 │       └── bootstrap.ps1
 │
-└── copilot-plugins/<plugin-slug>/     # Copilot feature plugin (portable plugins only)
-    ├── plugin.json                    # at the package root, no $schema
-    ├── .mcp.json
+└── agent-plugins/<plugin-slug>/       # Portable Agent Plugins 1.0 package
+    ├── .cursor-plugin/plugin.json     # Native Cursor overlay
+    ├── .mcp.json                      # Native Cursor MCP config
+    ├── plugin.json
+    ├── mcp.json
     └── skills/
 ```
 
@@ -86,7 +88,13 @@ Cursor plugins are grouped under the `cursor-plugins/` subdirectory, declared vi
 `metadata.pluginRoot` in the Cursor `marketplace.json`. Plugin `source` values are
 then resolved relative to that root (bare names, no `./` prefix).
 
-Published repositories never contain an [Agent Plugins 1.0](https://github.com/agentplugins/agent-plugins-spec) manifest (a `plugin.json` whose `$schema` is under `https://agent-plugins.org/schemas/`). Codex loads any package with such a root manifest as an Agent Plugin, and caps the MCP tool definitions of all installed Agent Plugins at 64,000 bytes in total and 8,000 bytes per tool. Tools over the cap are hidden from the model without any warning, so a large MCP server loses most of its tools. The Agent Plugins format is only produced by the explicit `agent-plugin` ZIP download.
+Compatible plugins are also published under `agent-plugins/` without changing the
+native Cursor or Codex marketplace entries. Codex must install the native
+`<plugin-slug>-codex/` package (or `speakeasy-codex/` for Platform MCP), not
+the portable package: its AP1.0 manifest selects Codex's restricted Agent Plugins
+tool budget. The portable package retains its Cursor overlay and MCP config,
+but does not include a Codex overlay. Native Codex ZIP downloads likewise have
+no root AP1.0 manifest; the explicit `agent-plugin` ZIP remains AP1.0.
 
 ## Marketplace manifests
 
@@ -365,7 +373,7 @@ curl -s -X POST \
 
 Directory: `<org-slug>-observability-copilot/`
 
-Copilot reads `plugin.json` from the package **root** rather than from a vendor subdirectory:
+Copilot is an [Agent Plugins 1.0](https://github.com/agentplugins/agent-plugins-spec) client, so `plugin.json` sits at the package **root** rather than in a vendor subdirectory:
 
 ```json
 {
@@ -463,7 +471,7 @@ Copilot probes four locations in order: `marketplace.json`, `.plugin/marketplace
     {
       "name": "<plugin-slug>",
       "displayName": "Plugin Name",
-      "source": "./copilot-plugins/<plugin-slug>",
+      "source": "./agent-plugins/<plugin-slug>",
       "description": "..."
     }
   ]
@@ -472,27 +480,17 @@ Copilot probes four locations in order: `marketplace.json`, `.plugin/marketplace
 
 Three constraints, each verified against Copilot CLI 1.0.80:
 
-| Constraint                                                     | Why                                                                                                                                                                                                                      |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `owner` is required                                            | A manifest without it fails `copilot plugin marketplace add` outright with `Invalid marketplace.json: owner: Required`.                                                                                                  |
-| Entry `name` must equal the package's own `plugin.json` `name` | Copilot installs to `~/.copilot/installed-plugins/<marketplace>/<name>/` and resolves the plugin by that name. A mismatch installs cleanly and is then never loaded.                                                     |
-| Only portable plugins get an entry                             | Feature plugins reach Copilot solely through `copilot-plugins/<plugin-slug>/`, which the generator omits for plugins failing the portability gate. Listing one anyway would point at a directory that was never written. |
+| Constraint                                                     | Why                                                                                                                                                                                                                    |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `owner` is required                                            | A manifest without it fails `copilot plugin marketplace add` outright with `Invalid marketplace.json: owner: Required`.                                                                                                |
+| Entry `name` must equal the package's own `plugin.json` `name` | Copilot installs to `~/.copilot/installed-plugins/<marketplace>/<name>/` and resolves the plugin by that name. A mismatch installs cleanly and is then never loaded.                                                   |
+| Only Agent-Plugins-compatible plugins get an entry             | Feature plugins reach Copilot solely through `agent-plugins/<plugin-slug>/`, which the generator omits for plugins failing the portability gate. Listing one anyway would point at a directory that was never written. |
 
 Copilot will not install a plugin that is absent from the manifest, even if its files are already present under `installed-plugins/` and it is listed in `enabledPlugins` — the manifest is the authority, not the filesystem.
 
 ### MCP servers and skills on Copilot
 
-MCP servers and skills reach Copilot through the credential-free package under `copilot-plugins/<plugin-slug>/`, which installs from the root marketplace or with `copilot plugin install OWNER/REPO:copilot-plugins/<plugin-slug>`. It carries a root `plugin.json` with `name`, `version` and `description`, `skills/`, and a `.mcp.json` with one `"type": "http"` entry per server and no headers:
-
-```json
-{
-  "mcpServers": {
-    "<server-name>": { "type": "http", "url": "https://..." }
-  }
-}
-```
-
-The manifest deliberately has no `$schema`. Declaring the Agent Plugins schema would make Codex budget-limit the same layout (see [Repository layout](#repository-layout-published-to-github)), and it also changes which file Copilot reads: with the schema Copilot loads `mcp.json`, without it `.mcp.json`. Plugins that fail the portability gate (a server needing a Speakeasy credential, environment-backed headers, or a non-HTTPS off-loopback URL) are omitted from that directory and are therefore not installable on Copilot.
+MCP servers and skills reach Copilot through the platform-neutral Agent Plugins 1.0 package under `agent-plugins/<plugin-slug>/`, not through a Copilot-specific package. That package carries `plugin.json`, `mcp.json` and `skills/`, is credential-free, and installs with `copilot plugin install OWNER/REPO:agent-plugins/<plugin-slug>` or from an extracted ZIP via `copilot --plugin-dir`. Plugins that fail the portability gate (a server needing a Speakeasy credential, environment-backed headers, or a non-HTTPS off-loopback URL) are omitted from that directory and are therefore not installable on Copilot.
 
 ## README
 
