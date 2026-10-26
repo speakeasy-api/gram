@@ -2171,7 +2171,7 @@ func newStartCommand() *cli.Command {
 					}
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator), productFeatures, tm.NewMCPServerHealth(db, chReadDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
+						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 						CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 						GuardianPolicy:                 guardianPolicy,
 						TunnelHTTPClient:               tunnelHTTPClient,
