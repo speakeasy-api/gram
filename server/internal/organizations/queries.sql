@@ -57,6 +57,7 @@ SELECT
     written.verified_domains,
     written.creation_source,
     written.default_host,
+    written.gateway_discovery_mode,
     written.created_at,
     written.updated_at,
     written.disabled_at
@@ -473,6 +474,7 @@ SELECT
     written.verified_domains,
     written.creation_source,
     written.default_host,
+    written.gateway_discovery_mode,
     written.created_at,
     written.updated_at,
     written.disabled_at
@@ -865,6 +867,7 @@ SELECT
     written.verified_domains,
     written.creation_source,
     written.default_host,
+    written.gateway_discovery_mode,
     written.created_at,
     written.updated_at,
     written.disabled_at
@@ -922,6 +925,7 @@ SELECT
     written.verified_domains,
     written.creation_source,
     written.default_host,
+    written.gateway_discovery_mode,
     written.created_at,
     written.updated_at,
     written.disabled_at

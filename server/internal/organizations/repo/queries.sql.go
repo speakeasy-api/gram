@@ -366,6 +366,7 @@ SELECT
     written.verified_domains,
     written.creation_source,
     written.default_host,
+    written.gateway_discovery_mode,
     written.created_at,
     written.updated_at,
     written.disabled_at
@@ -384,27 +385,28 @@ type CreateOrganizationMetadataFromWorkOSWithRequestsParams struct {
 }
 
 type CreateOrganizationMetadataFromWorkOSWithRequestsRow struct {
-	Requests           []byte
-	ID                 string
-	Name               string
-	Slug               string
-	GramAccountType    string
-	WorkosID           pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	SvixAppID          pgtype.Text
-	WebhooksEnabled    pgtype.Bool
-	Whitelisted        bool
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	ScimEnabled        pgtype.Bool
-	SsoEnabled         pgtype.Bool
-	VerifiedDomains    []string
-	CreationSource     pgtype.Text
-	DefaultHost        pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DisabledAt         pgtype.Timestamptz
+	Requests             []byte
+	ID                   string
+	Name                 string
+	Slug                 string
+	GramAccountType      string
+	WorkosID             pgtype.Text
+	WorkosUpdatedAt      pgtype.Timestamptz
+	WorkosLastEventID    pgtype.Text
+	SvixAppID            pgtype.Text
+	WebhooksEnabled      pgtype.Bool
+	Whitelisted          bool
+	FreeTrialStartedAt   pgtype.Timestamptz
+	FreeTrialEndsAt      pgtype.Timestamptz
+	ScimEnabled          pgtype.Bool
+	SsoEnabled           pgtype.Bool
+	VerifiedDomains      []string
+	CreationSource       pgtype.Text
+	DefaultHost          pgtype.Text
+	GatewayDiscoveryMode pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DisabledAt           pgtype.Timestamptz
 }
 
 // Create a Speakeasy organization row from a WorkOS organization event. The caller
@@ -441,6 +443,7 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOSWithRequests(ctx context.C
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.GatewayDiscoveryMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -473,6 +476,7 @@ SELECT
     written.verified_domains,
     written.creation_source,
     written.default_host,
+    written.gateway_discovery_mode,
     written.created_at,
     written.updated_at,
     written.disabled_at
@@ -487,27 +491,28 @@ type CreateOrganizationMetadataWithRequestsParams struct {
 }
 
 type CreateOrganizationMetadataWithRequestsRow struct {
-	Requests           []byte
-	ID                 string
-	Name               string
-	Slug               string
-	GramAccountType    string
-	WorkosID           pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	SvixAppID          pgtype.Text
-	WebhooksEnabled    pgtype.Bool
-	Whitelisted        bool
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	ScimEnabled        pgtype.Bool
-	SsoEnabled         pgtype.Bool
-	VerifiedDomains    []string
-	CreationSource     pgtype.Text
-	DefaultHost        pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DisabledAt         pgtype.Timestamptz
+	Requests             []byte
+	ID                   string
+	Name                 string
+	Slug                 string
+	GramAccountType      string
+	WorkosID             pgtype.Text
+	WorkosUpdatedAt      pgtype.Timestamptz
+	WorkosLastEventID    pgtype.Text
+	SvixAppID            pgtype.Text
+	WebhooksEnabled      pgtype.Bool
+	Whitelisted          bool
+	FreeTrialStartedAt   pgtype.Timestamptz
+	FreeTrialEndsAt      pgtype.Timestamptz
+	ScimEnabled          pgtype.Bool
+	SsoEnabled           pgtype.Bool
+	VerifiedDomains      []string
+	CreationSource       pgtype.Text
+	DefaultHost          pgtype.Text
+	GatewayDiscoveryMode pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DisabledAt           pgtype.Timestamptz
 }
 
 func (q *Queries) CreateOrganizationMetadataWithRequests(ctx context.Context, arg CreateOrganizationMetadataWithRequestsParams) (CreateOrganizationMetadataWithRequestsRow, error) {
@@ -537,6 +542,7 @@ func (q *Queries) CreateOrganizationMetadataWithRequests(ctx context.Context, ar
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.GatewayDiscoveryMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -3693,6 +3699,7 @@ SELECT
     written.verified_domains,
     written.creation_source,
     written.default_host,
+    written.gateway_discovery_mode,
     written.created_at,
     written.updated_at,
     written.disabled_at
@@ -3710,27 +3717,28 @@ type UpsertOrganizationMetadataFromWorkOSWithRequestsParams struct {
 }
 
 type UpsertOrganizationMetadataFromWorkOSWithRequestsRow struct {
-	Requests           []byte
-	ID                 string
-	Name               string
-	Slug               string
-	GramAccountType    string
-	WorkosID           pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	SvixAppID          pgtype.Text
-	WebhooksEnabled    pgtype.Bool
-	Whitelisted        bool
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	ScimEnabled        pgtype.Bool
-	SsoEnabled         pgtype.Bool
-	VerifiedDomains    []string
-	CreationSource     pgtype.Text
-	DefaultHost        pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DisabledAt         pgtype.Timestamptz
+	Requests             []byte
+	ID                   string
+	Name                 string
+	Slug                 string
+	GramAccountType      string
+	WorkosID             pgtype.Text
+	WorkosUpdatedAt      pgtype.Timestamptz
+	WorkosLastEventID    pgtype.Text
+	SvixAppID            pgtype.Text
+	WebhooksEnabled      pgtype.Bool
+	Whitelisted          bool
+	FreeTrialStartedAt   pgtype.Timestamptz
+	FreeTrialEndsAt      pgtype.Timestamptz
+	ScimEnabled          pgtype.Bool
+	SsoEnabled           pgtype.Bool
+	VerifiedDomains      []string
+	CreationSource       pgtype.Text
+	DefaultHost          pgtype.Text
+	GatewayDiscoveryMode pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DisabledAt           pgtype.Timestamptz
 }
 
 // Upsert a Speakeasy organization row from a WorkOS organization event.
@@ -3767,6 +3775,7 @@ func (q *Queries) UpsertOrganizationMetadataFromWorkOSWithRequests(ctx context.C
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.GatewayDiscoveryMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -3833,6 +3842,7 @@ SELECT
     written.verified_domains,
     written.creation_source,
     written.default_host,
+    written.gateway_discovery_mode,
     written.created_at,
     written.updated_at,
     written.disabled_at
@@ -3850,27 +3860,28 @@ type UpsertOrganizationMetadataWithRequestsParams struct {
 }
 
 type UpsertOrganizationMetadataWithRequestsRow struct {
-	Requests           []byte
-	ID                 string
-	Name               string
-	Slug               string
-	GramAccountType    string
-	WorkosID           pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	SvixAppID          pgtype.Text
-	WebhooksEnabled    pgtype.Bool
-	Whitelisted        bool
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	ScimEnabled        pgtype.Bool
-	SsoEnabled         pgtype.Bool
-	VerifiedDomains    []string
-	CreationSource     pgtype.Text
-	DefaultHost        pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DisabledAt         pgtype.Timestamptz
+	Requests             []byte
+	ID                   string
+	Name                 string
+	Slug                 string
+	GramAccountType      string
+	WorkosID             pgtype.Text
+	WorkosUpdatedAt      pgtype.Timestamptz
+	WorkosLastEventID    pgtype.Text
+	SvixAppID            pgtype.Text
+	WebhooksEnabled      pgtype.Bool
+	Whitelisted          bool
+	FreeTrialStartedAt   pgtype.Timestamptz
+	FreeTrialEndsAt      pgtype.Timestamptz
+	ScimEnabled          pgtype.Bool
+	SsoEnabled           pgtype.Bool
+	VerifiedDomains      []string
+	CreationSource       pgtype.Text
+	DefaultHost          pgtype.Text
+	GatewayDiscoveryMode pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DisabledAt           pgtype.Timestamptz
 }
 
 func (q *Queries) UpsertOrganizationMetadataWithRequests(ctx context.Context, arg UpsertOrganizationMetadataWithRequestsParams) (UpsertOrganizationMetadataWithRequestsRow, error) {
@@ -3903,6 +3914,7 @@ func (q *Queries) UpsertOrganizationMetadataWithRequests(ctx context.Context, ar
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.GatewayDiscoveryMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
