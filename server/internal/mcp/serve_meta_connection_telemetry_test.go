@@ -110,11 +110,13 @@ func TestCodeModeRecordsHelperAndRunRows(t *testing.T) {
 		{tool: metamcp.ToolCodeDescribe, status: http.StatusNotFound},
 		{tool: metamcp.ToolCodeExecute, status: http.StatusOK},
 	} {
-		requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND event_source = 'meta_discovery' AND tool_name = ?
+		// The mock organization's gateway is shared with parallel tests; the
+		// caller is this test's own.
+		requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND user_id = ? AND event_source = 'meta_discovery' AND tool_name = ?
 			   AND gram_urn = ?
 			   AND toInt32OrZero(toString(attributes.http.response.status_code)) = ?
 			   AND toString(attributes.gram.meta_mcp_server.discovery_mode) = 'code_mode'`,
-			1, gatewayID, row.tool, "metamcp:"+gatewayID+":"+row.tool, row.status)
+			1, gatewayID, fx.subject.ID, row.tool, "metamcp:"+gatewayID+":"+row.tool, row.status)
 	}
 }
 
@@ -135,7 +137,7 @@ func TestCodeModeRecordsRefusedRun(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND event_source = 'meta_discovery' AND tool_name = 'execute'
+	requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND user_id = ? AND event_source = 'meta_discovery' AND tool_name = 'execute'
 		   AND toInt32OrZero(toString(attributes.http.response.status_code)) = 503`,
-		1, endpoint.MetaMcpServerID.UUID.String())
+		1, endpoint.MetaMcpServerID.UUID.String(), fx.subject.ID)
 }
