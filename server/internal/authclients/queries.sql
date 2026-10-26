@@ -477,3 +477,13 @@ WHERE credential_kind = 'issuance_profile'
   AND credential_id = @profile_id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: ClearIssuanceProfileServerChoice :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE credential_kind = 'issuance_profile'
+  AND credential_id = @profile_id
+  AND mcp_server_id = @mcp_server_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;

@@ -152,8 +152,9 @@ export function HeadlessCallersSection({
       (selectedCaller?.kind !== "workload" || isShared(credential.clientType)),
   );
 
-  // A save replaces the caller's whole profile, so it waits for the current
-  // one: saving without it would drop the caller's other servers' choices.
+  // A save changes only this server's choice; the caller's choices for other
+  // servers are kept as the server holds them. It waits for the profiles so an
+  // existing profile keeps its name.
   const profilesReady = profiles.isSuccess;
   const write = (
     caller: Caller,
@@ -161,9 +162,6 @@ export function HeadlessCallersSection({
     authClientId: string | null,
   ) => {
     if (!profilesReady) return;
-    const others = (existing?.choices ?? []).filter(
-      (c) => c.mcpServerId !== mcpServerId,
-    );
     save.mutate({
       request: {
         setIssuanceProfileRequestBody: {
@@ -175,9 +173,8 @@ export function HeadlessCallersSection({
             caller.kind === "workload" ? caller.issuerId : undefined,
           workloadSubject:
             caller.kind === "workload" ? caller.subject : undefined,
-          choices: authClientId
-            ? [...others, { mcpServerId, authClientId }]
-            : others,
+          mcpServerId,
+          choices: authClientId ? [{ mcpServerId, authClientId }] : [],
         },
       },
     });

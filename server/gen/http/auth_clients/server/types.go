@@ -86,8 +86,12 @@ type SetIssuanceProfileRequestBody struct {
 	WorkloadSubject *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
 	// The profile's name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Every choice the profile should hold.
+	// Every choice the profile should hold. With mcp_server_id, the choice for
+	// that server alone, or none to remove it.
 	Choices []*IssuanceProfileChoiceRequestBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+	// Limits the write to this MCP server: the profile's choices for other servers
+	// are kept as they are.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // DeleteIssuanceProfileRequestBody is the type of the "authClients" service
@@ -6283,6 +6287,7 @@ func NewSetIssuanceProfilePayload(body *SetIssuanceProfileRequestBody, sessionTo
 		WorkloadIssuerID:    body.WorkloadIssuerID,
 		WorkloadSubject:     body.WorkloadSubject,
 		Name:                *body.Name,
+		McpServerID:         body.McpServerID,
 	}
 	v.Choices = make([]*types.IssuanceProfileChoice, len(body.Choices))
 	for i, val := range body.Choices {
@@ -6524,6 +6529,9 @@ func ValidateSetIssuanceProfileRequestBody(body *SetIssuanceProfileRequestBody) 
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }

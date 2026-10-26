@@ -26,6 +26,10 @@ type RegisterIssuerRequestBody struct {
 	// Where the issuer publishes the keys its assertions are signed with. Must be
 	// an https URL on a fully qualified domain name.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Checked when a wildcard rule is admitted and again on
 	// every lookup, so clearing it makes wildcard rules already written inert
@@ -62,6 +66,11 @@ type UpdateIssuerRequestBody struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Omit to preserve the current setting; false
+	// disables this opt-in. Tokens without replay identifiers retain existing
+	// exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 }
 
 // AdmitSubjectRequestBody is the type of the "workloadIdentities" service
@@ -2519,6 +2528,10 @@ type WorkloadIssuerResponseBody struct {
 	// What the platform is and what runs on it. Empty rather than absent where
 	// none is set.
 	Description string `form:"description" json:"description" xml:"description"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse bool `form:"allow_assertion_reuse" json:"allow_assertion_reuse" xml:"allow_assertion_reuse"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
 	// Free-form labels for grouping and filtering trusted platforms. Empty rather
@@ -4806,6 +4819,7 @@ func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *str
 		Name:                   *body.Name,
 		Issuer:                 *body.Issuer,
 		JwksURI:                *body.JwksURI,
+		AllowAssertionReuse:    body.AllowAssertionReuse,
 		AllowWildcardAdmission: body.AllowWildcardAdmission,
 		Description:            body.Description,
 	}
@@ -4832,10 +4846,11 @@ func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *str
 // endpoint payload.
 func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.UpdateIssuerPayload {
 	v := &workloadidentities.UpdateIssuerPayload{
-		ID:          *body.ID,
-		Name:        body.Name,
-		JwksURI:     body.JwksURI,
-		Description: body.Description,
+		ID:                  *body.ID,
+		Name:                body.Name,
+		JwksURI:             body.JwksURI,
+		Description:         body.Description,
+		AllowAssertionReuse: body.AllowAssertionReuse,
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))

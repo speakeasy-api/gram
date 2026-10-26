@@ -450,7 +450,7 @@ func BuildSetIssuanceProfilePayload(authClientsSetIssuanceProfileBody string, au
 	{
 		err = json.Unmarshal([]byte(authClientsSetIssuanceProfileBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"name\": \"aa\",\n      \"user_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workload_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workload_subject\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"user_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workload_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workload_subject\": \"aa\"\n   }'")
 		}
 		if body.Choices == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("choices", "body"))
@@ -483,6 +483,9 @@ func BuildSetIssuanceProfilePayload(authClientsSetIssuanceProfileBody string, au
 				}
 			}
 		}
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -505,6 +508,7 @@ func BuildSetIssuanceProfilePayload(authClientsSetIssuanceProfileBody string, au
 		WorkloadIssuerID:    body.WorkloadIssuerID,
 		WorkloadSubject:     body.WorkloadSubject,
 		Name:                body.Name,
+		McpServerID:         body.McpServerID,
 	}
 	if body.Choices != nil {
 		v.Choices = make([]*types.IssuanceProfileChoice, len(body.Choices))

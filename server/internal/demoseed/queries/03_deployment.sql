@@ -177,10 +177,10 @@ VALUES
 -- name: DeployInsertOrgWorkloadIssuer :exec
 INSERT INTO workload_issuers
   (id, organization_id, project_id, name, description, tags, issuer, jwks_uri,
-   allow_wildcard_admission)
+   allow_wildcard_admission, allow_assertion_reuse)
 VALUES
   (@id, @organization_id::text, NULL, @name, @description::text, @tags::text[], @issuer, @jwks_uri,
-   @allow_wildcard_admission);
+   @allow_wildcard_admission, @allow_assertion_reuse::boolean);
 
 -- name: DeployInsertWorkloadAdmission :exec
 INSERT INTO workload_identity_admissions

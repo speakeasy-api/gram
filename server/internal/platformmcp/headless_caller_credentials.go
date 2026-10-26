@@ -33,7 +33,8 @@ type ChooseMCPHeadlessCallerCredentialInput struct {
 }
 
 type MCPHeadlessCallerChoice struct {
-	ProfileID           string `json:"profile_id"`
+	// ProfileID is empty for a registered app that has no profile yet.
+	ProfileID           string `json:"profile_id,omitempty"`
 	Name                string `json:"name"`
 	UserSessionClientID string `json:"user_session_client_id,omitempty"`
 	WorkloadIssuerID    string `json:"workload_issuer_id,omitempty"`
@@ -48,7 +49,7 @@ type MCPHeadlessCallerChoice struct {
 
 type ChooseMCPHeadlessCallerCredentialOutput struct {
 	UpstreamAuthentication *MCPUpstreamAuthentication `json:"upstream_authentication" jsonschema:"the credentials the server offers"`
-	Callers                []MCPHeadlessCallerChoice  `json:"callers" jsonschema:"each headless caller's choice for this server"`
+	Callers                []MCPHeadlessCallerChoice  `json:"callers" jsonschema:"every app registered with the server's sign-in, and every caller with a profile, with its choice for this server"`
 }
 
 // ChooseHeadlessCallerCredential previews or changes the credential one
@@ -107,8 +108,16 @@ func (s *AccessRoleMutationService) ChooseHeadlessCallerCredential(ctx context.C
 	if err != nil {
 		return zero, accessRoleMutationUnavailable(err)
 	}
+	clients, err := platformrepo.New(s.reads.db).ListHeadlessCallerClients(ctx, platformrepo.ListHeadlessCallerClientsParams{UserSessionIssuerID: issuerID, OrganizationID: principal.OrganizationID})
+	if err != nil {
+		return zero, accessRoleMutationUnavailable(err)
+	}
 	out := ChooseMCPHeadlessCallerCredentialOutput{UpstreamAuthentication: upstream, Callers: []MCPHeadlessCallerChoice{}}
+	profiled := make(map[string]bool, len(profiles))
 	for _, profile := range profiles {
+		if profile.UserSessionClientID != nil {
+			profiled[*profile.UserSessionClientID] = true
+		}
 		caller := MCPHeadlessCallerChoice{
 			ProfileID: profile.ID, Name: profile.Name,
 			UserSessionClientID: conv.PtrValOr(profile.UserSessionClientID, ""),
@@ -124,6 +133,17 @@ func (s *AccessRoleMutationService) ChooseHeadlessCallerCredential(ctx context.C
 			}
 		}
 		out.Callers = append(out.Callers, caller)
+	}
+	// A registered app with no profile yet still needs its first choice, and
+	// this is where its id is found.
+	for _, client := range clients {
+		if profiled[client.ID.String()] {
+			continue
+		}
+		out.Callers = append(out.Callers, MCPHeadlessCallerChoice{
+			ProfileID: "", Name: client.ClientName, UserSessionClientID: client.ID.String(),
+			WorkloadIssuerID: "", WorkloadSubject: "", Chosen: false, AuthClientID: "", NoAuth: false,
+		})
 	}
 	return out, nil
 }

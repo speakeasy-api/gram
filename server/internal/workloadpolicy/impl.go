@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -449,6 +450,7 @@ func IssuerSnapshot(row repo.WorkloadIssuer) *audit.WorkloadIssuerSnapshot {
 		Description:            conv.FromPGTextOrEmpty[string](row.Description),
 		Tags:                   conv.DefaultSlice(row.Tags, []string{}),
 		AllowWildcardAdmission: row.AllowWildcardAdmission,
+		AllowAssertionReuse:    row.AllowAssertionReuse.Valid && row.AllowAssertionReuse.Bool,
 		Tier:                   tier(row.ProjectID),
 	}
 }
@@ -537,6 +539,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		Issuer:                 strings.TrimSpace(payload.Issuer),
 		JwksUri:                strings.TrimSpace(payload.JwksURI),
 		AllowWildcardAdmission: allowWildcard,
+		AllowAssertionReuse:    pgtype.Bool{Bool: conv.PtrValOr(payload.AllowAssertionReuse, false), Valid: true},
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -663,13 +666,17 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPay
 	}
 
 	params := repo.UpdateWorkloadIssuerParams{
-		Name:           existing.Name,
-		Description:    existing.Description,
-		Tags:           conv.DefaultSlice(existing.Tags, []string{}),
-		JwksUri:        existing.JwksUri,
-		OrganizationID: t.organizationID,
-		ProjectID:      t.projectID,
-		ID:             id,
+		Name:                existing.Name,
+		Description:         existing.Description,
+		Tags:                conv.DefaultSlice(existing.Tags, []string{}),
+		JwksUri:             existing.JwksUri,
+		AllowAssertionReuse: existing.AllowAssertionReuse,
+		OrganizationID:      t.organizationID,
+		ProjectID:           t.projectID,
+		ID:                  id,
+	}
+	if payload.AllowAssertionReuse != nil {
+		params.AllowAssertionReuse = pgtype.Bool{Bool: *payload.AllowAssertionReuse, Valid: true}
 	}
 	if name != nil {
 		params.Name = *name

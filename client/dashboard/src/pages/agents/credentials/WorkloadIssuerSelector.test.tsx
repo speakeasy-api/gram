@@ -37,6 +37,7 @@ const issuer: WorkloadIssuer = {
   description: "",
   tags: [],
   allowWildcardAdmission: false,
+  allowAssertionReuse: false,
   createdAt: new Date(0),
   updatedAt: new Date(0),
 };

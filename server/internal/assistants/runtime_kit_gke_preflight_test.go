@@ -38,10 +38,11 @@ func TestKitGKEAdmissionPermissions(t *testing.T) {
 			})
 			require.NoError(t, k.RuntimeReadyForAdmission(t.Context()))
 			expected := map[schema.GroupVersionResource][]string{
-				kitSecretGVR:       {"create", "get", "delete"},
-				kitTemplateGVR:     {"create", "get", "delete"},
-				gkeSandboxClaimGVR: {"create", "get", "delete", "list"},
-				gkePodGVR:          {"get", "list", "delete"},
+				kitServiceAccountGVR: {"create", "get", "delete"},
+				kitSecretGVR:         {"create", "get", "delete"},
+				kitTemplateGVR:       {"create", "get", "delete"},
+				gkeSandboxClaimGVR:   {"create", "get", "delete", "list"},
+				gkePodGVR:            {"get", "list", "delete"},
 			}
 			if snapshots {
 				expected[kitGKETriggerGVR] = []string{"create", "get", "delete"}
@@ -104,4 +105,36 @@ func TestKitGKEPermissionAllowedInvalidResponse(t *testing.T) {
 	require.False(t, kitGKEPermissionAllowed(&unstructured.Unstructured{Object: map[string]any{"status": map[string]any{"allowed": true}}}))
 	k := &KitGKERuntimeBackend{}
 	require.ErrorIs(t, k.RuntimeReadyForAdmission(t.Context()), errRuntimeSwitchUnavailable)
+}
+
+func TestKitGKEAdmissionRequiresServiceAccountPermissions(t *testing.T) {
+	t.Parallel()
+	for _, deniedVerb := range []string{"create", "get", "delete"} {
+		t.Run(deniedVerb, func(t *testing.T) {
+			t.Parallel()
+			k, client, _, _ := kitGKEBackendFixture(t)
+			denied := false
+			client.PrependReactor("create", "selfsubjectaccessreviews", func(action ktesting.Action) (bool, runtime.Object, error) {
+				creation, ok := action.(ktesting.CreateAction)
+				require.True(t, ok)
+				object, ok := creation.GetObject().(*unstructured.Unstructured)
+				require.True(t, ok)
+				review := object.DeepCopy()
+				attributes, found, err := unstructured.NestedStringMap(review.Object, "spec", "resourceAttributes")
+				require.NoError(t, err)
+				require.True(t, found)
+				allowed := attributes["resource"] != kitServiceAccountGVR.Resource || attributes["verb"] != deniedVerb
+				if !allowed {
+					denied = true
+				}
+				review.Object["status"] = map[string]any{"allowed": allowed}
+				return true, review, nil
+			})
+			require.ErrorIs(t, k.RuntimeReadyForAdmission(t.Context()), errRuntimeSwitchUnavailable)
+			require.True(t, denied)
+			for _, action := range client.Actions() {
+				require.True(t, action.Matches("create", "selfsubjectaccessreviews"), "permission denial must precede runtime resource effects")
+			}
+		})
+	}
 }

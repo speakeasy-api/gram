@@ -2,6 +2,7 @@ package workloadpolicy_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -346,6 +347,7 @@ func TestUpdateIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {
 	for _, id := range []string{otherIssuer.String(), uuid.NewString()} {
 		payload := updatePayload(id)
 		payload.Name = new("taken over")
+		payload.AllowAssertionReuse = new(true)
 		_, err = ti.service.UpdateIssuer(ctx, payload)
 		requireOopsCode(t, err, oops.CodeNotFound)
 	}
@@ -382,6 +384,7 @@ func TestUpdateIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 
 	payload := updatePayload(siblingIssuer.String())
 	payload.Name = new("taken over")
+	payload.AllowAssertionReuse = new(true)
 	_, err = ti.service.UpdateIssuer(ctx, payload)
 	requireOopsCode(t, err, oops.CodeNotFound)
 
@@ -430,12 +433,14 @@ func TestUpdateIssuer_RequiresWorkloadWrite(t *testing.T) {
 	readOnly := withScopes(t, ctx, ti, authz.ScopeWorkloadRead)
 	payload := updatePayload(original.ID)
 	payload.Name = new("Claude in Slack")
+	payload.AllowAssertionReuse = new(true)
 	_, err := ti.service.UpdateIssuer(readOnly, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	policy, err := ti.service.List(readOnly, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, "Claude Tag", onlyIssuer(t, policy).Name)
+	require.False(t, onlyIssuer(t, policy).AllowAssertionReuse)
 }
 
 func TestUpdateIssuer_RecordsTheChangeAsADiff(t *testing.T) {
@@ -449,6 +454,7 @@ func TestUpdateIssuer_RecordsTheChangeAsADiff(t *testing.T) {
 
 	payload := updatePayload(original.ID)
 	payload.Name = new("Claude in Slack")
+	payload.AllowAssertionReuse = new(true)
 	payload.JwksURI = new("https://keys.anthropic.com/jwks.json")
 	_, err = ti.service.UpdateIssuer(ctx, payload)
 	require.NoError(t, err)
@@ -469,12 +475,14 @@ func TestUpdateIssuer_RecordsTheChangeAsADiff(t *testing.T) {
 	require.Equal(t, "Claude Tag", beforeSnapshot["name"])
 	require.Equal(t, anthropicJWKS, beforeSnapshot["jwks_uri"])
 	require.Equal(t, "organization", beforeSnapshot["tier"])
+	require.Equal(t, false, beforeSnapshot["allow_assertion_reuse"])
 
 	afterSnapshot, err := audittest.DecodeAuditData(entry.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, "Claude in Slack", afterSnapshot["name"])
 	require.Equal(t, "https://keys.anthropic.com/jwks.json", afterSnapshot["jwks_uri"])
 	require.Equal(t, anthropicIssuer, afterSnapshot["issuer"])
+	require.Equal(t, true, afterSnapshot["allow_assertion_reuse"])
 	require.Equal(t, "Claude agents in our Slack workspace", afterSnapshot["description"])
 }
 
@@ -493,4 +501,46 @@ func TestUpdateIssuer_RollsBackWhenTheAuditEntryFails(t *testing.T) {
 	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, "Claude Tag", onlyIssuer(t, policy).Name)
+}
+
+//nolint:paralleltest,tparallel // Ordered updates intentionally share one issuer to test omitted-field preservation.
+func TestUpdateIssuer_AssertionReuseThroughGoClient(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	original := registerDescribedAnthropic(t, ctx, ti)
+	require.False(t, original.AllowAssertionReuse)
+	for _, tc := range []struct {
+		name  string
+		value *bool
+		want  bool
+	}{
+		{name: "enable", value: new(true), want: true},
+		{name: "omitted preserves opt in", value: nil, want: true},
+		{name: "disable", value: new(false), want: false},
+		{name: "omitted preserves opt out", value: nil, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := updatePayload(original.ID)
+			payload.Name = new("Projected token platform")
+			payload.AllowAssertionReuse = tc.value
+			decoded, err := genserver.DecodeUpdateIssuerRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(encodeUpdateIssuerRequest(t, payload))
+			require.NoError(t, err)
+			require.Equal(t, tc.value, decoded.AllowAssertionReuse)
+			policy, err := ti.service.UpdateIssuer(ctx, decoded)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, onlyIssuer(t, policy).AllowAssertionReuse)
+			listed, err := ti.service.List(ctx, &gen.ListPayload{})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, onlyIssuer(t, listed).AllowAssertionReuse)
+		})
+	}
+}
+
+func TestWorkloadIssuer_ResponseIncludesAssertionReuseWhenDisabled(t *testing.T) {
+	t.Parallel()
+	body, err := json.Marshal(genserver.WorkloadIssuerResponseBody{AllowAssertionReuse: false})
+	require.NoError(t, err)
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(body, &fields))
+	require.JSONEq(t, "false", string(fields["allow_assertion_reuse"]))
 }

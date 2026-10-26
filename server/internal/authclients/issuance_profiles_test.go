@@ -95,3 +95,49 @@ func TestIssuanceProfilesForClientsAndWorkloads(t *testing.T) {
 	_, err = ti.service.SetIssuanceProfile(readOnly, &gen.SetIssuanceProfilePayload{UserSessionIssuerID: issuerID.String(), UserSessionClientID: new(client.ID.String()), Name: "x"})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestIssuanceProfileWritesLimitedToOneServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	first := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	second := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	firstClient := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "First token")
+	associate(t, ctx, ti.conn, ti.organizationID, first, firstClient)
+	secondClient := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Second token")
+	associate(t, ctx, ti.conn, ti.organizationID, second, secondClient)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+
+	issuerID := uuid.New()
+	require.NoError(t, selectionbackfill.New(ti.conn).SeedUserSessionIssuerFixture(ctx, selectionbackfill.SeedUserSessionIssuerFixtureParams{ID: issuerID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}, OrganizationID: pgtype.Text{String: ti.organizationID, Valid: true}, Slug: "usi-" + issuerID.String()[:8]}))
+	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{ClientID: "headless", ClientName: "Headless", RedirectUris: []string{}, TokenEndpointAuthMethod: "none", UserSessionIssuerID: issuerID})
+	require.NoError(t, err)
+	write := func(serverID *string, choices ...*types.IssuanceProfileChoice) (*types.IssuanceProfile, error) {
+		return ti.service.SetIssuanceProfile(ctx, &gen.SetIssuanceProfilePayload{
+			UserSessionIssuerID: issuerID.String(), UserSessionClientID: new(client.ID.String()), Name: "Headless",
+			McpServerID: serverID, Choices: choices,
+		})
+	}
+	firstChoice := &types.IssuanceProfileChoice{McpServerID: first.id.String(), AuthClientID: new(firstClient.String())}
+	secondChoice := &types.IssuanceProfileChoice{McpServerID: second.id.String(), AuthClientID: new(secondClient.String())}
+
+	_, err = write(new(first.id.String()), firstChoice)
+	require.NoError(t, err)
+	_, err = write(new(second.id.String()), secondChoice)
+	require.NoError(t, err)
+	// An editor that last saw only the first server's choice removes it.
+	profile, err := write(new(first.id.String()))
+	require.NoError(t, err)
+	require.Equal(t, []*types.IssuanceProfileChoice{secondChoice}, profile.Choices, "another server's choice made meanwhile is kept")
+
+	_, err = write(nil, firstChoice, secondChoice)
+	require.NoError(t, err)
+	_, err = ti.service.DetachAuthClientFromMcpServer(ctx, &gen.DetachAuthClientFromMcpServerPayload{ID: firstClient.String(), McpServerID: first.id.String()})
+	require.NoError(t, err)
+	profile, err = write(new(second.id.String()))
+	require.NoError(t, err, "a stale choice on another server does not block the edit")
+	require.Equal(t, []*types.IssuanceProfileChoice{firstChoice}, profile.Choices)
+
+	_, err = write(new(second.id.String()), firstChoice)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

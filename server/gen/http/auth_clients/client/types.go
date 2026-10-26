@@ -86,8 +86,12 @@ type SetIssuanceProfileRequestBody struct {
 	WorkloadSubject *string `form:"workload_subject,omitempty" json:"workload_subject,omitempty" xml:"workload_subject,omitempty"`
 	// The profile's name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Every choice the profile should hold.
+	// Every choice the profile should hold. With mcp_server_id, the choice for
+	// that server alone, or none to remove it.
 	Choices []*IssuanceProfileChoiceRequestBody `form:"choices" json:"choices" xml:"choices"`
+	// Limits the write to this MCP server: the profile's choices for other servers
+	// are kept as they are.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // DeleteIssuanceProfileRequestBody is the type of the "authClients" service
@@ -3553,6 +3557,7 @@ func NewSetIssuanceProfileRequestBody(p *authclients.SetIssuanceProfilePayload) 
 		WorkloadIssuerID:    p.WorkloadIssuerID,
 		WorkloadSubject:     p.WorkloadSubject,
 		Name:                p.Name,
+		McpServerID:         p.McpServerID,
 	}
 	if p.Choices != nil {
 		body.Choices = make([]*IssuanceProfileChoiceRequestBody, len(p.Choices))
