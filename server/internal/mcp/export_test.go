@@ -105,3 +105,14 @@ func (s *Service) SetPosthog(p *posthog.Posthog) {
 func (s *Service) SetPrepareMandatory(prepare func(context.Context) (authz.MandatoryAuthorization, error)) {
 	s.prepareMandatory = prepare
 }
+
+// SetAuthClientPermission installs a mutable permit decision in the test binary.
+func (s *Service) SetAuthClientPermission(allowed func() bool) {
+	s.authClientPermitter = testAuthClientPermission(allowed)
+}
+
+type testAuthClientPermission func() bool
+
+func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return f(), nil
+}

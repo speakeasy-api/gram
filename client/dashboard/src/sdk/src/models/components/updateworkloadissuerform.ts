@@ -10,6 +10,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
  */
 export type UpdateWorkloadIssuerForm = {
   /**
+   * Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Omit to preserve the current setting; false disables this opt-in. Tokens without replay identifiers retain existing exact-token compatibility.
+   */
+  allowAssertionReuse?: boolean | undefined;
+  /**
    * What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.
    */
   description?: string | undefined;
@@ -33,6 +37,7 @@ export type UpdateWorkloadIssuerForm = {
 
 /** @internal */
 export type UpdateWorkloadIssuerForm$Outbound = {
+  allow_assertion_reuse?: boolean | undefined;
   description?: string | undefined;
   id: string;
   jwks_uri?: string | undefined;
@@ -46,6 +51,7 @@ export const UpdateWorkloadIssuerForm$outboundSchema: z.ZodMiniType<
   UpdateWorkloadIssuerForm
 > = z.pipe(
   z.object({
+    allowAssertionReuse: z.optional(z.boolean()),
     description: z.optional(z.string()),
     id: z.string(),
     jwksUri: z.optional(z.string()),
@@ -54,6 +60,7 @@ export const UpdateWorkloadIssuerForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      allowAssertionReuse: "allow_assertion_reuse",
       jwksUri: "jwks_uri",
     });
   }),

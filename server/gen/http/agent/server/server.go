@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts               []*MountPoint
 	GetPlugins           http.Handler
+	GetMyConnections     http.Handler
 	ListSyncedUsers      http.Handler
 	GetConfiguration     http.Handler
 	UpdateConfiguration  http.Handler
@@ -60,6 +61,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"GetPlugins", "GET", "/rpc/agent.getPlugins"},
+			{"GetMyConnections", "GET", "/rpc/agent.getMyConnections"},
 			{"ListSyncedUsers", "GET", "/rpc/agent.listSyncedUsers"},
 			{"GetConfiguration", "GET", "/rpc/agent.getConfiguration"},
 			{"UpdateConfiguration", "POST", "/rpc/agent.updateConfiguration"},
@@ -72,6 +74,7 @@ func New(
 			{"CreateSessionHandoff", "POST", "/rpc/agent.createSessionHandoff"},
 		},
 		GetPlugins:           NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
+		GetMyConnections:     NewGetMyConnectionsHandler(e.GetMyConnections, mux, decoder, encoder, errhandler, formatter),
 		ListSyncedUsers:      NewListSyncedUsersHandler(e.ListSyncedUsers, mux, decoder, encoder, errhandler, formatter),
 		GetConfiguration:     NewGetConfigurationHandler(e.GetConfiguration, mux, decoder, encoder, errhandler, formatter),
 		UpdateConfiguration:  NewUpdateConfigurationHandler(e.UpdateConfiguration, mux, decoder, encoder, errhandler, formatter),
@@ -91,6 +94,7 @@ func (s *Server) Service() string { return "agent" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetPlugins = m(s.GetPlugins)
+	s.GetMyConnections = m(s.GetMyConnections)
 	s.ListSyncedUsers = m(s.ListSyncedUsers)
 	s.GetConfiguration = m(s.GetConfiguration)
 	s.UpdateConfiguration = m(s.UpdateConfiguration)
@@ -109,6 +113,7 @@ func (s *Server) MethodNames() []string { return agent.MethodNames[:] }
 // Mount configures the mux to serve the agent endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetPluginsHandler(mux, h.GetPlugins)
+	MountGetMyConnectionsHandler(mux, h.GetMyConnections)
 	MountListSyncedUsersHandler(mux, h.ListSyncedUsers)
 	MountGetConfigurationHandler(mux, h.GetConfiguration)
 	MountUpdateConfigurationHandler(mux, h.UpdateConfiguration)
@@ -156,6 +161,59 @@ func NewGetPluginsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getPlugins")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMyConnectionsHandler configures the mux to serve the "agent" service
+// "getMyConnections" endpoint.
+func MountGetMyConnectionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agent.getMyConnections", f)
+}
+
+// NewGetMyConnectionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "getMyConnections" endpoint.
+func NewGetMyConnectionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMyConnectionsRequest(mux, decoder)
+		encodeResponse = EncodeGetMyConnectionsResponse(encoder)
+		encodeError    = EncodeGetMyConnectionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMyConnections")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {

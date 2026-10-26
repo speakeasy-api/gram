@@ -3301,13 +3301,15 @@ type McpServer struct {
 	RemoteSessionIssuerID uuid.NullUUID
 	// @access: confidential
 	RemoteMcpServerID uuid.NullUUID
-	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
+	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, or builtin_backend must be set.
 	// @access: confidential
 	TunneledMcpServerID uuid.NullUUID
 	// @access: confidential
 	ToolsetID uuid.NullUUID
 	// @access: confidential
 	UnproxiedMcpServerID uuid.NullUUID
+	// @access: confidential
+	BuiltinBackend pgtype.Text
 	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
 	// @access: confidential
@@ -5210,6 +5212,102 @@ type PublishOutboxDeadLetter struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type RegistryPromotionCandidate struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	RemoteMcpServerID uuid.NullUUID
+	// @access: confidential
+	SourceRevision string
+	// @access: confidential
+	Eligible bool
+	// @access: confidential
+	Reason string
+	// @access: confidential
+	ObservedSuccesses int64
+	// @access: confidential
+	ObservedFailures int64
+	// @access: confidential
+	ObservedDays int32
+	// @access: confidential
+	CheckedAt pgtype.Timestamptz
+	// @access: confidential
+	RegistryEntryID uuid.NullUUID
+	// Staff-reviewed public catalogue and documentation input.
+	// @access: opaque-restricted
+	PublicMetadata []byte
+	// @access: restricted
+	EndpointIdentity pgtype.Text
+	// @access: confidential
+	RequestDigest pgtype.Text
+	// @access: confidential
+	RetryKey pgtype.Text
+	// @access: confidential-pii
+	PromotedBy pgtype.Text
+	// @access: confidential
+	PromotedAt pgtype.Timestamptz
+	// @access: restricted
+	DocsUrl pgtype.Text
+	// @access: confidential
+	DocsQueuedAt pgtype.Timestamptz
+	// @access: confidential
+	DeliveryError pgtype.Text
+	// @access: confidential
+	DiscoveryLastAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DiscoveryNextAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DiscoveryFailures int32
+	// @access: confidential
+	DocsAttempts int32
+	// @access: confidential
+	DocsFailures int32
+	// @access: confidential
+	DocsLastAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DocsNextAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DocsNeedsAttention bool
+	// @access: confidential
+	DocsLeaseUntil pgtype.Timestamptz
+	// @access: confidential
+	DocsLeaseToken uuid.NullUUID
+	// @access: confidential
+	DocsRevision uuid.UUID
+	// @access: confidential
+	DocsRetryKey pgtype.Text
+	// @access: confidential
+	DocsRetryRevision pgtype.Text
+	// @access: confidential-pii
+	DocsRetryBy pgtype.Text
+	// Staff curation state, independent of observed eligibility.
+	// @access: confidential
+	CurationStatus string
+	// Compare-and-swap revision for staff curation changes.
+	// @access: confidential
+	CurationRevision uuid.UUID
+	// @access: confidential
+	CurationUpdatedAt pgtype.Timestamptz
+	// @access: confidential-pii
+	CurationUpdatedBy pgtype.Text
+	// @access: confidential
+	CurationRetryKey pgtype.Text
+	// @access: confidential
+	CurationRetryRevision pgtype.Text
+	// @access: confidential
+	CurationRetryAction pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type RemoteMcpServer struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -5809,10 +5907,116 @@ type RiskPolicy struct {
 	Prompt pgtype.Text
 	// @access: confidential
 	ModelConfig []byte
+	// @access: opaque-restricted
+	ApprovalConfig []byte
 	// @access: confidential
 	Score float64
 	// @access: confidential
 	Version int64
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// Speakeasy Approvals: a tool call held by a require_approval risk policy, from block through request, decision and consumption.
+type RiskPolicyApproval struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	RiskPolicyID uuid.UUID
+	// @access: confidential
+	PolicyVersion int64
+	// @access: secret-restricted
+	Token string
+	// @access: confidential
+	RequesterUrn string
+	// @access: confidential
+	RequesterUserID pgtype.Text
+	// @access: confidential
+	Surface string
+	// @access: confidential
+	SourceAdapter pgtype.Text
+	// @access: confidential
+	SessionID pgtype.Text
+	// @access: confidential
+	ChatID uuid.NullUUID
+	// @access: confidential
+	ToolsetID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: restricted
+	ServerUrl pgtype.Text
+	// @access: confidential
+	ToolName string
+	// @access: confidential
+	CallFingerprint string
+	// @access: opaque-restricted
+	ArgumentsPreview []byte
+	// @access: opaque-restricted
+	Reason pgtype.Text
+	// @access: confidential
+	Status string
+	// @access: opaque-confidential
+	RequestedScope []byte
+	// @access: opaque-confidential
+	GrantedScope []byte
+	// @access: confidential
+	DecidedByUrn pgtype.Text
+	// @access: confidential
+	DecidedVia pgtype.Text
+	// @access: opaque-restricted
+	DecisionNote pgtype.Text
+	// @access: confidential
+	RequestedAt pgtype.Timestamptz
+	// @access: confidential
+	DecidedAt pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	ConsumedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// Notifications sent for a Speakeasy Approvals request, such as one Slack DM per approver.
+type RiskPolicyApprovalMessage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ApprovalID uuid.UUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	RecipientUserID string
+	// @access: confidential
+	SlackTeamID pgtype.Text
+	// @access: confidential
+	SlackUserID pgtype.Text
+	// @access: confidential
+	SlackChannelID pgtype.Text
+	// @access: confidential
+	SlackMessageTs pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -8150,6 +8354,9 @@ type WorkloadIssuer struct {
 	JwksUri string
 	// @access: confidential
 	AllowWildcardAdmission bool
+	// Whether assertions carrying a jti or uti may be exchanged repeatedly until expiry. NULL is false.
+	// @access: confidential
+	AllowAssertionReuse pgtype.Bool
 	// @access: confidential
 	KeySource pgtype.Text
 	// @access: opaque-restricted

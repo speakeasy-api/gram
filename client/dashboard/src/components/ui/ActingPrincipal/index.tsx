@@ -4,6 +4,14 @@ import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils";
 import * as React from "react";
+import type { Principal } from "./text";
+
+// Underlined on hover, in full, so each name reads as its own way to its
+// identity page. The offset is kept small: `truncate` clips overflow, and
+// IdentityLink's default offset put the underline below the clip, so it
+// never showed at all.
+const LINK_CLASS =
+  "min-w-0 truncate no-underline underline-offset-2 hover:underline";
 
 /**
  * Who did a thing, when an agent did it for someone.
@@ -23,8 +31,6 @@ import * as React from "react";
  * particular call. Those render as the agent alone, not as "on behalf of
  * unknown", which would imply a person we failed to look up.
  */
-import type { Principal } from "./text";
-
 export function ActingPrincipal({
   agent,
   authorizer,
@@ -88,7 +94,7 @@ export function ActingPrincipal({
           <IdentityLink
             identifier={{ urn: `agent:${agent.id}` }}
             projectSlug={projectSlug}
-            className="min-w-0 truncate"
+            className={LINK_CLASS}
           >
             {agent.display ?? agentLabel}
           </IdentityLink>
@@ -126,7 +132,7 @@ export function ActingPrincipal({
               <IdentityLink
                 identifier={first.identity}
                 projectSlug={projectSlug}
-                className="min-w-0 truncate"
+                className={LINK_CLASS}
               >
                 {first.name || first.id}
               </IdentityLink>

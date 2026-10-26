@@ -1402,10 +1402,10 @@ type Selector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth
-	// scopes). When set with resource_id='*', grants access to every resource of
-	// the kind in the project. For mcp:auth and mcp:blocked_auth it is the project
-	// of the server using the client.
+	// Project filter (MCP, environment, assistant, inference, mcp:auth, and
+	// mcp:blocked_auth scopes). When set with resource_id='*', grants access to
+	// every resource of the kind in the project. For mcp:auth and mcp:blocked_auth
+	// it is the project of the server using the client.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.

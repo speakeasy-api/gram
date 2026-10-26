@@ -19,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -253,6 +255,45 @@ func TestUpdateMcpServerHostedWrapperRejectsPublicFlipWithExternalOAuth(t *testi
 	require.NoError(t, err)
 	_, server = f.requireProjected(t, ctx)
 	require.Equal(t, "disabled", server.Visibility)
+}
+
+func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer, err := usersessionsrepo.New(f.ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          f.projectID,
+		OrganizationID:     pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		Slug:               "proxy-link-issuer-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: 24 * 60 * 60 * 1_000_000, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) {
+		p.UserSessionIssuerID = new(issuer.ID.String())
+	}))
+	require.NoError(t, err)
+	testenv.LinkRetiredOAuthProxy(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("public"), nil))
+	require.NoError(t, err)
+	_, server := f.requireProjected(t, ctx)
+	require.Equal(t, "public", server.Visibility)
+	require.Equal(t, issuer.ID, server.UserSessionIssuerID.UUID)
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), nil))
+	require.NoError(t, err)
+	_, server = f.requireProjected(t, ctx)
+	require.Equal(t, "private", server.Visibility)
+	require.Equal(t, issuer.ID, server.UserSessionIssuerID.UUID)
+	require.True(t, f.resolve(t, ctx).Allowed)
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("disabled"), nil))
+	require.NoError(t, err)
+	toolset, server := f.requireProjected(t, ctx)
+	require.Equal(t, "private", hostingstate.ReEnableVisibility(toolset), "the retired proxy link alone re-enables private")
+	require.False(t, hostedmcp.WithServerState(toolset, &server).McpIsPublic)
 }
 
 func TestUpdateMcpServerHostedWrapperRejectsNameOverToolsetLimit(t *testing.T) {

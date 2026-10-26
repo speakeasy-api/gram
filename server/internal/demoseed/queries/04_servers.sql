@@ -36,6 +36,8 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
   (@slack_id::uuid, @project_id::uuid, @org_id::text, 'slack',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   (@gateway_id::uuid, @project_id::uuid, @org_id::text, 'acme-agent-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+  (@code_gateway_id::uuid, @project_id::uuid, @org_id::text, 'python-code-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
 -- name: ServersInsertMCPServers :exec
@@ -55,6 +57,12 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
   (@github_id::uuid, @project_id::uuid, 'GitHub', 'github',
    NULL, @remote_github_id::uuid,
    @issuer_workforce_id::uuid, 'private');
+
+-- name: ServersInsertRegistryPromotionCandidate :exec
+-- Synthetic evidence stays ineligible and queues no public publication or messages.
+INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, curation_status, created_at)
+VALUES (@id::uuid, @org_id::text, @project_id::uuid, @mcp_server_id::uuid, @remote_mcp_server_id::uuid, 'unobserved', false, 'insufficient_evidence', @curation_status::text, clock_timestamp() - make_interval(days => @age_days::integer))
+ON CONFLICT (project_id,mcp_server_id) DO NOTHING;
 
 -- Each hosted toolset owns a canonical wrapper (id = the toolset id) that
 -- holds its hosting state, and one platform endpoint at the wrapper's slug.
@@ -299,6 +307,26 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
    @meta_id::uuid, @linear_server_id::uuid, 2),
   (@slack_member_id::uuid, @project_id::uuid,
    @meta_id::uuid, @slack_server_id::uuid, 3);
+
+-- Stored as Progressive (the column default) because the shared demo org has
+-- no code runtime; local fixtures switch it to code_mode (RunLocalFixtures).
+-- name: ServersInsertCodeGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id) VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, 'Python Code Gateway',
+   @user_session_issuer_id::uuid);
+
+-- name: ServersInsertCodeGatewayMembers :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  (@support_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @support_server_id::uuid, 0),
+  (@ops_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @ops_server_id::uuid, 1);
+
+-- name: ServersInsertCodeGatewayEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, @meta_id::uuid, NULL, @slug::text);
 
 -- GitHub was a member until three days ago. Its dispatches are still in
 -- ClickHouse (gwgone rows), so the Activity section can show that a removed
@@ -705,3 +733,56 @@ VALUES
      'prescription_version', @prescription_version::int, 'state', @state::text),
    now() + (@expires_in::text)::interval, now() - (@created_ago::text)::interval,
    now() - (@created_ago::text)::interval);
+
+-- Typed auth clients, as the upstream OAuth migration records them: Linear's
+-- personal client over its OAuth registration, and one static credential
+-- shared by GitHub and Linear, so the server settings show a shared client
+-- and a server offering two. Slack is left undecided about upstream
+-- authentication.
+-- The projects delete cascades the clients, their headers and associations.
+-- name: ServersInsertAuthClient :exec
+INSERT INTO mcp_auth_clients
+  (id, organization_id, project_id, client_type, source, name,
+   remote_session_client_id, client_attachment_scope)
+SELECT @id::uuid, @org_id::text, @project_id::uuid, @client_type::text,
+       'backfill', @name::text, c.id, c.attachment_scope
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = sqlc.narg(remote_session_client_id)::uuid;
+
+-- The value is a placeholder; stored values are never returned.
+-- name: ServersInsertAuthClientHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_secret, value)
+VALUES
+  (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
+   @value::text);
+
+-- name: ServersInsertServerAuthClient :exec
+INSERT INTO mcp_server_auth_clients
+  (id, project_id, organization_id, mcp_server_id, auth_client_id,
+   client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
+       ac.id, ac.attachment_scope, 'backfill'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid;
+
+-- name: ServersMarkRequiresUpstreamAuth :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE
+WHERE project_id = @project_id::uuid
+  AND id = ANY(@ids::uuid[]);
+
+-- Engineers may use the shared GitHub token; Contractors are blocked from
+-- it on every server that offers it. Cleared by id at the top of the seed.
+-- name: ServersInsertAuthClientRoleGrants :exec
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT v.id, @org_id::text, 'role:organization:' || r.id, v.scope,
+       jsonb_build_object('resource_kind', 'mcp_auth_client',
+         'resource_id', (@auth_client_id::uuid)::text)
+FROM (VALUES
+  (@use_id::uuid, 'engineer', 'mcp:auth'),
+  (@block_id::uuid, 'contractors', 'mcp:blocked_auth')
+) AS v(id, slug, scope)
+JOIN organization_roles r
+  ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;

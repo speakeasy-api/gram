@@ -59,6 +59,7 @@ import (
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -866,7 +867,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			return nil, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, logger)
 		}
 	case ((ids.RemoteMcpServerID.Valid && ids.RemoteMcpServerID != existing.RemoteMcpServerID) || (ids.TunneledMcpServerID.Valid && ids.TunneledMcpServerID != existing.TunneledMcpServerID)) && !existing.UserSessionIssuerID.Valid:
-		issuerID, err = MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
+		issuerID, err = serverissuer.Mint(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
 		}

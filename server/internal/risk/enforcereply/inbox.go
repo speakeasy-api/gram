@@ -64,7 +64,7 @@ type Outcome struct {
 	// Deadline reports that at least one lane reached its wait deadline.
 	Deadline bool
 
-	// Truncated reports that the dispatcher size-limited content before publication.
+	// Truncated reports that publication or a lane handler size-limited scanned input.
 	Truncated bool
 }
 

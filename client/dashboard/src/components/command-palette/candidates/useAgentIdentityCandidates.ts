@@ -4,7 +4,11 @@ import {
   useSession,
 } from "@/contexts/Auth";
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
-import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import {
+  useProjectSlugForRequests,
+  useSdkClient,
+  useSlugs,
+} from "@/contexts/Sdk";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { fetchRegisteredAgents } from "@/pages/identities/identityRoster";
@@ -29,6 +33,7 @@ export function useAgentIdentityCandidates({
   const isPlatformAdmin = useIsPlatformAdmin();
   const sdk = useSdkClient();
   const projectSlug = useProjectSlugForRequests();
+  const { projectSlug: routeProjectSlug } = useSlugs();
   const routes = useRoutes({ projectSlug });
   const navigate = useNavigate();
   const { search } = useLocation();
@@ -99,9 +104,9 @@ export function useAgentIdentityCandidates({
     if (!queryEnabled) return [];
     return (data?.pages ?? [])
       .flatMap((page) => page.items)
-      .map((agent): LauncherCandidate => {
+      .flatMap((agent): LauncherCandidate[] => {
         const urn = `agent:${agent.id}`;
-        return {
+        const identity: LauncherCandidate = {
           id: `agent-identity:${agent.id}`,
           // Identity names share the same privacy treatment as people.
           kind: "person",
@@ -121,6 +126,34 @@ export function useAgentIdentityCandidates({
             );
           },
         };
+        // Request headers may fall back to the default project in the org shell;
+        // only a real project route can offer this project-scoped control.
+        if (!routeProjectSlug || !agent.permissions?.write) return [identity];
+        return [
+          identity,
+          {
+            ...identity,
+            id: `agent-inference-access:${agent.id}`,
+            title: `${agent.name} · Permissions`,
+            detail: "Edit permissions · inference project access",
+            keywords: [
+              ...identity.keywords,
+              "inference",
+              "inference:execute",
+              "permissions",
+            ],
+            run: () => {
+              void navigate(
+                withIdentityWindow(
+                  routes.identities.detail.permissions.href(
+                    encodeIdentityUrn(urn),
+                  ),
+                  search,
+                ),
+              );
+            },
+          },
+        ];
       });
-  }, [data, navigate, queryEnabled, routes, search]);
+  }, [data, navigate, queryEnabled, routes, routeProjectSlug, search]);
 }

@@ -21,6 +21,20 @@ export type CreateUserSessionIssuerFormAuthnChallengeMode = ClosedEnum<
 >;
 
 /**
+ * Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+ */
+export const CreateUserSessionIssuerFormAuthorizationServerMode = {
+  Endpoint: "endpoint",
+  Shared: "shared",
+} as const;
+/**
+ * Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+ */
+export type CreateUserSessionIssuerFormAuthorizationServerMode = ClosedEnum<
+  typeof CreateUserSessionIssuerFormAuthorizationServerMode
+>;
+
+/**
  * Form for creating a user_session_issuer.
  */
 export type CreateUserSessionIssuerForm = {
@@ -28,6 +42,12 @@ export type CreateUserSessionIssuerForm = {
    * How multi-remote authn challenges are presented: chain | interactive.
    */
   authnChallengeMode: CreateUserSessionIssuerFormAuthnChallengeMode;
+  /**
+   * Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+   */
+  authorizationServerMode?:
+    | CreateUserSessionIssuerFormAuthorizationServerMode
+    | undefined;
   /**
    * Maximum issued user session lifetime, in hours.
    */
@@ -45,8 +65,14 @@ export const CreateUserSessionIssuerFormAuthnChallengeMode$outboundSchema:
   );
 
 /** @internal */
+export const CreateUserSessionIssuerFormAuthorizationServerMode$outboundSchema:
+  z.ZodMiniEnum<typeof CreateUserSessionIssuerFormAuthorizationServerMode> = z
+    .enum(CreateUserSessionIssuerFormAuthorizationServerMode);
+
+/** @internal */
 export type CreateUserSessionIssuerForm$Outbound = {
   authn_challenge_mode: string;
+  authorization_server_mode: string;
   session_duration_hours: number;
   slug: string;
 };
@@ -59,12 +85,17 @@ export const CreateUserSessionIssuerForm$outboundSchema: z.ZodMiniType<
   z.object({
     authnChallengeMode:
       CreateUserSessionIssuerFormAuthnChallengeMode$outboundSchema,
+    authorizationServerMode: z._default(
+      CreateUserSessionIssuerFormAuthorizationServerMode$outboundSchema,
+      "endpoint",
+    ),
     sessionDurationHours: z.int(),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       authnChallengeMode: "authn_challenge_mode",
+      authorizationServerMode: "authorization_server_mode",
       sessionDurationHours: "session_duration_hours",
     });
   }),

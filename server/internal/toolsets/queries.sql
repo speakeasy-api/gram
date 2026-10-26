@@ -314,7 +314,6 @@ RETURNING *;
 UPDATE toolsets
 SET
     external_oauth_server_id = NULL
-  , oauth_proxy_server_id = NULL
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;

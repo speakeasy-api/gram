@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -150,7 +150,7 @@ type kitGKEAuthorityHandle struct {
 // top-level metadata so ordinary metadata updates cannot recursively nest it.
 func kitGKEAuthorityMetadata(state kitGKEAuthority) (kitGKEBackendMetadata, error) {
 	m := state.Metadata
-	state.Metadata = kitGKEBackendMetadata{Checkpoint: nil, TLSCertificate: nil, Provisioning: false, CheckpointMarker: "", ProxyImageDigest: "", ImageDigest: "", ContainerID: "", AuthorityUID: "", AuthorityNotAfter: time.Time{}, RuntimeID: uuid.Nil, AssistantID: uuid.Nil, ProjectID: uuid.Nil, Version: 0, Namespace: "", Fingerprint: "", ClaimUID: "", TemplateUID: "", SecretUID: "", SecretName: "", PodName: "", PodUID: ""}
+	state.Metadata = kitGKEBackendMetadata{Workload: nil, ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: nil, Provisioning: false, CheckpointMarker: "", ProxyImageDigest: "", ImageDigest: "", ContainerID: "", AuthorityUID: "", RuntimeID: uuid.Nil, AssistantID: uuid.Nil, ProjectID: uuid.Nil, Version: 0, Namespace: "", Fingerprint: "", ClaimUID: "", TemplateUID: "", SecretUID: "", SecretName: "", PodName: "", PodUID: ""}
 	raw, err := json.Marshal(state)
 	if err != nil {
 		return m, fmt.Errorf("marshal Kit GKE authority state: %w", err)
@@ -483,6 +483,12 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if state.Source.CheckpointMarker == "" {
 		return empty, fmt.Errorf("checkpoint has no rootfs marker; legacy restore is unsupported")
 	}
+	if _, err = k.get(ctx, r, kitServiceAccountGVR, state.Metadata.Workload.ServiceAccount, state.Metadata.ServiceAccountUID); err != nil {
+		return empty, err
+	}
+	var createdSAName string
+	var createdSAUID types.UID
+	serviceAccountPersisted := false
 	// Stopped already fences admission and the source claim is gone. Keep that
 	// retryable phase through preparation: no Kubernetes resource has changed.
 	// Bootstrap may mint authority even when its result is an error. Revoke that
@@ -495,11 +501,21 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 			if fenceErr := k.config.Fence(cleanupCtx, r); fenceErr != nil {
 				returnErr = errors.Join(returnErr, fmt.Errorf("revoke failed restore bootstrap: %w", fenceErr))
 			}
+			if createdSAUID != "" && !serviceAccountPersisted {
+				returnErr = errors.Join(returnErr, k.deleteOwned(cleanupCtx, kitServiceAccountGVR, createdSAName, createdSAUID))
+			}
 		}
 	}()
 	b, err := k.config.Bootstrap(ctx, r)
+	if b.Workload != nil {
+		r.BackendMetadataJSON, _ = json.Marshal(map[string]any{"workload": b.Workload})
+	}
 	if err != nil {
 		return empty, err
+	}
+	r.BackendMetadataJSON, _ = json.Marshal(map[string]any{"workload": b.Workload})
+	if b.Workload == nil || state.Metadata.Workload == nil || b.Workload.ServiceAccount == state.Metadata.Workload.ServiceAccount {
+		return empty, fmt.Errorf("restore requires a fresh workload service account")
 	}
 	if err = validateKitBootstrap(b); err != nil {
 		return empty, err
@@ -513,8 +529,10 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 		return empty, fmt.Errorf("restore requires a fresh gateway authentication token")
 	}
 	in := k.config.Provision
+	in.WorkloadServiceAccount, in.WorkloadAudience = b.Workload.ServiceAccount, b.Workload.Audience
+	in.Workload, in.InferenceEndpoint = b.Workload, b.InferenceEndpoint
 	in.Identity, in.Name, in.Model = k.identity(r), kitGKEName(r), b.Model
-	in.AgentsMD, in.InferenceJSON, in.MCPJSON, in.GatewayToken, in.MCPFiles = b.AgentsMD, b.InferenceJSON, b.MCPJSON, b.GatewayToken, b.MCPFiles
+	in.AgentsMD, in.MCPJSON, in.GatewayToken = b.AgentsMD, b.MCPJSON, b.GatewayToken
 	in.CheckpointMarker = []byte(uuid.NewString())
 	in.ExpectedCheckpointMarker = []byte(state.Source.CheckpointMarker)
 	in.Restore, in.RestoreSource = verified, &verified.binding
@@ -540,6 +558,28 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	state.Phase = "restoring"
 	obj, err = k.saveAuthority(ctx, obj, state)
 	if err != nil {
+		return empty, err
+	}
+	sa := kitWorkloadServiceAccount(in)
+	sa.SetLabels(labels)
+	sa.SetAnnotations(annotations)
+	sa, err = k.config.GKE.Dynamic.Resource(kitServiceAccountGVR).Namespace(k.config.GKE.Namespace).Create(ctx, sa, metav1.CreateOptions{})
+	if err != nil {
+		return empty, fmt.Errorf("create restore workload service account: %w", err)
+	}
+	if sa.GetUID() == "" {
+		return empty, fmt.Errorf("restore workload service account lacks UID")
+	}
+	createdSAName, createdSAUID = sa.GetName(), sa.GetUID()
+	oldWorkload, oldSAUID := state.Metadata.Workload, state.Metadata.ServiceAccountUID
+	state.Metadata.Workload, state.Metadata.ServiceAccountUID = b.Workload, sa.GetUID()
+	obj, err = k.saveAuthority(ctx, obj, state)
+	if err != nil {
+		return empty, err
+	}
+	// Once published, the exact UID is durable recovery/reap authority.
+	serviceAccountPersisted = true
+	if err = k.deleteOwned(ctx, kitServiceAccountGVR, oldWorkload.ServiceAccount, oldSAUID); err != nil {
 		return empty, err
 	}
 	secret, err := k.config.GKE.Dynamic.Resource(kitSecretGVR).Namespace(k.config.GKE.Namespace).Create(ctx, objects.Secret, metav1.CreateOptions{})
@@ -644,7 +684,6 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if digest != state.Metadata.ImageDigest {
 		return empty, fmt.Errorf("cold restored image changed")
 	}
-	state.Metadata.AuthorityNotAfter = time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour)
 	_, state.Metadata.ContainerID, err = kitGKEProcessIdentity(pod)
 	if err != nil {
 		return empty, err

@@ -538,6 +538,9 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
 	// The issuer kill switch fails closed when unset, so local dev sets it off.
 	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
+	// The dashboard shows every flag on in local dev, so the server lets local
+	// orgs create tool approval policies too. A CSV row can still turn it off.
+	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
