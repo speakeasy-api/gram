@@ -457,13 +457,19 @@ export function StepInstall({
                 </div>
                 <div className="space-y-2">
                   <CodeBlock
-                    value="speakeasy sync"
+                    value="/opt/speakeasy/bin/speakeasy sync"
                     label="3 · Configure the tools — as the account that runs them"
                     language="shell"
                   />
                   <Text muted small>
-                    Then <code className="text-xs">claude mcp list</code> should
-                    show <code className="text-xs">speakeasy-gateway</code> as
+                    The device agent&apos;s CLI is installed off PATH, so call
+                    it by its full path. Installed without sudo, it is at{" "}
+                    <code className="text-xs">
+                      ~/.local/state/speakeasy/bin/speakeasy
+                    </code>
+                    . Then <code className="text-xs">claude mcp list</code>{" "}
+                    should show{" "}
+                    <code className="text-xs">speakeasy-gateway</code> as
                     connected.
                   </Text>
                 </div>
