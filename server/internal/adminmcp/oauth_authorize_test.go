@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -375,7 +376,8 @@ func TestStaffOAuthAuthorizationMapsRevokedClient(t *testing.T) {
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code)
-	require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+	body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest)
+	require.Equal(t, "invalid_client", body.Code)
 	require.Equal(t, 1, store.calls)
 
 	store.err = errors.New("database unavailable")
@@ -395,4 +397,6 @@ func TestStaffAuthorizationStateExpires(t *testing.T) {
 	s.ConnectHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, Path+"/connect?state=expired", nil))
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Zero(t, store.calls)
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest).Code)
+	require.Contains(t, response.Body.String(), "link expired or was already used")
 }

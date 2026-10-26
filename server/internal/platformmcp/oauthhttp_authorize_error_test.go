@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
@@ -120,4 +121,33 @@ func TestOAuthHTTPConnectPostDenialStillRedirectsRemoteCallback(t *testing.T) {
 	require.Equal(t, oautherr.CodeAccessDenied, callback.Query().Get(oauthwire.ParamError))
 	require.Equal(t, "user denied authorization", callback.Query().Get(oauthwire.ParamErrorDescription))
 	require.Equal(t, challenge.State, callback.Query().Get(oauthwire.ParamState))
+}
+
+func TestOAuthHTTPBrowserRoutesRejectMissingStateWithHTML(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		method, path string
+		status       int
+	}{
+		{http.MethodGet, "/platform-mcp/idp_callback", http.StatusBadRequest},
+		{http.MethodGet, "/platform-mcp/select-organization", http.StatusBadRequest},
+		{http.MethodPost, "/platform-mcp/select-organization", http.StatusBadRequest},
+		{http.MethodGet, "/platform-mcp/connect", http.StatusBadRequest},
+		{http.MethodPost, "/platform-mcp/connect", http.StatusBadRequest},
+		{http.MethodPost, "/platform-mcp/create-workspace", http.StatusNotFound},
+		{http.MethodPost, "/platform-mcp/join-workspace", http.StatusNotFound},
+	} {
+		t.Run(tc.method+tc.path, func(t *testing.T) {
+			t.Parallel()
+			service := newTestOAuthHTTP(t)
+			mux := goahttp.NewMuxer()
+			service.Attach(mux)
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(tc.method, tc.path, nil)
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			mux.ServeHTTP(response, request)
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, tc.status)
+			require.Equal(t, oautherr.CodeInvalidRequest, body.Code)
+		})
+	}
 }

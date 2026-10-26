@@ -55,7 +55,8 @@ func TestAuthorizationErrorPageRejectsUnsafeSchemes(t *testing.T) {
 			response := httptest.NewRecorder()
 			err := oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{CallbackURL: strings.ToUpper(scheme) + ":payload", Code: oautherr.CodeInvalidRequest, Description: "invalid request", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: ""})
 			require.Error(t, err)
-			require.Empty(t, response.Body.String())
+			require.Contains(t, response.Body.String(), "Request could not be completed")
+			require.NotContains(t, response.Body.String(), "href=")
 			require.Empty(t, response.Header().Get("Location"))
 		})
 	}
@@ -135,4 +136,48 @@ func TestAuthorizationErrorPageCopiesTechnicalDetailsAsPlainText(t *testing.T) {
 		"Returns to: client.example",
 	}, "\n"), copied)
 	require.NotContains(t, copied, "secret-state")
+}
+
+func TestAuthorizationErrorPageWithoutCallback(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: status, Code: oautherr.CodeInvalidRequest, Description: "public detail"}))
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, status)
+			require.Equal(t, oautherr.CodeInvalidRequest, body.Code)
+			require.Equal(t, "public detail", body.Description)
+			require.NotContains(t, response.Body.String(), "Returns to")
+			require.NotContains(t, response.Body.String(), "Return to")
+			require.Contains(t, response.Body.String(), "close this tab and start again")
+			require.Contains(t, response.Body.String(), "data-copy-details")
+		})
+	}
+}
+
+func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		reason   oauthui.Reason
+		approval bool
+		want     string
+	}{
+		{"blocked", oauthui.ReasonOrganizationBlocked, false, "Your organization doesn't allow"},
+		{"expired", oauthui.ReasonExpired, false, "link expired or was already used"},
+		{"session", oauthui.ReasonSessionChanged, false, "current browser or sign-in session"},
+		{"approval-expired", oauthui.ReasonExpired, true, "This approval link expired"},
+		{"approval-session", oauthui.ReasonSessionChanged, true, "Your staff sign-in session changed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: tc.reason, Approval: tc.approval, ClientName: "Example Client", ServerName: "example-server"}))
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest)
+			require.Equal(t, oautherr.CodeInvalidClient, body.Code)
+			require.Contains(t, response.Body.String(), tc.want)
+			require.NotContains(t, response.Body.String(), "before you signed in")
+		})
+	}
 }

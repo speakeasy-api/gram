@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 
@@ -241,9 +242,8 @@ func requireAuthorizeOAuthError(t *testing.T, w *httptest.ResponseRecorder, stat
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 
 	require.Equal(t, status, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Equal(t, code, body["error"])
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, status)
+	require.Equal(t, code, body.Code)
 }
 
 // TestOAuthCIMD_FullFlow drives the complete authorize → consent → token
@@ -860,10 +860,9 @@ func TestOAuthCIMD_FetchFailureReturns503(t *testing.T) {
 	missingDocURL := ds.srv.URL + "/missing.json"
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, missingDocURL, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Equal(t, "temporarily_unavailable", body["error"])
-	require.Equal(t, "failed to fetch client metadata document", body["error_description"])
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusServiceUnavailable)
+	require.Equal(t, "temporarily_unavailable", body.Code)
+	require.Equal(t, "failed to fetch client metadata document", body.Description)
 }
 
 // TestOAuthCIMD_ConsentEscapesHostileClientName: client_name is

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
@@ -113,7 +114,8 @@ func TestStaffProposalApprovalBrowserFlow(t *testing.T) {
 	forged.Header.Set("Origin", "https://other.example.test")
 	blocked := httptest.NewRecorder()
 	handler.ServeHTTP(blocked, forged)
-	require.Equal(t, http.StatusForbidden, blocked.Code)
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, blocked, http.StatusForbidden).Code)
+	require.Contains(t, blocked.Body.String(), "staff sign-in session changed")
 
 	form.Set("csrf_token", "wrong")
 	require.Equal(t, http.StatusForbidden, post(form, "browser-session").Code)
@@ -121,7 +123,9 @@ func TestStaffProposalApprovalBrowserFlow(t *testing.T) {
 	require.Equal(t, http.StatusOK, page.Code)
 	form = approvalForm(t, page.Body.String())
 	require.Equal(t, http.StatusOK, post(form, "browser-session").Code)
-	require.Equal(t, http.StatusForbidden, post(form, "browser-session").Code, "the CSRF challenge is one use")
+	replayed := post(form, "browser-session")
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, replayed, http.StatusForbidden).Code)
+	require.Contains(t, replayed.Body.String(), "This approval link expired or was already used")
 	approved, err := f.store.GetForSubject(t.Context(), p.ID, proposalTestSubject)
 	require.NoError(t, err)
 	require.Equal(t, ProposalApproved, approved.Status)

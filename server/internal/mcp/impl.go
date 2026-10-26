@@ -767,15 +767,15 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 		case netingress.RouteRegister:
 			handler = oops.ErrHandle(service.logger, service.HandleRegister)
 		case netingress.RouteAuthorize:
-			handler = oops.ErrHandle(service.logger, service.HandleAuthorize)
+			handler = oops.BrowserErrHandle(service.logger, service.HandleAuthorize)
 		case netingress.RouteConnect:
-			handler = oops.ErrHandle(service.logger, service.HandleConsent)
+			handler = oops.BrowserErrHandle(service.logger, service.HandleConsent)
 		case netingress.RouteConnectRemoteSession:
-			handler = oops.ErrHandle(service.logger, service.HandleConsentAction)
+			handler = consentActionRouteHandler(service.logger, service.HandleConsentAction)
 		case netingress.RouteConnectMCP:
 			handler = oops.ErrHandle(service.logger, service.HandleConsentMCP)
 		case netingress.RouteConnectFirstParty:
-			handler = oops.ErrHandle(service.logger, service.HandleFirstPartyConnect)
+			handler = oops.BrowserErrHandle(service.logger, service.HandleFirstPartyConnect)
 		case netingress.RouteConsentScript:
 			handler = oops.ErrHandle(service.logger, service.ServeConsentScript)
 		case netingress.RouteConsentToolsScript:
@@ -851,14 +851,14 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/authorize", oops.ErrHandle(service.logger, service.HandleAuthorize).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/authorize", oops.BrowserErrHandle(service.logger, service.HandleAuthorize).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect/remote-session", oops.ErrHandle(service.logger, service.HandleConsentAction).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/connect", oops.BrowserErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect", oops.BrowserErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect/remote-session", consentActionRouteHandler(service.logger, service.HandleConsentAction).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect/mcp", oops.ErrHandle(service.logger, service.HandleConsentMCP).ServeHTTP)
 	o11y.AttachHandler(mux, "DELETE", PublicServerRoute+"/connect/mcp", oops.ErrHandle(service.logger, service.HandleConsentMCP).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/connect/first-party", oops.ErrHandle(service.logger, service.HandleFirstPartyConnect).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/connect/first-party", oops.BrowserErrHandle(service.logger, service.HandleFirstPartyConnect).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-page-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentScript).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-tools-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentToolsScript).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-fonts/{file}", oops.ErrHandle(service.logger, service.ServeConsentFont).ServeHTTP)
