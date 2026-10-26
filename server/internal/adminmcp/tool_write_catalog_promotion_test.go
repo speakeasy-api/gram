@@ -317,3 +317,15 @@ func TestCatalogPromotionOverrideReplayPreservesConsentAcrossHealthChanges(t *te
 		})
 	}
 }
+
+func TestCatalogPromotionLengthErrorsGiveSafeFieldGuidance(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{catalogpromotion.ErrPublicTitleTooLong, catalogpromotion.ErrPublicDescriptionTooLong} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			t.Parallel()
+			err := catalogPromotionValidationError(errors.Join(catalogpromotion.ErrInvalid, cause, errors.New("private rejected value")))
+			require.EqualError(t, err, cause.Error())
+			require.NotErrorIs(t, err, ErrStaleState)
+		})
+	}
+}

@@ -224,6 +224,10 @@ func (w *catalogPromotionWriter) registerPrepare(server *mcp.Server) {
 
 func catalogPromotionValidationError(err error) error {
 	switch {
+	case errors.Is(err, catalogpromotion.ErrPublicTitleTooLong):
+		return catalogpromotion.ErrPublicTitleTooLong
+	case errors.Is(err, catalogpromotion.ErrPublicDescriptionTooLong):
+		return catalogpromotion.ErrPublicDescriptionTooLong
 	case errors.Is(err, catalogpromotion.ErrStale), errors.Is(err, catalogpromotion.ErrNotFound), errors.Is(err, catalogpromotion.ErrConflict), errors.Is(err, catalogpromotion.ErrIneligible), errors.Is(err, catalogpromotion.ErrInvalid):
 		return ErrStaleState
 	default:
