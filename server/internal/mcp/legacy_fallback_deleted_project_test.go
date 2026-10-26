@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // A toolset in a deleted project answers every legacy slug entry point exactly
@@ -76,9 +77,15 @@ func TestLegacyFallback_DeletedProjectAnswersAsUnknownSlug(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeNotFound)
 	}
 
-	var clients int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM user_session_clients WHERE user_session_issuer_id = $1`, issuer.ID).Scan(&clients))
-	require.Equal(t, 1, clients, "registration must not add a client for a deleted project")
+	clients, err := usersessions_repo.New(ti.conn).ListUserSessionClientsByProjectID(ctx, usersessions_repo.ListUserSessionClientsByProjectIDParams{
+		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: conv.ToNullUUID(issuer.ID),
+		Cursor:              uuid.NullUUID{},
+		LimitValue:          10,
+	})
+	require.NoError(t, err)
+	require.Len(t, clients, 1, "registration must not add a client for a deleted project")
 
 	// A challenge minted before the delete must not resume after it.
 	_, err = ti.service.LoadResolvedMcpEndpointByRef(ctx, gatedRef)
