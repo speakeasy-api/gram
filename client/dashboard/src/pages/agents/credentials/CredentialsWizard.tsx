@@ -55,7 +55,12 @@ import { useAgents } from "@gram/client/react-query/agents.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agentpolicygrantcheck.js";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
-import { useCatalogEntries, valuesFromSubject } from "./workloadCatalog";
+import {
+  catalogEntryForIssuer,
+  useCatalogEntries,
+  valuesFromIssuer,
+  valuesFromSubject,
+} from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useServerInventory } from "./useServerInventory";
 import {
@@ -242,7 +247,7 @@ export function CredentialsWizard({
   const admittedEntry =
     admitted === undefined
       ? undefined
-      : catalog.entries.find((entry) => entry.issuer.value === admitted.issuer);
+      : catalogEntryForIssuer(catalog.entries, admitted.issuer);
   const [credential, setCredential] = useState<Credential>(
     initialPlatformKey === undefined ? "api-key" : "workload",
   );
@@ -866,17 +871,24 @@ export function CredentialsWizard({
     // field that would write a second rule.
     initialValues:
       admitted !== undefined && admittedEntry !== undefined
-        ? valuesFromSubject(admittedEntry, admitted.subject)
+        ? {
+            ...valuesFromIssuer(admittedEntry, admitted.issuer),
+            ...valuesFromSubject(admittedEntry, admitted.subject),
+          }
         : undefined,
     onValueChange: (key) =>
       setHighlight(
         key === "org_id"
           ? "Anthropic organization"
-          : key === "name"
-            ? "Platform"
-            : key === "issuer"
-              ? "Issuer"
-              : null,
+          : ["project", "location", "cluster"].includes(key)
+            ? "Cluster"
+            : ["namespace", "service_account"].includes(key)
+              ? "Service account"
+              : key === "name"
+                ? "Platform"
+                : key === "issuer"
+                  ? "Issuer"
+                  : null,
       ),
   });
   // A platform's own setup steps are steps of this wizard, not a wizard of
@@ -1072,6 +1084,43 @@ export function CredentialsWizard({
                   <code className="text-xs">
                     {workload.values["org_id"]?.trim()}
                   </code>
+                ),
+              },
+            ]
+          : []),
+        // A GKE cluster by its name alone: the project and location are on
+        // the step that asked for them, and the rail is too narrow for all
+        // three.
+        ...(credential === "workload" &&
+        platformKey === "gke" &&
+        (workload.values["cluster"] ?? "").trim() !== ""
+          ? [
+              {
+                label: "Cluster",
+                value: (
+                  <code className="text-xs">
+                    {workload.values["cluster"]?.trim()}
+                  </code>
+                ),
+              },
+            ]
+          : []),
+        ...(credential === "workload" &&
+        platformKey === "gke" &&
+        (workload.values["service_account"] ?? "").trim() !== ""
+          ? [
+              {
+                label: "Service account",
+                value: (
+                  <span className="text-xs">
+                    <code>{workload.values["service_account"]?.trim()}</code>
+                    {(workload.values["namespace"] ?? "").trim() !== "" && (
+                      <>
+                        {" "}
+                        in <code>{workload.values["namespace"]?.trim()}</code>
+                      </>
+                    )}
+                  </span>
                 ),
               },
             ]

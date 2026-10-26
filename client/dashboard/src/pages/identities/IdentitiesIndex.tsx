@@ -42,7 +42,10 @@ import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Bot, Plus, User } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
-import { useCatalogEntries } from "@/pages/agents/credentials/workloadCatalog";
+import {
+  catalogEntryForIssuer,
+  useCatalogEntries,
+} from "@/pages/agents/credentials/workloadCatalog";
 import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 import {
   identityKindOf,
@@ -1018,9 +1021,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       // A catalog platform by its own name; anything else was registered by
       // hand and carries the label its operator gave it. "Custom" is the
       // fallback for one that was left unnamed, not the name of all of them.
-      const known = catalog.entries.find(
-        (entry) => entry.issuer.value === admission.issuer,
-      );
+      const known = catalogEntryForIssuer(catalog.entries, admission.issuer);
       const label =
         known?.displayName ?? (admission.issuerName.trim() || "Custom");
       const names = byAgent.get(admission.agentId);
