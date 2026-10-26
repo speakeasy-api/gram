@@ -548,9 +548,14 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 			if res.outcome != authClientLegacy {
 				continue
 			}
-			// An enforced choice that names no auth client is a gap, never
-			// served by the upstream client choice; a profile has none.
-			if c.profile || c.onlyChosen || (c.enforced && res.clientID == uuid.Nil) {
+			// An enforced choice that names no auth client is never served
+			// by the upstream client choice; a profile and an agent key have
+			// none.
+			if (c.profile || c.onlyChosen || c.enforced) && res.clientID == uuid.Nil {
+				resolved[id] = withoutLegacyFallback(res)
+				continue
+			}
+			if c.profile || c.onlyChosen {
 				res.outcome = authClientGap
 				resolved[id] = res
 				continue
@@ -575,7 +580,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 			}, res, nil)
 			resolved[id] = prepared
 			memberErrors[id] = prepareErr
-			if prepareErr == nil && prepared.outcome == authClientResolved && !prepared.tunneled {
+			if prepareErr == nil && prepared.sendsClientHeaders() {
 				headerIDs = append(headerIDs, prepared.clientID)
 			}
 		}
@@ -604,7 +609,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 					res = choice
 				}
 				memberErr = memberErrors[member.serverID]
-				if memberErr == nil && res.outcome == authClientResolved && !res.tunneled {
+				if memberErr == nil && res.sendsClientHeaders() {
 					memberErr = headerErr
 					if memberErr == nil {
 						clientHeaders := headers[res.clientID]
