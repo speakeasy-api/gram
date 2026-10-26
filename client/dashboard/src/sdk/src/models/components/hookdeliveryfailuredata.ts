@@ -37,7 +37,7 @@ export const DeliveryPhase = {
 export type DeliveryPhase = ClosedEnum<typeof DeliveryPhase>;
 
 /**
- * Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
+ * Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
  */
 export const FailedEventType = {
   SessionStarted: "session.started",
@@ -53,15 +53,14 @@ export const FailedEventType = {
   UsageReported: "usage.reported",
   SkillActivated: "skill.activated",
   NotificationReported: "notification.reported",
-  ClientDeliveryFailed: "client.delivery_failed",
 } as const;
 /**
- * Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
+ * Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
  */
 export type FailedEventType = ClosedEnum<typeof FailedEventType>;
 
 /**
- * Device-side delivery failure report, sent with event type client.delivery_failed. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
+ * Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
  */
 export type HookDeliveryFailureData = {
   /**
@@ -93,7 +92,7 @@ export type HookDeliveryFailureData = {
    */
   elapsedMs?: number | undefined;
   /**
-   * Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
+   * Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
    */
   failedEventType: FailedEventType;
   /**

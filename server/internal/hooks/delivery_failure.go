@@ -9,6 +9,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hookevents/vocab"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -17,28 +19,17 @@ import (
 // uses to report that an earlier event could not reach the control plane. It
 // carries data.delivery_failure and nothing else: no session, tool, or prompt
 // content, so it is never agent activity.
-const eventTypeClientDeliveryFailed = "client.delivery_failed"
+const eventTypeClientDeliveryFailed = vocab.EventTypeClientDeliveryFailed
 
-// canonicalHookEventTypes mirrors the hook event enum in the Goa design. Goa
-// enforces that enum at the HTTP edge only; in-process callers reach ingest()
-// without it, and a report's failed_event_type is a metric dimension, so it is
-// checked here as well.
-var canonicalHookEventTypes = map[string]struct{}{
-	"session.started":             {},
-	"session.updated":             {},
-	"session.ended":               {},
-	"mcp.inventory":               {},
-	"prompt.submitted":            {},
-	"tool.requested":              {},
-	"tool.completed":              {},
-	"tool.failed":                 {},
-	"assistant.responded":         {},
-	"assistant.thought":           {},
-	"usage.reported":              {},
-	"skill.activated":             {},
-	"notification.reported":       {},
-	eventTypeClientDeliveryFailed: {},
-}
+// The report's enum fields feed metric dimensions. Goa enforces the enums at
+// the HTTP edge only; in-process callers reach ingest() without it, so the
+// same vocabulary is checked here. No caller sends reports in-process today;
+// this keeps the dimensions bounded if one ever does.
+var (
+	failedEventTypes = vocab.Set(vocab.FailedEventTypes)
+	deliveryPhases   = vocab.Set(vocab.DeliveryPhases)
+	deliveryCauses   = vocab.Set(vocab.DeliveryCauses)
+)
 
 func isDeliveryFailureReport(payload *gen.IngestPayload) bool {
 	return payload != nil && payload.Event != nil && strings.TrimSpace(payload.Event.Type) == eventTypeClientDeliveryFailed
@@ -55,7 +46,9 @@ func canonicalDeliveryFailure(payload *gen.IngestPayload) *gen.HookDeliveryFailu
 // report without the block has nothing to record, and the block on any other
 // event would let an ordinary hook row carry diagnostic fields. A report is
 // answered with allow before any policy runs, so it must not carry anything a
-// policy would otherwise judge: no session and no other data block.
+// policy would otherwise judge: no session and no other data block. An
+// idempotency key is required because counting each failure once is the
+// point of the report, and the only sender always mints one.
 func validateDeliveryFailurePayload(payload *gen.IngestPayload) error {
 	report := canonicalDeliveryFailure(payload)
 	switch {
@@ -65,14 +58,22 @@ func validateDeliveryFailurePayload(payload *gen.IngestPayload) error {
 		return nil
 	case report == nil:
 		return oops.E(oops.CodeInvalid, nil, "data.delivery_failure is required for client.delivery_failed events")
+	case strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, "")) == "":
+		return oops.E(oops.CodeInvalid, nil, "idempotency key is required for client.delivery_failed events")
 	case payload.Session != nil:
 		return oops.E(oops.CodeInvalid, nil, "session is not valid on client.delivery_failed events")
 	}
 	if block := activityBlockName(payload.Data); block != "" {
 		return oops.E(oops.CodeInvalid, nil, "data.%s is not valid on client.delivery_failed events", block)
 	}
-	if _, ok := canonicalHookEventTypes[strings.TrimSpace(string(report.FailedEventType))]; !ok {
+	if _, ok := failedEventTypes[strings.TrimSpace(string(report.FailedEventType))]; !ok {
 		return oops.E(oops.CodeInvalid, nil, "data.delivery_failure.failed_event_type is not a canonical hook event type")
+	}
+	if _, ok := deliveryPhases[strings.TrimSpace(string(report.DeliveryPhase))]; !ok {
+		return oops.E(oops.CodeInvalid, nil, "data.delivery_failure.delivery_phase is not a known delivery phase")
+	}
+	if _, ok := deliveryCauses[strings.TrimSpace(string(report.Cause))]; !ok {
+		return oops.E(oops.CodeInvalid, nil, "data.delivery_failure.cause is not a known delivery failure cause")
 	}
 	return nil
 }
@@ -146,10 +147,13 @@ func (s *Service) recordDeliveryFailure(ctx context.Context, payload *gen.Ingest
 	eventType := strings.TrimSpace(string(report.FailedEventType))
 	phase := strings.TrimSpace(string(report.DeliveryPhase))
 	cause := strings.TrimSpace(string(report.Cause))
-	harness := strings.TrimSpace(conv.PtrValOr(report.Harness, ""))
-	deviceOS := strings.TrimSpace(conv.PtrValOr(report.Os, ""))
-	arch := strings.TrimSpace(conv.PtrValOr(report.Arch, ""))
-	binaryVersion := strings.TrimSpace(conv.PtrValOr(report.BinaryVersion, ""))
+	// Device identity in the body gets the same bounds as the X-Gram-Device-*
+	// headers: both are untrusted device-reported strings headed for the same
+	// attribute keys.
+	harness := middleware.SanitizeDeviceValue(conv.PtrValOr(report.Harness, ""))
+	deviceOS := middleware.SanitizeDeviceValue(conv.PtrValOr(report.Os, ""))
+	arch := middleware.SanitizeDeviceValue(conv.PtrValOr(report.Arch, ""))
+	binaryVersion := middleware.SanitizeDeviceValue(conv.PtrValOr(report.BinaryVersion, ""))
 	statusCode := conv.PtrValOr(report.StatusCode, 0)
 	elapsedMs := conv.PtrValOr(report.ElapsedMs, 0)
 	attempts := conv.PtrValOr(report.Attempts, 0)
@@ -220,8 +224,8 @@ func (s *Service) recordDeliveryFailure(ctx context.Context, payload *gen.Ingest
 		attr.HookDeviceArchKey:                   arch,
 		attr.HookDeviceBinaryVersionKey:          binaryVersion,
 		attr.HookDeviceHarnessKey:                harness,
-		attr.HookDeviceHarnessVariantKey:         strings.TrimSpace(conv.PtrValOr(report.HarnessVariant, "")),
-		attr.HookDeviceHarnessVersionKey:         strings.TrimSpace(conv.PtrValOr(report.HarnessVersion, "")),
+		attr.HookDeviceHarnessVariantKey:         middleware.SanitizeDeviceValue(conv.PtrValOr(report.HarnessVariant, "")),
+		attr.HookDeviceHarnessVersionKey:         middleware.SanitizeDeviceValue(conv.PtrValOr(report.HarnessVersion, "")),
 	}
 	for key, value := range optional {
 		if value != "" {

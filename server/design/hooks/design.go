@@ -3,6 +3,7 @@ package hooks
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/hookevents/vocab"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -156,21 +157,11 @@ var HookIngestSession = Type("HookIngestSession", func() {
 	Attribute("model", String, "Model identifier reported by the local agent.")
 })
 
-// hookEventTypes is the canonical event vocabulary. The event envelope and the
-// delivery failure report share it so a failed event's type is bounded the
-// same way as a live one: it feeds a metric dimension and must stay finite.
-var hookEventTypes = []any{
-	"session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted",
-	"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
-	"assistant.thought", "usage.reported", "skill.activated", "notification.reported",
-	"client.delivery_failed",
-}
-
 var HookIngestEvent = Type("HookIngestEvent", func() {
 	Description("Canonical Speakeasy feature event.")
 	Required("type")
 	Attribute("type", String, "Canonical Speakeasy hook event type.", func() {
-		Enum(hookEventTypes...)
+		Enum(vocab.Any(vocab.EventTypes)...)
 	})
 	Attribute("occurred_at", String, "RFC3339 timestamp from the local agent. Defaults to receive time when absent.", func() {
 		Format(FormatDateTime)
@@ -272,21 +263,21 @@ var HookNotificationData = Type("HookNotificationData", func() {
 
 var HookDeliveryPhase = Type("HookDeliveryPhase", String, func() {
 	Description("Whether a failed send was a live hook or a spool-drain replay.")
-	Enum("live", "drain")
+	Enum(vocab.Any(vocab.DeliveryPhases)...)
 })
 
 var HookDeliveryCause = Type("HookDeliveryCause", String, func() {
 	Description("Failure class the hook sender observed. http means the control plane answered with a retryable status.")
-	Enum("dns", "tls", "timeout", "canceled", "connection", "unreadable-response", "unknown", "http")
+	Enum(vocab.Any(vocab.DeliveryCauses)...)
 })
 
 var HookDeliveryFailedEventType = Type("HookDeliveryFailedEventType", String, func() {
-	Description("Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.")
-	Enum(hookEventTypes...)
+	Description("Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.")
+	Enum(vocab.Any(vocab.FailedEventTypes)...)
 })
 
 var HookDeliveryFailureData = Type("HookDeliveryFailureData", func() {
-	Description("Device-side delivery failure report, sent with event type client.delivery_failed. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.")
+	Description("Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.")
 	Required("failed_event_type", "delivery_phase", "cause", "attempted_at")
 	Attribute("failed_event_type", HookDeliveryFailedEventType, "Canonical type of the event whose delivery failed.")
 	Attribute("delivery_phase", HookDeliveryPhase, "Whether the failed send was a live hook or a spool-drain replay.")

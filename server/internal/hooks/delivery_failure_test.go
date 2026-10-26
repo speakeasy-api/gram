@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -253,6 +254,34 @@ func TestIngest_DeliveryFailureRejectsActivityContent(t *testing.T) {
 			},
 			wantErr: "data.delivery_failure.failed_event_type is not a canonical hook event type",
 		},
+		{
+			name: "report about another report",
+			mutate: func(payload *gen.IngestPayload) {
+				payload.Data.DeliveryFailure.FailedEventType = eventTypeClientDeliveryFailed
+			},
+			wantErr: "data.delivery_failure.failed_event_type is not a canonical hook event type",
+		},
+		{
+			name: "phase outside the vocabulary",
+			mutate: func(payload *gen.IngestPayload) {
+				payload.Data.DeliveryFailure.DeliveryPhase = "retry"
+			},
+			wantErr: "data.delivery_failure.delivery_phase is not a known delivery phase",
+		},
+		{
+			name: "cause outside the vocabulary",
+			mutate: func(payload *gen.IngestPayload) {
+				payload.Data.DeliveryFailure.Cause = ""
+			},
+			wantErr: "data.delivery_failure.cause is not a known delivery failure cause",
+		},
+		{
+			name: "missing idempotency key",
+			mutate: func(payload *gen.IngestPayload) {
+				payload.IdempotencyKey = new("  ")
+			},
+			wantErr: "idempotency key is required for client.delivery_failed events",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -276,6 +305,67 @@ func TestIngest_DeliveryFailureRejectsActivityContent(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestIngest_DeliveryFailureBoundsDeviceDimensions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	reader := deliveryFailureMetrics(t, ti)
+	authCtx := hookAuthContext(t, ctx)
+	attemptedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+
+	payload := deliveryFailurePayload(attemptedAt)
+	payload.Data.DeliveryFailure.Os = new("beos")
+	payload.Data.DeliveryFailure.BinaryVersion = new("not a version")
+	payload.Data.DeliveryFailure.Harness = new("claudeé")
+	payload.Data.DeliveryFailure.HarnessVersion = new(" 2.1.0 ")
+
+	_, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+
+	point := findDeliveryFailurePoint(t, reader)
+	for key, want := range map[attr.Key]string{
+		attr.HookDeviceOSKey:            hookMetricDimensionUnknown,
+		attr.HookDeviceBinaryVersionKey: hookMetricDimensionUnknown,
+		attr.HookDeviceHarnessKey:       hookMetricDimensionUnknown,
+	} {
+		value, ok := point.Attributes.Value(key)
+		require.True(t, ok, "missing metric dimension %s", key)
+		require.Equal(t, want, value.AsString(), "metric dimension %s", key)
+	}
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "", attemptedAt, 1)
+	var stored map[string]any
+	require.NoError(t, json.Unmarshal([]byte(logs[0].Attributes), &stored))
+	gram, _ := stored["gram"].(map[string]any)
+	hook, _ := gram["hook"].(map[string]any)
+	device, _ := hook["device"].(map[string]any)
+	require.Equal(t, "beos", device["os"], "the row keeps the raw value for investigation")
+	require.Equal(t, "not a version", device["binary_version"])
+	require.Equal(t, "2.1.0", device["harness_version"])
+	_, hasHarness := device["harness"]
+	require.False(t, hasHarness, "non-ASCII device values are dropped like the equivalent header")
+}
+
+func TestBoundedBinaryVersion(t *testing.T) {
+	t.Parallel()
+
+	for input, want := range map[string]string{
+		"1.4.0":                            "1.4.0",
+		"v1.4.0":                           "v1.4.0",
+		"1.4.0-rc.1":                       "1.4.0-rc.1",
+		"dev":                              "dev",
+		"":                                 hookMetricDimensionUnknown,
+		"1.4":                              hookMetricDimensionUnknown,
+		"1.4.0+build":                      hookMetricDimensionUnknown,
+		"latest":                           hookMetricDimensionUnknown,
+		"1.4.0; DROP":                      hookMetricDimensionUnknown,
+		"1.4.0-" + strings.Repeat("x", 33): hookMetricDimensionUnknown,
+	} {
+		require.Equal(t, want, boundedBinaryVersion(input), "input %q", input)
 	}
 }
 

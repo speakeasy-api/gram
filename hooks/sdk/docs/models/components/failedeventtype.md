@@ -1,6 +1,6 @@
 # FailedEventType
 
-Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
+Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
 
 ## Example Usage
 
@@ -30,4 +30,3 @@ value := components.FailedEventTypeSessionStarted
 | `FailedEventTypeUsageReported`        | usage.reported                        |
 | `FailedEventTypeSkillActivated`       | skill.activated                       |
 | `FailedEventTypeNotificationReported` | notification.reported                 |
-| `FailedEventTypeClientDeliveryFailed` | client.delivery_failed                |

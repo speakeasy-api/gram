@@ -81,7 +81,7 @@ func (e *DeliveryPhase) UnmarshalJSON(data []byte) error {
 	}
 }
 
-// FailedEventType - Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
+// FailedEventType - Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
 type FailedEventType string
 
 const (
@@ -98,7 +98,6 @@ const (
 	FailedEventTypeUsageReported        FailedEventType = "usage.reported"
 	FailedEventTypeSkillActivated       FailedEventType = "skill.activated"
 	FailedEventTypeNotificationReported FailedEventType = "notification.reported"
-	FailedEventTypeClientDeliveryFailed FailedEventType = "client.delivery_failed"
 )
 
 func (e FailedEventType) ToPointer() *FailedEventType {
@@ -135,8 +134,6 @@ func (e *FailedEventType) UnmarshalJSON(data []byte) error {
 	case "skill.activated":
 		fallthrough
 	case "notification.reported":
-		fallthrough
-	case "client.delivery_failed":
 		*e = FailedEventType(v)
 		return nil
 	default:
@@ -144,7 +141,7 @@ func (e *FailedEventType) UnmarshalJSON(data []byte) error {
 	}
 }
 
-// HookDeliveryFailureData - Device-side delivery failure report, sent with event type client.delivery_failed. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
+// HookDeliveryFailureData - Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
 type HookDeliveryFailureData struct {
 	// CPU architecture of the device.
 	Arch *string `json:"arch,omitzero"`
@@ -160,7 +157,7 @@ type HookDeliveryFailureData struct {
 	DeliveryPhase DeliveryPhase `json:"delivery_phase"`
 	// Wall time the client spent on the send across its attempts, in milliseconds.
 	ElapsedMs *int64 `json:"elapsed_ms,omitzero"`
-	// Canonical type of the event whose delivery failed. Bounded to the hook event vocabulary because it is a metric dimension.
+	// Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
 	FailedEventType FailedEventType `json:"failed_event_type"`
 	// Idempotency key of the event that failed, so the report joins to the row its eventual replay produces.
 	FailedIdempotencyKey *string `json:"failed_idempotency_key,omitzero"`

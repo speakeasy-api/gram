@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -21,9 +22,10 @@ const (
 	// it counts; the telemetry row carries the device-side attempt time.
 	meterHooksDeliveryFailure = "hooks.delivery_failure"
 
-	// hookMetricDimensionUnknown fills a delivery failure dimension the report
-	// left empty, so a missing value is still a bucket rather than an absent
-	// tag that would make per-dimension totals disagree with the overall one.
+	// hookMetricDimensionUnknown fills a delivery failure device dimension the
+	// report left empty or outside the known set, so a missing value is still
+	// a bucket rather than an absent tag that would make per-dimension totals
+	// disagree with the overall one.
 	hookMetricDimensionUnknown = "unknown"
 
 	hookMetricOutcomeAccepted        = "accepted"
@@ -111,18 +113,54 @@ func (m *metrics) RecordDeliveryFailure(ctx context.Context, params deliveryFail
 		return
 	}
 
+	// EventType, Phase, and Cause are enum-validated before a report is
+	// recorded, so they are used as-is. The device dimensions are free-form on
+	// the wire and bounded here; the telemetry row keeps the raw values.
 	attrs := []attribute.KeyValue{
-		attr.HookDeliveryEventType(conv.Default(params.EventType, hookMetricDimensionUnknown)),
-		attr.HookDeliveryPhase(conv.Default(params.Phase, hookMetricDimensionUnknown)),
-		attr.HookDeliveryCause(conv.Default(params.Cause, hookMetricDimensionUnknown)),
+		attr.HookDeliveryEventType(params.EventType),
+		attr.HookDeliveryPhase(params.Phase),
+		attr.HookDeliveryCause(params.Cause),
 		attr.HookDeviceHarness(conv.Default(params.Harness, hookMetricDimensionUnknown)),
-		attr.HookDeviceOS(conv.Default(params.OS, hookMetricDimensionUnknown)),
-		attr.HookDeviceBinaryVersion(conv.Default(params.BinaryVersion, hookMetricDimensionUnknown)),
+		attr.HookDeviceOS(boundedDeviceOS(params.OS)),
+		attr.HookDeviceBinaryVersion(boundedBinaryVersion(params.BinaryVersion)),
 	}
 	if params.OrgSlug != "" {
 		attrs = append(attrs, attr.OrganizationSlug(params.OrgSlug))
 	}
 	m.deliveryFailures.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// knownDeviceOS is the set of Go GOOS values: the speakeasy-hooks binary
+// reports runtime.GOOS, so anything else is not a real platform.
+var knownDeviceOS = map[string]struct{}{
+	"aix": {}, "android": {}, "darwin": {}, "dragonfly": {}, "freebsd": {}, "illumos": {}, "ios": {},
+	"js": {}, "linux": {}, "netbsd": {}, "openbsd": {}, "plan9": {}, "solaris": {}, "wasip1": {}, "windows": {},
+}
+
+// releaseVersionPattern matches the versions goreleaser stamps into the
+// speakeasy-hooks binary (1.4.0, v1.4.0, 1.4.0-rc.1); "dev" is the
+// unstamped local build.
+var releaseVersionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]{1,32})?$`)
+
+const devBinaryVersion = "dev"
+
+// boundedDeviceOS maps a reported OS onto a known GOOS or "unknown", keeping
+// the counter's OS series finite.
+func boundedDeviceOS(v string) string {
+	if _, ok := knownDeviceOS[v]; ok {
+		return v
+	}
+	return hookMetricDimensionUnknown
+}
+
+// boundedBinaryVersion keeps a reported version only when it has the shape
+// of a release (or is the dev build), so a malformed or arbitrary value
+// cannot mint a new series.
+func boundedBinaryVersion(v string) string {
+	if v == devBinaryVersion || releaseVersionPattern.MatchString(v) {
+		return v
+	}
+	return hookMetricDimensionUnknown
 }
 
 func (m *metrics) RecordHookEventDuration(ctx context.Context, source string, eventName string, outcome string, decision string, orgSlug string, riskScanned bool, duration time.Duration) {

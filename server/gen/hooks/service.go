@@ -294,16 +294,18 @@ type GetStatusPayload struct {
 // answered with a retryable status.
 type HookDeliveryCause string
 
-// Canonical type of the event whose delivery failed. Bounded to the hook event
-// vocabulary because it is a metric dimension.
+// Canonical type of the event whose delivery failed. Bounded to the hook
+// activity event vocabulary because it is a metric dimension; a report never
+// describes another report.
 type HookDeliveryFailedEventType string
 
 // Device-side delivery failure report, sent with event type
-// client.delivery_failed. The speakeasy-hooks binary writes one when an event
-// could not reach the control plane and redelivers it from the offline spool
-// once connectivity returns, so the record describes the original attempt
-// rather than the request that carried it. It is diagnostic only and never
-// counts as agent activity.
+// client.delivery_failed and a required Idempotency-Key so each failure counts
+// once. The speakeasy-hooks binary writes one when an event could not reach
+// the control plane and redelivers it from the offline spool once connectivity
+// returns, so the record describes the original attempt rather than the
+// request that carried it. It is diagnostic only and never counts as agent
+// activity.
 type HookDeliveryFailureData struct {
 	// Canonical type of the event whose delivery failed.
 	FailedEventType HookDeliveryFailedEventType
