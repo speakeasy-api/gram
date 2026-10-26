@@ -101,8 +101,8 @@ func (f Feature) RequiresPlatformAdmin() bool {
 // EnabledUntilConfigured reports whether f reads as enabled for an
 // organization that has no row for it, active or soft-deleted. Turning such a
 // feature off must persist a soft-deleted row so the explicit choice survives;
-// the IsFeatureEnabled queries in productfeatures, plugins, and risk encode the
-// same list.
+// the IsFeatureEnabled queries in productfeatures and risk encode the same list.
+// The plugins query receives this default as an explicit parameter.
 func (f Feature) EnabledUntilConfigured() bool {
 	switch f {
 	case FeatureOrganizationGatewayDisabled, FeatureHooksFailOpen:
