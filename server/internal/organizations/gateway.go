@@ -104,8 +104,8 @@ func (s *Service) SetGatewayDiscoveryMode(ctx context.Context, payload *gen.SetG
 		ActorSlug:                         nil,
 		OrganizationName:                  updated.Name,
 		OrganizationSlug:                  updated.Slug,
-		OrganizationGatewaySnapshotBefore: &audit.OrganizationGatewaySnapshot{DiscoveryMode: string(preflight)},
-		OrganizationGatewaySnapshotAfter:  &audit.OrganizationGatewaySnapshot{DiscoveryMode: string(mode)},
+		OrganizationGatewaySnapshotBefore: &audit.OrganizationGatewaySnapshot{DiscoveryMode: conv.FromPGText[string](existing.GatewayDiscoveryMode)},
+		OrganizationGatewaySnapshotAfter:  &audit.OrganizationGatewaySnapshot{DiscoveryMode: conv.FromPGText[string](updated.GatewayDiscoveryMode)},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization gateway discovery mode update").LogError(ctx, logger)
 	}

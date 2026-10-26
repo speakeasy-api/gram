@@ -75,7 +75,7 @@ func TestService_SetGatewayDiscoveryMode_StoresAndAuditsMode(t *testing.T) {
 	require.Equal(t, authCtx.ActiveOrganizationID, record.SubjectID)
 	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
 	require.NoError(t, err)
-	require.Equal(t, "progressive", beforeSnapshot["discovery_mode"])
+	require.Nil(t, beforeSnapshot["discovery_mode"], "an unset default is recorded as none stored")
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, "direct", afterSnapshot["discovery_mode"])

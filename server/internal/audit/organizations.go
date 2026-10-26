@@ -1200,8 +1200,9 @@ func (l *Logger) LogOrganizationInferenceKeyRepaired(ctx context.Context, dbtx r
 
 // OrganizationGatewaySnapshot is the organization gateway's stored settings.
 type OrganizationGatewaySnapshot struct {
-	// DiscoveryMode is the mode served to connections that do not choose one.
-	DiscoveryMode string `json:"discovery_mode"`
+	// DiscoveryMode is the stored default for connections that do not choose
+	// one. Nil means none is stored, which serves Progressive.
+	DiscoveryMode *string `json:"discovery_mode"`
 }
 
 type LogOrganizationGatewayDiscoveryModeUpdatedEvent struct {
