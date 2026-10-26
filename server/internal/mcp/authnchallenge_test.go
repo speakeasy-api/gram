@@ -2071,11 +2071,11 @@ func TestHandleConsentMCP_RemoteToolsListStripsOutputSchema(t *testing.T) {
 	require.NotContains(t, tool, "outputSchema")
 }
 
-// TestHandleConsentPost_FilteringOnWithoutInventoryConflicts asserts a
+// TestHandleConsentPost_FilteringOnWithoutInventoryRestartsConsent asserts a
 // restrictive approve cannot skip the display-to-grant binding: filtering=on
-// without a bound inventory attempt is a retryable conflict that leaves the
-// challenge unconsumed.
-func TestHandleConsentPost_FilteringOnWithoutInventoryConflicts(t *testing.T) {
+// without a bound inventory attempt sends the browser back to the consent page
+// for a fresh capture and leaves the challenge unconsumed.
+func TestHandleConsentPost_FilteringOnWithoutInventoryRestartsConsent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -2096,13 +2096,26 @@ func TestHandleConsentPost_FilteringOnWithoutInventoryConflicts(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req = req.WithContext(ctx)
 
-	err = ti.service.ServeConsent(httptest.NewRecorder(), req, endpoint)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	rec := httptest.NewRecorder()
+	err = ti.service.ServeConsent(rec, req, endpoint)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, rec.Code)
+	location, err := url.Parse(rec.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "/mcp/"+endpointSlug+"/connect", location.Path)
+	require.Equal(t, stateID, location.Query().Get("state"))
+	require.Equal(t, "required", location.Query().Get("consent"))
+
+	form.Set("tool_inventory_id", uuid.NewString())
+	stale := httptest.NewRequest(http.MethodPost, "/mcp/"+endpointSlug+"/connect", strings.NewReader(form.Encode()))
+	stale.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	stale = stale.WithContext(ctx)
+	rec = httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(rec, stale, endpoint), "a superseded capture restarts consent instead of failing")
+	require.Equal(t, http.StatusSeeOther, rec.Code)
 
 	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
-	require.NoError(t, err, "conflict must not consume the challenge")
+	require.NoError(t, err, "restarting consent must not consume the challenge")
 }
 
 func TestHandleConsentPost_LegacyRestrictiveApprovalConflicts(t *testing.T) {
