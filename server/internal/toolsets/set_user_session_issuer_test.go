@@ -24,8 +24,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -79,6 +81,7 @@ func TestSetUserSessionIssuer_SetsAndClearsHostedServerIssuer(t *testing.T) {
 	records := buf.deprecationRecords(t)
 	require.Len(t, records, 1)
 	require.Equal(t, authCtx.ActiveOrganizationID, records[0]["gram.org.id"])
+	require.Equal(t, "/rpc/toolsets.setUserSessionIssuer", records[0]["http.route"])
 
 	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionMcpServerUpdate, toolset.ID)
 	require.NoError(t, err)
@@ -163,6 +166,57 @@ func TestSetUserSessionIssuer_RejectsUnknownIssuer(t *testing.T) {
 
 	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: types.Slug("missing-toolset"), UserSessionIssuerID: nil})
 	requireShimOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestSetUserSessionIssuer_RejectsSiblingProjectIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "Shim sibling issuer toolset")
+	sibling, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Sibling project",
+		Slug:           "sibling-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          sibling.ID,
+		OrganizationID:     pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		Slug:               "shim-sibling",
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: 14 * 24 * 60 * 60 * 1_000_000, Valid: true},
+	})
+	require.NoError(t, err)
+	issuerID := issuer.ID.String()
+
+	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: toolset.Slug, UserSessionIssuerID: &issuerID})
+	requireShimOopsCode(t, err, oops.CodeNotFound)
+	require.False(t, storedHostedIssuer(t, ctx, ti, toolset).Valid)
+}
+
+func TestSetUserSessionIssuer_RejectsToolsetWithoutHostedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	unwrapped, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Unwrapped toolset",
+		Slug:                   "shim-unwrapped",
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: "", Valid: false},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: types.Slug(unwrapped.Slug), UserSessionIssuerID: nil})
+	requireShimOopsCode(t, err, oops.CodeNotFound)
+	require.ErrorContains(t, err, "toolset has no hosted MCP server")
 }
 
 func TestSetUserSessionIssuer_AnnouncesSunset(t *testing.T) {

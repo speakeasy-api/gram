@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -25,6 +25,9 @@ var (
 	setUserSessionIssuerSunset = time.Date(2026, time.November, 25, 0, 0, 0, 0, time.UTC)
 )
 
+// setUserSessionIssuerRoute tags the deprecation log so the remaining callers can be found before the sunset.
+const setUserSessionIssuerRoute = "/rpc/toolsets.setUserSessionIssuer"
+
 // SetUserSessionIssuer links a session issuer to the toolset's hosted MCP server, or unlinks it when
 // user_session_issuer_id is null, through the same write as mcpServers.update.
 //
@@ -34,7 +37,7 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)), attr.SlogHTTPRoute(setUserSessionIssuerRoute))
 	logDeprecatedHostingUse(ctx, logger, authCtx, nil)
 
 	issuerID, err := conv.PtrToNullUUID(payload.UserSessionIssuerID)
@@ -50,16 +53,23 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 	}
 
-	if _, err := s.writeHostedServer(ctx, toolset.ID, hostedServerChange{
+	if _, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: *authCtx.ProjectID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset has no hosted MCP server").LogWarn(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, logger)
+	}
+
+	_, view, err := s.writeHostedServer(ctx, toolset.ID, hostedServerChange{
 		Name:                   nil,
 		Visibility:             nil,
 		UserSessionIssuerID:    issuerID,
 		ClearUserSessionIssuer: !issuerID.Valid,
 		ToolVariationsGroupID:  nil,
 		NetworkAccessMode:      nil,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	return mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), new(s.toolsetCache.SkipCache()), nil)
+	return view, nil
 }
