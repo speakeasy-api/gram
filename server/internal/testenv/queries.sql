@@ -436,6 +436,22 @@ FROM device_agent_environment_syncs
 WHERE organization_id = @organization_id
 ORDER BY environment ASC, email ASC;
 
+-- name: ListDeviceAgentStateReportsFixture :many
+-- Reads back stored agent state reports so tests can assert the upsert's
+-- dedup key and what a report stores.
+SELECT *
+FROM device_agent_state_reports
+WHERE organization_id = @organization_id
+ORDER BY email ASC, serial_number ASC NULLS FIRST;
+
+-- name: GetDeviceAgentServedEtagFixture :one
+-- Reads back the etag GetPlugins last served a user, which attestation
+-- compares reported applied etags against.
+SELECT served_etag, served_etag_changed_at
+FROM device_agent_syncs
+WHERE organization_id = @organization_id
+  AND email = @email;
+
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, NULLIF(@serial_number::text, ''), sqlc.narg('missing_since')::timestamptz);
