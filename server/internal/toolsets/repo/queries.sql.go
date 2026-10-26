@@ -863,6 +863,7 @@ SELECT id, organization_id, project_id, name, slug, description, default_environ
 FROM toolsets
 WHERE mcp_slug = $1
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE)
 ORDER BY (custom_domain_id IS NULL) DESC
 LIMIT 1
 `
@@ -900,6 +901,7 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id = $2
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE)
 `
 
 type GetToolsetByMcpSlugAndCustomDomainParams struct {
@@ -940,6 +942,7 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND project_id = $2
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE)
 `
 
 type GetToolsetByMcpSlugAndProjectParams struct {
@@ -1026,6 +1029,7 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id IS NULL
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE)
 `
 
 func (q *Queries) GetToolsetByPlatformMcpSlug(ctx context.Context, mcpSlug pgtype.Text) (Toolset, error) {

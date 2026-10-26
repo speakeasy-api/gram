@@ -141,6 +141,7 @@ SELECT *
 FROM toolsets
 WHERE mcp_slug = @mcp_slug
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE)
 ORDER BY (custom_domain_id IS NULL) DESC
 LIMIT 1;
 
@@ -149,21 +150,24 @@ SELECT *
 FROM toolsets
 WHERE mcp_slug = @mcp_slug
   AND custom_domain_id IS NULL
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE);
 
 -- name: GetToolsetByMcpSlugAndCustomDomain :one
 SELECT *
 FROM toolsets
 WHERE mcp_slug = @mcp_slug
   AND custom_domain_id = @custom_domain_id
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE);
 
 -- name: GetToolsetByMcpSlugAndProject :one
 SELECT *
 FROM toolsets
 WHERE mcp_slug = @mcp_slug
   AND project_id = @project_id
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE);
 
 -- name: GetPromptTemplatesForToolset :many
 WITH ranked_templates AS (
