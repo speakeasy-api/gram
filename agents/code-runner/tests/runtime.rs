@@ -647,16 +647,19 @@ async fn callback_concurrency_is_bounded() {
     pending.close().await.unwrap();
 }
 
-// A slow reader stalls the writer on the seventh callback while the eighth
+// A stalled reader holds the writer on the seventh callback while the eighth
 // waits behind it and the ninth fails the run. Every callback the program
 // issued still reaches the host, ahead of the terminal error, so the host can
 // account for each call.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_failed_run_still_delivers_every_issued_callback() {
+    // Each callback is about 10 KB, so this buffer fills partway through the
+    // seventh.
     let (mut stream, server) = tokio::io::duplex(65_000);
+    let state = state(1).await;
     let task = tokio::spawn(serve_stream(
         server,
-        state(1).await,
+        state.clone(),
         CancellationToken::new(),
     ));
     write_frame(
@@ -670,9 +673,14 @@ async fn a_failed_run_still_delivers_every_issued_callback() {
     )
     .await
     .unwrap();
-    // Each callback is about 10 KB, so the buffer fills partway through the
-    // seventh while the run fails.
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // Read nothing until the run has failed behind the stalled writer.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while state.ended_executions() == 0 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
     let mut callbacks = 0;
     loop {
         match read_frame::<_, ServerFrame>(&mut stream).await.unwrap().0 {

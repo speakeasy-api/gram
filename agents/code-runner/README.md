@@ -92,8 +92,10 @@ active streams for up to 31 seconds before forcing cancellation.
 Cancellation and the deadline discard queued callbacks. A callback already being
 written finishes its frame; Speakeasy must check its own deadline/cancellation before
 dispatch and ignore callbacks received after it. A run that fails on its own,
-such as at the concurrency limit, first delivers every callback it already
-issued, ahead of its terminal `error`, so Speakeasy can record each call. Sandbox termination grace must
+such as at the concurrency limit, keeps every callback it already issued and
+writes them ahead of its terminal `error`, so Speakeasy can record each call.
+They share the terminal frame's one-second drain: a peer that is not reading by
+then loses the stream instead, and Speakeasy treats the outcome as unknown. Sandbox termination grace must
 be at least 35 seconds to cover execution, terminal-frame and connection draining.
 
 ## Initial bounds

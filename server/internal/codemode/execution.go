@@ -249,12 +249,17 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 			}
 			return result
 		}
+		var message runnerMessage
+		decodeErr := decodeStrict(frame, &message)
 		if ctx.Err() != nil {
+			// A call read after cancellation is never dispatched, but still recorded.
+			if decodeErr == nil && message.Type == "callback" && started && !seen[message.ID] {
+				state.notDispatched(state.receiveCall(message))
+			}
 			failCancelled()
 			return result
 		}
-		var message runnerMessage
-		if err := decodeStrict(frame, &message); err != nil {
+		if decodeErr != nil {
 			fail("protocol_error", "invalid runtime response; do not replay automatically")
 			return result
 		}

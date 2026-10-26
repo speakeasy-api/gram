@@ -5,7 +5,10 @@ pub mod wire;
 use std::{
     collections::HashMap,
     convert::Infallible,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -48,6 +51,7 @@ pub struct State {
     streams: usize,
     start_reads: Semaphore,
     seen: Mutex<HashMap<String, Instant>>,
+    ended: AtomicUsize,
 }
 
 impl State {
@@ -63,6 +67,7 @@ impl State {
             streams: capacity,
             start_reads: Semaphore::new(MAX_START_READS),
             seen: Mutex::new(HashMap::new()),
+            ended: AtomicUsize::new(0),
         }))
     }
 
@@ -71,6 +76,14 @@ impl State {
     #[doc(hidden)]
     pub fn idle_start_reads(&self) -> usize {
         self.start_reads.available_permits()
+    }
+
+    /// Executions whose program has ended and whose callback handling is
+    /// decided, before their terminal frame drains, so tests can tell when a
+    /// run has ended behind a peer that is not reading.
+    #[doc(hidden)]
+    pub fn ended_executions(&self) -> usize {
+        self.ended.load(Ordering::SeqCst)
     }
 
     fn admit(&self, id: &str) -> Result<()> {
@@ -411,6 +424,7 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     if interrupt {
         interrupted.cancel();
     }
+    state.ended.fetch_add(1, Ordering::SeqCst);
     drop(reader_task);
     // A disconnected peer must not hold an execution slot while refusing reads.
     tokio::time::timeout(Duration::from_secs(1), async {

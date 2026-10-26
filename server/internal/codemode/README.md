@@ -89,11 +89,14 @@ intersects them with the admission boundary. Cancellation stops new callbacks
 and joins dispatchers for up to two seconds before recording outcomes. Stream
 cleanup adds at most one second. The provider release path also has a bounded
 cleanup context. Incomplete writes remain `unknown` even when Python fails.
-Each tool call is recorded when its callback arrives, before any limit or
-cancellation check, so a run that ends with calls in flight, such as one stopped
-at the eight-helper concurrency limit, still lists every call the runner sent:
-`not_dispatched` if it never reached its backend, otherwise `unknown` unless it
-completed. The runner never sends the call over the limit, and its error says so.
+Each tool call is recorded as soon as the server reads its callback, before any
+limit or cancellation check: `not_dispatched` if it never reached its backend,
+otherwise `unknown` unless it completed. A run the runner ends itself with calls
+in flight, such as one stopped at the eight-helper concurrency limit, therefore
+lists every call the runner sent; the runner never sends the call over the
+limit, and its error says so. After cancellation or the deadline the runner
+discards queued callbacks and the server stops reading, so only calls already
+read are listed.
 
 ## Local runtime
 
