@@ -34,6 +34,9 @@ const (
 	ActionOrganizationOnboardingPlaybookUnassigned Action = "organization:onboarding_playbook_unassigned"
 
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
+	// ActionOrganizationGatewayDiscoveryModeUpdated records an organization
+	// admin changing the organization gateway's default discovery mode.
+	ActionOrganizationGatewayDiscoveryModeUpdated Action = "organization:gateway_discovery_mode_updated"
 
 	ActionOrganizationEnterpriseTrialArmed Action = "organization:enterprise_trial_armed"
 
@@ -1193,4 +1196,59 @@ func (l *Logger) LogOrganizationInferenceKeyRepaired(ctx context.Context, dbtx r
 		return err
 	}
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorSlug: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""), OrganizationID: event.OrganizationID, ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), Action: string(ActionOrganizationInferenceKeyRepaired), SubjectID: event.OrganizationID, SubjectType: "organization", SubjectDisplayName: conv.ToPGText("Organization"), Metadata: metadata, BeforeSnapshot: before, AfterSnapshot: after}, OutboxEvent: events.OrganizationAccountTypeV1})
+}
+
+// OrganizationGatewaySnapshot is the organization gateway's stored settings.
+type OrganizationGatewaySnapshot struct {
+	// DiscoveryMode is the mode served to connections that do not choose one.
+	DiscoveryMode string `json:"discovery_mode"`
+}
+
+type LogOrganizationGatewayDiscoveryModeUpdatedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	OrganizationGatewaySnapshotBefore *OrganizationGatewaySnapshot
+	OrganizationGatewaySnapshotAfter  *OrganizationGatewaySnapshot
+}
+
+func (l *Logger) LogOrganizationGatewayDiscoveryModeUpdated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationGatewayDiscoveryModeUpdatedEvent) error {
+	action := ActionOrganizationGatewayDiscoveryModeUpdated
+	beforeSnapshot, err := marshalAuditPayload(event.OrganizationGatewaySnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.OrganizationGatewaySnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationGatewayV1})
 }

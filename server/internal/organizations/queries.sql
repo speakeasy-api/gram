@@ -69,6 +69,13 @@ SET gram_account_type = @gram_account_type,
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: SetOrganizationGatewayDiscoveryMode :one
+UPDATE organization_metadata
+SET gateway_discovery_mode = @gateway_discovery_mode,
+    updated_at = clock_timestamp()
+WHERE id = @id
+RETURNING *;
+
 -- name: SetAccountTypeIfUnchanged :one
 UPDATE organization_metadata
 SET gram_account_type = @gram_account_type,

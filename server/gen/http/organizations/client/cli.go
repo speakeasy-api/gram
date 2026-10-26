@@ -46,6 +46,37 @@ func BuildGetGatewayPayload(organizationsGetGatewaySessionToken string) (*organi
 	return v, nil
 }
 
+// BuildSetGatewayDiscoveryModePayload builds the payload for the organizations
+// setGatewayDiscoveryMode endpoint from CLI flags.
+func BuildSetGatewayDiscoveryModePayload(organizationsSetGatewayDiscoveryModeBody string, organizationsSetGatewayDiscoveryModeSessionToken string) (*organizations.SetGatewayDiscoveryModePayload, error) {
+	var err error
+	var body SetGatewayDiscoveryModeRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsSetGatewayDiscoveryModeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"discovery_mode\": \"direct\"\n   }'")
+		}
+		if !(body.DiscoveryMode == "progressive" || body.DiscoveryMode == "direct" || body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsSetGatewayDiscoveryModeSessionToken != "" {
+			sessionToken = &organizationsSetGatewayDiscoveryModeSessionToken
+		}
+	}
+	v := &organizations.SetGatewayDiscoveryModePayload{
+		DiscoveryMode: body.DiscoveryMode,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildSendInvitePayload builds the payload for the organizations sendInvite
 // endpoint from CLI flags.
 func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSendInviteSessionToken string) (*organizations.SendInvitePayload, error) {

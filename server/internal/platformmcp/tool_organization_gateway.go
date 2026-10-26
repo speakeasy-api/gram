@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -24,17 +25,21 @@ import (
 // Activation stays in the dashboard's review flow: there is no durable review
 // proposal for an MCP mutation to confirm. This discovery tool shares the
 // live opt-in gate; organization_gateway_integration_test proves its refusal.
+// The gateway's default discovery mode is reported here but set only in the
+// dashboard, as a stored gateway's default is: it changes every member's new
+// connections, and no Platform MCP tool sets a gateway default.
 const getMyOrganizationGatewayName = "get_my_organization_gateway"
 
 const getMyOrganizationGatewayDescription = "Get the one MCP URL that gives you every MCP server in your organization you are allowed to reach, across all projects, signed in with your organization account. " +
-	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the tool discovery mode chosen at sign-in decides how the gateway exposes the servers your access reaches. " +
+	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the tool discovery mode decides how the gateway exposes the servers your access reaches. " +
+	"At sign-in you keep the gateway default, which an organization administrator sets and default_discovery_mode reports, or choose another mode. " +
 	"Progressive offers list_servers, which lists those servers by slug, prefixed with the project only when two projects share a slug, then describe_server, describe_tools and execute_tool. Direct lists each tool in tools/list as server--tool. Code Mode offers a single execute tool that runs Python to search, describe and call those tools. " +
 	"For a connection limited to one project, use get_my_project_gateway instead. No token, credential, or other member's access is returned."
 
 // organizationGatewayNextAction gives each tool discovery mode its own first
 // step: only Progressive exposes list_servers.
-const organizationGatewayNextAction = "Add url to your MCP client as a remote server and sign in with your organization account when prompted, choosing a tool discovery mode. " +
-	"Then follow the mode you chose. Progressive: call list_servers, then describe_server, describe_tools and execute_tool. Direct: call the server--tool tools listed by tools/list. Code Mode: run Python with the execute tool."
+const organizationGatewayNextAction = "Add url to your MCP client as a remote server and sign in with your organization account when prompted, keeping the gateway default (default_discovery_mode) or choosing another tool discovery mode. " +
+	"Then follow the connection's mode. Progressive: call list_servers, then describe_server, describe_tools and execute_tool. Direct: call the server--tool tools listed by tools/list. Code Mode: run Python with the execute tool."
 
 // getMyOrganizationGatewayMeta is shared by the live and unavailable
 // registrations. The gateway is the caller's own connection target, so only
@@ -56,6 +61,12 @@ type GetMyOrganizationGatewayOutput struct {
 	// organization_disabled, set only when not Available.
 	UnavailableReason string `json:"unavailable_reason,omitempty"`
 
+	// DefaultDiscoveryMode is the tool discovery mode a connection that keeps
+	// the gateway default at sign-in gets now: progressive, direct, or
+	// code_mode. It is the organization's default, or progressive while a
+	// code_mode default cannot be served. Set only when Available.
+	DefaultDiscoveryMode string `json:"default_discovery_mode,omitempty"`
+
 	// NextAction tells the caller what to do with the answer.
 	NextAction string `json:"next_action"`
 }
@@ -68,12 +79,26 @@ type OrganizationGatewayService struct {
 	// orgHosts resolves the platform host stored as an organization's default
 	// host. Nil URLs follow the request's platform origin.
 	orgHosts *orghost.Resolver
+
+	// codeModeAvailable reports whether the organization can use Code Mode
+	// now. Nil reads as unavailable, so a code_mode default reports
+	// progressive.
+	codeModeAvailable CodeModeAvailability
 }
 
 // NewOrganizationGatewayService returns a service that builds gateway URLs
 // under serverURL.
 func NewOrganizationGatewayService(db *pgxpool.Pool, serverURL *url.URL) *OrganizationGatewayService {
-	return &OrganizationGatewayService{db: db, serverURL: serverURL, orgHosts: nil}
+	return &OrganizationGatewayService{db: db, serverURL: serverURL, orgHosts: nil, codeModeAvailable: nil}
+}
+
+// WithCodeModeAvailability lets the gateway report a code_mode default as the
+// mode it serves only while the organization can use Code Mode.
+func (s *OrganizationGatewayService) WithCodeModeAvailability(check CodeModeAvailability) *OrganizationGatewayService {
+	if s != nil {
+		s.codeModeAvailable = check
+	}
+	return s
 }
 
 // WithOrganizationHosts makes gateway URLs use the platform host stored as the
@@ -106,11 +131,16 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 	switch unavailable {
 	case orggateway.UnavailabilityNone:
 		baseURL, _ := organizationBaseURLs(ctx, s.orgHosts, organization.DefaultHost, s.serverURL, nil)
+		mode := orggateway.DiscoveryMode(organization)
+		if mode == metamcp.DiscoveryModeCode && (s.codeModeAvailable == nil || !s.codeModeAvailable(ctx, organization.ID)) {
+			mode = metamcp.DiscoveryModeProgressive
+		}
 		return GetMyOrganizationGatewayOutput{
-			Available:         true,
-			URL:               orggateway.URL(baseURL, organization.Slug),
-			UnavailableReason: "",
-			NextAction:        organizationGatewayNextAction,
+			Available:            true,
+			URL:                  orggateway.URL(baseURL, organization.Slug),
+			UnavailableReason:    "",
+			DefaultDiscoveryMode: string(mode),
+			NextAction:           organizationGatewayNextAction,
 		}, nil
 	case orggateway.UnavailabilityNoOrganizationIssuer:
 		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to set up an organization-wide authorization server."), nil
@@ -126,7 +156,7 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 }
 
 func unavailableOrganizationGateway(reason orggateway.Unavailability, nextAction string) GetMyOrganizationGatewayOutput {
-	return GetMyOrganizationGatewayOutput{Available: false, URL: "", UnavailableReason: string(reason), NextAction: nextAction}
+	return GetMyOrganizationGatewayOutput{Available: false, URL: "", UnavailableReason: string(reason), DefaultDiscoveryMode: "", NextAction: nextAction}
 }
 
 func registerOrganizationGatewayTool(reg *Registrar, service *OrganizationGatewayService) {

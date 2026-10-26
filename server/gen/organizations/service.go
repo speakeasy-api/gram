@@ -21,12 +21,19 @@ type Service interface {
 	Get(context.Context, *GetPayload) (res *Organization, err error)
 	// Get the active organization's gateway: one MCP URL that gives each member
 	// every MCP server in the organization they can reach, signed in through the
-	// organization's own user session issuer. It is served while the organization
-	// owns exactly one organization-level user session issuer, on the platform
-	// host, so not for an organization whose custom domain restricts access to an
-	// IP allowlist, not while an organization admin has turned it off, and not for
-	// a disabled organization. Requires org:read.
+	// organization's own user session issuer, and the discovery mode it serves
+	// connections that do not choose one. It is served while the organization owns
+	// exactly one organization-level user session issuer, on the platform host, so
+	// not for an organization whose custom domain restricts access to an IP
+	// allowlist, not while an organization admin has turned it off, and not for a
+	// disabled organization. Requires org:read.
 	GetGateway(context.Context, *GetGatewayPayload) (res *OrganizationGateway, err error)
+	// Set the discovery mode the active organization's gateway serves connections
+	// that do not choose one at sign-in: progressive, direct, or code_mode. It
+	// applies to new connections; existing connections keep their mode until they
+	// reconnect. code_mode requires the organization's Code Mode entitlement and
+	// an available code runtime. Requires org:admin.
+	SetGatewayDiscoveryMode(context.Context, *SetGatewayDiscoveryModePayload) (res *OrganizationGateway, err error)
 	// Send a WorkOS invitation for the active organization.
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)
 	// Revoke a pending WorkOS invitation.
@@ -97,7 +104,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"get", "getGateway", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "revokeMemberSignIns", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
+var MethodNames = [20]string{"get", "getGateway", "setGatewayDiscoveryMode", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "revokeMemberSignIns", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -275,6 +282,13 @@ type OrganizationGateway struct {
 	URL *string
 	// Why the gateway is not served. Set only when not available.
 	UnavailableReason *string
+	// The discovery mode the gateway serves connections that do not choose one at
+	// sign-in. Set whether or not the gateway is available.
+	DiscoveryMode string
+	// Whether the organization can select Code Mode now: the code runtime is
+	// available and the organization has Code Mode. While false, a code_mode
+	// default serves Progressive.
+	CodeModeEnabled bool
 }
 
 // OrganizationInvitation is the result type of the organizations service
@@ -370,6 +384,14 @@ type SendInvitePayload struct {
 	// Optional role ID for the invitee.
 	RoleID       *string
 	SessionToken *string
+}
+
+// SetGatewayDiscoveryModePayload is the payload type of the organizations
+// service setGatewayDiscoveryMode method.
+type SetGatewayDiscoveryModePayload struct {
+	// The organization gateway's default discovery mode.
+	DiscoveryMode string
+	SessionToken  *string
 }
 
 // SetupTask is the result type of the organizations service updateSetupTask

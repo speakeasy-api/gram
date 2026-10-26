@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 )
 
 // gatewayDiscoveryOptionsOffered reports whether a connection to endpoint can
@@ -63,11 +64,15 @@ func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMc
 }
 
 // gatewayDefaultDiscoveryMode returns the discovery mode a gateway offers
-// connections that do not choose one. The organization gateway has no stored
-// default and offers Progressive.
+// connections that do not choose one: a stored gateway's own default, or the
+// organization gateway's default from its organization.
 func (s *Service) gatewayDefaultDiscoveryMode(ctx context.Context, endpoint *ResolvedMcpEndpoint) (metamcp.DiscoveryMode, error) {
 	if endpoint.IsOrganizationGateway() {
-		return metamcp.DiscoveryModeProgressive, nil
+		organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, endpoint.OrganizationID)
+		if err != nil {
+			return "", fmt.Errorf("read organization gateway discovery mode: %w", err)
+		}
+		return orggateway.DiscoveryMode(organization), nil
 	}
 	metaServer, err := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
 		ID: endpoint.MetaMcpServerID.UUID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,

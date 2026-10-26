@@ -381,6 +381,9 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 	if err := s.q.OrgInsertGatewayDisabledFeature(ctx, org); err != nil {
 		return fmt.Errorf("insert demo gateway disabled feature: %w", err)
 	}
+	if err := s.q.OrgSeedGatewayDiscoveryMode(ctx, org); err != nil {
+		return fmt.Errorf("seed demo gateway discovery mode: %w", err)
+	}
 
 	// Unlike demo entitlements, preserve an explicit fail-closed choice on
 	// reseed.

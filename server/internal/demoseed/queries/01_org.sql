@@ -310,6 +310,13 @@ WHERE NOT EXISTS (
 )
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
+-- name: OrgSeedGatewayDiscoveryMode :exec
+-- Show the Organization Gateway with a non-default discovery mode, preserving
+-- an administrator's choice on reseed.
+UPDATE organization_metadata
+SET gateway_discovery_mode = 'direct'
+WHERE id = @org_id::text AND gateway_discovery_mode IS NULL;
+
 -- name: OrgInsertHooksFailOpenFeature :exec
 -- Unlike demo entitlements, preserve an explicit fail-closed choice on reseed.
 INSERT INTO organization_features (organization_id, feature_name)

@@ -3022,6 +3022,48 @@ func (q *Queries) SetOrganizationDefaultHostForTest(ctx context.Context, arg Set
 	return err
 }
 
+const setOrganizationGatewayDiscoveryMode = `-- name: SetOrganizationGatewayDiscoveryMode :one
+UPDATE organization_metadata
+SET gateway_discovery_mode = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, gateway_discovery_mode, created_at, updated_at, disabled_at
+`
+
+type SetOrganizationGatewayDiscoveryModeParams struct {
+	GatewayDiscoveryMode pgtype.Text
+	ID                   string
+}
+
+func (q *Queries) SetOrganizationGatewayDiscoveryMode(ctx context.Context, arg SetOrganizationGatewayDiscoveryModeParams) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, setOrganizationGatewayDiscoveryMode, arg.GatewayDiscoveryMode, arg.ID)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.GatewayDiscoveryMode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const setOrganizationOnboardingPlaybook = `-- name: SetOrganizationOnboardingPlaybook :exec
 INSERT INTO organization_onboarding (organization_id, playbook_id)
 VALUES ($1::text, $2::uuid)

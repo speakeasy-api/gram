@@ -368,9 +368,12 @@ change to the gateway's default reaches only new connections. Clients cache
 the connection's mode does not serve, such as `execute` after leaving Code
 Mode, is refused with a message to reconnect and refresh the tool list.
 
-The organization gateway has no stored default: its connections choose Code
-Mode on the consent page, the default stays Progressive, and agent gateways
-never use Code Mode.
+The organization gateway's default is stored on the organization
+(`organization_metadata.gateway_discovery_mode`, NULL meaning Progressive) and
+set by organization admins through `organizations.setGatewayDiscoveryMode`,
+which allows Code Mode under the same entitlement and runtime rules as a
+project gateway. Its connections can also choose Code Mode on the consent
+page. Agent gateways never use Code Mode.
 
 Code Mode is rolled out per organization. It is off for every organization
 until Speakeasy staff enable the `code_mode` product feature on the admin

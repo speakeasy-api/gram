@@ -168,7 +168,7 @@ func UsageCommands() []string {
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
 		"okta-resource-connections (list|confirm|reset)",
 		"okta-server-suggestions (list|dismiss|restore)",
-		"organizations (get|get-gateway|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|revoke-member-sign-ins|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task|submit-onboarding-survey)",
+		"organizations (get|get-gateway|set-gateway-discovery-mode|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|revoke-member-sign-ins|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task|submit-onboarding-survey)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -2244,6 +2244,10 @@ func ParseEndpoint(
 
 		organizationsGetGatewayFlags            = flag.NewFlagSet("get-gateway", flag.ExitOnError)
 		organizationsGetGatewaySessionTokenFlag = organizationsGetGatewayFlags.String("session-token", "", "")
+
+		organizationsSetGatewayDiscoveryModeFlags            = flag.NewFlagSet("set-gateway-discovery-mode", flag.ExitOnError)
+		organizationsSetGatewayDiscoveryModeBodyFlag         = organizationsSetGatewayDiscoveryModeFlags.String("body", "REQUIRED", "")
+		organizationsSetGatewayDiscoveryModeSessionTokenFlag = organizationsSetGatewayDiscoveryModeFlags.String("session-token", "", "")
 
 		organizationsSendInviteFlags            = flag.NewFlagSet("send-invite", flag.ExitOnError)
 		organizationsSendInviteBodyFlag         = organizationsSendInviteFlags.String("body", "REQUIRED", "")
@@ -5773,6 +5777,7 @@ func ParseEndpoint(
 	organizationsFlags.Usage = organizationsUsage
 	organizationsGetFlags.Usage = organizationsGetUsage
 	organizationsGetGatewayFlags.Usage = organizationsGetGatewayUsage
+	organizationsSetGatewayDiscoveryModeFlags.Usage = organizationsSetGatewayDiscoveryModeUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
 	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
 	organizationsUpdateInviteRoleFlags.Usage = organizationsUpdateInviteRoleUsage
@@ -7959,6 +7964,9 @@ func ParseEndpoint(
 
 			case "get-gateway":
 				epf = organizationsGetGatewayFlags
+
+			case "set-gateway-discovery-mode":
+				epf = organizationsSetGatewayDiscoveryModeFlags
 
 			case "send-invite":
 				epf = organizationsSendInviteFlags
@@ -11178,6 +11186,9 @@ func ParseEndpoint(
 			case "get-gateway":
 				endpoint = c.GetGateway()
 				data, err = organizationsc.BuildGetGatewayPayload(*organizationsGetGatewaySessionTokenFlag)
+			case "set-gateway-discovery-mode":
+				endpoint = c.SetGatewayDiscoveryMode()
+				data, err = organizationsc.BuildSetGatewayDiscoveryModePayload(*organizationsSetGatewayDiscoveryModeBodyFlag, *organizationsSetGatewayDiscoveryModeSessionTokenFlag)
 			case "send-invite":
 				endpoint = c.SendInvite()
 				data, err = organizationsc.BuildSendInvitePayload(*organizationsSendInviteBodyFlag, *organizationsSendInviteSessionTokenFlag)
@@ -22143,7 +22154,8 @@ func organizationsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organizations COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get: Get the active organization from the session.`)
-	fmt.Fprintln(os.Stderr, `    get-gateway: Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-gateway: Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer, and the discovery mode it serves connections that do not choose one. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    set-gateway-discovery-mode: Set the discovery mode the active organization's gateway serves connections that do not choose one at sign-in: progressive, direct, or code_mode. It applies to new connections; existing connections keep their mode until they reconnect. code_mode requires the organization's Code Mode entitlement and an available code runtime. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    send-invite: Send a WorkOS invitation for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    revoke-invite: Revoke a pending WorkOS invitation.`)
 	fmt.Fprintln(os.Stderr, `    update-invite-role: Change the role assigned to a pending WorkOS invitation.`)
@@ -22191,7 +22203,7 @@ func organizationsGetGatewayUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer, and the discovery mode it serves connections that do not choose one. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -22199,6 +22211,26 @@ func organizationsGetGatewayUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get-gateway --session-token \"abc123\"")
+}
+
+func organizationsSetGatewayDiscoveryModeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations set-gateway-discovery-mode", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set the discovery mode the active organization's gateway serves connections that do not choose one at sign-in: progressive, direct, or code_mode. It applies to new connections; existing connections keep their mode until they reconnect. code_mode requires the organization's Code Mode entitlement and an available code runtime. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations set-gateway-discovery-mode --body '{\n      \"discovery_mode\": \"direct\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationsSendInviteUsage() {
