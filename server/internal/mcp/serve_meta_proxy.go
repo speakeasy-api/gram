@@ -232,7 +232,7 @@ func (s *Service) routeMetaMember(
 			return memberDial{}, "remote", terr
 		}
 		options := []remotemcp.BuildOption{remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String())}
-		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
+		if member.authClient != nil && (member.authClient.outcome != authClientLegacy || member.authClient.sendsClientHeaders()) {
 			options = append(options, remotemcp.WithAuthClientHeaders(member.authClient.headers))
 		}
 		var authHeaders []proxy.ConfiguredHeader
