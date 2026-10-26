@@ -38,9 +38,11 @@ func TestKeysService_AgentKeyRecordsCredentialChoices(t *testing.T) {
 	}
 	shared := offer(authz.AuthClientTypeStaticCredential)
 	personal := offer(authz.AuthClientTypeRemoteSession)
+	passThrough := offer(authz.AuthClientTypePassThrough)
 
 	refused := map[string]*gen.AgentKeyAuthClientChoice{
 		"a personal connection":            {McpServerID: serverID.String(), AuthClientID: new(personal.String())},
+		"a pass-through credential":        {McpServerID: serverID.String(), AuthClientID: new(passThrough.String())},
 		"no-auth on a server with clients": {McpServerID: serverID.String()},
 		"a client the server lacks":        {McpServerID: serverID.String(), AuthClientID: new(uuid.NewString())},
 	}

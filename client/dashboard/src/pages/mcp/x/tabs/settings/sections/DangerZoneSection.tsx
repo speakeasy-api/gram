@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useIsSpeakeasyStaff } from "@/contexts/Auth";
@@ -172,8 +173,10 @@ export function DangerZoneSection({
       error instanceof Error ? error.message : "Failed to update MCP server",
     );
   };
+  const followRenamedServer = useFollowRenamedServer();
   const updateVisibility = useUpdateMcpServerMutation({
-    onSuccess: async (_data, variables) => {
+    onSuccess: async (updated, variables) => {
+      followRenamedServer(updated);
       await invalidateMcpServerQueries(queryClient);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(mcpServerVisibilityToast(next));

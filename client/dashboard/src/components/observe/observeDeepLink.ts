@@ -31,6 +31,7 @@ export const OBSERVE_FILTER_PARAMS = [
   "status",
   "account_type",
   "client",
+  "agent",
   "range",
   "from",
   "to",

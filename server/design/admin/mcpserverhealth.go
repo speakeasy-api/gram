@@ -214,7 +214,7 @@ var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
 	Attribute("server", AdminMcpServerHealthServer)
 	Attribute("correlation", AdminMcpServerHealthCorrelation)
 	Attribute("legacy_auth", String, "Legacy authentication in force. Set only when the server has no user session issuer.", func() {
-		Enum("external_oauth", "oauth_proxy", "gram_private")
+		Enum("external_oauth", "gram_private")
 	})
 	Attribute("user_session_issuer", AdminMcpServerHealthUserSessionIssuer)
 	Attribute("upstream_auth", AdminMcpServerHealthUpstreamAuth, "How the server reaches its upstream. Omitted for toolset-only servers.")

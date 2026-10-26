@@ -44,8 +44,13 @@ import {
   policyScopeSummary,
 } from "./policy-mcp-scope";
 import { type PolicyStep, useStepParam } from "./use-step-param";
+import { approvalsServerSetupNote } from "./approvals-server-note";
 import { SESSION_SECURITY } from "../org/identity-provider/identityProviderQueries";
 import { canSendApprovalDMs } from "../org/slack-workspaces/approvalReadiness";
+
+// The approvals server note has an action, so it stays up long enough to
+// read and click.
+const SETUP_TOAST_MS = 10_000;
 
 const APPROVAL_STEPS: PolicyStep[] = [
   {
@@ -312,20 +317,39 @@ export function ApprovalPolicyEditor({
       !sameSet(audiencePrincipalUrns, audiencePrincipalsOf(policy)) ||
       !sameSet(approvers, approversOf(policy)));
 
+  // The first approval policy in a project also creates its approvals
+  // server and adds it to the Default plugin; say so, and where to look.
+  const viewPlugins = {
+    label: "View plugins",
+    onClick: () => routes.plugins.goTo(),
+  };
   const updateMutation = useRiskPoliciesUpdateMutation({
-    onSuccess: () => {
+    onSuccess: (updated) => {
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskListPolicies(queryClient);
-      toast.success("Policy updated");
+      const setup = approvalsServerSetupNote(updated.approvalsServerSetup);
+      toast.success(
+        "Policy updated",
+        setup
+          ? {
+              description: setup,
+              action: viewPlugins,
+              duration: SETUP_TOAST_MS,
+            }
+          : undefined,
+      );
     },
     onError: () => toast.error("The policy could not be saved. Try again."),
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: (created) => {
       void invalidateAllRiskListPolicies(queryClient);
+      const setup = approvalsServerSetupNote(created.approvalsServerSetup);
       toast.success("Approval policy created", {
         description:
+          setup ??
           "Agents it applies to now ask for approval before calling these tools.",
+        ...(setup ? { action: viewPlugins, duration: SETUP_TOAST_MS } : {}),
       });
       routes.policyCenter.detail.goTo(created.id);
     },

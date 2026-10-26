@@ -12,6 +12,7 @@ import { ClosedEnum } from "../../types/enums.js";
 export const MintUserSessionRequestBodyDiscoveryMode = {
   Progressive: "progressive",
   Direct: "direct",
+  CodeMode: "code_mode",
 } as const;
 /**
  * An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.

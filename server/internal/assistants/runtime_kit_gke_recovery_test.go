@@ -2,6 +2,9 @@ package assistants
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/url"
@@ -34,24 +37,29 @@ func TestKitGKEReapTombstoneDoesNotRequireLiveAdmission(t *testing.T) {
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 }
 
-func TestKitGKEExpiredAuthorityAllowsLifecycleButNotTurns(t *testing.T) {
+func TestKitGKELegacyNativeExpiryDoesNotExpireWorkload(t *testing.T) {
 	t.Parallel()
-	k, _, r, _ := kitGKEBackendFixture(t)
+	k, _, r, fences := kitGKEBackendFixture(t)
 	result, err := k.Ensure(t.Context(), r)
 	require.NoError(t, err)
-	r.BackendMetadataJSON = result.BackendMetadataJSON
-	state, handle, err := k.loadAuthority(t.Context(), r)
+	// Old persisted native-inference expiry is an unknown field, not workload
+	// admission authority. Projected tokens rotate without replacing the process.
+	var metadata map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &metadata))
+	metadata["authority_not_after"], err = json.Marshal(time.Now().Add(-time.Minute))
 	require.NoError(t, err)
-	state.Metadata.AuthorityNotAfter = time.Now().Add(-time.Minute)
-	_, err = k.saveAuthority(t.Context(), handle, state)
+	raw, err := json.Marshal(metadata)
 	require.NoError(t, err)
+	require.NoError(t, k.config.AuthorityStore.Save(t.Context(), r.LifecycleTx, r, result.BackendMetadataJSON, raw))
+	r.BackendMetadataJSON = raw
 	_, err = k.protocol(t.Context(), r)
-	require.ErrorContains(t, err, "expired")
+	require.NoError(t, err)
 	_, err = k.protocolForLifecycle(t.Context(), r, true)
 	require.NoError(t, err)
-	// An unavailable checkpoint must not bypass expiration with live credential rotation.
-	_, err = k.Ensure(t.Context(), r)
-	require.ErrorContains(t, err, "checkpoint expired Kit authority")
+	reused, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	require.False(t, reused.ColdStart)
+	require.Zero(t, *fences)
 }
 
 func TestKitGKEReapTombstoneFenceFailurePreservesResources(t *testing.T) {
@@ -128,4 +136,23 @@ func TestKitGKELifecycleCommitsRecoveryEvidenceAfterFailure(t *testing.T) {
 		require.True(t, locked.Retired, "cleanup authority must include the assistant tombstone")
 		return nil
 	}))
+}
+
+func TestKitGKEGatewayRenewalUsesCertificateExpiry(t *testing.T) {
+	t.Parallel()
+	certPEM, _, err := newKitGKETLSCertificate("kit-renewal.kit.internal")
+	require.NoError(t, err)
+	block, _ := pem.Decode(certPEM)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err)
+	due, err := kitGKETLSRenewalDue(certPEM, "kit-renewal.kit.internal", cert.NotAfter.Add(-24*time.Hour-time.Second))
+	require.NoError(t, err)
+	require.False(t, due)
+	due, err = kitGKETLSRenewalDue(certPEM, "kit-renewal.kit.internal", cert.NotAfter.Add(-24*time.Hour))
+	require.NoError(t, err)
+	require.True(t, due)
+	_, err = kitGKETLSRenewalDue(certPEM, "wrong.kit.internal", time.Now())
+	require.Error(t, err)
+	_, err = kitGKETLSRenewalDue([]byte("invalid"), "kit-renewal.kit.internal", time.Now())
+	require.Error(t, err)
 }

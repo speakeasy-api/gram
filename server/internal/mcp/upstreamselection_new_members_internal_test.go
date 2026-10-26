@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"context"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -8,10 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -169,4 +175,38 @@ func TestAgentKeySelectorReadsOnlyTheKeysOwnChoices(t *testing.T) {
 	selector, err = f.service.agentKeySelectorFor(legacyCtx, endpoint)
 	require.NoError(t, err)
 	require.Nil(t, selector, "only agent keys are served through key choices")
+}
+
+func TestAgentKeyChoiceServesAServerWithoutAnIssuerGate(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_agent_key_ungated")
+	require.NoError(t, err)
+	ctx := t.Context()
+	f := newAuthClientFixture(t, pool)
+	f.service.authClientPermitter = fixedPermitter(true)
+	clientID := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+	f.copyHeader(clientID, "X-Api-Key", false, false, text("chosen-value"), pgtype.Text{})
+	keyID := uuid.New()
+	_, err = upstreamclientsrepo.New(pool).RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{
+		CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: keyID, Source: upstreamclients.SelectionSourceIssuance,
+		OrganizationID: f.orgID, AuthClientID: validUUID(clientID), McpServerID: f.serverID,
+	})
+	require.NoError(t, err)
+
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	keyCtx := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: keyID.String()}, agent, contextvalues.PrincipalCredential{AuthorizerUserID: "user_1"})
+	endpoint := &mcpendpointsrepo.McpEndpoint{ProjectID: f.projectID}
+	server := &mcpserversrepo.McpServer{ID: f.serverID, ProjectID: f.projectID, RemoteMcpServerID: validUUID(f.remoteID)}
+	serve := func(ctx context.Context) []remotemcp.BuildOption {
+		t.Helper()
+		_, options, err := f.service.agentKeyUngatedUpstream(ctx, httptest.NewRecorder(), testenv.NewLogger(t), endpoint, server, f.orgID, remotesessions.UpstreamToken{}, nil)
+		require.NoError(t, err)
+		return options
+	}
+
+	require.Empty(t, serve(keyCtx), "before enforcement the server's own headers serve the key")
+	f.enforce()
+	require.Len(t, serve(keyCtx), 1, "the key's chosen credential replaces the server's headers")
+	require.Empty(t, serve(ctx), "a caller with no agent key keeps the server's headers")
 }

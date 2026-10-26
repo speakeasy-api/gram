@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type RegisterCatalogMCPToolInput struct {
@@ -102,7 +104,14 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				CatalogRef:     result.CatalogRef,
 			})
 			if err != nil {
-				return nil, RegisterCatalogMCPToolOutput{}, err
+				// The registration has already committed. A failed setup link must
+				// not report the add as failed and prompt a duplicate retry; the
+				// caller can still continue setup from the dashboard.
+				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+				if reg.logger != nil {
+					reg.logger.ErrorContext(ctx, "platform mcp catalog registration setup link failed after commit", attr.SlogError(err))
+				}
+				dashboardSetupURL = ""
 			}
 		}
 		return nil, RegisterCatalogMCPToolOutput{

@@ -45,6 +45,7 @@ type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
 	headerPolicy           proxy.HeaderPolicy
+	anonymousCaller        bool
 	// authClientHeaders, when authClientSelected, are the resolved auth
 	// client's headers; the server's credential headers are not sent.
 	authClientHeaders  []proxy.ConfiguredHeader
@@ -52,7 +53,7 @@ type proxyBuildOptions struct {
 }
 
 func newProxyBuildOptions(buildOptions []BuildOption) proxyBuildOptions {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -98,6 +99,14 @@ func WithAuthClientHeaders(headers []proxy.ConfiguredHeader) BuildOption {
 func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.headerPolicy = policy
+	}}
+}
+
+// WithAnonymousCaller marks the caller as admitted without a Speakeasy credential.
+// It has no effect on a private server.
+func WithAnonymousCaller() BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.anonymousCaller = true
 	}}
 }
 
@@ -434,6 +443,7 @@ func (f *ProxyManager) BuildTarget(
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
 		StrictToolSelection:         selection != nil,
+		AnonymousCaller:             options.anonymousCaller && visibility == mcpservers.VisibilityPublic,
 		WWWAuthenticate:             wwwAuthenticate,
 		// The census runs first so every parsed request is counted, including
 		// those a later interceptor rejects — matching the hosted dispatch,

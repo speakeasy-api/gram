@@ -44,6 +44,7 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		{gkePodGVR, m.PodName, m.PodUID},
 		{kitTemplateGVR, kitGKEName(r), m.TemplateUID},
 		{kitSecretGVR, m.SecretName, m.SecretUID},
+		{kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID},
 	}
 	exists := make([]bool, len(steps))
 	for i, s := range steps {

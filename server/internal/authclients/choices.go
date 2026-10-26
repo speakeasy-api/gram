@@ -51,7 +51,7 @@ func (s *Service) ListMcpServerAuthClientChoices(ctx context.Context, payload *g
 	}
 	choices := make([]*types.AuthClientChoice, 0, len(rows))
 	for _, row := range rows {
-		if authz.IsSharedAuthClientType(row.ClientType.String) {
+		if authz.IsAgentKeyAuthClientType(row.ClientType.String) {
 			choices = append(choices, &types.AuthClientChoice{ID: row.AuthClientID.UUID.String(), Name: row.AuthClientName.String, ClientType: row.ClientType.String})
 		}
 	}

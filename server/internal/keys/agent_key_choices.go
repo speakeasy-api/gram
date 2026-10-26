@@ -89,8 +89,11 @@ func checkAgentKeyChoice(offered []upstreamclientsrepo.ListServerConsentAuthClie
 		if row.AuthClientID != clientID {
 			continue
 		}
-		if authz.IsSharedAuthClientType(row.ClientType.String) {
+		switch {
+		case authz.IsAgentKeyAuthClientType(row.ClientType.String):
 			return nil
+		case row.ClientType.String == authz.AuthClientTypePassThrough:
+			return oops.E(oops.CodeBadRequest, nil, "agent keys cannot use a pass-through credential; the agent gateway does not forward the caller's headers to its servers")
 		}
 		return oops.E(oops.CodeBadRequest, nil, "agent keys use shared credentials; an agent reaches a person's own connection only when it acts for them")
 	}
