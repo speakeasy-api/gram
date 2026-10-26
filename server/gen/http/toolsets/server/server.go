@@ -31,6 +31,7 @@ type Server struct {
 	AddExternalOAuthServer     http.Handler
 	UpdateExternalOAuthServer  http.Handler
 	RemoveOAuthServer          http.Handler
+	SetUserSessionIssuer       http.Handler
 	SetToolVariationsGroup     http.Handler
 }
 
@@ -73,6 +74,7 @@ func New(
 			{"AddExternalOAuthServer", "POST", "/rpc/toolsets.addExternalOAuthServer"},
 			{"UpdateExternalOAuthServer", "POST", "/rpc/toolsets.updateExternalOAuthServer"},
 			{"RemoveOAuthServer", "POST", "/rpc/toolsets.removeOAuthServer"},
+			{"SetUserSessionIssuer", "POST", "/rpc/toolsets.setUserSessionIssuer"},
 			{"SetToolVariationsGroup", "POST", "/rpc/toolsets.setToolVariationsGroup"},
 		},
 		CreateToolset:              NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
@@ -87,6 +89,7 @@ func New(
 		AddExternalOAuthServer:     NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
 		UpdateExternalOAuthServer:  NewUpdateExternalOAuthServerHandler(e.UpdateExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
 		RemoveOAuthServer:          NewRemoveOAuthServerHandler(e.RemoveOAuthServer, mux, decoder, encoder, errhandler, formatter),
+		SetUserSessionIssuer:       NewSetUserSessionIssuerHandler(e.SetUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 		SetToolVariationsGroup:     NewSetToolVariationsGroupHandler(e.SetToolVariationsGroup, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -108,6 +111,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.AddExternalOAuthServer = m(s.AddExternalOAuthServer)
 	s.UpdateExternalOAuthServer = m(s.UpdateExternalOAuthServer)
 	s.RemoveOAuthServer = m(s.RemoveOAuthServer)
+	s.SetUserSessionIssuer = m(s.SetUserSessionIssuer)
 	s.SetToolVariationsGroup = m(s.SetToolVariationsGroup)
 }
 
@@ -128,6 +132,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountAddExternalOAuthServerHandler(mux, h.AddExternalOAuthServer)
 	MountUpdateExternalOAuthServerHandler(mux, h.UpdateExternalOAuthServer)
 	MountRemoveOAuthServerHandler(mux, h.RemoveOAuthServer)
+	MountSetUserSessionIssuerHandler(mux, h.SetUserSessionIssuer)
 	MountSetToolVariationsGroupHandler(mux, h.SetToolVariationsGroup)
 }
 
@@ -751,6 +756,59 @@ func NewRemoveOAuthServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "removeOAuthServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetUserSessionIssuerHandler configures the mux to serve the "toolsets"
+// service "setUserSessionIssuer" endpoint.
+func MountSetUserSessionIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.setUserSessionIssuer", f)
+}
+
+// NewSetUserSessionIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "setUserSessionIssuer" endpoint.
+func NewSetUserSessionIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetUserSessionIssuerRequest(mux, decoder)
+		encodeResponse = EncodeSetUserSessionIssuerResponse(encoder)
+		encodeError    = EncodeSetUserSessionIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setUserSessionIssuer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {
