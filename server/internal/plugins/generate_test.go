@@ -864,8 +864,8 @@ func TestGenerateCodexMarketplaceDescriptions(t *testing.T) {
 		require.LessOrEqual(t, len([]rune(manifest.Interface.ShortDescription)), 240, name)
 		require.Equal(t, manifest.Description, manifest.Interface.LongDescription, name)
 	}
-	// Native, shared Agent Plugins overlay, and observability manifests.
-	require.GreaterOrEqual(t, count, 3)
+	// Only the native and observability packages carry Codex manifests.
+	require.Equal(t, 2, count)
 }
 
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
