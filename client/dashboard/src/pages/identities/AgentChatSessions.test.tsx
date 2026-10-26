@@ -83,3 +83,17 @@ it("shows a failed read as an error rather than no sessions", () => {
   expect(screen.getByText("This panel could not be loaded.")).toBeTruthy();
   expect(screen.queryByText(/No sessions from this agent/)).toBeNull();
 });
+
+it.each(["/agent", "/agent?range=invalid"])(
+  "carries the effective seven-day window from %s to the full session list",
+  (entry) => {
+    render(
+      <MemoryRouter initialEntries={[entry]}>
+        <AgentChatSessionsPanel agent={agent} limit={3} />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("link", { name: /Agent Sessions/ }).getAttribute("href"),
+    ).toBe("/p/agent-sessions?range=7d&agentId=agent_example");
+  },
+);

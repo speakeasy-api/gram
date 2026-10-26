@@ -1,5 +1,7 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { Link, useLocation } from "react-router";
+import { isValidPreset } from "@/components/observe/observeFilterUtils";
+import { DEFAULT_DATE_RANGE_PRESET } from "@/components/observe/useDateRangeFilter";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import {
@@ -44,10 +46,14 @@ export function AgentChatSessionsPanel({
   const total = query.data?.total ?? chats.length;
 
   const current = new URLSearchParams(location.search);
-  const windowParams = new URLSearchParams();
+  const windowParams = new URLSearchParams({
+    range: DEFAULT_DATE_RANGE_PRESET,
+  });
   for (const key of WINDOW_PARAMS) {
     const value = current.get(key);
-    if (value) windowParams.set(key, value);
+    if (value && (key !== "range" || isValidPreset(value))) {
+      windowParams.set(key, value);
+    }
   }
   const agentSessionsHref = routes.agentSessions.href();
   const blocked = query.isError && chats.length === 0;
