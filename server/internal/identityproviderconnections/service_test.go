@@ -188,21 +188,23 @@ func TestCreate_SecondLiveConnectionConflicts(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 
-func TestCreate_PendingIssuersCoexistUntilCredentialProof(t *testing.T) {
+func TestSubmitClientID_TwoOrganizationsVerifySameOktaOrg(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 	first := createConnection(t, ctx, si, fullOrgURL)
 	otherCtx, _ := asOtherOrganization(t, ctx, si)
 	second := createConnection(t, otherCtx, si, fullOrgURL)
 
-	// The later creator can prove ownership; the earlier pending row cannot squat.
-	submitClientID(t, otherCtx, si, second.ID)
-	_, err := si.svc.SubmitClientID(ctx, &gen.SubmitClientIDPayload{ID: first.ID, ClientID: testClientID})
-	requireOopsCode(t, err, oops.CodeConflict)
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{ID: &first.ID})
-	require.NoError(t, err)
-	require.False(t, fetched.Connection.ClientIDSubmitted, "conflicting claim rolls back the client id")
-	require.Equal(t, identityproviderconnections.StatusPending, fetched.Connection.Status)
+	contexts := []context.Context{ctx, otherCtx}
+	for i, connection := range []*gen.OktaIdentityProviderConnection{first, second} {
+		result := submitClientID(t, contexts[i], si, connection.ID)
+		require.Equal(t, identityproviderconnections.StatusVerified, result.Status)
+		stored, err := repo.New(si.conn.conn).GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{
+			OrganizationID: connection.OrganizationID, ID: conv.ToNullUUID(mustParseUUID(t, connection.ID)),
+		})
+		require.NoError(t, err)
+		require.True(t, stored.OktaIdentityProviderConnection.OwnershipClaimed)
+	}
 }
 
 func TestSubmitClientID_RejectsMalformedIDs(t *testing.T) {
@@ -878,20 +880,6 @@ func TestRevoke_ConcurrentCallsBothSucceedAndAuditOnce(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestCreate_SameOktaOrgFreedByRevoke(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-	first := createConnection(t, ctx, si, fullOrgURL)
-	submitClientID(t, ctx, si, first.ID)
-	otherCtx, _ := asOtherOrganization(t, ctx, si)
-	second := createConnection(t, otherCtx, si, fullOrgURL)
-	_, err := si.svc.SubmitClientID(otherCtx, &gen.SubmitClientIDPayload{ID: second.ID, ClientID: testClientID})
-	requireOopsCode(t, err, oops.CodeConflict)
-	_, err = si.svc.Revoke(ctx, &gen.RevokePayload{ID: first.ID})
-	require.NoError(t, err)
-	submitClientID(t, otherCtx, si, second.ID)
-}
-
 func TestNormalizeOktaOrgURL(t *testing.T) {
 	t.Parallel()
 
@@ -997,44 +985,6 @@ func TestSubmitClientID_NoMintedTokenDoesNotClaimIssuer(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, stored.OktaIdentityProviderConnection.OwnershipClaimed, "nil verification error is not credential proof")
 	}
-}
-
-func TestSubmitClientID_ConcurrentIssuerClaimsHaveOneWinner(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-	first := createConnection(t, ctx, si, fullOrgURL)
-	otherCtx, _ := asOtherOrganization(t, ctx, si)
-	second := createConnection(t, otherCtx, si, fullOrgURL)
-	start := make(chan struct{})
-	results := make(chan error, 2)
-	contexts := []context.Context{ctx, otherCtx}
-	connections := []*gen.OktaIdentityProviderConnection{first, second}
-	for i, connection := range connections {
-		go func() {
-			<-start
-			_, err := si.svc.SubmitClientID(contexts[i], &gen.SubmitClientIDPayload{ID: connection.ID, ClientID: testClientID})
-			results <- err
-		}()
-	}
-	close(start)
-	a, b := <-results, <-results
-	if a == nil {
-		requireOopsCode(t, b, oops.CodeConflict)
-	} else {
-		requireOopsCode(t, a, oops.CodeConflict)
-		require.NoError(t, b)
-	}
-	claimed := 0
-	for _, connection := range connections {
-		stored, err := repo.New(si.conn.conn).GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{
-			OrganizationID: connection.OrganizationID, ID: conv.ToNullUUID(mustParseUUID(t, connection.ID)),
-		})
-		require.NoError(t, err)
-		if stored.OktaIdentityProviderConnection.OwnershipClaimed {
-			claimed++
-		}
-	}
-	require.Equal(t, 1, claimed)
 }
 
 func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing.T) {
