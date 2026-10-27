@@ -17,11 +17,13 @@ func TestAgentConnectionHealth(t *testing.T) {
 		name           string
 		refresh        bool
 		refreshExpired bool
+		missingLink    bool
 		want           bool
 	}{
-		{"expired access without refresh", false, false, true},
-		{"expired access can refresh", true, false, false},
-		{"expired refresh and access", true, true, true},
+		{"expired access without refresh", false, false, false, true},
+		{"expired access can refresh", true, false, false, false},
+		{"expired refresh and access", true, true, false, true},
+		{"removed issuer association", true, false, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -45,6 +47,11 @@ func TestAgentConnectionHealth(t *testing.T) {
 			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: issuer}))
 			_, err := q.AttachPrincipalRemoteSessionBinding(t.Context(), remoterepo.AttachPrincipalRemoteSessionBindingParams{ProjectID: project.ID, OrganizationID: "org-a", PrincipalID: agent.ID, UserSessionIssuerID: issuer, SubjectUrn: "user:owner", RemoteSessionID: session.ID})
 			require.NoError(t, err)
+			if tc.missingLink {
+				removed, err := q.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(t.Context(), remoterepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{OrganizationID: "org-a", RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: issuer})
+				require.NoError(t, err)
+				require.EqualValues(t, 1, removed)
+			}
 			svc := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 			ctx := validatedHumanContext(t, "org-a", "owner")
 			got, err := svc.Get(ctx, &gen.GetPayload{ID: agent.ID.String()})
