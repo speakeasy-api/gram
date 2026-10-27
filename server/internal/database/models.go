@@ -4831,6 +4831,8 @@ type Plugin struct {
 	// @access: confidential
 	AutoCreated bool
 	// @access: confidential
+	AutoSyncEnabled pgtype.Bool
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
