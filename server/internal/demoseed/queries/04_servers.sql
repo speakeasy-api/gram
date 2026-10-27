@@ -20,7 +20,7 @@ INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
 -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
 -- authenticate to it rather than to a member.
 -- session_duration must be a Microseconds-only interval: the user-session
--- mint rejects Months/Days components (see usersessions/minthandler.go).
+-- mint rejects Months components (see conv.PGIntervalToDuration).
 -- The workforce issuer serves one shared authorization server for its MCP
 -- servers at /oauth/usi/{id}. It is left unpinned: this seed runs against
 -- every deployment, and an unpinned issuer URL follows the deployment's own
@@ -36,6 +36,8 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
   (@slack_id::uuid, @project_id::uuid, @org_id::text, 'slack',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   (@gateway_id::uuid, @project_id::uuid, @org_id::text, 'acme-agent-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+  (@code_gateway_id::uuid, @project_id::uuid, @org_id::text, 'python-code-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
 -- name: ServersInsertMCPServers :exec
@@ -56,30 +58,51 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
    NULL, @remote_github_id::uuid,
    @issuer_workforce_id::uuid, 'private');
 
--- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
--- toolset id) and one endpoint at its address, mirroring its hosting
--- columns. The fresh-id servers above stay separate servers over the same
--- toolsets.
+-- name: ServersInsertRegistryPromotionCandidate :exec
+-- Synthetic evidence stays ineligible and queues no public publication or messages.
+INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, curation_status, created_at)
+VALUES (@id::uuid, @org_id::text, @project_id::uuid, @mcp_server_id::uuid, @remote_mcp_server_id::uuid, 'unobserved', false, 'insufficient_evidence', @curation_status::text, clock_timestamp() - make_interval(days => @age_days::integer))
+ON CONFLICT (project_id,mcp_server_id) DO NOTHING;
+
+-- Each hosted toolset owns a canonical wrapper (id = the toolset id) that
+-- holds its hosting state, and one platform endpoint at the wrapper's slug.
+-- The fresh-id servers above stay separate servers over the same toolsets.
 -- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         user_session_issuer_id, tool_variations_group_id,
-                         visibility)
-SELECT t.id, t.project_id, t.name, t.mcp_slug, t.id, t.user_session_issuer_id,
-       t.tool_variations_group_id,
-       CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-            WHEN t.mcp_is_public THEN 'public'
-            ELSE 'private' END
-FROM toolsets t
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+                         user_session_issuer_id, visibility)
+SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
+FROM (VALUES
+  (@toolset_1::uuid, @support_mcp_slug::text, NULL::uuid, 'private'),
+  (@toolset_2::uuid, @ops_mcp_slug::text, NULL::uuid, 'private'),
+  (@toolset_3::uuid, @partner_mcp_slug::text, @partner_issuer_id::uuid, 'private'),
+  (@toolset_4::uuid, @discovery_mcp_slug::text, NULL::uuid, 'public')
+) AS v(toolset_id, slug, user_session_issuer_id, visibility)
+JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = @project_id::uuid AND t.deleted IS FALSE;
 
 -- The endpoint id is det_uuid(<name seed> || 'endpoint-hosted-' || slug),
 -- computed in SQL with the same md5 formula as detUUID in names.go.
 -- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5(@endpoint_name_prefix::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
-       t.project_id, t.id, t.custom_domain_id, t.mcp_slug
-FROM toolsets t
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+       s.project_id, s.id, NULL, s.slug
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
+
+-- Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
+-- name: ServersMirrorHostedToolsets :exec
+UPDATE toolsets AS t
+SET
+    mcp_slug = e.slug
+  , custom_domain_id = e.custom_domain_id
+  , mcp_enabled = s.visibility <> 'disabled'
+  , mcp_is_public = s.visibility = 'public'
+  , user_session_issuer_id = s.user_session_issuer_id
+  , tool_variations_group_id = s.tool_variations_group_id
+FROM mcp_servers AS s
+JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
+  AND t.project_id = @project_id::uuid AND t.deleted IS FALSE;
 
 -- Check Access scenarios on GitHub. Contractors blocks connecting, which
 -- wins over every other role's grant: Mateo (a contractor through the
@@ -299,6 +322,26 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
    @meta_id::uuid, @linear_server_id::uuid, 2),
   (@slack_member_id::uuid, @project_id::uuid,
    @meta_id::uuid, @slack_server_id::uuid, 3);
+
+-- Stored as Progressive (the column default) because the shared demo org has
+-- no code runtime; local fixtures switch it to code_mode (RunLocalFixtures).
+-- name: ServersInsertCodeGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id) VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, 'Python Code Gateway',
+   @user_session_issuer_id::uuid);
+
+-- name: ServersInsertCodeGatewayMembers :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  (@support_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @support_server_id::uuid, 0),
+  (@ops_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @ops_server_id::uuid, 1);
+
+-- name: ServersInsertCodeGatewayEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, @meta_id::uuid, NULL, @slug::text);
 
 -- GitHub was a member until three days ago. Its dispatches are still in
 -- ClickHouse (gwgone rows), so the Activity section can show that a removed
@@ -705,3 +748,74 @@ VALUES
      'prescription_version', @prescription_version::int, 'state', @state::text),
    now() + (@expires_in::text)::interval, now() - (@created_ago::text)::interval,
    now() - (@created_ago::text)::interval);
+
+-- Typed auth clients, as the upstream OAuth migration records them: Linear's
+-- personal client over its OAuth registration, and one static credential
+-- shared by GitHub and Linear, so the server settings show a shared client
+-- and a server offering two. Slack is left undecided about upstream
+-- authentication.
+-- The projects delete cascades the clients, their headers and associations.
+-- name: ServersInsertAuthClient :exec
+INSERT INTO mcp_auth_clients
+  (id, organization_id, project_id, client_type, source, name,
+   remote_session_client_id, client_attachment_scope)
+SELECT @id::uuid, @org_id::text, @project_id::uuid, @client_type::text,
+       'backfill', @name::text, c.id, c.attachment_scope
+FROM (SELECT 1) AS one
+LEFT JOIN remote_session_clients AS c
+  ON c.id = sqlc.narg(remote_session_client_id)::uuid;
+
+-- The value is a placeholder; stored values are never returned.
+-- name: ServersInsertAuthClientHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_secret, value)
+VALUES
+  (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
+   @value::text);
+
+-- name: ServersInsertServerAuthClient :exec
+INSERT INTO mcp_server_auth_clients
+  (id, project_id, organization_id, mcp_server_id, auth_client_id,
+   client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
+       ac.id, ac.attachment_scope, 'backfill'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid;
+
+-- name: ServersMarkRequiresUpstreamAuth :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE
+WHERE project_id = @project_id::uuid
+  AND id = ANY(@ids::uuid[]);
+
+-- Engineers may use the shared GitHub token; Contractors are blocked from
+-- it on every server that offers it. Cleared by id at the top of the seed.
+-- name: ServersInsertAuthClientRoleGrants :exec
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT v.id, @org_id::text, 'role:organization:' || r.id, v.scope,
+       jsonb_build_object('resource_kind', 'mcp_auth_client',
+         'resource_id', (@auth_client_id::uuid)::text)
+FROM (VALUES
+  (@use_id::uuid, 'engineer', 'mcp:auth'),
+  (@block_id::uuid, 'contractors', 'mcp:blocked_auth')
+) AS v(id, slug, scope)
+JOIN organization_roles r
+  ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;
+
+-- name: ServersInsertOrganizationGatewayClient :exec
+INSERT INTO user_session_clients
+ (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
+ redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+VALUES (@id::uuid, NULL, @org_id::text, @issuer_id::uuid,
+ (@id::uuid)::text, 'Example desktop client', ARRAY['http://127.0.0.1:41296/callback'], now(), 'none');
+
+-- name: ServersInsertOrganizationGatewaySession :exec
+-- Inert authorizations remain visible while the gateway is disabled.
+-- Access tokens expired one hour ago; refresh authorization has its own deadline.
+INSERT INTO user_sessions
+ (id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn,
+ jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+VALUES (@id::uuid, @org_id::text, @issuer_id::uuid, @client_id::uuid, 'user:' || @user_id::text,
+ @jti::text, @refresh_token_hash::text,
+ now() + (@refresh_expires_in::text)::interval,
+ now() - interval '1 hour', now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);

@@ -201,7 +201,7 @@ func (q *Queries) ListEndpointsFixture(ctx context.Context, projectID uuid.UUID)
 }
 
 const listServersFixture = `-- name: ListServersFixture :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
 ORDER BY id
@@ -228,6 +228,7 @@ func (q *Queries) ListServersFixture(ctx context.Context, projectID uuid.UUID) (
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,

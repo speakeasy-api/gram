@@ -178,7 +178,7 @@ func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.R
 	req := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 	req.SetDefaults()
 	if err := req.ValidateRedirectableFields(); err != nil {
-		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, authorizationErrorPage(nil, req.ClientID, ""), err)
 	}
 	// A client_id this issuer has not registered, including a CIMD client on
 	// first contact, has no redirect_uri that can be trusted yet.
@@ -188,12 +188,12 @@ func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.R
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, description)
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, authorizationErrorPage(nil, req.ClientID, ""), oautherr.CodeInvalidTarget, description)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	if !redirectURIMatches(&client, req.RedirectURI) {
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, description)
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, authorizationErrorPage(nil, req.ClientID, ""), oautherr.CodeInvalidTarget, description)
 	}
 	// The rejected resource names no server this issuer will identify, so the
 	// page names only the client.
@@ -250,8 +250,7 @@ func (s *Service) HandleSharedConsentAction(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return err
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, consentActionFormMaxBytes)
-	if err := r.ParseForm(); err != nil {
+	if err := parseConsentActionForm(w, r); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, issuer.logger)
 	}
 	endpoint, err := s.sharedChallengeEndpoint(ctx, issuer, r.PostForm.Get("state"))
@@ -339,6 +338,9 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
 		}
 		resources := r.PostForm[oauthwire.ParamResource]
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 1 && resources[0] == InferenceResource && extractClientCredentials(r).clientless(r) {
+			return s.handleInferenceWorkloadGrant(ctx, w, r, issuer)
+		}
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 && extractClientCredentials(r).clientless(r) {
 			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
 		}

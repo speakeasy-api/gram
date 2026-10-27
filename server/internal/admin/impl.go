@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -63,6 +64,7 @@ import (
 )
 
 type Service struct {
+	catalogPromotion     *catalogpromotion.Service
 	registry             *mcpregistry.Service
 	remoteSessions       *remotesessions.Service
 	assets               *assets.Service
@@ -251,7 +253,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{catalogPromotion: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -318,7 +320,7 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled,
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
 		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
-		DeviceAgent: snapshot.DeviceAgent,
+		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
 	}
 }
 
@@ -495,6 +497,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
 	server.ListRegistryEntries = service.preauthorizeAdmin(server.ListRegistryEntries)
 	server.GetRegistryEntry = service.preauthorizeAdmin(server.GetRegistryEntry)
+	server.ListRegistryPromotionCandidates = service.preauthorizeAdmin(server.ListRegistryPromotionCandidates)
+	server.GetRegistryPromotionCandidate = service.strictAdminJSON(server.GetRegistryPromotionCandidate, func() any { return new(adminserver.GetRegistryPromotionCandidateRequestBody) })
+	server.RetryRegistryPromotionDocs = service.strictAdminJSON(server.RetryRegistryPromotionDocs, func() any { return new(adminserver.RetryRegistryPromotionDocsRequestBody) })
+	server.CurateRegistryPromotionCandidate = service.strictAdminJSON(server.CurateRegistryPromotionCandidate, func() any { return new(adminserver.CurateRegistryPromotionCandidateRequestBody) })
+	server.PromoteRegistryCandidate = service.strictAdminJSON(server.PromoteRegistryCandidate, func() any { return new(adminserver.PromoteRegistryCandidateRequestBody) })
 	server.CreateRegistryEntry = service.strictAdminJSONLimit(server.CreateRegistryEntry, func() any { return new(adminserver.CreateRegistryEntryRequestBody) }, 16<<20)
 	server.SaveRegistryEntry = service.strictAdminJSONLimit(server.SaveRegistryEntry, func() any { return new(adminserver.SaveRegistryEntryRequestBody) }, 16<<20)
 	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
@@ -1074,41 +1081,63 @@ func (s *Service) ListOrganizationProjects(ctx context.Context, payload *gen.Lis
 }
 
 func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.ListOrganizationActivityPayload) (*gen.AdminListOrganizationActivityResult, error) {
+	return s.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{
+		OrganizationID: payload.OrganizationID, Cursor: payload.Cursor,
+		ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorID: nil, Action: nil,
+		SubjectType: nil, SubjectID: nil, ActingSurface: nil, From: nil, To: nil,
+	})
+}
+
+func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter OrganizationActivityFilter) (*gen.AdminListOrganizationActivityResult, error) {
 	_, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID: payload.OrganizationID, AllowSlug: false,
+		ID: filter.OrganizationID, AllowSlug: false,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for activity").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+	}
+	if filter.ProjectID.Valid {
+		belongs, err := repo.New(s.db).AdminAuditProjectBelongsToOrganization(ctx, repo.AdminAuditProjectBelongsToOrganizationParams{
+			ProjectID: filter.ProjectID.UUID, OrganizationID: filter.OrganizationID,
+		})
+		switch {
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "lookup activity project organization").LogError(ctx, s.logger)
+		case !belongs:
+			return nil, oops.C(oops.CodeNotFound)
+		}
+	}
+	if filter.From != nil && filter.To != nil && !filter.From.Before(*filter.To) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "from must be before to")
 	}
 
 	params := auditrepo.ListAuditLogsParams{
-		OrganizationID:         payload.OrganizationID,
-		ProjectID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:         filter.OrganizationID,
+		ProjectID:              filter.ProjectID,
 		CursorSeq:              pgtype.Int8{Int64: 0, Valid: false},
-		ActorID:                pgtype.Text{String: "", Valid: false},
-		Action:                 pgtype.Text{String: "", Valid: false},
-		SubjectType:            pgtype.Text{String: "", Valid: false},
+		ActorID:                conv.PtrToPGTextEmpty(filter.ActorID),
+		Action:                 conv.PtrToPGTextEmpty(filter.Action),
+		SubjectType:            conv.PtrToPGTextEmpty(filter.SubjectType),
 		IncludeAssistantEvents: true,
-		SubjectID:              pgtype.Text{String: "", Valid: false},
+		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
-		ActingSurface:          pgtype.Text{String: "", Valid: false},
-		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
-		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),
+		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
+		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}
-	if payload.Cursor != nil && *payload.Cursor != "" {
-		seq, err := audit.DecodeCursor(*payload.Cursor)
+	if filter.Cursor != nil && *filter.Cursor != "" {
+		seq, err := audit.DecodeCursor(*filter.Cursor)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogWarn(ctx, s.logger)
 		}
 		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
 	rows, err := auditrepo.New(s.db).ListAuditLogs(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
 	}
 
 	const pageSize = 50

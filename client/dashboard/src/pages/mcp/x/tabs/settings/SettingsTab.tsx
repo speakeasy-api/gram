@@ -17,7 +17,6 @@ import {
 import { MCPPerformanceTab } from "@/pages/mcp/MCPPerformanceTab";
 import { PageSection } from "@/pages/mcp/PageSection";
 import { ExportJsonSection } from "@/pages/mcp/x/hosted/ExportJsonSection";
-import { HostedAddressSections } from "@/pages/mcp/x/hosted/HostedAddressSections";
 import { ServerInstructionsSection } from "@/pages/mcp/x/hosted/ServerInstructionsSection";
 import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
@@ -32,12 +31,17 @@ import {
   AgentSetupSection,
   MCP_AGENT_SETUP_SECTION_ID,
 } from "./sections/AgentSetupSection";
+import { BuiltinServerSection } from "./sections/BuiltinServerSection";
 import { CallerIdentitySection } from "./sections/CallerIdentitySection";
 import {
   IDENTITY_CHAINING_SECTION_ID,
   IdentityChainingSection,
 } from "./sections/authentication/IdentityChainingSection";
 import { GeneralSection } from "./sections/GeneralSection";
+import {
+  UPSTREAM_CREDENTIALS_SECTION_ID,
+  UpstreamCredentialsSection,
+} from "./sections/authentication/UpstreamCredentialsSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
 import {
@@ -76,6 +80,7 @@ const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_AGENT_SETUP_SECTION_ID,
   IDENTITY_CHAINING_SECTION_ID,
   MCP_SESSIONS_SECTION_ID,
+  UPSTREAM_CREDENTIALS_SECTION_ID,
 ];
 
 // `ready` flips once the source-backed sections can be on the page: they
@@ -151,6 +156,16 @@ export function SettingsTab({
 
   useScrollToSettingsHash(sourceSettled);
 
+  // Speakeasy manages a built-in server, such as the approvals server, so it
+  // has no settings to edit.
+  if (mcpServer.builtinBackend) {
+    return (
+      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
+        <BuiltinServerSection />
+      </div>
+    );
+  }
+
   let deleteTarget: SourceBackedDeleteTarget | undefined;
   if (remoteMcpServer) {
     deleteTarget = { kind: "remote", source: remoteMcpServer };
@@ -172,8 +187,17 @@ export function SettingsTab({
             resourceId={hostedToolset.id}
             level="section"
           >
-            <HostedAddressSections toolset={hostedToolset} />
-            <NetworkAccessSection toolset={hostedToolset} />
+            <ServerUrlSection
+              backend={{ mcpServerId: mcpServer.id }}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+              mcpServer={mcpServer}
+            />
+            <NetworkAccessSection
+              mcpServer={mcpServer}
+              endpoints={endpoints}
+              toolset={hostedToolset}
+            />
             <div id={MCP_AUTHENTICATION_SECTION_ID}>
               <ToolsetOAuthSection toolset={hostedToolset} />
             </div>
@@ -241,6 +265,7 @@ export function SettingsTab({
             Headers disclosure; they are governed by the identity choice, not
             a peer of it. */}
         <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+        <UpstreamCredentialsSection mcpServer={mcpServer} />
         <IdentityChainingSection mcpServer={mcpServer} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
@@ -280,6 +305,11 @@ export function SettingsTab({
         </>
       )}
       <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+      {/* Hosted toolsets keep their own authentication, and unproxied
+          servers reach the upstream without Speakeasy in between. */}
+      {isUnproxied || mcpServer.toolsetId ? null : (
+        <UpstreamCredentialsSection mcpServer={mcpServer} />
+      )}
       {tunneledMcpServer ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />

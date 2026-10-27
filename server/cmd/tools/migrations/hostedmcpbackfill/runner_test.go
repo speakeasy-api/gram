@@ -26,8 +26,8 @@ func TestDryRunWritesNothing(t *testing.T) {
 	require.Equal(t, before, f.state(t))
 	require.Equal(t, "dry-run", report.Mode)
 	require.Equal(t, OutcomeWouldCreate, rowFor(t, report, toolsetID).Outcome)
-	require.Equal(t, OutcomeWouldReconcile, rowFor(t, report, drifted).Outcome)
-	require.Equal(t, 2, report.Writes)
+	require.Equal(t, OutcomeAlreadyComplete, rowFor(t, report, drifted).Outcome, "an existing canonical wrapper is never reconciled")
+	require.Equal(t, 1, report.Writes)
 }
 
 func TestApplyCreatesCanonicalWrapperAndIsIdempotent(t *testing.T) {
@@ -69,6 +69,7 @@ func TestApplyCreatesCanonicalWrapperAndIsIdempotent(t *testing.T) {
 	rerun := f.run(t, Options{Apply: true})
 	require.Len(t, rerun.Outcomes, 1)
 	require.Equal(t, 4, rerun.Outcomes[OutcomeAlreadyComplete])
+	require.Equal(t, 1, rowFor(t, rerun, onDomain).LiveEndpoints, "a rerun still reports the existing wrapper's endpoints")
 	require.Zero(t, rerun.Writes)
 	require.Equal(t, state, f.state(t))
 }
@@ -87,29 +88,21 @@ func TestApplyKeepsUnprefixedPlatformSlugVerbatim(t *testing.T) {
 	require.False(t, endpoints[0].CustomDomainID.Valid)
 }
 
-func TestApplyReconcilesDriftedCanonical(t *testing.T) {
+func TestApplyLeavesExistingCanonicalUntouched(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "current-slug", public: false, enabled: true, domainID: uuid.NullUUID{}})
-	f.seedServer(t, toolsetID, toolsetID, "stale name", "old-slug", "public")
-	endpointID := f.seedEndpoint(t, toolsetID, uuid.NullUUID{}, "old-slug")
+	f.seedServer(t, toolsetID, toolsetID, "edited name", "edited-slug", "public")
+	f.seedEndpoint(t, toolsetID, uuid.NullUUID{}, "edited-slug")
+	f.seedEndpoint(t, toolsetID, uuid.NullUUID{}, "second-address")
+	before := f.state(t)
 
 	report := f.run(t, Options{Apply: true})
-	require.Equal(t, OutcomeReconciled, rowFor(t, report, toolsetID).Outcome)
-
-	state := f.state(t)
-	server := state.server(t, toolsetID)
-	require.Equal(t, "private", server.Visibility)
-	require.Equal(t, "current-slug", server.Slug.String)
-	require.Equal(t, "Hosted current-slug", server.Name.String)
-	endpoints := state.liveEndpoints(toolsetID)
-	require.Len(t, endpoints, 1)
-	require.Equal(t, endpointID, endpoints[0].ID, "the endpoint is re-keyed in place")
-	require.Equal(t, "current-slug", endpoints[0].Slug)
-
-	rerun := f.run(t, Options{Apply: true})
-	require.Equal(t, OutcomeAlreadyComplete, rowFor(t, rerun, toolsetID).Outcome)
-	require.Zero(t, rerun.Writes)
+	row := rowFor(t, report, toolsetID)
+	require.Equal(t, OutcomeAlreadyComplete, row.Outcome)
+	require.False(t, row.Wrote)
+	require.Zero(t, report.Writes)
+	require.Equal(t, before, f.state(t), "the wrapper owns its hosting state; the frozen columns never revert it")
 }
 
 func TestFreshIDServersAreReportedAndUntouched(t *testing.T) {
@@ -149,28 +142,9 @@ func TestDeadCustomDomainSyncsWrapperWithoutEndpoint(t *testing.T) {
 	require.Empty(t, state.liveEndpoints(toolsetID))
 
 	rerun := f.run(t, Options{Apply: true})
-	require.Equal(t, OutcomeDeadCustomDomain, rowFor(t, rerun, toolsetID).Outcome)
+	require.Equal(t, OutcomeAlreadyComplete, rowFor(t, rerun, toolsetID).Outcome, "the created wrapper is never reconciled")
 	require.Zero(t, rerun.Writes)
 	require.Equal(t, state, f.state(t))
-}
-
-func TestMultipleEndpointsBlockAndStayUntouched(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	domain := f.seedDomain(t, false)
-	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "multi", public: true, enabled: false, domainID: domain})
-	f.seedServer(t, toolsetID, toolsetID, "stale", "multi", "public")
-	f.seedEndpoint(t, toolsetID, domain, "multi")
-	f.seedEndpoint(t, toolsetID, uuid.NullUUID{}, "multi-platform-"+uuid.NewString()[:8])
-	before := f.state(t)
-
-	report := f.run(t, Options{Apply: true})
-
-	row := rowFor(t, report, toolsetID)
-	require.Equal(t, OutcomeBlockedMultipleEndpoints, row.Outcome)
-	require.Equal(t, 2, row.LiveEndpoints)
-	require.False(t, row.Wrote)
-	require.Equal(t, before, f.state(t))
 }
 
 func TestEndpointAddressCollisionBlocks(t *testing.T) {
@@ -251,7 +225,7 @@ func TestCanonicalIDOwnedByAnotherToolsetBlocks(t *testing.T) {
 	require.Equal(t, before.server(t, toolsetID), f.state(t).server(t, toolsetID))
 }
 
-func TestSyncRejectionBlocksWithoutWriting(t *testing.T) {
+func TestExistingDisabledWrapperIsNeverReEnabled(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "private-only", public: false, enabled: true, domainID: uuid.NullUUID{}})
@@ -265,7 +239,7 @@ func TestSyncRejectionBlocksWithoutWriting(t *testing.T) {
 	before := f.state(t)
 
 	row := rowFor(t, f.run(t, Options{Apply: true}), toolsetID)
-	require.Equal(t, OutcomeBlockedSyncRejected, row.Outcome)
+	require.Equal(t, OutcomeAlreadyComplete, row.Outcome, "an existing wrapper is never re-enabled from the frozen columns")
 	require.False(t, row.Wrote)
 	require.Equal(t, before, f.state(t))
 }

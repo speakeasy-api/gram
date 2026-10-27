@@ -1,3 +1,4 @@
+import { mcpServerRouteParam } from "@/lib/sources";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -531,7 +532,7 @@ function RoleServerAssignment({
       <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3">
         <Link
           className="break-words text-sm font-medium hover:underline"
-          to={routes.mcp.x.overview.href(server.slug)}
+          to={routes.mcp.details.overview.href(mcpServerRouteParam(server))}
         >
           {server.name || "Unnamed server"}
         </Link>

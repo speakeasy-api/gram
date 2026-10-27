@@ -8,16 +8,24 @@ const mocks = vi.hoisted(() => ({
     organizationOverride: false,
     impersonatorEmail: undefined as string | undefined,
   },
-  isPlatformAdmin: false,
-  scopeOverride: null as string | null,
   sdk: { name: "sdk" },
   projectSlug: "project-one",
+  routeProjectSlug: "project-one" as string | undefined,
+  scopeOverride: null as string | null,
   search: "?range=30d&from=2025-01-01&to=2025-01-31&tab=ignored",
   navigate: vi.fn(),
   href: vi.fn((urn: string) => `/identities/${urn}/overview`),
   queryOptions: undefined as Record<string, unknown> | undefined,
   queryData: undefined as
-    | { pages: Array<{ items: Array<{ id: string; name: string }> }> }
+    | {
+        pages: Array<{
+          items: Array<{
+            id: string;
+            name: string;
+            permissions?: { write: boolean };
+          }>;
+        }>;
+      }
     | undefined,
   hasNextPage: false,
   isFetchingNextPage: false,
@@ -29,20 +37,27 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => mocks.organization,
   useSession: () => mocks.session,
-  useIsPlatformAdmin: () => mocks.isPlatformAdmin,
 }));
-vi.mock("@/components/dev-toolbar-utils", () => ({
-  getRBACScopeOverrideHeader: () => mocks.scopeOverride,
+vi.mock("@/hooks/useRBACScopeOverride", () => ({
+  useRBACScopeOverride: () => mocks.scopeOverride,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mocks.sdk,
   useProjectSlugForRequests: () => mocks.projectSlug,
+  useSlugs: () => ({ projectSlug: mocks.routeProjectSlug }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: (overrides: unknown) => {
     expect(overrides).toEqual({ projectSlug: mocks.projectSlug });
     return {
-      identities: { detail: { overview: { href: mocks.href } } },
+      identities: {
+        detail: {
+          overview: { href: mocks.href },
+          permissions: {
+            href: (urn: string) => `/identities/${urn}/permissions`,
+          },
+        },
+      },
     };
   },
 }));
@@ -79,9 +94,9 @@ describe("useAgentIdentityCandidates", () => {
     mocks.session.user.id = "user-one";
     mocks.session.organizationOverride = false;
     mocks.session.impersonatorEmail = undefined;
-    mocks.isPlatformAdmin = false;
-    mocks.scopeOverride = null;
     mocks.projectSlug = "project-one";
+    mocks.routeProjectSlug = "project-one";
+    mocks.scopeOverride = null;
     mocks.queryData = undefined;
     mocks.hasNextPage = false;
     mocks.isFetchingNextPage = false;
@@ -110,6 +125,7 @@ describe("useAgentIdentityCandidates", () => {
         "[]",
         "[]",
         "",
+        null,
       ],
       enabled: false,
       retry: false,
@@ -143,7 +159,6 @@ describe("useAgentIdentityCandidates", () => {
       "impersonated session",
       () => (mocks.session.impersonatorEmail = "operator@example.test"),
     ],
-    ["RBAC override", () => (mocks.scopeOverride = "project:read")],
   ])("does not expose agents in a %s", (_label, restrict) => {
     mocks.queryData = {
       pages: [{ items: [{ id: "agent-one", name: "Build bot" }] }],
@@ -156,6 +171,31 @@ describe("useAgentIdentityCandidates", () => {
 
     expect(queryEnabled()).toBe(false);
     expect(result.current).toEqual([]);
+  });
+
+  it("keeps registered agents discoverable under a narrowed override", () => {
+    mocks.scopeOverride = "rbac-override:none";
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            {
+              id: "agent-one",
+              name: "Build bot",
+              permissions: { write: false },
+            },
+          ],
+        },
+      ],
+    };
+    const { result } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    expect(queryEnabled()).toBe(true);
+    expect(result.current.map((candidate) => candidate.id)).toEqual([
+      "agent-identity:agent-one",
+    ]);
+    expect(mocks.queryOptions?.queryKey).toContain("rbac-override:none");
   });
 
   it("maps names and canonical URNs without exposing them to intent ranking", () => {
@@ -216,5 +256,64 @@ describe("useAgentIdentityCandidates", () => {
     rerender({ enabled: false });
     expect(result.current).toEqual([]);
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not offer the project-scoped alias in the org shell despite the request default", () => {
+    mocks.projectSlug = "default";
+    mocks.routeProjectSlug = undefined;
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            { id: "editable", name: "Worker", permissions: { write: true } },
+          ],
+        },
+      ],
+    };
+    const { result, rerender } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    expect(result.current.map((candidate) => candidate.id)).toEqual([
+      "agent-identity:editable",
+    ]);
+    mocks.routeProjectSlug = "project-one";
+    mocks.projectSlug = "project-one";
+    rerender();
+    expect(result.current.map((candidate) => candidate.id)).toContain(
+      "agent-inference-access:editable",
+    );
+  });
+
+  it("adds an inference-access alias only for editable agents and keeps names private", () => {
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            { id: "read_only", name: "Viewer", permissions: { write: false } },
+          ],
+        },
+        {
+          items: [
+            { id: "editable", name: "Worker", permissions: { write: true } },
+          ],
+        },
+      ],
+    };
+    const { result } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    const aliases = result.current.filter((candidate) =>
+      candidate.id.startsWith("agent-inference-access:"),
+    );
+    expect(aliases).toHaveLength(1);
+    expect(aliases[0]).toMatchObject({
+      title: "Worker · Permissions",
+      fuzzyOnly: true,
+      keywords: expect.arrayContaining(["inference", "permissions"]),
+    });
+    void aliases[0]!.run("open");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/identities/agent%3Aeditable/permissions?range=30d&from=2025-01-01&to=2025-01-31",
+    );
   });
 });

@@ -121,7 +121,19 @@ LIMIT 1;
 -- name: ResolveToolsetsForWrite :many
 -- Also locks the toolsets behind canonical wrappers named by slug, so server
 -- attachments take the toolset lock before the server lock, as deletion does.
-SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
+SELECT t.id, t.slug, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+    AND (
+      t.mcp_slug IS NOT NULL
+      OR EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
+    )
+)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -328,23 +340,9 @@ WHERE t.project_id = @project_id
 ORDER BY so.seen_at DESC, so.id DESC
 LIMIT 1;
 
--- name: EnableMCPForToolsets :many
--- Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
--- attached toolsets are enabled so users don't have to do it separately; the
--- caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
-UPDATE toolsets
-SET mcp_enabled = TRUE,
-    updated_at = clock_timestamp()
-WHERE id = ANY(@toolset_ids::UUID[])
-  AND project_id = @project_id
-  AND mcp_enabled IS FALSE
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-RETURNING id;
-
 -- name: LoadAssistantMcpServers :many
--- Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug,
--- mcp_enabled and default environment, and sort first so they win runtime id
+-- Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug and
+-- default environment, and sort first so they win runtime id
 -- collisions. The address is the server's own endpoint: platform first, else
 -- one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
 -- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias until the
@@ -354,11 +352,7 @@ SELECT
   ams.mcp_server_id,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
-  CASE WHEN t.id IS NOT NULL THEN CASE
-    WHEN t.mcp_enabled IS NOT TRUE THEN 'disabled'
-    WHEN t.mcp_is_public THEN 'public'
-    ELSE 'private'
-  END ELSE ms.visibility END::text AS visibility,
+  ms.visibility::text AS visibility,
   COALESCE(ep.slug, t.mcp_slug, '')::text AS endpoint_slug,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,

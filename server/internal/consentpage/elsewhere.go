@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 // FinishElsewhereField is the approve form's opt-in for a client that runs on
@@ -17,7 +17,7 @@ const FinishElsewhereField = "finish_elsewhere"
 // listener, which only a browser on the client's own machine can reach.
 func IsLoopbackRedirect(redirectURI string) bool {
 	u, err := url.Parse(redirectURI)
-	return err == nil && cimd.IsLoopbackRedirectURI(u)
+	return err == nil && oauthwire.IsLoopbackRedirectURI(u)
 }
 
 // FinishElsewhereRequested reports whether an approval should be handed to the

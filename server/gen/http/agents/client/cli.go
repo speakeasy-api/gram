@@ -413,6 +413,66 @@ func BuildListPolicyGrantsPayload(agentsListPolicyGrantsAgentID string, agentsLi
 	return v, nil
 }
 
+// BuildCheckPolicyGrantsPayload builds the payload for the agents
+// checkPolicyGrants endpoint from CLI flags.
+func BuildCheckPolicyGrantsPayload(agentsCheckPolicyGrantsBody string, agentsCheckPolicyGrantsSessionToken string) (*agents.CheckPolicyGrantsPayload, error) {
+	var err error
+	var body CheckPolicyGrantsRequestBody
+	{
+		err = json.Unmarshal([]byte(agentsCheckPolicyGrantsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }'")
+		}
+		if body.PolicyGrants == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("policy_grants", "body"))
+		}
+		if body.AgentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+		}
+		if len(body.PolicyGrants) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 1, true))
+		}
+		if len(body.PolicyGrants) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 100, false))
+		}
+		for _, e := range body.PolicyGrants {
+			if e != nil {
+				if err2 := ValidateAgentPolicyGrantFormRequestBodyRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsCheckPolicyGrantsSessionToken != "" {
+			sessionToken = &agentsCheckPolicyGrantsSessionToken
+		}
+	}
+	v := &agents.CheckPolicyGrantsPayload{
+		AgentID:     body.AgentID,
+		OwnerUserID: body.OwnerUserID,
+	}
+	if body.PolicyGrants != nil {
+		v.PolicyGrants = make([]*agents.AgentPolicyGrantForm, len(body.PolicyGrants))
+		for i, val := range body.PolicyGrants {
+			if val == nil {
+				v.PolicyGrants[i] = nil
+				continue
+			}
+			v.PolicyGrants[i] = marshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm(val)
+		}
+	} else {
+		v.PolicyGrants = []*agents.AgentPolicyGrantForm{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreatePolicyGrantPayload builds the payload for the agents
 // createPolicyGrant endpoint from CLI flags.
 func BuildCreatePolicyGrantPayload(agentsCreatePolicyGrantBody string, agentsCreatePolicyGrantSessionToken string) (*agents.CreatePolicyGrantPayload, error) {
@@ -519,7 +579,12 @@ func BuildDeletePolicyGrantPayload(agentsDeletePolicyGrantBody string, agentsDel
 	{
 		err = json.Unmarshal([]byte(agentsDeletePolicyGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_policy\": {\n         \"scope\": \"aa\",\n         \"selector\": {\n            \"client_type\": \"service_account\",\n            \"connection_owner\": \"abc123\",\n            \"disposition\": \"destructive\",\n            \"project_id\": \"abc123\",\n            \"resource_id\": \"abc123\",\n            \"resource_kind\": \"mcp\",\n            \"server_identity\": \"abc123\",\n            \"server_url\": \"https://example.com/foo\",\n            \"tool\": \"abc123\",\n            \"upstream_client\": \"abc123\"\n         }\n      },\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.ExpectedPolicy != nil {
+			if err2 := ValidateAgentExpectedPolicyRequestBodyRequestBody(body.ExpectedPolicy); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.grant_id", body.GrantID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
@@ -536,6 +601,9 @@ func BuildDeletePolicyGrantPayload(agentsDeletePolicyGrantBody string, agentsDel
 	v := &agents.DeletePolicyGrantPayload{
 		GrantID: body.GrantID,
 		AgentID: body.AgentID,
+	}
+	if body.ExpectedPolicy != nil {
+		v.ExpectedPolicy = marshalAgentExpectedPolicyRequestBodyRequestBodyToAgentsAgentExpectedPolicy(body.ExpectedPolicy)
 	}
 	v.SessionToken = sessionToken
 

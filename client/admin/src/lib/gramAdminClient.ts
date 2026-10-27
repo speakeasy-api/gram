@@ -1,3 +1,25 @@
+import {
+  buildAdminCurateRegistryPromotionCandidateMutation,
+  type AdminCurateRegistryPromotionCandidateMutationData,
+  type AdminCurateRegistryPromotionCandidateMutationError,
+  type AdminCurateRegistryPromotionCandidateMutationVariables,
+} from "@gram/admin-client/react-query/adminCurateRegistryPromotionCandidate";
+import {
+  buildAdminRetryRegistryPromotionDocsMutation,
+  type AdminRetryRegistryPromotionDocsMutationData,
+  type AdminRetryRegistryPromotionDocsMutationError,
+  type AdminRetryRegistryPromotionDocsMutationVariables,
+} from "@gram/admin-client/react-query/adminRetryRegistryPromotionDocs";
+import type {
+  AdminPromoteRegistryCandidateMutationData,
+  AdminPromoteRegistryCandidateMutationError,
+  AdminPromoteRegistryCandidateMutationVariables,
+} from "@gram/admin-client/react-query/adminPromoteRegistryCandidate";
+import { buildAdminListRegistryPromotionCandidatesQuery } from "@gram/admin-client/react-query/adminListRegistryPromotionCandidates.core";
+import { buildAdminGetRegistryPromotionCandidateMutation } from "@gram/admin-client/react-query/adminGetRegistryPromotionCandidate";
+import { buildAdminPromoteRegistryCandidateMutation } from "@gram/admin-client/react-query/adminPromoteRegistryCandidate";
+import type { AdminListRegistryPromotionCandidatesRequest } from "@gram/admin-client/models/operations/adminlistregistrypromotioncandidates";
+import type { GetRegistryPromotionCandidateRequestBody } from "@gram/admin-client/models/components/getregistrypromotioncandidaterequestbody";
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
 import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
@@ -1199,4 +1221,88 @@ export function adminMigrateExternalMcpServers(
       request,
     }),
   );
+}
+
+function createRegistryPromotionCandidatesQuery(
+  params: AdminListRegistryPromotionCandidatesRequest,
+) {
+  const generated = buildAdminListRegistryPromotionCandidatesQuery(
+    redirectingClient,
+    { ...params, status: params.status ?? "active" },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createRegistryPromotionCandidateQuery(
+  params: GetRegistryPromotionCandidateRequestBody,
+) {
+  const generated = buildAdminGetRegistryPromotionCandidateMutation(
+    redirectingClient,
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    queryKey: ["registryPromotionCandidate", params],
+    queryFn: ({ signal }) =>
+      redirecting(
+        generated.mutationFn({
+          request: params,
+          options: { fetchOptions: { signal } },
+        }),
+      ),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function usePromoteRegistryCandidateMutation(): UseMutationResult<
+  AdminPromoteRegistryCandidateMutationData,
+  AdminPromoteRegistryCandidateMutationError,
+  AdminPromoteRegistryCandidateMutationVariables
+> {
+  return useMutation({
+    ...buildAdminPromoteRegistryCandidateMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
+}
+
+export function registryPromotionCandidatesQuery(
+  params: AdminListRegistryPromotionCandidatesRequest,
+): ReturnType<typeof createRegistryPromotionCandidatesQuery> {
+  return createRegistryPromotionCandidatesQuery(params);
+}
+export function registryPromotionCandidateQuery(
+  params: GetRegistryPromotionCandidateRequestBody,
+): ReturnType<typeof createRegistryPromotionCandidateQuery> {
+  return createRegistryPromotionCandidateQuery(params);
+}
+
+export function useRetryRegistryPromotionDocsMutation(): UseMutationResult<
+  AdminRetryRegistryPromotionDocsMutationData,
+  AdminRetryRegistryPromotionDocsMutationError,
+  AdminRetryRegistryPromotionDocsMutationVariables
+> {
+  return useMutation({
+    ...buildAdminRetryRegistryPromotionDocsMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
+}
+
+export function useCurateRegistryPromotionCandidateMutation(): UseMutationResult<
+  AdminCurateRegistryPromotionCandidateMutationData,
+  AdminCurateRegistryPromotionCandidateMutationError,
+  AdminCurateRegistryPromotionCandidateMutationVariables
+> {
+  return useMutation({
+    ...buildAdminCurateRegistryPromotionCandidateMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -227,7 +228,7 @@ func TestSharedAuthorizationServer_ServesMetadataAtBothLocations(t *testing.T) {
 		require.Equal(t, f.issuerURL+"/token", meta["token_endpoint"])
 		require.Equal(t, f.issuerURL+"/register", meta["registration_endpoint"])
 		require.Equal(t, f.issuerURL+"/revoke", meta["revocation_endpoint"])
-		require.ElementsMatch(t, []any{"authorization_code", "refresh_token", "client_credentials", "urn:ietf:params:oauth:grant-type:jwt-bearer"}, meta["grant_types_supported"])
+		require.ElementsMatch(t, []any{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"}, meta["grant_types_supported"])
 		require.Equal(t, true, meta["authorization_response_iss_parameter_supported"])
 	}
 }
@@ -451,7 +452,7 @@ func TestSharedAuthorizationServer_AuthorizeRendersRefusalForUnknownClient(t *te
 
 	w := sharedAuthorize(t, ctx, ti, f, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+	require.Equal(t, "invalid_target", oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusBadRequest).Code)
 }
 
 // A per-endpoint authorization server stays in service for the servers of a

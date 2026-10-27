@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -23,7 +24,7 @@ func (f assistantWorkloadIssuerFunc) IssueAssistantWorkloadToken(ctx context.Con
 func TestAssistantClientCredentialsDispatch(t *testing.T) {
 	t.Parallel()
 
-	s, _, _ := newTokenDispatchTestService(t)
+	s, endpoint, _ := newTokenDispatchTestService(t)
 	r := newTokenDispatchRequest(t, url.Values{})
 	_, ok := s.tokenGrantFor(r, "client_credentials", presentedClientCredentials{})
 	require.False(t, ok)
@@ -35,6 +36,14 @@ func TestAssistantClientCredentialsDispatch(t *testing.T) {
 	require.Equal(t, tokenClientAuthRequired, g.clientAuth)
 	require.Equal(t, lookupClientOnly, g.resolveMode)
 	require.Nil(t, g.clientless)
+
+	// An explicitly composed client-credentials issuer still requires a client;
+	// removing the runtime implementation must not relax generic OAuth auth.
+	w := httptest.NewRecorder()
+	r = newTokenDispatchRequest(t, url.Values{"grant_type": {"client_credentials"}})
+	require.NoError(t, s.ServeToken(w, r, endpoint))
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.JSONEq(t, `{"error":"invalid_client","error_description":"client_id is required"}`, w.Body.String())
 }
 
 func TestAssistantClientCredentialsBoundRequest(t *testing.T) {

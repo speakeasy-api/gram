@@ -2368,6 +2368,7 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 const getPlatformMCPConnectionSettings = `-- name: GetPlatformMCPConnectionSettings :one
 SELECT
     CASE WHEN $1::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
+    ($1::text = 'gateway' AND gateway.user_session_issuer_id IS NOT NULL)::boolean AS gateway_requires_sign_in,
     CASE WHEN $1::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN $1::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(
@@ -2456,13 +2457,14 @@ type GetPlatformMCPConnectionSettingsParams struct {
 }
 
 type GetPlatformMCPConnectionSettingsRow struct {
-	DiscoveryMode     string
-	Name              string
-	Visibility        string
-	NetworkMode       string
-	Endpoints         []byte
-	Ingress           []byte
-	PluginMemberships []byte
+	DiscoveryMode         string
+	GatewayRequiresSignIn bool
+	Name                  string
+	Visibility            string
+	NetworkMode           string
+	Endpoints             []byte
+	Ingress               []byte
+	PluginMemberships     []byte
 }
 
 // One exact organization/project-scoped target and its connection dependencies.
@@ -2477,6 +2479,7 @@ func (q *Queries) GetPlatformMCPConnectionSettings(ctx context.Context, arg GetP
 	var i GetPlatformMCPConnectionSettingsRow
 	err := row.Scan(
 		&i.DiscoveryMode,
+		&i.GatewayRequiresSignIn,
 		&i.Name,
 		&i.Visibility,
 		&i.NetworkMode,
@@ -2627,7 +2630,7 @@ func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatfo
 }
 
 const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
-SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
 FROM (
     SELECT
         m.id AS mcp_server_id,
@@ -2641,6 +2644,7 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
+        m.builtin_backend,
         COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
@@ -2720,6 +2724,7 @@ type GetPlatformMCPInventoryItemRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	BuiltinBackend                  pgtype.Text
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -2758,6 +2763,7 @@ func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatfo
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.UpstreamUrl,
 		&i.RegistrationID,
 		&i.SourceKind,
@@ -5244,6 +5250,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
+    m.builtin_backend,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -5304,6 +5311,15 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || $10::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || $10::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || $10::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = $1
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || $10::text || '%'
+      )
   )
   AND (
       $11::text IS NULL
@@ -5318,7 +5334,15 @@ WHERE m.deleted IS FALSE
 ORDER BY
     CASE
         WHEN $10::text <> ''
-         AND (m.id::text = $10::text OR LOWER(COALESCE(m.name, '')) = LOWER($10::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($10::text))
+         AND (m.id::text = $10::text OR LOWER(COALESCE(m.name, '')) = LOWER($10::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($10::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = $1
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER($10::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -5353,6 +5377,7 @@ type ListPlatformMCPInventoryRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	BuiltinBackend                  pgtype.Text
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -5408,6 +5433,7 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.UpstreamUrl,
 			&i.RegistrationID,
 			&i.SourceKind,
@@ -5447,11 +5473,28 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || $4::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || $4::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || $4::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = $1
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || $4::text || '%'
+      )
   )
 ORDER BY
     CASE
         WHEN $4::text <> ''
-         AND (m.id::text = $4::text OR LOWER(COALESCE(m.name, '')) = LOWER($4::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($4::text))
+         AND (m.id::text = $4::text OR LOWER(COALESCE(m.name, '')) = LOWER($4::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($4::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = $1
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER($4::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -6958,85 +7001,6 @@ func (q *Queries) ListPlatformMCPSubjectConnections(ctx context.Context, arg Lis
 	return items, nil
 }
 
-const listRiskFindingSpansForRecall = `-- name: ListRiskFindingSpansForRecall :many
-SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN chats c ON c.id = cm.chat_id
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE cm.chat_id = $1
-  AND rr.project_id = $2
-  AND c.organization_id = $3
-  AND c.user_id = $4::text
-  AND c.deleted IS FALSE
-  AND (ua.id IS NULL OR ua.account_type <> 'personal')
-  AND cm.generation = (
-    SELECT COALESCE(MAX(generation), 0)
-    FROM chat_messages
-    WHERE chat_id = $1
-      AND project_id = $2
-  )
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC
-`
-
-type ListRiskFindingSpansForRecallParams struct {
-	ChatID         uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         string
-}
-
-type ListRiskFindingSpansForRecallRow struct {
-	ChatMessageID uuid.NullUUID
-	Source        string
-	RuleID        pgtype.Text
-	Match         pgtype.Text
-	Spans         []byte
-	StartPos      pgtype.Int4
-	EndPos        pgtype.Int4
-}
-
-// Findings that drive inline masking of the recall digest. Message-anchored
-// rows only (the digest does not render content parts): found, not excluded,
-// not swept as false positive, policy still enabled and not deleted.
-// Latest generation only, matching the transcript read: findings on
-// superseded generations mask nothing the digest renders, so loading them
-// would only let long, repeatedly compacted sessions inflate the scan.
-func (q *Queries) ListRiskFindingSpansForRecall(ctx context.Context, arg ListRiskFindingSpansForRecallParams) ([]ListRiskFindingSpansForRecallRow, error) {
-	rows, err := q.db.Query(ctx, listRiskFindingSpansForRecall,
-		arg.ChatID,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.UserID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRiskFindingSpansForRecallRow
-	for rows.Next() {
-		var i ListRiskFindingSpansForRecallRow
-		if err := rows.Scan(
-			&i.ChatMessageID,
-			&i.Source,
-			&i.RuleID,
-			&i.Match,
-			&i.Spans,
-			&i.StartPos,
-			&i.EndPos,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockLivePlatformMCPProjectForRegistration = `-- name: LockLivePlatformMCPProjectForRegistration :one
 SELECT id
 FROM projects
@@ -8285,6 +8249,30 @@ func (q *Queries) ResolvePlatformMCPProjectBySlug(ctx context.Context, arg Resol
 	var i ResolvePlatformMCPProjectBySlugRow
 	err := row.Scan(&i.ID, &i.Name, &i.Slug)
 	return i, err
+}
+
+const retirePlatformMCPCatalogRegistration = `-- name: RetirePlatformMCPCatalogRegistration :exec
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type RetirePlatformMCPCatalogRegistrationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Retires a registration whose MCP server was deleted outside Platform MCP, so
+// adding the same catalogue server again creates a fresh registration instead
+// of reusing one that points at a deleted server.
+func (q *Queries) RetirePlatformMCPCatalogRegistration(ctx context.Context, arg RetirePlatformMCPCatalogRegistrationParams) error {
+	_, err := q.db.Exec(ctx, retirePlatformMCPCatalogRegistration, arg.ID, arg.OrganizationID, arg.ProjectID)
+	return err
 }
 
 const revokePlatformMCPConnection = `-- name: RevokePlatformMCPConnection :one

@@ -54,7 +54,7 @@ func newHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixtu
 	})
 	require.NoError(t, err)
 	tx := testenv.BeginTx(t, ctx, db)
-	_, err = hostedmcp.Sync(ctx, tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), hosted, nil)
+	_, err = hostedmcp.BackfillSync(ctx, tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), hosted)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
@@ -91,7 +91,7 @@ func newHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixtu
 func syncCanonicalWrapper(t *testing.T, db *pgxpool.Pool, toolset toolsetsrepo.Toolset) {
 	t.Helper()
 	tx := testenv.BeginTx(t, t.Context(), db)
-	_, err := hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), toolset, nil)
+	_, err := hostedmcp.BackfillSync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), toolset)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 }
@@ -142,7 +142,7 @@ func (f hostedAttachmentFixture) setToolsetMCPEnabled(t *testing.T, enabled bool
 	t.Helper()
 	ts := f.setToolsetMCPEnabledNoSync(t, enabled)
 	tx := testenv.BeginTx(t, t.Context(), f.db)
-	_, err := hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), ts, nil)
+	_, err := hostedmcp.BackfillSync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), ts)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 }
@@ -384,8 +384,8 @@ func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 	})
 }
 
-// A hosted attachment follows the toolset when the wrapper has drifted from it.
-func TestHostedAttachmentFollowsToolsetOverWrapper(t *testing.T) {
+// A hosted attachment follows its canonical wrapper when the toolset columns have drifted from it.
+func TestHostedAttachmentFollowsWrapperOverToolset(t *testing.T) {
 	t.Parallel()
 	f := newHostedAttachmentFixture(t, "hosted_drift")
 	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
@@ -405,12 +405,12 @@ func TestHostedAttachmentFollowsToolsetOverWrapper(t *testing.T) {
 		_, err := mcpendpointsrepo.New(f.db).DeleteMCPEndpoint(t.Context(), mcpendpointsrepo.DeleteMCPEndpointParams{ID: e.ID, ProjectID: f.projectID})
 		require.NoError(t, err)
 	}
-	require.Equal(t, want, f.runtime(t), "disabled, endpointless wrapper; toolset still on")
+	require.Empty(t, f.runtime(t), "disabled, endpointless wrapper; toolset still on")
 
 	wrapper.Visibility = "public"
 	f.updateWrapper(t, wrapper)
 	f.setToolsetMCPEnabledNoSync(t, false)
-	require.Empty(t, f.runtime(t), "toolset MCP off; wrapper still public")
+	require.Equal(t, want, f.runtime(t), "toolset MCP off; wrapper public keeps the legacy alias")
 }
 
 func runtimeIDs(servers []runtimeMCPServer) []string {
@@ -452,7 +452,7 @@ func TestHostedAttachmentOnDisabledWrapper(t *testing.T) {
 	})
 	require.NoError(t, err)
 	tx := testenv.BeginTx(t, t.Context(), f.db)
-	_, err = hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), off, nil)
+	_, err = hostedmcp.BackfillSync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), off)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 	f.addServerRow(t, off.ID, uuid.NullUUID{})
@@ -471,7 +471,7 @@ func TestHostedAttachmentUndialableToolsetUsesWrapper(t *testing.T) {
 	require.NoError(t, err)
 	noSlug := f.toolset(t)
 	tx := testenv.BeginTx(t, t.Context(), f.db)
-	_, err = hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), noSlug, nil)
+	_, err = hostedmcp.BackfillSync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), noSlug)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 	require.Equal(t, f.hosted.ID, f.wrapper(t).ID, "the wrapper outlives the slug")

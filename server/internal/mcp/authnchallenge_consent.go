@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -115,6 +116,12 @@ type consentApprovalError struct {
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
+	// GatewayDefaultMode labels the gateway default when choosing discovery.
+	GatewayDefaultMode string
+	// CodeModeUnavailable explains a stored code choice that is currently served as Progressive.
+	CodeModeUnavailable bool
+	// ShowCodeMode exposes Python execution when the runtime accepts new selections.
+	ShowCodeMode bool
 	// ShowDiscoveryMode exposes optional gateway connection settings.
 	ShowDiscoveryMode bool
 	// PrefillDiscoveryMode is the mode this subject chose on its previous
@@ -515,21 +522,24 @@ func (s *Service) ServeConsent(w http.ResponseWriter, r *http.Request, endpoint 
 	}
 }
 
-func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
 	stateID := r.URL.Query().Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return consentChallengeCacheError(ctx, logger, err)
 	}
+	if challengeState.FirstParty {
+		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
+	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -784,7 +794,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 				if errors.Is(err, errConsentCaptureSuperseded) {
 					approvalError.Message = "This page was replaced by a newer one. Reload the page to continue."
 				}
-			} else if gateway.ReadyCount == 0 {
+			} else if !gateway.AnyReady() {
 				approvalError = &consentApprovalError{Message: "No servers could be verified. Resolve the server statuses above before approving access.", ActionURL: "", ActionLabel: ""}
 			}
 		}
@@ -814,7 +824,37 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		prefillDiscoveryMode = s.consentDiscoveryModePrefill(ctx, endpoint, *challengeState.Subject, clientRowID)
 	}
 
+	gatewayDefaultMode := ""
+	codeModeAvailable := showDiscoveryMode && s.CodeModeAvailable(ctx, endpoint.OrganizationID)
+	codeModeUnavailable := prefillDiscoveryMode == metamcp.DiscoveryModeCode && !codeModeAvailable
+	if codeModeUnavailable {
+		prefillDiscoveryMode = metamcp.DiscoveryModeProgressive
+	}
+	if (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) && focusServer == "" {
+		defaultMode, readErr := s.gatewayDefaultDiscoveryMode(ctx, endpoint)
+		// Display only: an unreadable default leaves the page without it.
+		if readErr != nil {
+			logger.WarnContext(ctx, "read gateway discovery mode", attr.SlogError(readErr))
+		}
+		switch {
+		case readErr != nil:
+		case defaultMode == metamcp.DiscoveryModeCode:
+			gatewayDefaultMode = "Code Mode"
+			// admitMetaGate serves Code Mode gateways as Progressive while the
+			// runtime is off or the organization is not entitled to Code Mode.
+			if !s.CodeModeAvailable(ctx, endpoint.OrganizationID) {
+				gatewayDefaultMode = "Progressive"
+				codeModeUnavailable = true
+			}
+		case defaultMode == metamcp.DiscoveryModeDirect:
+			gatewayDefaultMode = "Direct"
+		default:
+			gatewayDefaultMode = "Progressive"
+		}
+	}
 	data := consentTemplateData{
+		GatewayDefaultMode:      gatewayDefaultMode,
+		CodeModeUnavailable:     codeModeUnavailable,
 		ClientName:              clientName,
 		MCPSlug:                 endpoint.Slug,
 		MCPRouteBase:            endpoint.RouteBase,
@@ -840,6 +880,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		GatewayInventory:        gatewayInventory,
 		ShowDiscoveryMode:       showDiscoveryMode,
 		PrefillDiscoveryMode:    prefillDiscoveryMode,
+		ShowCodeMode:            codeModeAvailable,
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
@@ -867,7 +908,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	return nil
 }
 
-func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
 	ctx := r.Context()
 
 	r.Body = http.MaxBytesReader(w, r.Body, consentFormMaxBytes)
@@ -879,7 +920,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	stateID := r.PostForm.Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
 	// Preflight on a plain Get: everything that can fail for retryable
@@ -891,8 +932,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err != nil {
 		return consentChallengeCacheError(ctx, logger, err)
 	}
+	if challengeState.FirstParty {
+		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
+	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	issuerID := endpoint.UserSessionIssuerID.String()
@@ -1172,8 +1216,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			}
 			return oops.E(oops.CodeUnavailable, err, "could not save the approved tool catalog; retry consent").LogError(ctx, logger)
 		}
+		// consentGatewayPolicy records a mode for every connection that
+		// materializes a gateway catalog, and the selection rides inside it.
 		if toolPolicy == nil {
-			toolPolicy = &toolfilter.SessionPolicy{Resource: endpointToolSelectionResource(endpoint), Selection: toolSelection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: nil}, Catalog: nil}
+			return oops.E(oops.CodeUnexpected, nil, "gateway approval carries no connection options").LogError(ctx, logger)
 		}
 		toolPolicy.Selection = toolSelection
 		toolPolicy.Catalog = reference
@@ -1195,7 +1241,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return err.LogError(ctx, logger)
 	}
 	if reuse && !consentBrowserMatches(r, challengeState, time.Now()) {
-		return oops.E(oops.CodeBadRequest, nil, "invalid consent browser binding").LogWarn(ctx, logger)
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "invalid consent browser binding").LogWarn(ctx, logger), oauthui.ReasonSessionChanged))
 	}
 	subject := *challengeState.Subject
 
@@ -1512,10 +1558,11 @@ func formatDurationHours(hours int) string {
 // presets at or below the issuer's maximum, with the maximum itself
 // guaranteed present and preselected.
 func buildSessionDurationOptions(issuer usersessions_repo.UserSessionIssuer) []sessionDurationOption {
-	if !issuer.SessionDuration.Valid || issuer.SessionDuration.Microseconds <= 0 {
+	maxLifetime, ok := conv.PGIntervalToDuration(issuer.SessionDuration)
+	if !ok || maxLifetime <= 0 {
 		return nil
 	}
-	maxHours := int(time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond / time.Hour)
+	maxHours := int(maxLifetime / time.Hour)
 	if maxHours < 1 {
 		return nil
 	}

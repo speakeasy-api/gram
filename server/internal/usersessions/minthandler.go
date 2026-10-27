@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -126,6 +127,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		if !hasMeta || !mode.Valid() {
 			return nil, oops.E(oops.CodeBadRequest, nil, "discovery_mode requires a gateway and a supported mode")
 		}
+		if mode == metamcp.DiscoveryModeCode && !s.codeModeSelection.Allows(ctx, authCtx.ActiveOrganizationID) {
+			return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+		}
 		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{
 			Resource:  "meta_mcp_server:" + target.resourceID,
 			Selection: nil,
@@ -148,10 +152,10 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}
-	if !issuer.SessionDuration.Valid || issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
-		return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is unset or carries Months/Days; only Microseconds intervals are supported").LogError(ctx, s.logger)
+	refreshLifetime, ok := conv.PGIntervalToDuration(issuer.SessionDuration)
+	if !ok {
+		return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is unset or carries Months").LogError(ctx, s.logger)
 	}
-	refreshLifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
 	if refreshLifetime <= 0 {
 		return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").LogError(ctx, s.logger)
 	}
@@ -270,6 +274,11 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
 	}
+	// The legacy binding below gates on the hosting state the slug fallback serves.
+	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load toolset mcp server").LogError(ctx, s.logger)
+	}
 
 	wrapper, err := mcpserversrepo.New(s.db).GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{
 		ToolsetID: toolset.ID,
@@ -297,7 +306,7 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
 	if toolset.McpSlug.String == "" {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated toolset has no mcp slug").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "the hosted MCP server has no address; add one before minting a user-session token").LogWarn(ctx, s.logger)
 	}
 
 	issuerURL, err := url.JoinPath(s.serverURL, "mcp", toolset.McpSlug.String)

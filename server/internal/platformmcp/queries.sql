@@ -879,11 +879,28 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = @organization_id
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || @query_text::text || '%'
+      )
   )
 ORDER BY
     CASE
         WHEN @query_text::text <> ''
-         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = @organization_id
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER(@query_text::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -909,6 +926,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
+    m.builtin_backend,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -969,6 +987,15 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = @organization_id
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || @query_text::text || '%'
+      )
   )
   AND (
       sqlc.narg(readiness_state)::text IS NULL
@@ -983,7 +1010,15 @@ WHERE m.deleted IS FALSE
 ORDER BY
     CASE
         WHEN @query_text::text <> ''
-         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = @organization_id
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER(@query_text::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -1005,6 +1040,7 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
+        m.builtin_backend,
         COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
@@ -1152,6 +1188,18 @@ INSERT INTO platform_mcp_catalog_registrations (
     @acting_surface
 )
 RETURNING *;
+
+-- name: RetirePlatformMCPCatalogRegistration :exec
+-- Retires a registration whose MCP server was deleted outside Platform MCP, so
+-- adding the same catalogue server again creates a fresh registration instead
+-- of reusing one that points at a deleted server.
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
 
 -- name: UpdatePlatformMCPCatalogRegistrationComponents :one
 UPDATE platform_mcp_catalog_registrations
@@ -2875,34 +2923,6 @@ WHERE cm.chat_id = @chat_id
 ORDER BY cm.created_at DESC, cm.seq DESC
 LIMIT @row_limit;
 
--- name: ListRiskFindingSpansForRecall :many
--- Findings that drive inline masking of the recall digest. Message-anchored
--- rows only (the digest does not render content parts): found, not excluded,
--- not swept as false positive, policy still enabled and not deleted.
--- Latest generation only, matching the transcript read: findings on
--- superseded generations mask nothing the digest renders, so loading them
--- would only let long, repeatedly compacted sessions inflate the scan.
-SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN chats c ON c.id = cm.chat_id
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE cm.chat_id = @chat_id
-  AND rr.project_id = @project_id
-  AND c.organization_id = @organization_id
-  AND c.user_id = @user_id::text
-  AND c.deleted IS FALSE
-  AND (ua.id IS NULL OR ua.account_type <> 'personal')
-  AND cm.generation = (
-    SELECT COALESCE(MAX(generation), 0)
-    FROM chat_messages
-    WHERE chat_id = @chat_id
-      AND project_id = @project_id
-  )
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC;
-
 -- name: InsertChatSessionRecallLink :exec
 -- Sibling of agent's InsertChatSessionLink with kind='recall'. A v1 recall
 -- edge always has a NULL child: the OAuth principal carries no harness
@@ -3128,6 +3148,7 @@ WHERE m.id = @mcp_server_id
 -- Deliberately returns no upstream URL, credentials, or provider resource data.
 SELECT
     CASE WHEN @target_kind::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
+    (@target_kind::text = 'gateway' AND gateway.user_session_issuer_id IS NOT NULL)::boolean AS gateway_requires_sign_in,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(

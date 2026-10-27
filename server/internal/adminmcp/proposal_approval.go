@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -118,12 +119,12 @@ func (s *StaffProposalApproval) Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 		if s == nil || s.store == nil || s.session == nil {
-			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			writeApprovalError(w, r, http.StatusServiceUnavailable, "unavailable", oauthui.ReasonDefault)
 			return
 		}
 		id, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
-			http.NotFound(w, r)
+			writeApprovalError(w, r, http.StatusNotFound, "404 page not found", oauthui.ReasonDefault)
 			return
 		}
 		switch r.Method {
@@ -133,7 +134,7 @@ func (s *StaffProposalApproval) Handler() http.Handler {
 			s.decide(w, r, id)
 		default:
 			w.Header().Set("Allow", "GET, POST")
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeApprovalError(w, r, http.StatusMethodNotAllowed, "method not allowed", oauthui.ReasonInvalidLink)
 		}
 	})
 }
@@ -189,32 +190,36 @@ func (s *StaffProposalApproval) show(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 	p, err := s.store.GetForSubject(r.Context(), id, urn.NewUserSubject(staff.OIDCSubject).String())
-	if err != nil || p.Status != ProposalPendingApproval || !time.Now().Before(p.ExpiresAt) {
-		http.NotFound(w, r)
+	if err != nil || p.Status != ProposalPendingApproval {
+		writeApprovalError(w, r, http.StatusNotFound, "404 page not found", oauthui.ReasonDefault)
+		return
+	}
+	if !time.Now().Before(p.ExpiresAt) {
+		writeApprovalError(w, r, http.StatusNotFound, "404 page not found", oauthui.ReasonExpired)
 		return
 	}
 	operation := s.operations[p.Operation]
 	if _, err := s.browser(r, p); err != nil || operation == nil {
-		http.Error(w, "write operation unavailable", http.StatusForbidden)
+		writeApprovalError(w, r, http.StatusForbidden, "write operation unavailable", oauthui.ReasonDefault)
 		return
 	}
 	if err := s.checkConnection(r.Context(), s.store.db, p); err != nil {
-		http.Error(w, "staff connection unavailable", http.StatusForbidden)
+		writeApprovalError(w, r, http.StatusForbidden, "staff connection unavailable", oauthui.ReasonDefault)
 		return
 	}
 	change, err := operation.view(p)
 	if err != nil {
-		http.Error(w, "proposal preview unavailable", http.StatusConflict)
+		writeApprovalError(w, r, http.StatusConflict, "proposal preview unavailable", oauthui.ReasonDefault)
 		return
 	}
 	csrf, err := staffOpaqueToken()
 	if err != nil {
-		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		writeApprovalError(w, r, http.StatusServiceUnavailable, "unavailable", oauthui.ReasonDefault)
 		return
 	}
 	challenge := proposalApprovalChallenge{ID: uuid.NewString(), ProposalID: id, Digest: p.ProposalDigest, SessionHash: staffTokenHash(sessionID), CSRFHash: staffTokenHash(csrf), CreatedAt: time.Now()}
 	if err := s.cache.Store(r.Context(), challenge); err != nil {
-		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		writeApprovalError(w, r, http.StatusServiceUnavailable, "unavailable", oauthui.ReasonDefault)
 		return
 	}
 	var page strings.Builder
@@ -230,7 +235,7 @@ func (s *StaffProposalApproval) show(w http.ResponseWriter, r *http.Request, id 
 		Digest:    p.ProposalDigest,
 	}
 	if err := proposalApprovalPage.Execute(&page, view); err != nil {
-		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		writeApprovalError(w, r, http.StatusServiceUnavailable, "unavailable", oauthui.ReasonDefault)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -240,24 +245,24 @@ func (s *StaffProposalApproval) show(w http.ResponseWriter, r *http.Request, id 
 func (s *StaffProposalApproval) decide(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid approval", http.StatusBadRequest)
+		writeApprovalError(w, r, http.StatusBadRequest, "invalid approval", oauthui.ReasonDefault)
 		return
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), proposalApprovalPrefix+r.PostForm.Get("challenge"))
 	if err != nil || challenge.ProposalID != id || time.Since(challenge.CreatedAt) >= proposalLifetime || !digestsEqual(challenge.CSRFHash, staffTokenHash(r.PostForm.Get("csrf_token"))) || !digestsEqual(challenge.Digest, r.PostForm.Get("digest")) {
-		http.Error(w, "approval expired or changed", http.StatusForbidden)
+		writeApprovalError(w, r, http.StatusForbidden, "approval expired or changed", oauthui.ReasonExpired)
 		return
 	}
 	staff, sessionID, err := s.session.staffSession(r)
 	if err != nil || staff == nil || !digestsEqual(challenge.SessionHash, staffTokenHash(sessionID)) {
-		http.Error(w, "staff session changed", http.StatusForbidden)
+		writeApprovalError(w, r, http.StatusForbidden, "staff session changed", oauthui.ReasonSessionChanged)
 		return
 	}
 	subject := urn.NewUserSubject(staff.OIDCSubject).String()
 	p, err := s.store.GetForSubject(r.Context(), id, subject)
 	operation := s.operations[p.Operation]
 	if err != nil || !digestsEqual(p.ProposalDigest, challenge.Digest) || !s.writes.OperationEnabled(p.Operation) || operation == nil {
-		http.Error(w, "proposal unavailable", http.StatusForbidden)
+		writeApprovalError(w, r, http.StatusForbidden, "proposal unavailable", oauthui.ReasonDefault)
 		return
 	}
 	if r.PostForm.Get("action") == "reject" {
@@ -267,13 +272,31 @@ func (s *StaffProposalApproval) decide(w http.ResponseWriter, r *http.Request, i
 	} else if r.PostForm.Get("action") == "approve" {
 		_, err = s.store.Approve(r.Context(), id, subject, challenge.Digest, time.Now(), s.verifyConnection(), operation.revalidate)
 	} else {
-		http.Error(w, "invalid action", http.StatusBadRequest)
+		writeApprovalError(w, r, http.StatusBadRequest, "invalid action", oauthui.ReasonDefault)
 		return
 	}
 	if err != nil {
-		http.Error(w, "proposal unavailable or changed", http.StatusConflict)
+		writeApprovalError(w, r, http.StatusConflict, "proposal unavailable or changed", oauthui.ReasonDefault)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("Decision recorded. Return to your MCP client to check the proposal status."))
+}
+
+func writeApprovalError(w http.ResponseWriter, r *http.Request, status int, description string, reason oauthui.Reason) {
+	_ = oauthui.WriteAuthorizationError(r.Context(), w, oauthui.AuthorizationError{
+		Recovery:       nil,
+		Setup:          false,
+		Status:         status,
+		Reason:         reason,
+		Approval:       true,
+		ErrorID:        "",
+		Code:           http.StatusText(status),
+		Description:    description,
+		CallbackURL:    "",
+		ClientName:     "",
+		ClientID:       "",
+		ClientIDOrigin: "",
+		ServerName:     "",
+	})
 }

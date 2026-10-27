@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -95,9 +96,8 @@ func (s *Service) SetToolVariationsGroup(ctx context.Context, payload *gen.SetTo
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update toolset tool_variations_group").LogError(ctx, s.logger)
 	}
-	clearedDomainIDs, err := s.syncHostedServer(ctx, dbtx, authCtx, updatedToolset, nil)
-	if err != nil {
-		return nil, err
+	if err := hostedmcp.Sync(ctx, dbtx, s.audit, hostedActor(authCtx), updatedToolset); err != nil {
+		return nil, err //nolint:wrapcheck // oops errors pass through.
 	}
 
 	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
@@ -129,9 +129,5 @@ func (s *Service) SetToolVariationsGroup(ctx context.Context, payload *gen.SetTo
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
-	if err := s.reconcileCustomDomains(ctx, clearedDomainIDs); err != nil {
-		return nil, err
-	}
-
 	return afterView, nil
 }

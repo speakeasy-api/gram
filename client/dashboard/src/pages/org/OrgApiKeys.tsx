@@ -17,6 +17,8 @@ import { useOrganization } from "@/contexts/Auth";
 import { RequireScope } from "@/components/require-scope";
 import { CreateApiKeySheet } from "./CreateApiKeySheet";
 import { projectBindingLabel } from "./api-key-project-binding";
+import { KeyPolicySheet } from "./KeyPolicySheet";
+import { keyPolicySummary } from "./key-policy";
 
 export default function OrgApiKeys(): JSX.Element {
   const organization = useOrganization();
@@ -36,6 +38,7 @@ function OrgApiKeysInner() {
     projectBindingLabel(organization.projects, id);
   const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
+  const [keyForPolicy, setKeyForPolicy] = useState<Key | null>(null);
   const queryClient = useQueryClient();
   const [apiKeySearch, setApiKeySearch] = useState("");
 
@@ -95,6 +98,28 @@ function OrgApiKeysInner() {
       render: (key: Key) => (
         <Text variant="body">{projectLabel(key.projectId)}</Text>
       ),
+    },
+    {
+      key: "policyGrants",
+      header: "MCP access",
+      width: "1fr",
+      render: (key: Key) =>
+        key.subjectUrn ? (
+          <Text variant="body" className="text-muted-foreground">
+            Set by its agent
+          </Text>
+        ) : (
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={() => setKeyForPolicy(key)}
+            className="h-auto px-0 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:bg-transparent hover:decoration-solid"
+          >
+            <Button.Text className="font-sans normal-case tracking-normal">
+              {keyPolicySummary(key)}
+            </Button.Text>
+          </Button>
+        ),
     },
     {
       key: "createdAt",
@@ -195,6 +220,16 @@ function OrgApiKeysInner() {
         open={isCreateSheetOpen}
         onOpenChange={setIsCreateSheetOpen}
       />
+
+      {keyForPolicy ? (
+        <KeyPolicySheet
+          key={keyForPolicy.id}
+          apiKey={keyForPolicy}
+          onOpenChange={(open) => {
+            if (!open) setKeyForPolicy(null);
+          }}
+        />
+      ) : null}
 
       <Dialog
         open={!!keyToRevoke}

@@ -661,7 +661,6 @@ const (
 	OAuthStatusKey                    = attribute.Key("gram.oauth.status")
 	OAuthConnectedKey                 = attribute.Key("gram.oauth.connected")
 	OAuthExpiredKey                   = attribute.Key("gram.oauth.expired")
-	OAuthProxyServerIDKey             = attribute.Key("gram.oauth.proxy_server_id")
 	MessageObserverCountKey           = attribute.Key("gram.message_observer.count")
 	OAuthProviderCountKey             = attribute.Key("gram.oauth.provider_count")
 	OpenAPIMethodKey                  = attribute.Key("gram.openapi.method")
@@ -762,6 +761,8 @@ const (
 
 	RiskPolicyCountKey           = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey              = attribute.Key("gram.risk.policy_id")
+	RiskPolicyApprovalIDKey      = attribute.Key("gram.risk.policy_approval.id")
+	RiskPolicyApprovalStatusKey  = attribute.Key("gram.risk.policy_approval.status")
 	RiskPolicyNameKey            = attribute.Key("gram.risk.policy_name")
 	RiskPolicyTypeKey            = attribute.Key("gram.risk.policy_type")
 	RiskMessageTypeKey           = attribute.Key("gram.risk.message_type")
@@ -878,6 +879,24 @@ const (
 	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
 	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
 	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
+	// Device-side delivery failure reports (client.delivery_failed): what the
+	// speakeasy-hooks binary observed when an event could not reach the
+	// control plane. Rows carrying these are diagnostic
+	// (gram.event.source=hook_diagnostic) and stamp the device attributes
+	// above from the report body, since the request that carries a report is
+	// a later spool drain. SessionID is the failed event's session, kept off
+	// gen_ai.conversation.id so the report never joins a chat.
+	HookDeliveryEventTypeKey            = attribute.Key("gram.hook.delivery.event_type")
+	HookDeliveryPhaseKey                = attribute.Key("gram.hook.delivery.phase")
+	HookDeliveryCauseKey                = attribute.Key("gram.hook.delivery.cause")
+	HookDeliveryStatusCodeKey           = attribute.Key("gram.hook.delivery.status_code")
+	HookDeliveryElapsedMsKey            = attribute.Key("gram.hook.delivery.elapsed_ms")
+	HookDeliveryAttemptsKey             = attribute.Key("gram.hook.delivery.attempts")
+	HookDeliveryGatingKey               = attribute.Key("gram.hook.delivery.gating")
+	HookDeliveryAttemptedAtKey          = attribute.Key("gram.hook.delivery.attempted_at")
+	HookDeliveryFailedIdempotencyKeyKey = attribute.Key("gram.hook.delivery.failed_idempotency_key")
+	HookDeliverySessionIDKey            = attribute.Key("gram.hook.delivery.session_id")
+	HookDeliverySpoolDepthKey           = attribute.Key("gram.hook.delivery.spool_depth")
 	// Hardware identity the Speakeasy device agent (speakeasyd) reports via
 	// the Gram-Device-* headers, recorded on the request log for its
 	// endpoints so a fleet's requests can be counted and told apart per
@@ -1081,9 +1100,21 @@ const (
 	RemoteMCPConfiguredHeaderNameKey   = attribute.Key("gram.remote_mcp.configured_header.name")
 	RemoteMCPProxyRemoteStatusCodeKey  = attribute.Key("gram.remote_mcp.proxy.remote_status_code")
 	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
-	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
-	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
-	TunneledMCPServerIDKey             = attribute.Key("gram.tunneled_mcp_server.id")
+	// RemoteMCPProxyStreamEndReasonKey names why a relayed SSE stream ended.
+	// Closed set, see proxy.StreamEndReason.
+	RemoteMCPProxyStreamEndReasonKey = attribute.Key("gram.remote_mcp.proxy.stream.end_reason")
+	// RemoteMCPProxyStreamResponseRelayedKey reports whether a POST stream had
+	// already relayed the JSON-RPC response to its request when it ended.
+	RemoteMCPProxyStreamResponseRelayedKey = attribute.Key("gram.remote_mcp.proxy.stream.response_relayed")
+	// RemoteMCPProxyStreamResumableKey reports whether the upstream stream
+	// carried SSE event ids, which lets a client resume it with Last-Event-ID.
+	RemoteMCPProxyStreamResumableKey = attribute.Key("gram.remote_mcp.proxy.stream.resumable")
+	// RemoteMCPProxyStreamResumeRequestedKey reports whether the client opened
+	// the stream with Last-Event-ID to resume an earlier one.
+	RemoteMCPProxyStreamResumeRequestedKey = attribute.Key("gram.remote_mcp.proxy.stream.resume_requested")
+	RemoteMCPServerIDKey                   = attribute.Key("gram.remote_mcp_server.id")
+	RemoteMCPServerURLKey                  = attribute.Key("gram.remote_mcp_server.url")
+	TunneledMCPServerIDKey                 = attribute.Key("gram.tunneled_mcp_server.id")
 	// TunnelPublicRejectionReasonKey names why the anonymous public tunnel
 	// path rejected a request before proxying. Closed set, see
 	// mcpmetrics.TunnelPublicRejectReason.
@@ -1556,6 +1587,44 @@ func SlogAgentDeviceEnvironment(v string) slog.Attr {
 
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
 func SlogHookReplayed(v bool) slog.Attr      { return slog.Bool(string(HookReplayedKey), v) }
+
+func HookDeviceOS(v string) attribute.KeyValue { return HookDeviceOSKey.String(v) }
+func SlogHookDeviceOS(v string) slog.Attr      { return slog.String(string(HookDeviceOSKey), v) }
+
+func SlogHookDeviceArch(v string) slog.Attr { return slog.String(string(HookDeviceArchKey), v) }
+
+func HookDeviceBinaryVersion(v string) attribute.KeyValue {
+	return HookDeviceBinaryVersionKey.String(v)
+}
+func SlogHookDeviceBinaryVersion(v string) slog.Attr {
+	return slog.String(string(HookDeviceBinaryVersionKey), v)
+}
+
+func HookDeviceHarness(v string) attribute.KeyValue { return HookDeviceHarnessKey.String(v) }
+func SlogHookDeviceHarness(v string) slog.Attr      { return slog.String(string(HookDeviceHarnessKey), v) }
+
+func HookDeliveryEventType(v string) attribute.KeyValue { return HookDeliveryEventTypeKey.String(v) }
+func SlogHookDeliveryEventType(v string) slog.Attr {
+	return slog.String(string(HookDeliveryEventTypeKey), v)
+}
+
+func HookDeliveryPhase(v string) attribute.KeyValue { return HookDeliveryPhaseKey.String(v) }
+func SlogHookDeliveryPhase(v string) slog.Attr      { return slog.String(string(HookDeliveryPhaseKey), v) }
+
+func HookDeliveryCause(v string) attribute.KeyValue { return HookDeliveryCauseKey.String(v) }
+func SlogHookDeliveryCause(v string) slog.Attr      { return slog.String(string(HookDeliveryCauseKey), v) }
+
+func SlogHookDeliveryStatusCode(v int) slog.Attr {
+	return slog.Int(string(HookDeliveryStatusCodeKey), v)
+}
+
+func SlogHookDeliveryElapsedMs(v int) slog.Attr { return slog.Int(string(HookDeliveryElapsedMsKey), v) }
+
+func SlogHookDeliveryAttempts(v int) slog.Attr { return slog.Int(string(HookDeliveryAttemptsKey), v) }
+
+func SlogHookDeliverySpoolDepth(v int) slog.Attr {
+	return slog.Int(string(HookDeliverySpoolDepthKey), v)
+}
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
@@ -2528,11 +2597,6 @@ func SlogOAuthConnected(v bool) slog.Attr      { return slog.Bool(string(OAuthCo
 func OAuthExpired(v bool) attribute.KeyValue { return OAuthExpiredKey.Bool(v) }
 func SlogOAuthExpired(v bool) slog.Attr      { return slog.Bool(string(OAuthExpiredKey), v) }
 
-func OAuthProxyServerID(v string) attribute.KeyValue { return OAuthProxyServerIDKey.String(v) }
-func SlogOAuthProxyServerID(v string) slog.Attr {
-	return slog.String(string(OAuthProxyServerIDKey), v)
-}
-
 func MessageObserverCount(v int) attribute.KeyValue { return MessageObserverCountKey.Int(v) }
 func SlogMessageObserverCount(v int) slog.Attr {
 	return slog.Int(string(MessageObserverCountKey), v)
@@ -2958,11 +3022,55 @@ func SlogRemoteMCPProxyRemoteStatusClass(v string) slog.Attr {
 	return slog.String(string(RemoteMCPProxyRemoteStatusClassKey), v)
 }
 
+func RemoteMCPProxyStreamEndReason(v string) attribute.KeyValue {
+	return RemoteMCPProxyStreamEndReasonKey.String(v)
+}
+
+func SlogRemoteMCPProxyStreamEndReason(v string) slog.Attr {
+	return slog.String(string(RemoteMCPProxyStreamEndReasonKey), v)
+}
+
+func RemoteMCPProxyStreamResponseRelayed(v bool) attribute.KeyValue {
+	return RemoteMCPProxyStreamResponseRelayedKey.Bool(v)
+}
+
+func SlogRemoteMCPProxyStreamResponseRelayed(v bool) slog.Attr {
+	return slog.Bool(string(RemoteMCPProxyStreamResponseRelayedKey), v)
+}
+
+func RemoteMCPProxyStreamResumable(v bool) attribute.KeyValue {
+	return RemoteMCPProxyStreamResumableKey.Bool(v)
+}
+
+func SlogRemoteMCPProxyStreamResumable(v bool) slog.Attr {
+	return slog.Bool(string(RemoteMCPProxyStreamResumableKey), v)
+}
+
+func RemoteMCPProxyStreamResumeRequested(v bool) attribute.KeyValue {
+	return RemoteMCPProxyStreamResumeRequestedKey.Bool(v)
+}
+
+func SlogRemoteMCPProxyStreamResumeRequested(v bool) slog.Attr {
+	return slog.Bool(string(RemoteMCPProxyStreamResumeRequestedKey), v)
+}
+
 func RiskPolicyCount(v int) attribute.KeyValue { return RiskPolicyCountKey.Int(v) }
 func SlogRiskPolicyCount(v int) slog.Attr      { return slog.Int(string(RiskPolicyCountKey), v) }
 
 func RiskPolicyID(v string) attribute.KeyValue { return RiskPolicyIDKey.String(v) }
 func SlogRiskPolicyID(v string) slog.Attr      { return slog.String(string(RiskPolicyIDKey), v) }
+
+func RiskPolicyApprovalID(v string) attribute.KeyValue { return RiskPolicyApprovalIDKey.String(v) }
+func SlogRiskPolicyApprovalID(v string) slog.Attr {
+	return slog.String(string(RiskPolicyApprovalIDKey), v)
+}
+
+func RiskPolicyApprovalStatus(v string) attribute.KeyValue {
+	return RiskPolicyApprovalStatusKey.String(v)
+}
+func SlogRiskPolicyApprovalStatus(v string) slog.Attr {
+	return slog.String(string(RiskPolicyApprovalStatusKey), v)
+}
 
 func RiskPolicyName(v string) attribute.KeyValue { return RiskPolicyNameKey.String(v) }
 func SlogRiskPolicyName(v string) slog.Attr      { return slog.String(string(RiskPolicyNameKey), v) }

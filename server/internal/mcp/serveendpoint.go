@@ -171,6 +171,13 @@ func (s *Service) serveResolvedMCPEndpoint(
 	s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, mcpServer.ID, uuid.Nil, "")
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
+	// A first-party backend authorizes each call itself and is never
+	// risk-scanned, so it is dispatched before the issuer gate and the scan,
+	// and authenticates its callers on its own path.
+	if mcpServer.BuiltinBackend.Valid {
+		return s.serveBuiltinBackend(w, r, logger, mcpEndpoint, mcpServer, mcpRouteBase)
+	}
+
 	var prepared *preparedMCPRequest
 	if mcpServer.ToolsetID.Valid {
 		var handled bool
@@ -272,8 +279,20 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
-		if mcpServer.ID == mcpServer.ToolsetID.UUID && !toolset.McpEnabled {
-			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+		// Re-read after issuer auth: a hosted server disabled meanwhile stops serving, and one whose access changed
+		// meanwhile is refused rather than served under the access it had when the request resolved.
+		if mcpServer.ID == mcpServer.ToolsetID.UUID {
+			fresh, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServer.ID, ProjectID: mcpEndpoint.ProjectID})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return oops.E(oops.CodeNotFound, err, "mcp server not found")
+			case err != nil:
+				return oops.E(oops.CodeUnexpected, err, "reload hosted MCP server").LogError(ctx, logger)
+			case fresh.Visibility == mcpservers.VisibilityDisabled:
+				return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+			case fresh.Visibility != mcpServer.Visibility || fresh.UserSessionIssuerID != mcpServer.UserSessionIssuerID:
+				return oops.E(oops.CodeConflict, nil, "mcp server access changed during the request; retry")
+			}
 		}
 		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpEndpoint.ID, mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
@@ -730,6 +749,12 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
+	// Identity auth above stamps an AuthContext for every caller that
+	// presented a Speakeasy credential, so its absence marks an anonymous caller.
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
+		buildOptions = append(buildOptions, remotemcp.WithAnonymousCaller())
+	}
+
 	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstream.Token, wwwAuthenticate, selection, buildOptions...)
 	if err != nil {
 		return err
@@ -789,6 +814,18 @@ func (s *Service) remoteBackendProxyBuilder(
 	return func(context.Context) (*proxy.Proxy, error) {
 		return s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, organizationID, projectID.String(), upstreamAuth, wwwAuthenticate, selection, options...), nil
 	}, nil
+}
+
+// StartDrain starts the shutdown drain for relayed remote and tunneled MCP
+// traffic: streams that only carry server-initiated messages end now, so
+// their clients reconnect to a replica that is still serving, and requests
+// still waiting on a remote MCP server after interruptAfter are answered with
+// a JSON-RPC error. Call it when the server starts shutting down, before
+// waiting for in-flight requests.
+func (s *Service) StartDrain(interruptAfter time.Duration) {
+	if s.remoteProxyManager != nil {
+		s.remoteProxyManager.StartDrain(interruptAfter)
+	}
 }
 
 func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) error {
@@ -1015,7 +1052,7 @@ func (s *Service) authorizeProxyBackendAccess(
 	if authorized != nil {
 		shadowCtx = authorized
 	}
-	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequire(shadowCtx, surface, err, connect)
+	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequireServer(shadowCtx, surface, err, mandatoryVisibility(mcpServer.Visibility == mcpservers.VisibilityPublic), connect)
 	if err != nil {
 		return nil, err
 	}

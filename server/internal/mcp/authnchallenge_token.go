@@ -70,8 +70,11 @@ type tokenResponse struct {
 }
 
 const (
-	// refreshTokenReplayGracePeriod is intentionally short: it only covers
-	// clients that issue parallel refresh requests from several open sessions.
+	// refreshTokenReplayGracePeriod bounds the rotation lock and cached
+	// rotation failures. A successful rotation's replay instead lives until
+	// its successor access token expires (refreshTokenReplayTTL), because
+	// clients such as Codex run several processes on one stored credential
+	// and the losers present the old refresh token long after the winner.
 	refreshTokenReplayGracePeriod     = 30 * time.Second
 	refreshTokenReplayWait            = 5 * time.Second
 	refreshTokenReplayInitialPollWait = 20 * time.Millisecond
@@ -91,6 +94,17 @@ type userSessionRefreshReplay struct {
 
 	// Ciphertext holds the AES-GCM-encrypted replay payload.
 	Ciphertext string `json:"ciphertext"`
+
+	// ttl is how long the record is kept; zero means
+	// refreshTokenReplayGracePeriod. Not persisted.
+	ttl time.Duration
+}
+
+// refreshTokenReplayTTL keeps a successful rotation replayable until its
+// successor access token expires, and never shorter than the grace period.
+// The replay is still refused once the successor is rotated or revoked.
+func refreshTokenReplayTTL(accessExpiresAt, now time.Time) time.Duration {
+	return max(accessExpiresAt.Sub(now), refreshTokenReplayGracePeriod)
 }
 
 type userSessionRefreshReplayPayload struct {
@@ -183,7 +197,12 @@ var _ cache.CacheableObject[userSessionRefreshReplay] = (*userSessionRefreshRepl
 
 func (r userSessionRefreshReplay) CacheKey() string { return r.Key }
 
-func (r userSessionRefreshReplay) TTL() time.Duration { return refreshTokenReplayGracePeriod }
+func (r userSessionRefreshReplay) TTL() time.Duration {
+	if r.ttl > 0 {
+		return r.ttl
+	}
+	return refreshTokenReplayGracePeriod
+}
 
 // HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3 /
 // §6). Mounted at `POST /mcp/{mcpSlug}/token` on the MCP host and, when one is
@@ -960,8 +979,9 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 // refresh-token rotation guidance). Hashes the supplied refresh token,
 // elects one rotation winner, atomically replaces the matching user_sessions
 // row with a successor, then pushes the old access token's JTI into the
-// revocation cache. Concurrent
-// replays receive the winner's response during a short grace period. A replay
+// revocation cache. Later presentations of the old refresh token receive the
+// winner's response until the successor's access token expires, unless the
+// successor has since been rotated or revoked. A replay
 // through another endpoint surface re-signs only the access token for that
 // surface; the refresh grant remains single-use in persistent storage.
 //
@@ -1740,6 +1760,7 @@ func (s *Service) storeRefreshTokenReplay(
 	if err := s.userSessionRefreshReplayCache.Store(ctx, userSessionRefreshReplay{
 		Key:        replayKey,
 		Ciphertext: ciphertext,
+		ttl:        refreshTokenReplayTTL(payload.AccessExpiresAt, time.Now()),
 	}); err != nil {
 		return fmt.Errorf("store refresh token replay response: %w", err)
 	}
@@ -1787,6 +1808,7 @@ func (s *Service) storeRefreshTokenReplayFailure(
 	stored, err := s.userSessionRefreshReplayCache.StoreIfAbsent(ctx, userSessionRefreshReplay{
 		Key:        replayKey,
 		Ciphertext: ciphertext,
+		ttl:        refreshTokenReplayGracePeriod,
 	})
 	if err != nil {
 		logger.WarnContext(ctx, "failed to cache refresh token replay rejection", attr.SlogError(err))
@@ -2007,11 +2029,7 @@ func (s *Service) issueSession(
 ) (*mintedSession, error) {
 	now := time.Now()
 	if issuance.AuthorizationExpiresAt == nil {
-		// Resolve the issuer's session_duration — the maximum absolute
-		// authorization lifetime. Microseconds-only: the issuer create handler
-		// stores via conv.PtrToPGInterval which never sets Months/Days; if we
-		// ever see those here, raw SQL bypassed the writer and the conversion
-		// is calendar-dependent — fail rather than silently approximate.
+		// The issuer's session_duration is the maximum absolute authorization lifetime.
 		issuer, err := queries.GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 			ID:             issuance.UserSessionIssuerID,
 			ProjectID:      issuance.ProjectID,
@@ -2023,13 +2041,10 @@ func (s *Service) issueSession(
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "lookup user session issuer").LogError(ctx, logger)
 		}
-		if !issuer.SessionDuration.Valid {
-			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is not set").LogError(ctx, logger)
+		maxLifetime, ok := conv.PGIntervalToDuration(issuer.SessionDuration)
+		if !ok {
+			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is unset or carries Months").LogError(ctx, logger)
 		}
-		if issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
-			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").LogError(ctx, logger)
-		}
-		maxLifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
 		if maxLifetime <= 0 {
 			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").LogError(ctx, logger)
 		}

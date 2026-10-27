@@ -35,7 +35,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
@@ -51,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -655,21 +655,8 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			if clientErr != nil && !errors.Is(clientErr, pgx.ErrNoRows) {
 				return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, clientErr)
 			}
-			if clientErr != nil || client.UserSessionIssuerID != endpoint.UserSessionIssuerID {
+			if clientErr != nil || client.UserSessionIssuerID != endpoint.UserSessionIssuerID || obsoleteRuntimeOAuthClient(&client) {
 				return ctx, nil, nil, false, fmt.Errorf("%w: workload client registration is no longer eligible", errCredentialRejected)
-			}
-			// A client reference alone does not identify an assistant credential:
-			// existing workload sessions can belong to ordinary OAuth clients.
-			// Either assistant binding marker requires the complete live binding;
-			// missing, revoked or retired bindings must still fail closed.
-			if strings.HasPrefix(client.ClientID, assistantWorkloadClientPrefix) || client.AssistantRuntimeID.Valid || client.AssistantTriggerWorkloadBindingID.Valid {
-				identity, bindingErr := s.loadAssistantWorkloadClientIdentity(ctx, endpoint, row.UserSessionClientID.UUID)
-				if bindingErr != nil && !errors.Is(bindingErr, pgx.ErrNoRows) && !errors.Is(bindingErr, assistantidentity.ErrInvalidIdentity) {
-					return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, bindingErr)
-				}
-				if bindingErr != nil || urn.NewWorkloadSubject(identity.IssuerID, identity.Subject).String() != subject.String() {
-					return ctx, nil, nil, false, fmt.Errorf("%w: assistant workload registration is no longer eligible", errCredentialRejected)
-				}
 			}
 		}
 		reach := workloadSessionReachResource
@@ -1426,9 +1413,9 @@ func generateOpaqueToken() (string, error) {
 
 // consentChallengeCacheError distinguishes expired consent state from a
 // dependency outage and logs each with its corresponding severity.
-func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err error) *oops.ShareableError {
+func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err error) error {
 	if errors.Is(err, redisCache.ErrCacheMiss) {
-		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return fmt.Errorf("load consent challenge: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 	return oops.E(oops.CodeUnavailable, err, "authn challenge state is temporarily unavailable").LogError(ctx, logger)
 }

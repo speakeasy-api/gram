@@ -67,7 +67,9 @@ export function useMcpServerCandidates({
     // A hosted server is granted under its toolset id, not its wrapper row's
     // (the server resolves the grant the same way: grantResourceID in
     // server/internal/mcpservers/impl.go), so that is the id to check.
+    // Speakeasy manages a built-in server, so it can only be opened.
     const canWrite = (server: McpServer) =>
+      !server.builtinBackend &&
       hasScope("mcp:write", server.toolsetId ?? server.id);
 
     // `offerUndo` is false for the undo itself, so the toasts do not loop.
@@ -153,7 +155,7 @@ export function useMcpServerCandidates({
           if (!opensServerPage && (verb === "enable" || verb === "disable")) {
             return setVisibility(server, verb);
           }
-          routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
+          routes.mcp.details.overview.goTo(mcpServerRouteParam(server));
         },
       };
     });

@@ -57,7 +57,9 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -267,6 +269,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 			AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 			AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 			AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+			AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 			DevMode:                          serviceEnv == "local",
 		})
 
@@ -322,8 +325,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	approvalService := approval.NewService(logger, db, serverURL, auditLogger)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
+		approvalService,
 	)
 	if err != nil {
 		return err
@@ -431,8 +436,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	internalsessionissuers.AttachDiscovery(mux, db, logger)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)
+	attachApprovals(mux, logger, approvalService, runtime.MCP, ratelimit.NewRedisStore(redisClient))
 	usersessions.AttachRetiredProxy(mux, logger)
 
+	// Requests get their own base context so the shutdown deadline can cancel
+	// the ones still running without cancelling ctx, which the probe drain
+	// below still needs.
+	requestCtx, cancelRequests := context.WithCancelCause(ctx)
+	defer cancelRequests(nil)
 	srv := &http.Server{
 		Addr:              c.String("address"),
 		Handler:           mux,
@@ -441,7 +452,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		// backend connections at 600s, so the backend must outlast it. No
 		// WriteTimeout, since this mux serves long-lived MCP streams.
 		IdleTimeout: 620 * time.Second,
-		BaseContext: func(net.Listener) context.Context { return ctx },
+		BaseContext: func(net.Listener) context.Context { return requestCtx },
 	}
 
 	sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
@@ -450,14 +461,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	group.Go(func() {
 		<-sigctx.Done()
 		logger.InfoContext(ctx, "shutting down mcp server")
-		graceCtx, graceCancel := context.WithTimeoutCause(context.WithoutCancel(ctx), shutdownDrainTimeout, errors.New("graceful shutdown timed out"))
-		defer graceCancel()
-		if err := srv.Shutdown(graceCtx); err != nil {
-			if gerr := context.Cause(graceCtx); gerr != nil {
-				err = errors.Join(err, gerr)
-			}
-			logger.ErrorContext(ctx, "failed to shutdown mcp server", attr.SlogError(err))
-		}
+		// Listen streams never finish on their own, so end them first and
+		// let their clients reconnect to a replica that is still serving.
+		mcpService.StartDrain(relayedRequestInterruptAfter)
+		drainHTTPServer(ctx, logger, srv, cancelRequests, shutdownDrainTimeout, "failed to shutdown mcp server")
 		// Handlers are drained; the automatic remote-session probes they
 		// detached still write verdicts, so give them their own budget before
 		// the datastores close.

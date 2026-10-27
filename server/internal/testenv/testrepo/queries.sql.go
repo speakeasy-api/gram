@@ -1582,6 +1582,36 @@ func (q *Queries) ExpireRemoteSessionAccessTokenFixture(ctx context.Context, id 
 	return err
 }
 
+const expireUserSessionFixture = `-- name: ExpireUserSessionFixture :execrows
+UPDATE user_sessions
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = $1
+  AND organization_id = $2::text
+  AND project_id = $3::uuid
+  AND user_session_issuer_id = $4
+`
+
+type ExpireUserSessionFixtureParams struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Test-only fixture: expires a session without waiting for its access token TTL.
+func (q *Queries) ExpireUserSessionFixture(ctx context.Context, arg ExpireUserSessionFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, expireUserSessionFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const expireWorkloadDeviceJoinTokensFixture = `-- name: ExpireWorkloadDeviceJoinTokensFixture :execrows
 UPDATE workload_device_join_tokens
 SET expires_at = clock_timestamp() - interval '1 minute'
@@ -5857,6 +5887,38 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
+const setGatewaySessionListFixture = `-- name: SetGatewaySessionListFixture :exec
+UPDATE user_sessions
+SET resource = $1, created_at = $2,
+    last_used_at = $3, refresh_expires_at = $4,
+    deleted_at = $5
+WHERE id = $6 AND organization_id = $7
+`
+
+type SetGatewaySessionListFixtureParams struct {
+	Resource         pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	LastUsedAt       pgtype.Timestamptz
+	RefreshExpiresAt pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	ID               uuid.UUID
+	OrganizationID   pgtype.Text
+}
+
+// Test fixture for endpoint, ordering, and expiry boundaries.
+func (q *Queries) SetGatewaySessionListFixture(ctx context.Context, arg SetGatewaySessionListFixtureParams) error {
+	_, err := q.db.Exec(ctx, setGatewaySessionListFixture,
+		arg.Resource,
+		arg.CreatedAt,
+		arg.LastUsedAt,
+		arg.RefreshExpiresAt,
+		arg.DeletedAt,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
 const setGcpIamCredentialServiceAccountFixture = `-- name: SetGcpIamCredentialServiceAccountFixture :exec
 UPDATE gcp_iam_credentials AS gic SET impersonate_service_account = $1::text
 FROM external_credentials AS ec
@@ -6450,6 +6512,41 @@ func (q *Queries) SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx context.Con
 	return result.RowsAffected(), nil
 }
 
+const setRemoteSessionListFixture = `-- name: SetRemoteSessionListFixture :exec
+UPDATE remote_sessions s
+SET created_at = $1, last_used_at = $2,
+    access_expires_at = $3, refresh_expires_at = $4,
+    authorization_expires_at = $5, refresh_token_encrypted = $6
+FROM remote_session_clients c
+WHERE s.id = $7 AND c.id = s.remote_session_client_id AND c.organization_id = $8
+`
+
+type SetRemoteSessionListFixtureParams struct {
+	CreatedAt              pgtype.Timestamptz
+	LastUsedAt             pgtype.Timestamptz
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	ID                     uuid.UUID
+	OrganizationID         pgtype.Text
+}
+
+// Test fixture for effective expiry and timestamp pagination.
+func (q *Queries) SetRemoteSessionListFixture(ctx context.Context, arg SetRemoteSessionListFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionListFixture,
+		arg.CreatedAt,
+		arg.LastUsedAt,
+		arg.AccessExpiresAt,
+		arg.RefreshExpiresAt,
+		arg.AuthorizationExpiresAt,
+		arg.RefreshTokenEncrypted,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
 const setRemoteSessionResourceFixture = `-- name: SetRemoteSessionResourceFixture :exec
 UPDATE remote_sessions
 SET resource = $1
@@ -6498,6 +6595,100 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 		arg.ID,
 		arg.ProjectID,
 	)
+	return err
+}
+
+const setToolsetCustomDomain = `-- name: SetToolsetCustomDomain :exec
+UPDATE toolsets
+SET
+    custom_domain_id = $1
+  , updated_at = clock_timestamp()
+WHERE slug = $2 AND project_id = $3
+`
+
+type SetToolsetCustomDomainParams struct {
+	CustomDomainID uuid.NullUUID
+	Slug           string
+	ProjectID      uuid.UUID
+}
+
+// Points a toolset's legacy alias at a custom domain; the canonical wrapper's endpoints are left as they are.
+func (q *Queries) SetToolsetCustomDomain(ctx context.Context, arg SetToolsetCustomDomainParams) error {
+	_, err := q.db.Exec(ctx, setToolsetCustomDomain, arg.CustomDomainID, arg.Slug, arg.ProjectID)
+	return err
+}
+
+const setToolsetMCPEnabledByID = `-- name: SetToolsetMCPEnabledByID :exec
+WITH toolset AS (
+    UPDATE toolsets
+    SET mcp_enabled = $1
+    WHERE toolsets.id = $2 AND toolsets.project_id = $3
+    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
+)
+UPDATE mcp_servers
+SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
+FROM toolset
+WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE
+`
+
+type SetToolsetMCPEnabledByIDParams struct {
+	McpEnabled bool
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// Enables or disables as an MCP server update would: on the canonical wrapper, and on the column for wrapper-less toolsets.
+func (q *Queries) SetToolsetMCPEnabledByID(ctx context.Context, arg SetToolsetMCPEnabledByIDParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPEnabledByID, arg.McpEnabled, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setToolsetMCPPublicByID = `-- name: SetToolsetMCPPublicByID :exec
+WITH toolset AS (
+    UPDATE toolsets
+    SET mcp_is_public = $1
+    WHERE toolsets.id = $2 AND toolsets.project_id = $3
+    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
+)
+UPDATE mcp_servers
+SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
+FROM toolset
+WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE
+`
+
+type SetToolsetMCPPublicByIDParams struct {
+	McpIsPublic bool
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Sets publicness as an MCP server update would: on the canonical wrapper, and on the columns for wrapper-less toolsets.
+func (q *Queries) SetToolsetMCPPublicByID(ctx context.Context, arg SetToolsetMCPPublicByIDParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPPublicByID, arg.McpIsPublic, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setToolsetMCPPublicBySlug = `-- name: SetToolsetMCPPublicBySlug :exec
+WITH toolset AS (
+    UPDATE toolsets
+    SET mcp_is_public = $1
+    WHERE toolsets.mcp_slug = $2 AND toolsets.project_id = $3
+    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
+)
+UPDATE mcp_servers
+SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
+FROM toolset
+WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE
+`
+
+type SetToolsetMCPPublicBySlugParams struct {
+	McpIsPublic bool
+	McpSlug     pgtype.Text
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetMCPPublicBySlugParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPPublicBySlug, arg.McpIsPublic, arg.McpSlug, arg.ProjectID)
 	return err
 }
 
@@ -6651,6 +6842,22 @@ func (q *Queries) SetUserSessionIssuerUseAuthenticationHostFixture(ctx context.C
 	return result.RowsAffected(), nil
 }
 
+const setWorkloadIssuerAssertionReuseFixture = `-- name: SetWorkloadIssuerAssertionReuseFixture :exec
+UPDATE workload_issuers SET allow_assertion_reuse = $1::boolean
+WHERE id = $2 AND organization_id = $3
+`
+
+type SetWorkloadIssuerAssertionReuseFixtureParams struct {
+	AllowAssertionReuse bool
+	ID                  uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) SetWorkloadIssuerAssertionReuseFixture(ctx context.Context, arg SetWorkloadIssuerAssertionReuseFixtureParams) error {
+	_, err := q.db.Exec(ctx, setWorkloadIssuerAssertionReuseFixture, arg.AllowAssertionReuse, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const setWorkloadIssuerKeySourceFixture = `-- name: SetWorkloadIssuerKeySourceFixture :execrows
 UPDATE workload_issuers
 SET key_source = $1
@@ -6666,6 +6873,34 @@ type SetWorkloadIssuerKeySourceFixtureParams struct {
 
 func (q *Queries) SetWorkloadIssuerKeySourceFixture(ctx context.Context, arg SetWorkloadIssuerKeySourceFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setWorkloadIssuerKeySourceFixture, arg.KeySource, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setWorkloadIssuerWildcardAdmissionForTest = `-- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
+UPDATE workload_issuers SET allow_wildcard_admission = $1
+WHERE organization_id = $2
+  AND project_id IS NOT DISTINCT FROM $3::uuid
+  AND id = $4 AND deleted IS FALSE
+`
+
+type SetWorkloadIssuerWildcardAdmissionForTestParams struct {
+	AllowWildcardAdmission bool
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	ID                     uuid.UUID
+}
+
+// Test-only fixture for an issuer policy change while admission waits on its lock.
+func (q *Queries) SetWorkloadIssuerWildcardAdmissionForTest(ctx context.Context, arg SetWorkloadIssuerWildcardAdmissionForTestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setWorkloadIssuerWildcardAdmissionForTest,
+		arg.AllowWildcardAdmission,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -7246,4 +7481,20 @@ func (q *Queries) WithdrawJsonWebKeyKeepingUpdatedAtFixture(ctx context.Context,
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const workloadIssuerWriteIsBlockedFixture = `-- name: WorkloadIssuerWriteIsBlockedFixture :one
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database()
+      AND wait_event_type = 'Lock'
+      AND query LIKE '%LockWorkloadIssuerForWrite%'
+)::boolean
+`
+
+func (q *Queries) WorkloadIssuerWriteIsBlockedFixture(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, workloadIssuerWriteIsBlockedFixture)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }

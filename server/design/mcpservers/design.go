@@ -420,7 +420,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.")
+	Description("Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value, and set clear_user_session_issuer to detach the issuer; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
@@ -447,6 +447,7 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 	Attribute("user_session_issuer_id", String, "The ID of an existing project- or organization-owned user session issuer to attach. Omit to preserve the current issuer.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("clear_user_session_issuer", Boolean, "Detach the current user session issuer, so the server no longer requires user sessions. Must not be true when user_session_issuer_id is set.")
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 
@@ -487,6 +488,9 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server, if any.", func() {
 		Format(FormatUUID)
+	})
+	Attribute("builtin_backend", String, "A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.", func() {
+		Enum("approvals")
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")

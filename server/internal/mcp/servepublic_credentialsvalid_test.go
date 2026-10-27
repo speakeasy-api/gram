@@ -63,7 +63,6 @@ func TestServePublic_PrivateWithoutOAuth_ValidAPIKey_Succeeds(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 		McpSlug:                conv.ToPGText("private-no-oauth-mcp-" + uuid.New().String()[:8]),
 		McpEnabled:             true,
-		// OauthProxyServerID NOT set - no OAuth
 	})
 	require.NoError(t, err)
 

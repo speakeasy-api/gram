@@ -22,6 +22,10 @@ vi.mock("./sections/authentication/AuthenticationSection", () => ({
     <h2>{mcpServer.remoteMcpServerId ? "Identity" : "Authentication"}</h2>
   ),
 }));
+vi.mock("./sections/authentication/UpstreamCredentialsSection", () => ({
+  UPSTREAM_CREDENTIALS_SECTION_ID: "upstream-credentials",
+  UpstreamCredentialsSection: () => <h2>Upstream credentials</h2>,
+}));
 vi.mock("./sections/authentication/IdentityChainingSection", () => ({
   IDENTITY_CHAINING_SECTION_ID: "identity-chaining",
   IdentityChainingSection: () => <h2>Identity chaining</h2>,
@@ -136,6 +140,7 @@ describe("SettingsTab", () => {
       // Upstream headers are the Identity panel's Custom Headers disclosure
       // not a section of their own.
       "Identity",
+      "Upstream credentials",
       "Identity chaining",
       "Server URL",
       "Network Access",
@@ -153,6 +158,7 @@ describe("SettingsTab", () => {
       "Server URL",
       "Network Access",
       "Authentication",
+      "Upstream credentials",
       "Resource Identifier",
       "Caller Identity",
       "Public Access",

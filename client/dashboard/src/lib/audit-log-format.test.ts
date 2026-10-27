@@ -1,5 +1,6 @@
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { describe, expect, it } from "vitest";
+import { AUDIT_ACTIONS } from "./audit-actions";
 import {
   formatAuditActionLabel,
   formatSubjectLabel,
@@ -128,6 +129,17 @@ describe("formatAuditActionLabel", () => {
     expect(
       formatAuditActionLabel("billing_metadata:create_stripe_portal"),
     ).toBe("Opened Stripe billing portal");
+    expect(formatAuditActionLabel("risk_policy:approval_approve")).toBe(
+      "Approved a held tool call",
+    );
+  });
+
+  it("never leaves a dangling preposition on a known action", () => {
+    for (const action of AUDIT_ACTIONS) {
+      expect(formatAuditActionLabel(action), action).not.toMatch(
+        /\s(about|at|by|for|from|in|into|of|on|onto|to|under|via|with|within)$/,
+      );
+    }
   });
 });
 

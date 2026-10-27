@@ -4,12 +4,15 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useMemo } from "react";
 import type { LauncherCandidate } from "./types";
 import { useAccessRequestCandidates } from "./useAccessRequestCandidates";
+import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
 import { useActionCandidates } from "./useActionCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useAssistantCandidates } from "./useAssistantCandidates";
 import { useCatalogCandidates } from "./useCatalogCandidates";
 import { useDeploymentCandidates } from "./useDeploymentCandidates";
+import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates";
 import { useEnvironmentCandidates } from "./useEnvironmentCandidates";
+import { useGatewayCandidates } from "./useGatewayCandidates";
 import { useMarketplaceCandidate } from "./useMarketplaceCandidate";
 import { useMcpServerCandidates } from "./useMcpServerCandidates";
 import { usePersonCandidates } from "./usePersonCandidates";
@@ -31,6 +34,11 @@ import { useSourceCandidates } from "./useSourceCandidates";
  * query's `enabled` option, so nothing fetches while the palette is closed.
  * Project-scoped sources are further gated on `inProject`, and admin-only
  * sources on RBAC, mirroring the gates the resource groups applied before.
+ *
+ * Session titles are intentionally excluded: transcripts are high-volume,
+ * sensitive history, so opening the palette must not crawl their pages. The
+ * Agent Sessions page action opens the scoped search; an agent's profile links
+ * there with its agent and time-window filters. See docs/rbac.md.
  */
 export function useLauncherCandidates({
   enabled,
@@ -64,6 +72,10 @@ export function useLauncherCandidates({
   // Sources are a tab of that section and their detail page gates on
   // mcp:read, so they share it.
   const canListMcp = hasAnyScope(["mcp:read", "mcp:write"]);
+  // Listing gateways requires mcp:read on the project itself
+  // (server/internal/metamcp/impl.go), so a grant in another project must not
+  // fire the forbidden list call here or keep its cached names visible.
+  const canListGateways = hasAnyScope(["mcp:read", "mcp:write"], project.id);
   // Plugins list for whoever can edit them (org admins and plugin:write on
   // this project, per usePluginWriteAccess) or read the organization; the
   // same gate the Plugins page renders behind.
@@ -81,6 +93,10 @@ export function useLauncherCandidates({
 
   const projectEnabled = enabled && inProject;
 
+  const gatewayConnections = useGatewayConnectionCandidates({
+    enabled,
+    inProject,
+  });
   const actions = useActionCandidates();
   const recents = useRecentCandidates({
     enabled,
@@ -91,6 +107,9 @@ export function useLauncherCandidates({
   const marketplace = useMarketplaceCandidate({ enabled, inProject });
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,
+  });
+  const gateways = useGatewayCandidates({
+    enabled: projectEnabled && canListGateways,
   });
   const catalog = useCatalogCandidates({
     enabled: projectEnabled && canBrowseCatalog,
@@ -104,6 +123,7 @@ export function useLauncherCandidates({
   const skills = useSkillCandidates({
     enabled: projectEnabled && canReadSkills,
   });
+  const inferenceSetup = useInferenceSetupCandidate({ enabled, inProject });
   const agentIdentities = useAgentIdentityCandidates({ enabled });
   const environments = useEnvironmentCandidates({ enabled: projectEnabled });
   const sources = useSourceCandidates({
@@ -128,9 +148,11 @@ export function useLauncherCandidates({
       inProject && isAdmin ? list : [];
     return [
       ...actions,
+      ...gatewayConnections,
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
+      ...(inProject && canListGateways ? gateways : []),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
@@ -138,6 +160,7 @@ export function useLauncherCandidates({
       ...(inProject && canReadAssistants ? assistants : []),
       ...(inProject && canReadSkills ? skills : []),
       ...agentIdentities,
+      ...inferenceSetup,
       ...projectOnly(environments),
       ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
@@ -153,16 +176,20 @@ export function useLauncherCandidates({
     canReadApprovals,
     canReadPeople,
     canListMcp,
+    canListGateways,
     canListPlugins,
     canBrowseCatalog,
     canReadAssistants,
     canReadSkills,
     skills,
     agentIdentities,
+    inferenceSetup,
     actions,
+    gatewayConnections,
     recents,
     marketplace,
     mcpServers,
+    gateways,
     catalog,
     plugins,
     assistants,

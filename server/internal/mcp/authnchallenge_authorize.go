@@ -7,7 +7,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -71,6 +70,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 
 	req := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 	req.SetDefaults()
+	page := authorizationErrorPage(nil, req.ClientID, endpoint.Slug)
 
 	// Stamp the presented client_id before anything can reject the request.
 	// Without this it only reaches the logs on the post-resolution "oauth
@@ -86,7 +86,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// otherwise. That motivates the two-phase split: validate the fields
 	// needed to match the URI first, then validate the rest.
 	if err := req.ValidateRedirectableFields(); err != nil {
-		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, page, err)
 	}
 
 	// The origin of the endpoint's resource. It is the mint origin by
@@ -107,7 +107,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	if namesEndpoint {
 		logger.InfoContext(ctx, "oauth authorize rejected client_id naming this endpoint", attr.SlogOAuthFailureReason(clientIDNamesEndpointReason))
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
 	}
 
 	// URL-shaped client_ids resolve via CIMD here (admission-gated, inside
@@ -119,18 +119,19 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, req.ClientID, resolveClientCIMD)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
+			page.Reason = oauthui.ReasonOrganizationBlocked
 			// Checked before the generic *oauthwire.Error branch below, since an
 			// admission denial is policy rather than a spec violation and
 			// carries its own actionable description. Already logged with
 			// the presented client_id inside admitCIMDClient.
-			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidClient, admissionErr.Description())
+			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, admissionErr.Description())
 		}
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			code := oauthErr.Code
 			if code == oautherr.CodeInvalidClientMetadata || code == oautherr.CodeInvalidRedirectURI {
 				code = oautherr.CodeInvalidClient
 			}
-			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, code, oauthErr.Description)
+			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, code, oauthErr.Description)
 		}
 		if errors.Is(err, errCIMDFetchFailed) {
 			// The cause may name internal network conditions (SSRF denials,
@@ -141,15 +142,17 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			// rather than a permanent invalid_client that would make SDKs
 			// stop retrying.
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
-			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
+			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, page, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
-			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id")
+			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, "unknown client_id")
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
+	page = authorizationErrorPage(client, req.ClientID, endpoint.Slug)
 	if !redirectURIMatches(client, req.RedirectURI) {
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
+		page.Reason = oauthui.ReasonInvalidClient
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, "invalid_request", "redirect_uri is not registered for this client")
 	}
 
 	// Shadow AI blocking, refused inline for the same reason an admission
@@ -160,10 +163,12 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// verified.
 	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, req.ClientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
-			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidClient, blockedErr.Description())
+			page.Reason = oauthui.ReasonOrganizationBlocked
+			page.ClientName = blockedErr.DisplayName
+			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
-			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
+			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, page, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
 		}
 		return oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
 	}
@@ -326,11 +331,11 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 // description and forwards to writeAuthorizeError. Falls back to a generic
 // invalid_request if err is something else (shouldn't happen — Validate
 // returns *oauthwire.Error).
-func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
+func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, page oauthui.AuthorizationError, err error) error {
 	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
-		return writeAuthorizeError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
+		return writeAuthorizeError(ctx, w, logger, status, page, oauthErr.Code, oauthErr.Description)
 	}
-	return writeAuthorizeError(ctx, w, logger, status, "invalid_request", err.Error())
+	return writeAuthorizeError(ctx, w, logger, status, page, "invalid_request", err.Error())
 }
 
 // writePreAuthenticationAuthorizeError sends errors to a registered callback
@@ -381,14 +386,24 @@ func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWr
 // presented, which the browser already holds.
 func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientID, serverName string) oauthui.AuthorizationError {
 	page := oauthui.AuthorizationError{
+		Recovery:       nil,
+		Setup:          false,
+		Status:         http.StatusBadRequest,
+		Reason:         oauthui.ReasonDefault,
+		Approval:       false,
+		ErrorID:        "",
 		CallbackURL:    "",
 		Code:           "",
 		Description:    "",
-		ClientName:     client.ClientName,
+		ClientName:     "",
 		ClientID:       clientID,
 		ClientIDOrigin: "",
 		ServerName:     serverName,
 	}
+	if client == nil {
+		return page
+	}
+	page.ClientName = client.ClientName
 	if client.ClientIDMetadataUri.Valid {
 		if u, err := url.Parse(client.ClientIDMetadataUri.String); err == nil {
 			page.ClientIDOrigin = u.Host
@@ -397,30 +412,16 @@ func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientI
 	return page
 }
 
-// writeAuthorizeError emits an OAuth 2.1 authorization error (RFC 6749
-// §4.1.2.1) inline as a JSON body. We don't redirect to redirect_uri because
-// the request hasn't been validated to that point — per RFC 6749 §3.1.2.4, an
-// invalid redirect_uri must NOT be redirected to.
-func writeAuthorizeError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, code, description string) error {
-	body, err := json.Marshal(map[string]string{
-		"error":             code,
-		"error_description": description,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal authorize error").LogError(ctx, logger)
+// writeAuthorizeError refuses an inline authorization request without following
+// an unvalidated callback. Its public status and OAuth code remain unchanged.
+func writeAuthorizeError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, page oauthui.AuthorizationError, code, description string) error {
+	logger.InfoContext(ctx, "authorize request rejected", attr.SlogOAuthError(code), attr.SlogOAuthErrorDescription(description))
+	page.Status, page.Code, page.Description = status, code, description
+	if page.Reason == oauthui.ReasonDefault && code == oautherr.CodeInvalidClient {
+		page.Reason = oauthui.ReasonInvalidClient
 	}
-
-	logger.InfoContext(ctx, "authorize request rejected",
-		attr.SlogOAuthError(code),
-		attr.SlogOAuthErrorDescription(description),
-	)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Pragma", "no-cache")
-	w.WriteHeader(status)
-	if _, werr := w.Write(body); werr != nil {
-		return oops.E(oops.CodeUnexpected, werr, "failed to write authorize error body").LogError(ctx, logger)
+	if err := oauthui.WriteAuthorizationError(ctx, w, page); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "write authorize error page").LogError(ctx, logger)
 	}
 	return nil
 }

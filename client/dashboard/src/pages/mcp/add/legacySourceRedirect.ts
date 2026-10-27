@@ -69,7 +69,7 @@ export type LegacySourceLookup = {
 export type LegacySourceTarget =
   /** /mcp/sources/:sourceId, addressed by the deployment asset's id. */
   | { kind: "source"; assetId: string }
-  /** /mcp/x/:mcpServerSlug, the server fronting a remote/tunneled/unproxied source. */
+  /** /mcp/:mcpServerSlug, the server fronting a remote/tunneled/unproxied source. */
   | { kind: "mcp-server"; routeParam: string }
   /** /mcp/:toolsetSlug, the toolset carrying an external MCP's tools. */
   | { kind: "toolset"; slug: string }
