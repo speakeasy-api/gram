@@ -104747,6 +104747,9 @@ components:
           enum:
             - subject
             - self
+        display_name:
+          type: string
+          description: Administrator-chosen name for the client. Null when unset, in which case the client is shown by its client_id.
         federated_callback_url:
           type: string
           description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
@@ -115919,9 +115922,17 @@ components:
           description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
           pattern: ^[!-~]+$
           maxLength: 512
+        client_id:
+          type: string
+          description: Correct the client_id registered with the issuer. Refused for Client ID Metadata Document (CIMD) clients and clients managed by an identity provider connection. A changed value revokes every remote session obtained through the client, so each user must reconnect. Omit to leave unchanged.
+          minLength: 1
         client_secret:
           type: string
           description: Rotate the client secret. Speakeasy re-encrypts before persisting.
+        display_name:
+          type: string
+          description: Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
+          maxLength: 200
         id:
           type: string
           description: The remote_session_client id.
