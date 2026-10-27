@@ -1,7 +1,4 @@
-export const RELEASES_BASE =
-  "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
-
-export const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
+import { RELEASES_BASE } from "./release-paths";
 
 /** Sentinel spliced into the startup script until an org_token is minted. */
 export const CLOUD_ORG_TOKEN_SENTINEL = "__SLOT_orgToken__";

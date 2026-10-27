@@ -27,13 +27,12 @@ import {
   RemoteOrganizationDefaultStep,
   RemoteSetupScriptStep,
 } from "./device-agent-cloud-setup";
+import {
+  MANAGED_CONFIG_PATHS,
+  MANIFEST_URL,
+  RELEASES_BASE,
+} from "./release-paths";
 
-// Public, unauthenticated bucket the release pipeline publishes to. The
-// manifest (releases.json) lists the current version + per-platform URLs;
-// binaries live under v{version}/.
-const RELEASES_BASE =
-  "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
-const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
 // The server's stable links to the current signed macOS pkg and Windows msi
 // (a 302 to the versioned file in the release bucket). They sit under /rpc,
 // which the Ingress routes to the server.
@@ -1021,20 +1020,6 @@ function FleetIdentity({ os }: { os: OsKey }) {
     </div>
   );
 }
-
-const MANAGED_CONFIG_PATHS = [
-  {
-    os: "macOS",
-    path: "/Library/Application Support/Speakeasy/managed.json",
-    owner: "root",
-  },
-  { os: "Linux", path: "/etc/speakeasy/managed.json", owner: "root" },
-  {
-    os: "Windows",
-    path: "%ProgramData%\\Speakeasy\\managed.json",
-    owner: "SYSTEM",
-  },
-];
 
 // InstallerDownload is the direct installer button (the macOS pkg or the
 // Windows msi), shared by the setup sheet's install step and onboarding's

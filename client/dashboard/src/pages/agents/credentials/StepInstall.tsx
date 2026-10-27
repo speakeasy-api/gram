@@ -11,6 +11,13 @@ import { useState, type JSX } from "react";
 import { CodeBlock } from "./CodeBlock";
 import { WizardStepHeader } from "./WizardChrome";
 import { isCredentialSafe } from "./gateway";
+import { deviceAgentManagedConfig } from "./deviceAgentConfig";
+import {
+  LINUX_SYSTEM_UNIT_URL,
+  MANAGED_CONFIG_PATHS,
+  SANDBOX_INSTALL_SCRIPT_URL,
+} from "@/pages/device-agent/release-paths";
+import { Link as ExternalLink } from "@/components/ui/Link";
 
 /**
  * The step that hands the runtime its credential. One command for a machine
@@ -20,6 +27,27 @@ import { isCredentialSafe } from "./gateway";
 
 const KEY_ENV = "SPEAKEASY_AGENT_KEY";
 
+// Installs the system unit, with User= and Group= set, and starts it.
+const SERVICE_COMMANDS = [
+  "sed -i 's/REPLACE_WITH_TOOL_ACCOUNT/<account>/g' com.speakeasy.daemon.service",
+  "sudo install -m 0644 com.speakeasy.daemon.service /etc/systemd/system/com.speakeasy.daemon.service",
+  "sudo systemctl daemon-reload && sudo systemctl enable --now com.speakeasy.daemon",
+].join("\n");
+
+// A headless machine is a Linux box: a VPS, a CI runner, a sandbox.
+const LINUX_MANAGED_CONFIG_PATH =
+  MANAGED_CONFIG_PATHS.find((row) => row.os === "Linux")?.path ??
+  "/etc/speakeasy/managed.json";
+
+/** The origin of an endpoint, or empty when there is no endpoint yet. */
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
+
 export function StepInstall({
   command,
   commandError,
@@ -28,6 +56,7 @@ export function StepInstall({
   onIssue,
   issuing,
   secret,
+  agentID,
   gatewayURL,
   serverCount,
 }: {
@@ -39,6 +68,8 @@ export function StepInstall({
   onIssue: () => void;
   issuing: boolean;
   secret: string | null;
+  /** Empty until the agent exists. */
+  agentID: string;
   gatewayURL: string;
   /** `"all"` where the agent's reach is a wildcard rather than a list. */
   serverCount: number | "all";
@@ -61,6 +92,13 @@ export function StepInstall({
       ? "Every server sits"
       : `${serverCount} ${serverCount === 1 ? "server sits" : "servers sit"}`;
   const key = secret ?? `<your ${KEY_ENV}>`;
+  // The gateway is served by the same server the device agent must reach, so
+  // its origin is the control plane, wherever this dashboard is deployed.
+  const managedConfig = deviceAgentManagedConfig({
+    mcpCredential: key,
+    agentID,
+    serverOrigin: originOf(gatewayURL),
+  });
   // One complete call per runtime, not the pair of values on their own: the
   // question the step has to answer is what to do with them.
   // Streamable HTTP, not the SDK's built-in "sse" transport: the gateway
@@ -166,6 +204,9 @@ export function StepInstall({
                   One-line setup
                 </PageTabsTrigger>
                 <PageTabsTrigger value="manual">Manual</PageTabsTrigger>
+                <PageTabsTrigger value="device-agent">
+                  Device Agent
+                </PageTabsTrigger>
                 <PageTabsTrigger value="programmatic">
                   Programmatic
                 </PageTabsTrigger>
@@ -313,6 +354,94 @@ export function StepInstall({
                   agent may reach changes what it finds there, without
                   reconnecting.
                 </Text>
+              </div>
+            </TabsContent>
+
+            <TabsContent
+              value="device-agent"
+              forceMount
+              className="data-[state=inactive]:hidden"
+            >
+              <div className="space-y-4 p-4">
+                <Text muted small>
+                  For a machine with no person at it, like a VPS, CI runner or
+                  sandbox. The Speakeasy device agent sets up MCP for Claude
+                  Code, Codex and Cursor on that machine, using this agent
+                  identity&apos;s key.
+                </Text>
+                <CodeBlock
+                  value={`curl -fsSL ${SANDBOX_INSTALL_SCRIPT_URL} | sudo sh`}
+                  label="1 · Install the device agent — Linux"
+                  language="shell"
+                />
+                <div className="space-y-2">
+                  <CodeBlock
+                    value={managedConfig}
+                    label="2 · Save as managed.json — shown once"
+                    language="json"
+                    breakAnywhere
+                  />
+                  <CodeBlock
+                    value={`sudo install -D -o root -g <group> -m 0640 managed.json ${LINUX_MANAGED_CONFIG_PATH} && rm managed.json`}
+                    label={`Move it to ${LINUX_MANAGED_CONFIG_PATH}`}
+                    language="shell"
+                  />
+                  <Text muted small>
+                    Replace <code className="text-xs">&lt;group&gt;</code> with
+                    the private group of the account that runs the AI tools — on
+                    most distributions, the group named after that account. Only
+                    members of that group can read the file.
+                  </Text>
+                </div>
+                <div className="space-y-2">
+                  <Text small className="block">
+                    3 · Run the device agent as the account that runs the AI
+                    tools. Download{" "}
+                    <ExternalLink
+                      href={LINUX_SYSTEM_UNIT_URL}
+                      target="_blank"
+                      iconSuffixName="external-link"
+                    >
+                      com.speakeasy.daemon.service
+                    </ExternalLink>
+                    , then set its <code className="text-xs">User=</code> and{" "}
+                    <code className="text-xs">Group=</code> to that account.
+                  </Text>
+                  <Text small className="block font-medium">
+                    Use the same account the AI tools run as, not root: the
+                    device agent writes their MCP settings into that
+                    account&apos;s home.
+                  </Text>
+                  <CodeBlock
+                    value={SERVICE_COMMANDS}
+                    label="Set the account, then install and start the service"
+                    language="shell"
+                  />
+                  <Text muted small>
+                    Replace <code className="text-xs">&lt;account&gt;</code>{" "}
+                    with that account. Then{" "}
+                    <code className="text-xs">
+                      sudo -u &lt;account&gt; claude mcp list
+                    </code>{" "}
+                    should show{" "}
+                    <code className="text-xs">speakeasy-gateway</code> as
+                    connected. The service keeps those settings current while it
+                    runs.
+                  </Text>
+                </div>
+                <div className="space-y-2">
+                  <span className="text-eyebrow">What this sets up</span>
+                  <Text muted small className="block">
+                    MCP access only, to {reachPhrase} through this agent
+                    identity&apos;s permissions. Plugin sync and hooks are not
+                    included yet.
+                  </Text>
+                  <Text muted small className="block">
+                    The key is written into those tools&apos; MCP settings for
+                    that account. If the machine is compromised, revoke or
+                    rotate the key from this agent&apos;s page.
+                  </Text>
+                </div>
               </div>
             </TabsContent>
 

@@ -17,10 +17,10 @@ import {
   buildCloudDefaultEnvironmentSnippet,
   buildCloudSetupCommand,
   CLOUD_ORG_TOKEN_SENTINEL,
-  MANIFEST_URL,
   PINNED_AGENT_VERSION,
   RELEASE_SHA256,
 } from "./cloud-setup";
+import { MANIFEST_URL } from "./release-paths";
 
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
