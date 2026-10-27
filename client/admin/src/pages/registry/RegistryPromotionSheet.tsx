@@ -277,8 +277,9 @@ export function RegistryPromotionSheet({
             <PromotionAuthDiscovery
               discovery={candidate.authDiscovery}
               matchesSource={
-                form.publicUrl === candidate.suggestedMetadata?.publicUrl &&
-                authMode === candidate.suggestedMetadata?.authMode
+                form.publicUrl ===
+                  (candidate.suggestedMetadata?.publicUrl ?? "") &&
+                authMode === (candidate.suggestedMetadata?.authMode ?? "")
               }
               pending={query.isFetching}
               disabled={mutation.isPending}

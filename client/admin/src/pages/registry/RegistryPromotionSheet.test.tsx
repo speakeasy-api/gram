@@ -547,28 +547,47 @@ it("shows CIMD discovery and hides it when the reviewed endpoint changes", async
   ).toBeTruthy();
 });
 
-it("lets staff retry inconclusive discovery without calling promotion", async () => {
-  api.candidate.mockResolvedValue({
-    ...candidate,
-    suggestedMetadata: { ...metadata, authMode: "oauth" },
-    authDiscovery: {
-      supportsDcr: false,
-      supportsCimd: false,
-      authSetup: "unknown",
-      status: "unavailable",
-    },
-  });
-  await renderWithApp(
-    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
-  );
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Recheck sign-in options" }),
-  );
-  await waitFor(() => expect(api.candidate).toHaveBeenCalledTimes(2));
-  expect(
-    await screen.findByText(
-      "Sign-in setup could not be confirmed. This does not mean automatic setup is unsupported.",
-    ),
-  ).toBeDefined();
-  expect(api.promote).not.toHaveBeenCalled();
-});
+it.each([
+  {
+    label: "known auth mode",
+    authMode: "oauth" as const,
+    publicUrl: metadata.publicUrl,
+  },
+  {
+    label: "omitted auth mode",
+    authMode: undefined,
+    publicUrl: metadata.publicUrl,
+  },
+  {
+    label: "omitted endpoint and auth mode",
+    authMode: undefined,
+    publicUrl: undefined,
+  },
+])(
+  "lets staff retry inconclusive discovery without promotion: $label",
+  async ({ authMode, publicUrl }) => {
+    api.candidate.mockResolvedValue({
+      ...candidate,
+      suggestedMetadata: { ...metadata, authMode, publicUrl },
+      authDiscovery: {
+        supportsDcr: false,
+        supportsCimd: false,
+        authSetup: "unknown",
+        status: "unavailable",
+      },
+    });
+    await renderWithApp(
+      <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Recheck sign-in options" }),
+    );
+    await waitFor(() => expect(api.candidate).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByText(
+        "Sign-in setup could not be confirmed. This does not mean automatic setup is unsupported.",
+      ),
+    ).toBeDefined();
+    expect(api.promote).not.toHaveBeenCalled();
+  },
+);
