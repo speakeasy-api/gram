@@ -100,7 +100,11 @@ export function ServerUrlSection({
   subject?: "server" | "gateway";
   mcpServer?: McpServer | MetaMcpServer;
 }): JSX.Element {
-  const { domains, isLoading: isLoadingDomains } = useCustomDomains();
+  const {
+    domains,
+    isLoading: isLoadingDomains,
+    isError: domainsError,
+  } = useCustomDomains();
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
@@ -180,7 +184,7 @@ export function ServerUrlSection({
   const mustDisableBeforeLastRemoval =
     !!hostedServerId && mcpServer?.visibility !== "disabled";
   // Only addresses that can serve count toward the last one: the platform, or a verified, activated domain.
-  // Every address counts while domains load, so a removal is never left unconfirmed.
+  // Every address counts while domains load or fail to load, so a removal is never left unconfirmed.
   const servableIds = useMemo(
     () =>
       new Set(
@@ -188,6 +192,7 @@ export function ServerUrlSection({
           .filter(
             (e) =>
               isLoadingDomains ||
+              domainsError ||
               !e.customDomainId ||
               availableDomains.some(
                 (d) => d.id === e.customDomainId && d.verified && d.activated,
@@ -195,7 +200,7 @@ export function ServerUrlSection({
           )
           .map((e) => e.id),
       ),
-    [endpoints, availableDomains, isLoadingDomains],
+    [endpoints, availableDomains, isLoadingDomains, domainsError],
   );
   const isLast = (endpoint: McpEndpoint) =>
     servableIds.size === 1 && servableIds.has(endpoint.id);

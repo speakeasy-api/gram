@@ -14,6 +14,7 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+const domainsError = vi.hoisted(() => ({ current: false }));
 const domainsOverride = vi.hoisted(() => ({
   current: undefined as
     | Array<{
@@ -34,6 +35,8 @@ vi.mock("@/hooks/useToolsetUrl", () => ({
         activated: true,
       },
     ],
+    isLoading: false,
+    isError: domainsError.current,
   }),
 }));
 vi.mock("@/hooks/usePrivateMcpServerUrls", () => ({
@@ -138,6 +141,7 @@ afterEach(() => {
   deleteEndpoint.mockReset();
   networkIngress.current = undefined;
   domainsOverride.current = undefined;
+  domainsError.current = false;
 });
 
 describe("ServerUrlSection", () => {
@@ -286,6 +290,16 @@ describe("ServerUrlSection", () => {
     expect(screen.getByText("Disable this server first")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove address" })).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "Close" }).at(-1)!);
+    expect(deleteEndpoint).not.toHaveBeenCalled();
+  });
+
+  it("still asks to disable first when the domain list fails to load", () => {
+    domainsError.current = true;
+    domainsOverride.current = [];
+    renderSection(hosted(), [customEndpoint]);
+
+    fireEvent.click(screen.getByLabelText("Remove address"));
+    expect(screen.getByText("Disable this server first")).toBeTruthy();
     expect(deleteEndpoint).not.toHaveBeenCalled();
   });
 

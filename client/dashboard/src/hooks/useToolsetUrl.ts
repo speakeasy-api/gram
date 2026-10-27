@@ -35,16 +35,17 @@ export function useCustomDomain(enabled = true): {
 export function useCustomDomains(enabled = true): {
   domains: CustomDomain[];
   isLoading: boolean;
+  isError: boolean;
   refetch: ReturnType<typeof useListDomains>["refetch"];
 } {
-  const { data, isLoading, refetch } = useListDomains(undefined, undefined, {
+  const { data, isLoading, isError, refetch } = useListDomains(undefined, undefined, {
     refetchOnWindowFocus: false,
     retry: false,
     throwOnError: false,
     enabled,
   });
 
-  return { domains: data?.domains ?? [], isLoading, refetch };
+  return { domains: data?.domains ?? [], isLoading, isError, refetch };
 }
 
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
