@@ -1204,6 +1204,18 @@ func (q *Queries) SoftDeleteMCPEndpointsByMetaMCPServerID(ctx context.Context, a
 	return items, nil
 }
 
+const tryLockPlatformSlugScope = `-- name: TryLockPlatformSlugScope :one
+SELECT pg_try_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || $1::text, 0))::boolean AS locked
+`
+
+// LockSlugScope's platform lock without waiting, for a write that already holds another slug's lock.
+func (q *Queries) TryLockPlatformSlugScope(ctx context.Context, slug string) (bool, error) {
+	row := q.db.QueryRow(ctx, tryLockPlatformSlugScope, slug)
+	var locked bool
+	err := row.Scan(&locked)
+	return locked, err
+}
+
 const updateMCPEndpoint = `-- name: UpdateMCPEndpoint :one
 UPDATE mcp_endpoints
 SET
