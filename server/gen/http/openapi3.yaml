@@ -94410,9 +94410,39 @@ components:
                     type: string
             required:
                 - entries
+        AdminRegistryPromotionAuthDiscovery:
+            type: object
+            properties:
+                auth_setup:
+                    type: string
+                    enum:
+                        - none
+                        - dcr
+                        - cimd
+                        - manual
+                        - unknown
+                status:
+                    type: string
+                    enum:
+                        - complete
+                        - partial
+                        - unavailable
+                        - not_required
+                supports_cimd:
+                    type: boolean
+                supports_dcr:
+                    type: boolean
+            description: Publicly advertised authentication capabilities, not a verified OAuth connection.
+            required:
+                - supports_dcr
+                - supports_cimd
+                - auth_setup
+                - status
         AdminRegistryPromotionCandidate:
             type: object
             properties:
+                auth_discovery:
+                    $ref: '#/components/schemas/AdminRegistryPromotionAuthDiscovery'
                 can_override_eligibility:
                     type: boolean
                     description: Whether staff may explicitly accept this candidate's health evidence.
@@ -104487,6 +104517,15 @@ components:
         ExternalMCPServerEntry:
             type: object
             properties:
+                auth_setup:
+                    type: string
+                    description: Advertised authentication setup; unknown means evidence is insufficient, not that manual setup is required.
+                    enum:
+                        - none
+                        - dcr
+                        - cimd
+                        - manual
+                        - unknown
                 description:
                     type: string
                     description: Description of what the server does
@@ -104523,9 +104562,12 @@ components:
                     description: Available remote endpoints for the server
                 repository:
                     $ref: '#/components/schemas/ExternalMCPRepository'
+                supports_cimd:
+                    type: boolean
+                    description: Whether issuer metadata advertises compatible Client ID Metadata Document support.
                 supports_dcr:
                     type: boolean
-                    description: Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).
+                    description: Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). False alone does not establish that manual setup is required.
                 title:
                     type: string
                     description: Display name for the server

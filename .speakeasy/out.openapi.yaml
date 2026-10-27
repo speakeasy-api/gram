@@ -93306,6 +93306,15 @@ components:
     ExternalMCPServerEntry:
       type: object
       properties:
+        auth_setup:
+          type: string
+          description: Advertised authentication setup; unknown means evidence is insufficient, not that manual setup is required.
+          enum:
+            - none
+            - dcr
+            - cimd
+            - manual
+            - unknown
         description:
           type: string
           description: Description of what the server does
@@ -93342,9 +93351,12 @@ components:
           description: Available remote endpoints for the server
         repository:
           $ref: '#/components/schemas/ExternalMCPRepository'
+        supports_cimd:
+          type: boolean
+          description: Whether issuer metadata advertises compatible Client ID Metadata Document support.
         supports_dcr:
           type: boolean
-          description: Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).
+          description: Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). False alone does not establish that manual setup is required.
         title:
           type: string
           description: Display name for the server

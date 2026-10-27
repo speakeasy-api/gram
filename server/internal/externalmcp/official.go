@@ -154,7 +154,8 @@ func officialEntry(registryID uuid.UUID, server serverJSON) *types.ExternalMCPSe
 		ToolCount:         0,
 		IsReadOnly:        false,
 		SupportsDcr:       false,
-		Remotes:           remotes,
+		SupportsCimd:      new(false), AuthSetup: new("unknown"),
+		Remotes: remotes,
 	}
 }
 
@@ -198,7 +199,7 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 	}
 	remote, ok := selectOfficialRemote(detail.Server.Remotes, allowedRemoteURLs)
 	if !ok {
-		return &ServerDetails{
+		return &ServerDetails{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "unknown",
 			Name:          detail.Server.Name,
 			Description:   detail.Server.Description,
 			Version:       detail.Server.Version,
@@ -209,7 +210,7 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 			Variables:     nil,
 		}, nil
 	}
-	return &ServerDetails{
+	return &ServerDetails{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "unknown",
 		Name:          detail.Server.Name,
 		Description:   detail.Server.Description,
 		Version:       detail.Server.Version,
