@@ -297,6 +297,44 @@ func (p *Posthog) FlagVariant(ctx context.Context, flag feature.Flag, distinctID
 	return feature.Variant(*result.Variant), nil
 }
 
+// FlagVariantLocal resolves a multivariate flag's variant from the cached
+// definitions only, with caller-supplied person properties. It returns "" when
+// posthog is disabled, local evaluation is off, the flag is missing or off, or
+// the definitions cannot decide without a remote call.
+func (p *Posthog) FlagVariantLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (feature.Variant, error) {
+	if p == nil || p.disabled || p.client == nil || !p.localEvaluation {
+		return "", nil
+	}
+
+	var phPersonProperties posthog.Properties
+	if len(personProperties) > 0 {
+		phPersonProperties = posthog.NewProperties()
+		for key, value := range personProperties {
+			phPersonProperties.Set(key, value)
+		}
+	}
+	sendFeatureFlagEvents := false
+	result, err := p.client.GetFeatureFlagResult(posthog.FeatureFlagPayload{
+		Key:                   string(flag),
+		DistinctId:            distinctID,
+		Groups:                posthogGroups(groups),
+		PersonProperties:      phPersonProperties,
+		OnlyEvaluateLocally:   true,
+		SendFeatureFlagEvents: &sendFeatureFlagEvents,
+	})
+	if err != nil {
+		var inconclusive *posthog.InconclusiveMatchError
+		if errors.As(err, &inconclusive) || errors.Is(err, posthog.ErrFlagNotFound) {
+			return "", nil
+		}
+		return "", fmt.Errorf("locally get feature flag variant: %w", err)
+	}
+	if result == nil || !result.Enabled || result.Variant == nil {
+		return "", nil
+	}
+	return feature.Variant(*result.Variant), nil
+}
+
 func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
 	if p.disabled {
 		p.logger.DebugContext(ctx, "posthog is disabled, returning false")

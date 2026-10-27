@@ -5,6 +5,8 @@ description: Summarize critical Watchdog findings for an explicit Speakeasy AI C
 
 # Summarize critical Watchdog findings
 
+If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+
 Turn an AICP Watchdog review into a concise, channel-neutral digest: establish the authenticated scope, read critical findings, rank the rules that need attention, and report coverage and limitations.
 
 ## Scope and prerequisites

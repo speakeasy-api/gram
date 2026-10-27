@@ -5,6 +5,8 @@ description: Use when an administrator of a Speakeasy AI Control Plane project s
 
 # Create a guardrail from a description
 
+If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+
 Turn "stop agents deleting anything in production" into a reviewed policy: map the description to a preset, show the administrator exactly what the policy will do, and create it only after they confirm.
 
 ## Scope and prerequisites

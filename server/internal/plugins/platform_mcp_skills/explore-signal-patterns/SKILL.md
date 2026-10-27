@@ -5,6 +5,8 @@ description: Explore how a customer-defined signal appears over time and across 
 
 # Explore signal patterns
 
+If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+
 Use authenticated Speakeasy AI Control Plane tools to answer a bounded question
 about captured activity. First successfully call `list_projects` through this
 client's own connection and select the exact project requested by the user.

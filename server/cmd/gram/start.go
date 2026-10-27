@@ -1967,6 +1967,7 @@ func newStartCommand() *cli.Command {
 				LocalFixture:              platformFixture,
 				RegistryDiscoveryEnabled:  c.Bool("registry-discovery-enabled"),
 				CodeModeAvailable:         mcpService.CodeModeAvailable,
+				CodeExecutor:              mcpService.CodeExecutor(),
 			}
 			agentService.WithConnectionStatuses(newAgentConnectionStatuses(platformMCPCfg)).
 				WithConnectionsLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-get-my-connections", agent.ConnectionsRate, ratelimit.WithMetrics(meterProvider)))

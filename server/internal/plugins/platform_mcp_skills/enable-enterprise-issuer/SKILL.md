@@ -5,6 +5,8 @@ description: Guide an organization administrator through Speakeasy AI Control Pl
 
 # Set up enterprise-managed authorization
 
+If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+
 Use the executing client's authenticated Speakeasy AI Control Plane (AICP)
 Platform MCP connection. This workflow retrieves one organization's issuer and
 guides its administrator through dashboard setup. The available issuer tool is

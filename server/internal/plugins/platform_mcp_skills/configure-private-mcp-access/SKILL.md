@@ -5,6 +5,8 @@ description: Configure the address and network access of an existing MCP server 
 
 # Configure private access for an existing MCP
 
+If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+
 Use the authenticated Speakeasy AI Control Plane (AICP) Platform MCP. Installing a plugin does not grant organization access, network access, or authorization to change an MCP. This workflow changes the address or network mode of an existing MCP server (including a hosted toolset) or gateway, not its upstream URL, its plugin membership, or its users' permissions. A hosted toolset's address and network mode belong to its canonical MCP server target, not the toolset. Change its network mode through that target. `set_mcp_address` refuses hosted servers: change a hosted server's address in the dashboard or with `mcpEndpoints.update`. A hosted server keeps one address, adds one only when it has lost its address, and cannot have it removed; disable the server instead.
 
 1. Call `list_projects` and ask the administrator to select an exact project. The list caps at 100; if truncated, use the AICP dashboard to select the project rather than assuming the first page is complete.

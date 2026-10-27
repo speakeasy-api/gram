@@ -5,6 +5,8 @@ description: Inspect and safely change who a risk policy targets in an explicit 
 
 # Manage a risk policy audience
 
+If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+
 Use the executing client's authenticated Platform MCP connection. Installing this skill grants no authority. Live membership, organization-admin permission, explicit-project authorization, and the risk-mutation rollout remain authoritative. Never request credentials or use another client's identity.
 
 ## Inspect and confirm the exact target

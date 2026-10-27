@@ -5,6 +5,8 @@ description: Put a newly published tool in front of people by adding it to one e
 
 # Put a tool on an MCP server
 
+If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+
 Use this workflow only through the authenticated Speakeasy AI Control Plane (AICP) Platform MCP connected as an external administrator. Publishing a tool to a project regenerates what the project can offer; it does not put that tool in front of anybody. Which tools one MCP server exposes is a separate, deliberate decision, and this workflow is how an administrator makes it: read the project's tools, read what the server exposes today, then add or remove named tools against the exact list that was read. When the project has no server that fits, the same workflow can create one whose tools are tools the project's functions already produce.
 
 This is not the same as adding a server to a plugin. A plugin decides which servers people receive; this decides which tools one of those servers offers. For putting a whole server in front of people, use `add-mcp-from-catalog`, `add-mcp-from-remote-url`, or the plugin workflows instead.
