@@ -55,6 +55,7 @@ func TestAssistantIdentityToolContract(t *testing.T) {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	require.Contains(t, a.Description, "project:write")
+	require.Contains(t, a.Description, "project-wide inference:execute only when both the provisioning actor and the agent owner already have that access")
 	require.Contains(t, a.Description, "Repeating the upgrade is safe")
 	require.Contains(t, a.Description, "ACTIVE does not prove")
 	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})

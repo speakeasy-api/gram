@@ -359,9 +359,19 @@ func BuildUpdateClientPayload(organizationRemoteSessionClientsUpdateClientBody s
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionClientsUpdateClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"aa\",\n      \"client_secret\": \"abc123\",\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.ClientID != nil {
+			if utf8.RuneCountInString(*body.ClientID) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_id", *body.ClientID, utf8.RuneCountInString(*body.ClientID), 1, true))
+			}
+		}
+		if body.DisplayName != nil {
+			if utf8.RuneCountInString(*body.DisplayName) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", *body.DisplayName, utf8.RuneCountInString(*body.DisplayName), 200, false))
+			}
+		}
 		if body.TokenEndpointAuthMethod != nil {
 			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
@@ -404,6 +414,8 @@ func BuildUpdateClientPayload(organizationRemoteSessionClientsUpdateClientBody s
 	}
 	v := &organizationremotesessionclients.UpdateClientPayload{
 		ID:                              body.ID,
+		ClientID:                        body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientSecret:                    body.ClientSecret,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
@@ -521,6 +533,58 @@ func BuildRotateClientPayload(organizationRemoteSessionClientsRotateClientBody s
 	}
 	v := &organizationremotesessionclients.RotateClientPayload{
 		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildDuplicateClientPayload builds the payload for the
+// organizationRemoteSessionClients duplicateClient endpoint from CLI flags.
+func BuildDuplicateClientPayload(organizationRemoteSessionClientsDuplicateClientBody string, organizationRemoteSessionClientsDuplicateClientSessionToken string, organizationRemoteSessionClientsDuplicateClientApikeyToken string) (*organizationremotesessionclients.DuplicateClientPayload, error) {
+	var err error
+	var body DuplicateClientRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionClientsDuplicateClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.TokenEndpointAuthMethod != nil {
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+			}
+		}
+		if body.ClientIDIssuedAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+		}
+		if body.ClientSecretExpiresAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionClientsDuplicateClientSessionToken != "" {
+			sessionToken = &organizationRemoteSessionClientsDuplicateClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionClientsDuplicateClientApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionClientsDuplicateClientApikeyToken
+		}
+	}
+	v := &organizationremotesessionclients.DuplicateClientPayload{
+		ID:                      body.ID,
+		ClientID:                body.ClientID,
+		ClientSecret:            body.ClientSecret,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

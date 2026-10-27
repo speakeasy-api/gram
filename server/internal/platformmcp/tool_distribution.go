@@ -35,6 +35,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 		Name:        "distribute_mcp_to_plugin",
 		Title:       "Add an MCP Server to a Plugin",
 		Description: "Give a working MCP server to one plugin — the bundle of MCP servers and skills you share with people — so everyone it is shared with gets it. Constraints: the project must already be selected, the MCP server registered, and freshly confirmed working through the dashboard setup flow. Name the plugin exactly by ID, slug, or name: a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, and neither falls back to the default plugin. This never creates a plugin. For a server added by URL, the administrator's own distribution counts as the Shadow MCP review when the project has a policy that blocks unreviewed servers: the server is recorded in Shadow MCP as approved for this plugin's audience, and shadow_mcp in the result says so with the page where that standing is seen and changed.",
+		Annotations: distributeMCPToPluginAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// External-only: distribution rows require a connection, which a
@@ -90,6 +91,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 		Name:        "remove_mcp_from_plugin",
 		Title:       "Remove an MCP Server from a Plugin",
 		Description: "Take an MCP server back out of one plugin, undoing distribute_mcp_to_plugin, so the people it is shared with stop getting it. Constraints: only a membership this flow created is removed; one an administrator made by hand stays. Name the plugin exactly, on the same terms as distribute_mcp_to_plugin. Removing it from a plugin does not revoke any Shadow MCP approval recorded for it; adding it back to a plugin whose audience that approval covers is admitted without a new approval. Narrow or revoke the approval itself with decide_shadow_mcp_access, or from the server's Shadow MCP page.",
+		Annotations: removeMCPFromPluginAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// External-only for the same reason as distribution: the removal is

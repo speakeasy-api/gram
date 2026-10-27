@@ -1576,9 +1576,12 @@ func dbInvitationToGen(row *orgrepo.OrganizationInvitation, inviterUserID *strin
 	}
 }
 
-var errInvitationAcceptanceRace = errors.New("invitation is no longer pending")
+var (
+	errInvitationAcceptanceRace       = errors.New("invitation is no longer pending")
+	errInvitationOrganizationDisabled = errors.New("invitation organization is disabled")
+)
 
-func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID string) (orgrepo.OrganizationMetadatum, orgrepo.OrganizationInvitation, bool, error) {
+func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID string, requireSSO func(orgrepo.OrganizationMetadatum) bool) (orgrepo.OrganizationMetadatum, orgrepo.OrganizationInvitation, bool, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("begin invite acceptance transaction: %w", err)
@@ -1589,6 +1592,14 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 	org, err := repo.LockOrganizationForInviteAcceptance(ctx, organizationID)
 	if err != nil {
 		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("lock invite organization: %w", err)
+	}
+	// Checked under the lock, so an organization disabled after the
+	// invitation was listed gains no member.
+	if org.DisabledAt.Valid {
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, errInvitationOrganizationDisabled
+	}
+	if requireSSO != nil && requireSSO(org) {
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, ErrInvitationRequiresSSO
 	}
 
 	acceptedInvite, err := repo.AcceptInvitation(ctx, inviteID)
@@ -1662,6 +1673,39 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 	}
 
 	return org, acceptedInvite, trialArmed, nil
+}
+
+// acceptInvitation makes the user a member of the invitation's organization
+// and runs everything that follows an acceptance: the trial an eligible
+// invitation arms, the WorkOS membership, and the notifications. Only the
+// acceptance itself can fail. A non-nil requireSSO is checked under the
+// organization lock and refuses the acceptance with ErrInvitationRequiresSSO.
+func (s *Service) acceptInvitation(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID, inviteeEmail string, requireSSO func(orgrepo.OrganizationMetadatum) bool) error {
+	org, acceptedInvite, trialArmed, err := s.acceptInvitationTx(ctx, inviteID, organizationID, gramUserID, workosUserID, requireSSO)
+	if err != nil {
+		return err
+	}
+
+	if trialArmed {
+		for _, feature := range productfeatures.EnterpriseAccessBundle {
+			s.features.UpdateFeatureCache(ctx, acceptedInvite.OrganizationID, feature, true)
+		}
+	}
+
+	s.reconcileInvitationWorkOSMembership(ctx, acceptedInvite, org, gramUserID, workosUserID)
+
+	if trialArmed {
+		if err := s.trial.TrialStarted(ctx, acceptedInvite.OrganizationID); err != nil {
+			s.logger.ErrorContext(ctx, "invitation acceptance: failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID))
+		}
+		s.capturePlatformAdminInviteTelemetry(ctx, inviteeEmail, org)
+	} else if acceptedInvite.RoleSlug.Valid && acceptedInvite.RoleSlug.String == authz.SystemRoleAdmin {
+		if err := s.trial.AdminAdded(ctx, acceptedInvite.OrganizationID, gramUserID); err != nil {
+			s.logger.ErrorContext(ctx, "invitation acceptance: failed to notify trial admin added", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID), attr.SlogUserID(gramUserID), attr.SlogOrganizationInviteID(acceptedInvite.ID.String()))
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email string, org orgrepo.OrganizationMetadatum) {
@@ -1852,12 +1896,17 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	)
 	span.AddEvent("invite.callback.user_provisioned", trace.WithAttributes(attr.UserID(gramUserID)))
 
-	org, acceptedInvite, trialArmed, err := s.acceptInvitationTx(ctx, invite.ID, invite.OrganizationID, gramUserID, idpUser.Sub)
-	if err != nil {
+	if err := s.acceptInvitation(ctx, invite.ID, invite.OrganizationID, gramUserID, idpUser.Sub, inviteeEmail, nil); err != nil {
 		if errors.Is(err, errInvitationAcceptanceRace) {
 			s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
 			span.AddEvent("invite.callback.acceptance_race_lost")
 			redirectError("invite already used, revoked, or expired")
+			return
+		}
+		if errors.Is(err, errInvitationOrganizationDisabled) {
+			s.logger.WarnContext(ctx, "invite callback: invitation organization is disabled")
+			span.AddEvent("invite.callback.organization_disabled")
+			redirectError("this organization is disabled, please reach out to support@speakeasy.com for more information")
 			return
 		}
 		s.logger.ErrorContext(ctx, "invite callback: failed to accept invitation", attr.SlogError(err))
@@ -1867,25 +1916,6 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	span.AddEvent("invite.callback.org_membership_created")
 	span.AddEvent("invite.callback.invitation_accepted")
-
-	if trialArmed {
-		for _, feature := range productfeatures.EnterpriseAccessBundle {
-			s.features.UpdateFeatureCache(ctx, acceptedInvite.OrganizationID, feature, true)
-		}
-	}
-
-	s.reconcileInvitationWorkOSMembership(ctx, acceptedInvite, org, gramUserID, idpUser.Sub)
-
-	if trialArmed {
-		if err := s.trial.TrialStarted(ctx, acceptedInvite.OrganizationID); err != nil {
-			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID))
-		}
-		s.capturePlatformAdminInviteTelemetry(ctx, inviteeEmail, org)
-	} else if acceptedInvite.RoleSlug.Valid && acceptedInvite.RoleSlug.String == authz.SystemRoleAdmin {
-		if err := s.trial.AdminAdded(ctx, acceptedInvite.OrganizationID, gramUserID); err != nil {
-			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial admin added", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID), attr.SlogUserID(gramUserID), attr.SlogOrganizationInviteID(acceptedInvite.ID.String()))
-		}
-	}
 
 	// Record the sign-in like any other login, so grants from this session
 	// link to it and later revocations reach them.

@@ -344,7 +344,7 @@ func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principa
 	if setup.OrganizationSlug == "" || setup.MCPServerRoute == "" {
 		return "", ErrRegistrationUnavailable
 	}
-	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", "x", setup.MCPServerRoute, "settings").String() + "#authentication", nil
+	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings").String() + "#authentication", nil
 }
 
 // DashboardAuthorizationURL returns the Inspect page only after the upstream
@@ -368,7 +368,7 @@ func (s *RegistrationService) DashboardAuthorizationURL(ctx context.Context, pri
 	if setup.OrganizationSlug == "" || setup.MCPServerRoute == "" {
 		return "", ErrRegistrationUnavailable
 	}
-	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", "x", setup.MCPServerRoute, "inspect").String(), nil
+	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "inspect").String(), nil
 }
 
 // AttachDefaultIdentityProvider attaches the one OAuth provider advertised by

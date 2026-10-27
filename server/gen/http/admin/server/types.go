@@ -413,6 +413,57 @@ type MigrateExternalMcpServersRequestBody struct {
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 }
 
+// GetRegistryPromotionCandidateRequestBody is the type of the "admin" service
+// "getRegistryPromotionCandidate" endpoint HTTP request body.
+type GetRegistryPromotionCandidateRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID      *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID    *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
+// PromoteRegistryCandidateRequestBody is the type of the "admin" service
+// "promoteRegistryCandidate" endpoint HTTP request body.
+type PromoteRegistryCandidateRequestBody struct {
+	OrganizationID   *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID      *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	SourceRevision   *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	CurationRevision *string `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	PublicName       *string `form:"public_name,omitempty" json:"public_name,omitempty" xml:"public_name,omitempty"`
+	// Public title, at most 100 Unicode code points.
+	PublicTitle *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	// Public description, at most 100 Unicode code points.
+	PublicDescription       *string `form:"public_description,omitempty" json:"public_description,omitempty" xml:"public_description,omitempty"`
+	PublicURL               *string `form:"public_url,omitempty" json:"public_url,omitempty" xml:"public_url,omitempty"`
+	DocumentationURL        *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	DocsSlug                *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
+	AuthMode                *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
+	RetryKey                *string `form:"retry_key,omitempty" json:"retry_key,omitempty" xml:"retry_key,omitempty"`
+	PublicMetadataConfirmed *bool   `form:"public_metadata_confirmed,omitempty" json:"public_metadata_confirmed,omitempty" xml:"public_metadata_confirmed,omitempty"`
+	// Explicitly accept insufficient, failed, or unavailable health evidence.
+	// Source safety checks still apply.
+	OverrideEligibility *bool `form:"override_eligibility,omitempty" json:"override_eligibility,omitempty" xml:"override_eligibility,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateRequestBody is the type of the "admin"
+// service "curateRegistryPromotionCandidate" endpoint HTTP request body.
+type CurateRegistryPromotionCandidateRequestBody struct {
+	OrganizationID   *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	PromotionID      *string `form:"promotion_id,omitempty" json:"promotion_id,omitempty" xml:"promotion_id,omitempty"`
+	CurationRevision *string `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	Action           *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	RetryKey         *string `form:"retry_key,omitempty" json:"retry_key,omitempty" xml:"retry_key,omitempty"`
+}
+
+// RetryRegistryPromotionDocsRequestBody is the type of the "admin" service
+// "retryRegistryPromotionDocs" endpoint HTTP request body.
+type RetryRegistryPromotionDocsRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	PromotionID    *string `form:"promotion_id,omitempty" json:"promotion_id,omitempty" xml:"promotion_id,omitempty"`
+	DocsRevision   *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	RetryKey       *string `form:"retry_key,omitempty" json:"retry_key,omitempty" xml:"retry_key,omitempty"`
+}
+
 // CreateRegistryEntryRequestBody is the type of the "admin" service
 // "createRegistryEntry" endpoint HTTP request body.
 type CreateRegistryEntryRequestBody struct {
@@ -553,6 +604,27 @@ type RunUpstreamOAuthMigrationRequestBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
+// EnableUpstreamAuthEnforcementRequestBody is the type of the "admin" service
+// "enableUpstreamAuthEnforcement" endpoint HTTP request body.
+type EnableUpstreamAuthEnforcementRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The caller checked the organization's mandatory authorization shadow
+	// (mcp.authz.mandatory_shadow) and found no unexplained new denial.
+	ShadowParityConfirmed *bool `form:"shadow_parity_confirmed,omitempty" json:"shadow_parity_confirmed,omitempty" xml:"shadow_parity_confirmed,omitempty"`
+	// The organization was told that valid credentials from another organization
+	// are refused on its public servers once enforcement is on, instead of being
+	// served anonymously.
+	CrossOrganizationDenialCommunicated *bool `form:"cross_organization_denial_communicated,omitempty" json:"cross_organization_denial_communicated,omitempty" xml:"cross_organization_denial_communicated,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementRequestBody is the type of the "admin" service
+// "disableUpstreamAuthEnforcement" endpoint HTTP request body.
+type DisableUpstreamAuthEnforcementRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -614,6 +686,8 @@ type GetOrganizationFeaturesResponseBody struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled bool `form:"organization_gateway_disabled" json:"organization_gateway_disabled" xml:"organization_gateway_disabled"`
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool `form:"code_mode_enabled" json:"code_mode_enabled" xml:"code_mode_enabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -674,6 +748,8 @@ type SetOrganizationFeatureResponseBody struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled bool `form:"organization_gateway_disabled" json:"organization_gateway_disabled" xml:"organization_gateway_disabled"`
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool `form:"code_mode_enabled" json:"code_mode_enabled" xml:"code_mode_enabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -1958,6 +2034,8 @@ type DescribeMcpServerHealthResponseBody struct {
 	// issuer.
 	LegacyAuth        *string                                            `form:"legacy_auth,omitempty" json:"legacy_auth,omitempty" xml:"legacy_auth,omitempty"`
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuerResponseBody `form:"user_session_issuer,omitempty" json:"user_session_issuer,omitempty" xml:"user_session_issuer,omitempty"`
+	// How the server reaches its upstream. Omitted for toolset-only servers.
+	UpstreamAuth *AdminMcpServerHealthUpstreamAuthResponseBody `form:"upstream_auth,omitempty" json:"upstream_auth,omitempty" xml:"upstream_auth,omitempty"`
 }
 
 // GetMcpServerToolCallsResponseBody is the type of the "admin" service
@@ -2016,6 +2094,157 @@ type PreviewExternalMcpMigrationResponseBody struct {
 type MigrateExternalMcpServersResponseBody struct {
 	// One outcome per requested server, in request order.
 	Outcomes []*AdminExternalMcpMigrationOutcomeResponseBody `form:"outcomes" json:"outcomes" xml:"outcomes"`
+}
+
+// ListRegistryPromotionCandidatesResponseBody is the type of the "admin"
+// service "listRegistryPromotionCandidates" endpoint HTTP response body.
+type ListRegistryPromotionCandidatesResponseBody struct {
+	Candidates []*AdminRegistryPromotionCandidateResponseBody `form:"candidates" json:"candidates" xml:"candidates"`
+	NextCursor *string                                        `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
+// "getRegistryPromotionCandidate" endpoint HTTP response body.
+type GetRegistryPromotionCandidateResponseBody struct {
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
+	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
+	Status                 string  `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses      int64   `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures       int64   `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays           int     `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           string  `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed       bool    `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts           int     `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// PromoteRegistryCandidateResponseBody is the type of the "admin" service
+// "promoteRegistryCandidate" endpoint HTTP response body.
+type PromoteRegistryCandidateResponseBody struct {
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
+	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
+	Status                 string  `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses      int64   `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures       int64   `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays           int     `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           string  `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed       bool    `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts           int     `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
+// service "curateRegistryPromotionCandidate" endpoint HTTP response body.
+type CurateRegistryPromotionCandidateResponseBody struct {
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
+	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
+	Status                 string  `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses      int64   `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures       int64   `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays           int     `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           string  `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed       bool    `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts           int     `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
+// "retryRegistryPromotionDocs" endpoint HTTP response body.
+type RetryRegistryPromotionDocsResponseBody struct {
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
+	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
+	Status                 string  `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses      int64   `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures       int64   `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays           int     `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           string  `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed       bool    `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts           int     `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
@@ -2400,6 +2629,16 @@ type GetUpstreamOAuthMigrationStatusResponseBody struct {
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
 // RunUpstreamOAuthMigrationResponseBody is the type of the "admin" service
@@ -2412,8 +2651,95 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	AssociationsSkipped int64 `form:"associations_skipped" json:"associations_skipped" xml:"associations_skipped"`
 	// Credential choices recorded.
 	SelectionsWritten int64 `form:"selections_written" json:"selections_written" xml:"selections_written"`
+	// Typed auth clients recorded.
+	AuthClientsWritten *int64 `form:"auth_clients_written,omitempty" json:"auth_clients_written,omitempty" xml:"auth_clients_written,omitempty"`
+	// Server to auth client links recorded.
+	AuthClientLinksWritten *int64 `form:"auth_client_links_written,omitempty" json:"auth_client_links_written,omitempty" xml:"auth_client_links_written,omitempty"`
+	// Servers marked as needing upstream authentication because they offer a
+	// backfilled auth client.
+	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
+	// Credential choices this run named a typed auth client on.
+	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
+	// Execution-selection profile versions this run recorded.
+	ExecutionProfileVersionsWritten *int64 `form:"execution_profile_versions_written,omitempty" json:"execution_profile_versions_written,omitempty" xml:"execution_profile_versions_written,omitempty"`
+	// Default auth permissions this run granted across the organization: the
+	// personal default and shared client grants for every recorded client, and API
+	// key policies once every client is recorded. The auth-permission-defaults
+	// backfill grants the rest.
+	AuthPermissionGrantsWritten *int64 `form:"auth_permission_grants_written,omitempty" json:"auth_permission_grants_written,omitempty" xml:"auth_permission_grants_written,omitempty"`
+	// Why recording typed auth clients failed, when it did. The upstream OAuth
+	// migration itself is unaffected.
+	AuthClientsError *string `form:"auth_clients_error,omitempty" json:"auth_clients_error,omitempty" xml:"auth_clients_error,omitempty"`
 	// The organization's status after the run.
 	Status *AdminUpstreamOAuthMigrationStatusResponseBody `form:"status" json:"status" xml:"status"`
+}
+
+// EnableUpstreamAuthEnforcementResponseBody is the type of the "admin" service
+// "enableUpstreamAuthEnforcement" endpoint HTTP response body.
+type EnableUpstreamAuthEnforcementResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Whether the organization has nothing left to write and no server needing
+	// configuration.
+	Migrated bool `form:"migrated" json:"migrated" xml:"migrated"`
+	// MCP servers on a user session issuer that the association backfill decided.
+	Servers int64 `form:"servers" json:"servers" xml:"servers"`
+	// Server to client associations the configuration proves that are not yet
+	// recorded.
+	PendingAssociations int64 `form:"pending_associations" json:"pending_associations" xml:"pending_associations"`
+	// Servers whose upstream OAuth client must be associated by an administrator.
+	UnresolvedServers []*AdminUpstreamOAuthMigrationServerResponseBody `form:"unresolved_servers" json:"unresolved_servers" xml:"unresolved_servers"`
+	// Live user session credentials scanned.
+	Credentials int64 `form:"credentials" json:"credentials" xml:"credentials"`
+	// Credential choices the configuration decides that are not yet recorded.
+	PendingSelections int64 `form:"pending_selections" json:"pending_selections" xml:"pending_selections"`
+	// Credentials with at least one server they will be asked to reconnect to,
+	// because no single client is decided for them.
+	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementResponseBody is the type of the "admin"
+// service "disableUpstreamAuthEnforcement" endpoint HTTP response body.
+type DisableUpstreamAuthEnforcementResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Whether the organization has nothing left to write and no server needing
+	// configuration.
+	Migrated bool `form:"migrated" json:"migrated" xml:"migrated"`
+	// MCP servers on a user session issuer that the association backfill decided.
+	Servers int64 `form:"servers" json:"servers" xml:"servers"`
+	// Server to client associations the configuration proves that are not yet
+	// recorded.
+	PendingAssociations int64 `form:"pending_associations" json:"pending_associations" xml:"pending_associations"`
+	// Servers whose upstream OAuth client must be associated by an administrator.
+	UnresolvedServers []*AdminUpstreamOAuthMigrationServerResponseBody `form:"unresolved_servers" json:"unresolved_servers" xml:"unresolved_servers"`
+	// Live user session credentials scanned.
+	Credentials int64 `form:"credentials" json:"credentials" xml:"credentials"`
+	// Credential choices the configuration decides that are not yet recorded.
+	PendingSelections int64 `form:"pending_selections" json:"pending_selections" xml:"pending_selections"`
+	// Credentials with at least one server they will be asked to reconnect to,
+	// because no single client is decided for them.
+	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -14752,6 +15078,956 @@ type MigrateExternalMcpServersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListRegistryPromotionCandidatesUnauthorizedResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListRegistryPromotionCandidatesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryPromotionCandidatesForbiddenResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "forbidden" error.
+type ListRegistryPromotionCandidatesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryPromotionCandidatesBadRequestResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "bad_request" error.
+type ListRegistryPromotionCandidatesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryPromotionCandidatesNotFoundResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "not_found" error.
+type ListRegistryPromotionCandidatesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryPromotionCandidatesConflictResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "conflict" error.
+type ListRegistryPromotionCandidatesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryPromotionCandidatesUnsupportedMediaResponseBody is the type of
+// the "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListRegistryPromotionCandidatesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryPromotionCandidatesInvalidResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "invalid" error.
+type ListRegistryPromotionCandidatesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryPromotionCandidatesInvariantViolationResponseBody is the type of
+// the "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListRegistryPromotionCandidatesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryPromotionCandidatesUnexpectedResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "unexpected" error.
+type ListRegistryPromotionCandidatesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryPromotionCandidatesGatewayErrorResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListRegistryPromotionCandidatesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateUnauthorizedResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetRegistryPromotionCandidateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateForbiddenResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "forbidden" error.
+type GetRegistryPromotionCandidateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateBadRequestResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "bad_request" error.
+type GetRegistryPromotionCandidateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateNotFoundResponseBody is the type of the "admin"
+// service "getRegistryPromotionCandidate" endpoint HTTP response body for the
+// "not_found" error.
+type GetRegistryPromotionCandidateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateConflictResponseBody is the type of the "admin"
+// service "getRegistryPromotionCandidate" endpoint HTTP response body for the
+// "conflict" error.
+type GetRegistryPromotionCandidateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateUnsupportedMediaResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetRegistryPromotionCandidateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateInvalidResponseBody is the type of the "admin"
+// service "getRegistryPromotionCandidate" endpoint HTTP response body for the
+// "invalid" error.
+type GetRegistryPromotionCandidateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateInvariantViolationResponseBody is the type of
+// the "admin" service "getRegistryPromotionCandidate" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetRegistryPromotionCandidateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateUnexpectedResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "unexpected" error.
+type GetRegistryPromotionCandidateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryPromotionCandidateGatewayErrorResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetRegistryPromotionCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateUnauthorizedResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "unauthorized" error.
+type PromoteRegistryCandidateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateForbiddenResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "forbidden" error.
+type PromoteRegistryCandidateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateBadRequestResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "bad_request" error.
+type PromoteRegistryCandidateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateNotFoundResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "not_found" error.
+type PromoteRegistryCandidateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateConflictResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "conflict" error.
+type PromoteRegistryCandidateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateUnsupportedMediaResponseBody is the type of the
+// "admin" service "promoteRegistryCandidate" endpoint HTTP response body for
+// the "unsupported_media" error.
+type PromoteRegistryCandidateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateInvalidResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "invalid" error.
+type PromoteRegistryCandidateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateInvariantViolationResponseBody is the type of the
+// "admin" service "promoteRegistryCandidate" endpoint HTTP response body for
+// the "invariant_violation" error.
+type PromoteRegistryCandidateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateUnexpectedResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "unexpected" error.
+type PromoteRegistryCandidateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PromoteRegistryCandidateGatewayErrorResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "gateway_error" error.
+type PromoteRegistryCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateUnauthorizedResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "unauthorized" error.
+type CurateRegistryPromotionCandidateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateForbiddenResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "forbidden" error.
+type CurateRegistryPromotionCandidateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateBadRequestResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "bad_request" error.
+type CurateRegistryPromotionCandidateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateNotFoundResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "not_found" error.
+type CurateRegistryPromotionCandidateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateConflictResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "conflict" error.
+type CurateRegistryPromotionCandidateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateUnsupportedMediaResponseBody is the type of
+// the "admin" service "curateRegistryPromotionCandidate" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CurateRegistryPromotionCandidateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateInvalidResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "invalid" error.
+type CurateRegistryPromotionCandidateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateInvariantViolationResponseBody is the type
+// of the "admin" service "curateRegistryPromotionCandidate" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CurateRegistryPromotionCandidateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateUnexpectedResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "unexpected" error.
+type CurateRegistryPromotionCandidateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateGatewayErrorResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "gateway_error" error.
+type CurateRegistryPromotionCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsUnauthorizedResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "unauthorized" error.
+type RetryRegistryPromotionDocsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsForbiddenResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "forbidden" error.
+type RetryRegistryPromotionDocsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsBadRequestResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "bad_request" error.
+type RetryRegistryPromotionDocsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsNotFoundResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "not_found" error.
+type RetryRegistryPromotionDocsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsConflictResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "conflict" error.
+type RetryRegistryPromotionDocsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsUnsupportedMediaResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "unsupported_media" error.
+type RetryRegistryPromotionDocsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsInvalidResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "invalid" error.
+type RetryRegistryPromotionDocsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsInvariantViolationResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "invariant_violation" error.
+type RetryRegistryPromotionDocsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsUnexpectedResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "unexpected" error.
+type RetryRegistryPromotionDocsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryRegistryPromotionDocsGatewayErrorResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "gateway_error" error.
+type RetryRegistryPromotionDocsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetRegistryOktaCandidatesUnauthorizedResponseBody is the type of the "admin"
 // service "getRegistryOktaCandidates" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -20636,6 +21912,386 @@ type RunUpstreamOAuthMigrationGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// EnableUpstreamAuthEnforcementUnauthorizedResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unauthorized" error.
+type EnableUpstreamAuthEnforcementUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementForbiddenResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "forbidden" error.
+type EnableUpstreamAuthEnforcementForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementBadRequestResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "bad_request" error.
+type EnableUpstreamAuthEnforcementBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementNotFoundResponseBody is the type of the "admin"
+// service "enableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "not_found" error.
+type EnableUpstreamAuthEnforcementNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementConflictResponseBody is the type of the "admin"
+// service "enableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "conflict" error.
+type EnableUpstreamAuthEnforcementConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unsupported_media" error.
+type EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementInvalidResponseBody is the type of the "admin"
+// service "enableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "invalid" error.
+type EnableUpstreamAuthEnforcementInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementInvariantViolationResponseBody is the type of
+// the "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response
+// body for the "invariant_violation" error.
+type EnableUpstreamAuthEnforcementInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementUnexpectedResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unexpected" error.
+type EnableUpstreamAuthEnforcementUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementGatewayErrorResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "gateway_error" error.
+type EnableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementUnauthorizedResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unauthorized" error.
+type DisableUpstreamAuthEnforcementUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementForbiddenResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "forbidden" error.
+type DisableUpstreamAuthEnforcementForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementBadRequestResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "bad_request" error.
+type DisableUpstreamAuthEnforcementBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementNotFoundResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "not_found" error.
+type DisableUpstreamAuthEnforcementNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementConflictResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "conflict" error.
+type DisableUpstreamAuthEnforcementConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody is the type of
+// the "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response
+// body for the "unsupported_media" error.
+type DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementInvalidResponseBody is the type of the "admin"
+// service "disableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "invalid" error.
+type DisableUpstreamAuthEnforcementInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementInvariantViolationResponseBody is the type of
+// the "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response
+// body for the "invariant_violation" error.
+type DisableUpstreamAuthEnforcementInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementUnexpectedResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unexpected" error.
+type DisableUpstreamAuthEnforcementUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementGatewayErrorResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "gateway_error" error.
+type DisableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -21388,6 +23044,37 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 	ValidationStatusCounts map[string]int64 `form:"validation_status_counts" json:"validation_status_counts" xml:"validation_status_counts"`
 }
 
+// AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthUpstreamAuthResponseBody struct {
+	// configured, setup_incomplete (required with no enabled client),
+	// no_auth_required or undecided.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool                                         `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	AuthClients          []*AdminMcpServerHealthAuthClientResponseBody `form:"auth_clients" json:"auth_clients" xml:"auth_clients"`
+}
+
+// AdminMcpServerHealthAuthClientResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthAuthClientResponseBody struct {
+	// Auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// How the client authenticates upstream.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+	// backfill when created from existing configuration, admin when an
+	// administrator created it.
+	Source string `form:"source" json:"source" xml:"source"`
+	// Whether the client can be used.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// The OAuth registration behind an OAuth-backed client.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Servers offering the client, this one included.
+	ServerCount int `form:"server_count" json:"server_count" xml:"server_count"`
+	// Headers the client sends upstream.
+	HeaderCount int `form:"header_count" json:"header_count" xml:"header_count"`
+}
+
 // AdminMcpServerToolCallOutcomesResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerToolCallOutcomesResponseBody struct {
@@ -21406,7 +23093,8 @@ type AdminMcpServerToolCallBucketResponseBody struct {
 	BucketStart string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
 	// Tool calls in the bucket.
 	Total int64 `form:"total" json:"total" xml:"total"`
-	// Failed tool calls in the bucket.
+	// Tool calls in the bucket that failed with status 400 or above. Tool errors
+	// returned inside HTTP 200 (isError) are not counted here.
 	Failed int64 `form:"failed" json:"failed" xml:"failed"`
 }
 
@@ -21549,6 +23237,54 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 	Actions []string `form:"actions" json:"actions" xml:"actions"`
 	// What the migration could not carry over.
 	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
+}
+
+// AdminRegistryPromotionCandidateResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionCandidateResponseBody struct {
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
+	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
+	Status                 string  `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses      int64   `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures       int64   `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays           int     `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           string  `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed       bool    `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts           int     `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// AdminRegistryPromotionSuggestionsResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionSuggestionsResponseBody struct {
+	PublicName        *string `form:"public_name,omitempty" json:"public_name,omitempty" xml:"public_name,omitempty"`
+	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	PublicDescription *string `form:"public_description,omitempty" json:"public_description,omitempty" xml:"public_description,omitempty"`
+	PublicURL         *string `form:"public_url,omitempty" json:"public_url,omitempty" xml:"public_url,omitempty"`
+	DocumentationURL  *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	DocsSlug          *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
+	AuthMode          *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
 }
 
 // AdminRegistryOktaCandidateResponseBody is used to define fields on response
@@ -21784,6 +23520,202 @@ type AdminUpstreamOAuthMigrationServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 }
 
+// AdminUpstreamOAuthMigrationAuthClientsResponseBody is used to define fields
+// on response body types.
+type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
+	// Whether every configured identity has its auth client, server links and
+	// header copies recorded, no backfilled record is left to retire, no server
+	// offering one is left undecided, and no phase failed.
+	Complete bool `form:"complete" json:"complete" xml:"complete"`
+	// Whether a run is recording typed auth clients for the organization right
+	// now. The other counts are then empty; check again when it finishes.
+	InProgress bool `form:"in_progress" json:"in_progress" xml:"in_progress"`
+	// Servers offering a backfilled auth client whose need for upstream
+	// authentication is still undecided, not yet marked as needing it.
+	PendingMarkedServers int64 `form:"pending_marked_servers" json:"pending_marked_servers" xml:"pending_marked_servers"`
+	// Configured identities and server links decided.
+	Associations int64 `form:"associations" json:"associations" xml:"associations"`
+	// Auth clients not yet recorded.
+	PendingClients int64 `form:"pending_clients" json:"pending_clients" xml:"pending_clients"`
+	// Server to auth client links not yet recorded.
+	PendingLinks int64 `form:"pending_links" json:"pending_links" xml:"pending_links"`
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders int64 `form:"pending_headers" json:"pending_headers" xml:"pending_headers"`
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
+	PendingRetirements int64 `form:"pending_retirements" json:"pending_retirements" xml:"pending_retirements"`
+	// Configured identities that cannot be recorded without a guess and need
+	// attention.
+	Unresolved int64 `form:"unresolved" json:"unresolved" xml:"unresolved"`
+	// The configuration counted in unresolved.
+	UnresolvedAssociations []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"unresolved_associations" json:"unresolved_associations" xml:"unresolved_associations"`
+	// Configuration worth a look that needs no action and does not hold back
+	// complete, such as a server at an identity chaining upstream's origin that
+	// only live discovery could confirm.
+	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"warnings" json:"warnings" xml:"warnings"`
+	// The same counts for each kind of configured identity.
+	Kinds []*AdminUpstreamOAuthMigrationAuthClientKindResponseBody `form:"kinds" json:"kinds" xml:"kinds"`
+	// Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile,
+	// mark, selections or grants. The counts cover the other phases.
+	FailedPhases []string `form:"failed_phases" json:"failed_phases" xml:"failed_phases"`
+	// Whether every live credential choice names a usable auth client or is an
+	// explicit no-auth choice, and the selections check did not fail.
+	SelectionsComplete *bool `form:"selections_complete,omitempty" json:"selections_complete,omitempty" xml:"selections_complete,omitempty"`
+	// Live credential choices with exactly one auth client to name, not yet named.
+	PendingSelectionMappings *int64 `form:"pending_selection_mappings,omitempty" json:"pending_selection_mappings,omitempty" xml:"pending_selection_mappings,omitempty"`
+	// Default auth permission grants (mcp:auth) the organization's roles, users,
+	// agents and API keys are missing, which a run adds. Enforcement needs them,
+	// so existing callers keep their access.
+	PendingGrants *int64 `form:"pending_grants,omitempty" json:"pending_grants,omitempty" xml:"pending_grants,omitempty"`
+	// Credential choice coverage for each credential class.
+	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClassResponseBody `form:"selection_classes,omitempty" json:"selection_classes,omitempty" xml:"selection_classes,omitempty"`
+	// The first live credential choices left without a usable auth client.
+	SelectionGaps []*AdminUpstreamOAuthMigrationSelectionGapResponseBody `form:"selection_gaps,omitempty" json:"selection_gaps,omitempty" xml:"selection_gaps,omitempty"`
+	// Every live credential choice left without a usable auth client, including
+	// those beyond selection_gaps.
+	SelectionGapCount *int64 `form:"selection_gap_count,omitempty" json:"selection_gap_count,omitempty" xml:"selection_gap_count,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody is used to
+// define fields on response body types.
+type AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody struct {
+	// What was decided: oauth, header or ema.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch,
+	// multiple_authorization_headers, duplicate_header_names, denied_source,
+	// mixed_credential_headers, oauth_client_shared_across_sources,
+	// ema_client_shared_across_sources, conflicting_scopes, resource_variants,
+	// resource_not_matched, issuer_not_allowed or registration_out_of_reach; for a
+	// warning, server_not_matched.
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// The association, source, upstream OAuth client or first binding decided.
+	SubjectID string `form:"subject_id" json:"subject_id" xml:"subject_id"`
+	// The server to upstream OAuth client association ID, for an oauth association.
+	AssociationID string `form:"association_id" json:"association_id" xml:"association_id"`
+	// The MCP server ID, when one server is concerned.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The project the configuration belongs to.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The upstream OAuth client ID, for oauth and ema.
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	// Every identity chaining binding decided together, for ema.
+	BindingIds []string `form:"binding_ids" json:"binding_ids" xml:"binding_ids"`
+	// The sources concerned, for an upstream OAuth client shared across sources.
+	SourceIds []string `form:"source_ids" json:"source_ids" xml:"source_ids"`
+	// The servers concerned, for an upstream OAuth client shared across sources.
+	ServerIds []string `form:"server_ids" json:"server_ids" xml:"server_ids"`
+	// The auth client already recorded, if any.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationAuthClientKindResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationAuthClientKindResponseBody struct {
+	// The kind: oauth, header or ema.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Configuration and server links decided.
+	Decided int64 `form:"decided" json:"decided" xml:"decided"`
+	// Auth clients not yet recorded.
+	PendingClients int64 `form:"pending_clients" json:"pending_clients" xml:"pending_clients"`
+	// Server to auth client links not yet recorded.
+	PendingLinks int64 `form:"pending_links" json:"pending_links" xml:"pending_links"`
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders int64 `form:"pending_headers" json:"pending_headers" xml:"pending_headers"`
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
+	PendingRetirements int64 `form:"pending_retirements" json:"pending_retirements" xml:"pending_retirements"`
+	// Configuration that cannot be recorded without a guess.
+	Unresolved int64 `form:"unresolved" json:"unresolved" xml:"unresolved"`
+}
+
+// AdminUpstreamOAuthMigrationSelectionClassResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationSelectionClassResponseBody struct {
+	// The class: interactive, id_jag, dashboard_mint, workload or agent.
+	CredentialClass string `form:"credential_class" json:"credential_class" xml:"credential_class"`
+	// Live credential choices of this class.
+	Selections int64 `form:"selections" json:"selections" xml:"selections"`
+	// Choices that already name a usable auth client.
+	Mapped int64 `form:"mapped" json:"mapped" xml:"mapped"`
+	// Choices with exactly one auth client to name, not yet named.
+	Pending int64 `form:"pending" json:"pending" xml:"pending"`
+	// Explicit no-auth choices on servers with no auth client.
+	NoAuth int64 `form:"no_auth" json:"no_auth" xml:"no_auth"`
+	// Choices several auth clients could serve. They are never guessed: configure
+	// the server or ask the credential to reconnect.
+	Ambiguous int64 `form:"ambiguous" json:"ambiguous" xml:"ambiguous"`
+	// Choices whose upstream OAuth client has no live, enabled auth client linked
+	// to the server.
+	NoClient int64 `form:"no_client" json:"no_client" xml:"no_client"`
+	// No-auth choices, and choices naming the server's headers, on servers that
+	// now offer an OAuth-backed client; the credential reconnects.
+	StaleNoAuth int64 `form:"stale_no_auth" json:"stale_no_auth" xml:"stale_no_auth"`
+	// Choices naming an auth client that is no longer usable for the server; the
+	// credential reconnects.
+	Unusable int64 `form:"unusable" json:"unusable" xml:"unusable"`
+}
+
+// AdminUpstreamOAuthMigrationSelectionGapResponseBody is used to define fields
+// on response body types.
+type AdminUpstreamOAuthMigrationSelectionGapResponseBody struct {
+	// The choice.
+	SelectionID string `form:"selection_id" json:"selection_id" xml:"selection_id"`
+	// The class of the credential the choice belongs to.
+	CredentialClass string `form:"credential_class" json:"credential_class" xml:"credential_class"`
+	// The credential.
+	CredentialID string `form:"credential_id" json:"credential_id" xml:"credential_id"`
+	// The server the choice is for.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The server's project.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Why the choice has no usable auth client: ambiguous, no_client,
+	// stale_no_auth, unusable or skipped_race.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfilesResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfilesResponseBody struct {
+	// Whether every profile is recorded and holds a choice for every server its
+	// assistant reaches.
+	Complete bool `form:"complete" json:"complete" xml:"complete"`
+	// Assistant and trigger pairs, each with a profile per execution context.
+	Targets int64 `form:"targets" json:"targets" xml:"targets"`
+	// Profile versions not yet recorded.
+	PendingVersions int64 `form:"pending_versions" json:"pending_versions" xml:"pending_versions"`
+	// Servers the profiles hold no choice for, by execution context and reason.
+	// They are never guessed: configure the server's auth clients.
+	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody `form:"gaps" json:"gaps" xml:"gaps"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
+	// user_backed for turns run for a user the event identified, userless for
+	// turns run as the trigger's workload.
+	ExecutionContext string `form:"execution_context" json:"execution_context" xml:"execution_context"`
+	// Why there is no choice: selection_required (several clients could serve it),
+	// personal_requires_user (only a personal client serves it, and the turn has
+	// no user), no_client (no live, enabled auth client carries its upstream OAuth
+	// client), setup_incomplete (it needs upstream authentication and offers no
+	// auth client) or upstream_auth_undecided (it offers no auth client and an
+	// administrator has not decided whether it needs upstream authentication).
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// Profile and server pairs with no choice for this reason.
+	Servers int64 `form:"servers" json:"servers" xml:"servers"`
+}
+
+// AdminUpstreamAuthEnforcementResponseBody is used to define fields on
+// response body types.
+type AdminUpstreamAuthEnforcementResponseBody struct {
+	// Whether enforcement is on.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether the coverage enforcement needs is in place, so it can be turned on.
+	Ready bool `form:"ready" json:"ready" xml:"ready"`
+	// What keeps enforcement from being turned on, empty when ready.
+	Blockers []string `form:"blockers" json:"blockers" xml:"blockers"`
+}
+
 // AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
 // response body types.
 type AdminUpstreamOAuthMigrationStatusResponseBody struct {
@@ -21806,6 +23738,16 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -21878,6 +23820,7 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
 	}
 	return body
@@ -21907,6 +23850,7 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
 	}
 	return body
@@ -23285,6 +25229,9 @@ func NewDescribeMcpServerHealthResponseBody(res *admin.AdminMcpServerHealth) *De
 	if res.UserSessionIssuer != nil {
 		body.UserSessionIssuer = marshalAdminAdminMcpServerHealthUserSessionIssuerToAdminMcpServerHealthUserSessionIssuerResponseBody(res.UserSessionIssuer)
 	}
+	if res.UpstreamAuth != nil {
+		body.UpstreamAuth = marshalAdminAdminMcpServerHealthUpstreamAuthToAdminMcpServerHealthUpstreamAuthResponseBody(res.UpstreamAuth)
+	}
 	return body
 }
 
@@ -23430,6 +25377,191 @@ func NewMigrateExternalMcpServersResponseBody(res *admin.AdminExternalMcpMigrati
 		}
 	} else {
 		body.Outcomes = []*AdminExternalMcpMigrationOutcomeResponseBody{}
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesResponseBody builds the HTTP response body
+// from the result of the "listRegistryPromotionCandidates" endpoint of the
+// "admin" service.
+func NewListRegistryPromotionCandidatesResponseBody(res *admin.AdminRegistryPromotionCandidates) *ListRegistryPromotionCandidatesResponseBody {
+	body := &ListRegistryPromotionCandidatesResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Candidates != nil {
+		body.Candidates = make([]*AdminRegistryPromotionCandidateResponseBody, len(res.Candidates))
+		for i, val := range res.Candidates {
+			if val == nil {
+				body.Candidates[i] = nil
+				continue
+			}
+			body.Candidates[i] = marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidateResponseBody(val)
+		}
+	} else {
+		body.Candidates = []*AdminRegistryPromotionCandidateResponseBody{}
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateResponseBody builds the HTTP response body
+// from the result of the "getRegistryPromotionCandidate" endpoint of the
+// "admin" service.
+func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromotionCandidate) *GetRegistryPromotionCandidateResponseBody {
+	body := &GetRegistryPromotionCandidateResponseBody{
+		ID:                     res.ID,
+		OrganizationID:         res.OrganizationID,
+		ProjectID:              res.ProjectID,
+		McpServerID:            res.McpServerID,
+		RemoteMcpServerID:      res.RemoteMcpServerID,
+		SourceName:             res.SourceName,
+		CreatedAt:              res.CreatedAt,
+		CurationRevision:       res.CurationRevision,
+		SourceRevision:         res.SourceRevision,
+		Eligible:               res.Eligible,
+		CanOverrideEligibility: res.CanOverrideEligibility,
+		Reason:                 res.Reason,
+		Status:                 res.Status,
+		ObservedSuccesses:      res.ObservedSuccesses,
+		ObservedFailures:       res.ObservedFailures,
+		ObservedDays:           res.ObservedDays,
+		CheckedAt:              res.CheckedAt,
+		RegistryEntryID:        res.RegistryEntryID,
+		DocsStatus:             res.DocsStatus,
+		DocsURL:                res.DocsURL,
+		DocsRevision:           res.DocsRevision,
+		DocsRetryAllowed:       res.DocsRetryAllowed,
+		DocsAttempts:           res.DocsAttempts,
+		DocsLastAttemptAt:      res.DocsLastAttemptAt,
+		DocsNextAttemptAt:      res.DocsNextAttemptAt,
+		DocsQueuedAt:           res.DocsQueuedAt,
+		PromotedAt:             res.PromotedAt,
+		PublicTitle:            res.PublicTitle,
+		DeliveryError:          res.DeliveryError,
+	}
+	if res.SuggestedMetadata != nil {
+		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateResponseBody builds the HTTP response body from
+// the result of the "promoteRegistryCandidate" endpoint of the "admin" service.
+func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCandidate) *PromoteRegistryCandidateResponseBody {
+	body := &PromoteRegistryCandidateResponseBody{
+		ID:                     res.ID,
+		OrganizationID:         res.OrganizationID,
+		ProjectID:              res.ProjectID,
+		McpServerID:            res.McpServerID,
+		RemoteMcpServerID:      res.RemoteMcpServerID,
+		SourceName:             res.SourceName,
+		CreatedAt:              res.CreatedAt,
+		CurationRevision:       res.CurationRevision,
+		SourceRevision:         res.SourceRevision,
+		Eligible:               res.Eligible,
+		CanOverrideEligibility: res.CanOverrideEligibility,
+		Reason:                 res.Reason,
+		Status:                 res.Status,
+		ObservedSuccesses:      res.ObservedSuccesses,
+		ObservedFailures:       res.ObservedFailures,
+		ObservedDays:           res.ObservedDays,
+		CheckedAt:              res.CheckedAt,
+		RegistryEntryID:        res.RegistryEntryID,
+		DocsStatus:             res.DocsStatus,
+		DocsURL:                res.DocsURL,
+		DocsRevision:           res.DocsRevision,
+		DocsRetryAllowed:       res.DocsRetryAllowed,
+		DocsAttempts:           res.DocsAttempts,
+		DocsLastAttemptAt:      res.DocsLastAttemptAt,
+		DocsNextAttemptAt:      res.DocsNextAttemptAt,
+		DocsQueuedAt:           res.DocsQueuedAt,
+		PromotedAt:             res.PromotedAt,
+		PublicTitle:            res.PublicTitle,
+		DeliveryError:          res.DeliveryError,
+	}
+	if res.SuggestedMetadata != nil {
+		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateResponseBody builds the HTTP response
+// body from the result of the "curateRegistryPromotionCandidate" endpoint of
+// the "admin" service.
+func NewCurateRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromotionCandidate) *CurateRegistryPromotionCandidateResponseBody {
+	body := &CurateRegistryPromotionCandidateResponseBody{
+		ID:                     res.ID,
+		OrganizationID:         res.OrganizationID,
+		ProjectID:              res.ProjectID,
+		McpServerID:            res.McpServerID,
+		RemoteMcpServerID:      res.RemoteMcpServerID,
+		SourceName:             res.SourceName,
+		CreatedAt:              res.CreatedAt,
+		CurationRevision:       res.CurationRevision,
+		SourceRevision:         res.SourceRevision,
+		Eligible:               res.Eligible,
+		CanOverrideEligibility: res.CanOverrideEligibility,
+		Reason:                 res.Reason,
+		Status:                 res.Status,
+		ObservedSuccesses:      res.ObservedSuccesses,
+		ObservedFailures:       res.ObservedFailures,
+		ObservedDays:           res.ObservedDays,
+		CheckedAt:              res.CheckedAt,
+		RegistryEntryID:        res.RegistryEntryID,
+		DocsStatus:             res.DocsStatus,
+		DocsURL:                res.DocsURL,
+		DocsRevision:           res.DocsRevision,
+		DocsRetryAllowed:       res.DocsRetryAllowed,
+		DocsAttempts:           res.DocsAttempts,
+		DocsLastAttemptAt:      res.DocsLastAttemptAt,
+		DocsNextAttemptAt:      res.DocsNextAttemptAt,
+		DocsQueuedAt:           res.DocsQueuedAt,
+		PromotedAt:             res.PromotedAt,
+		PublicTitle:            res.PublicTitle,
+		DeliveryError:          res.DeliveryError,
+	}
+	if res.SuggestedMetadata != nil {
+		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsResponseBody builds the HTTP response body from
+// the result of the "retryRegistryPromotionDocs" endpoint of the "admin"
+// service.
+func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotionCandidate) *RetryRegistryPromotionDocsResponseBody {
+	body := &RetryRegistryPromotionDocsResponseBody{
+		ID:                     res.ID,
+		OrganizationID:         res.OrganizationID,
+		ProjectID:              res.ProjectID,
+		McpServerID:            res.McpServerID,
+		RemoteMcpServerID:      res.RemoteMcpServerID,
+		SourceName:             res.SourceName,
+		CreatedAt:              res.CreatedAt,
+		CurationRevision:       res.CurationRevision,
+		SourceRevision:         res.SourceRevision,
+		Eligible:               res.Eligible,
+		CanOverrideEligibility: res.CanOverrideEligibility,
+		Reason:                 res.Reason,
+		Status:                 res.Status,
+		ObservedSuccesses:      res.ObservedSuccesses,
+		ObservedFailures:       res.ObservedFailures,
+		ObservedDays:           res.ObservedDays,
+		CheckedAt:              res.CheckedAt,
+		RegistryEntryID:        res.RegistryEntryID,
+		DocsStatus:             res.DocsStatus,
+		DocsURL:                res.DocsURL,
+		DocsRevision:           res.DocsRevision,
+		DocsRetryAllowed:       res.DocsRetryAllowed,
+		DocsAttempts:           res.DocsAttempts,
+		DocsLastAttemptAt:      res.DocsLastAttemptAt,
+		DocsNextAttemptAt:      res.DocsNextAttemptAt,
+		DocsQueuedAt:           res.DocsQueuedAt,
+		PromotedAt:             res.PromotedAt,
+		PublicTitle:            res.PublicTitle,
+		DeliveryError:          res.DeliveryError,
+	}
+	if res.SuggestedMetadata != nil {
+		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
 	}
 	return body
 }
@@ -24092,6 +26224,15 @@ func NewGetUpstreamOAuthMigrationStatusResponseBody(res *admin.AdminUpstreamOAut
 	} else {
 		body.UnresolvedServers = []*AdminUpstreamOAuthMigrationServerResponseBody{}
 	}
+	if res.AuthClients != nil {
+		body.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(res.AuthClients)
+	}
+	if res.ExecutionProfiles != nil {
+		body.ExecutionProfiles = marshalAdminAdminUpstreamOAuthMigrationExecutionProfilesToAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(res.ExecutionProfiles)
+	}
+	if res.Enforcement != nil {
+		body.Enforcement = marshalAdminAdminUpstreamAuthEnforcementToAdminUpstreamAuthEnforcementResponseBody(res.Enforcement)
+	}
 	return body
 }
 
@@ -24100,12 +26241,93 @@ func NewGetUpstreamOAuthMigrationStatusResponseBody(res *admin.AdminUpstreamOAut
 // service.
 func NewRunUpstreamOAuthMigrationResponseBody(res *admin.AdminUpstreamOAuthMigrationRun) *RunUpstreamOAuthMigrationResponseBody {
 	body := &RunUpstreamOAuthMigrationResponseBody{
-		AssociationsWritten: res.AssociationsWritten,
-		AssociationsSkipped: res.AssociationsSkipped,
-		SelectionsWritten:   res.SelectionsWritten,
+		AssociationsWritten:                res.AssociationsWritten,
+		AssociationsSkipped:                res.AssociationsSkipped,
+		SelectionsWritten:                  res.SelectionsWritten,
+		AuthClientsWritten:                 res.AuthClientsWritten,
+		AuthClientLinksWritten:             res.AuthClientLinksWritten,
+		ServersMarkedRequiringUpstreamAuth: res.ServersMarkedRequiringUpstreamAuth,
+		SelectionsMapped:                   res.SelectionsMapped,
+		ExecutionProfileVersionsWritten:    res.ExecutionProfileVersionsWritten,
+		AuthPermissionGrantsWritten:        res.AuthPermissionGrantsWritten,
+		AuthClientsError:                   res.AuthClientsError,
 	}
 	if res.Status != nil {
 		body.Status = marshalAdminAdminUpstreamOAuthMigrationStatusToAdminUpstreamOAuthMigrationStatusResponseBody(res.Status)
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementResponseBody builds the HTTP response body
+// from the result of the "enableUpstreamAuthEnforcement" endpoint of the
+// "admin" service.
+func NewEnableUpstreamAuthEnforcementResponseBody(res *admin.AdminUpstreamOAuthMigrationStatus) *EnableUpstreamAuthEnforcementResponseBody {
+	body := &EnableUpstreamAuthEnforcementResponseBody{
+		OrganizationID:       res.OrganizationID,
+		Migrated:             res.Migrated,
+		Servers:              res.Servers,
+		PendingAssociations:  res.PendingAssociations,
+		Credentials:          res.Credentials,
+		PendingSelections:    res.PendingSelections,
+		ReconnectCredentials: res.ReconnectCredentials,
+	}
+	if res.UnresolvedServers != nil {
+		body.UnresolvedServers = make([]*AdminUpstreamOAuthMigrationServerResponseBody, len(res.UnresolvedServers))
+		for i, val := range res.UnresolvedServers {
+			if val == nil {
+				body.UnresolvedServers[i] = nil
+				continue
+			}
+			body.UnresolvedServers[i] = marshalAdminAdminUpstreamOAuthMigrationServerToAdminUpstreamOAuthMigrationServerResponseBody(val)
+		}
+	} else {
+		body.UnresolvedServers = []*AdminUpstreamOAuthMigrationServerResponseBody{}
+	}
+	if res.AuthClients != nil {
+		body.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(res.AuthClients)
+	}
+	if res.ExecutionProfiles != nil {
+		body.ExecutionProfiles = marshalAdminAdminUpstreamOAuthMigrationExecutionProfilesToAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(res.ExecutionProfiles)
+	}
+	if res.Enforcement != nil {
+		body.Enforcement = marshalAdminAdminUpstreamAuthEnforcementToAdminUpstreamAuthEnforcementResponseBody(res.Enforcement)
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementResponseBody builds the HTTP response body
+// from the result of the "disableUpstreamAuthEnforcement" endpoint of the
+// "admin" service.
+func NewDisableUpstreamAuthEnforcementResponseBody(res *admin.AdminUpstreamOAuthMigrationStatus) *DisableUpstreamAuthEnforcementResponseBody {
+	body := &DisableUpstreamAuthEnforcementResponseBody{
+		OrganizationID:       res.OrganizationID,
+		Migrated:             res.Migrated,
+		Servers:              res.Servers,
+		PendingAssociations:  res.PendingAssociations,
+		Credentials:          res.Credentials,
+		PendingSelections:    res.PendingSelections,
+		ReconnectCredentials: res.ReconnectCredentials,
+	}
+	if res.UnresolvedServers != nil {
+		body.UnresolvedServers = make([]*AdminUpstreamOAuthMigrationServerResponseBody, len(res.UnresolvedServers))
+		for i, val := range res.UnresolvedServers {
+			if val == nil {
+				body.UnresolvedServers[i] = nil
+				continue
+			}
+			body.UnresolvedServers[i] = marshalAdminAdminUpstreamOAuthMigrationServerToAdminUpstreamOAuthMigrationServerResponseBody(val)
+		}
+	} else {
+		body.UnresolvedServers = []*AdminUpstreamOAuthMigrationServerResponseBody{}
+	}
+	if res.AuthClients != nil {
+		body.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(res.AuthClients)
+	}
+	if res.ExecutionProfiles != nil {
+		body.ExecutionProfiles = marshalAdminAdminUpstreamOAuthMigrationExecutionProfilesToAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(res.ExecutionProfiles)
+	}
+	if res.Enforcement != nil {
+		body.Enforcement = marshalAdminAdminUpstreamAuthEnforcementToAdminUpstreamAuthEnforcementResponseBody(res.Enforcement)
 	}
 	return body
 }
@@ -33769,6 +35991,756 @@ func NewMigrateExternalMcpServersGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewListRegistryPromotionCandidatesUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesUnauthorizedResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesUnauthorizedResponseBody {
+	body := &ListRegistryPromotionCandidatesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesForbiddenResponseBody builds the HTTP
+// response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesForbiddenResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesForbiddenResponseBody {
+	body := &ListRegistryPromotionCandidatesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesBadRequestResponseBody builds the HTTP
+// response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesBadRequestResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesBadRequestResponseBody {
+	body := &ListRegistryPromotionCandidatesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesNotFoundResponseBody builds the HTTP
+// response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesNotFoundResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesNotFoundResponseBody {
+	body := &ListRegistryPromotionCandidatesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesConflictResponseBody builds the HTTP
+// response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesConflictResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesConflictResponseBody {
+	body := &ListRegistryPromotionCandidatesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesUnsupportedMediaResponseBody {
+	body := &ListRegistryPromotionCandidatesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesInvalidResponseBody builds the HTTP
+// response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesInvalidResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesInvalidResponseBody {
+	body := &ListRegistryPromotionCandidatesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesInvariantViolationResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesInvariantViolationResponseBody {
+	body := &ListRegistryPromotionCandidatesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesUnexpectedResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesUnexpectedResponseBody {
+	body := &ListRegistryPromotionCandidatesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryPromotionCandidatesGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listRegistryPromotionCandidates"
+// endpoint of the "admin" service.
+func NewListRegistryPromotionCandidatesGatewayErrorResponseBody(res *goa.ServiceError) *ListRegistryPromotionCandidatesGatewayErrorResponseBody {
+	body := &ListRegistryPromotionCandidatesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewGetRegistryPromotionCandidateUnauthorizedResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateUnauthorizedResponseBody {
+	body := &GetRegistryPromotionCandidateUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateForbiddenResponseBody builds the HTTP
+// response body from the result of the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewGetRegistryPromotionCandidateForbiddenResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateForbiddenResponseBody {
+	body := &GetRegistryPromotionCandidateForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateBadRequestResponseBody builds the HTTP
+// response body from the result of the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewGetRegistryPromotionCandidateBadRequestResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateBadRequestResponseBody {
+	body := &GetRegistryPromotionCandidateBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateNotFoundResponseBody builds the HTTP
+// response body from the result of the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewGetRegistryPromotionCandidateNotFoundResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateNotFoundResponseBody {
+	body := &GetRegistryPromotionCandidateNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateConflictResponseBody builds the HTTP
+// response body from the result of the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewGetRegistryPromotionCandidateConflictResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateConflictResponseBody {
+	body := &GetRegistryPromotionCandidateConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewGetRegistryPromotionCandidateUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateUnsupportedMediaResponseBody {
+	body := &GetRegistryPromotionCandidateUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateInvalidResponseBody builds the HTTP response
+// body from the result of the "getRegistryPromotionCandidate" endpoint of the
+// "admin" service.
+func NewGetRegistryPromotionCandidateInvalidResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateInvalidResponseBody {
+	body := &GetRegistryPromotionCandidateInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewGetRegistryPromotionCandidateInvariantViolationResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateInvariantViolationResponseBody {
+	body := &GetRegistryPromotionCandidateInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewGetRegistryPromotionCandidateUnexpectedResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateUnexpectedResponseBody {
+	body := &GetRegistryPromotionCandidateUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewGetRegistryPromotionCandidateGatewayErrorResponseBody(res *goa.ServiceError) *GetRegistryPromotionCandidateGatewayErrorResponseBody {
+	body := &GetRegistryPromotionCandidateGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "promoteRegistryCandidate" endpoint of the
+// "admin" service.
+func NewPromoteRegistryCandidateUnauthorizedResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateUnauthorizedResponseBody {
+	body := &PromoteRegistryCandidateUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateForbiddenResponseBody builds the HTTP response
+// body from the result of the "promoteRegistryCandidate" endpoint of the
+// "admin" service.
+func NewPromoteRegistryCandidateForbiddenResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateForbiddenResponseBody {
+	body := &PromoteRegistryCandidateForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateBadRequestResponseBody builds the HTTP response
+// body from the result of the "promoteRegistryCandidate" endpoint of the
+// "admin" service.
+func NewPromoteRegistryCandidateBadRequestResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateBadRequestResponseBody {
+	body := &PromoteRegistryCandidateBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateNotFoundResponseBody builds the HTTP response
+// body from the result of the "promoteRegistryCandidate" endpoint of the
+// "admin" service.
+func NewPromoteRegistryCandidateNotFoundResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateNotFoundResponseBody {
+	body := &PromoteRegistryCandidateNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateConflictResponseBody builds the HTTP response
+// body from the result of the "promoteRegistryCandidate" endpoint of the
+// "admin" service.
+func NewPromoteRegistryCandidateConflictResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateConflictResponseBody {
+	body := &PromoteRegistryCandidateConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "promoteRegistryCandidate" endpoint of
+// the "admin" service.
+func NewPromoteRegistryCandidateUnsupportedMediaResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateUnsupportedMediaResponseBody {
+	body := &PromoteRegistryCandidateUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateInvalidResponseBody builds the HTTP response body
+// from the result of the "promoteRegistryCandidate" endpoint of the "admin"
+// service.
+func NewPromoteRegistryCandidateInvalidResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateInvalidResponseBody {
+	body := &PromoteRegistryCandidateInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "promoteRegistryCandidate" endpoint of
+// the "admin" service.
+func NewPromoteRegistryCandidateInvariantViolationResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateInvariantViolationResponseBody {
+	body := &PromoteRegistryCandidateInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateUnexpectedResponseBody builds the HTTP response
+// body from the result of the "promoteRegistryCandidate" endpoint of the
+// "admin" service.
+func NewPromoteRegistryCandidateUnexpectedResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateUnexpectedResponseBody {
+	body := &PromoteRegistryCandidateUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "promoteRegistryCandidate" endpoint of the
+// "admin" service.
+func NewPromoteRegistryCandidateGatewayErrorResponseBody(res *goa.ServiceError) *PromoteRegistryCandidateGatewayErrorResponseBody {
+	body := &PromoteRegistryCandidateGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateUnauthorizedResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateUnauthorizedResponseBody {
+	body := &CurateRegistryPromotionCandidateUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateForbiddenResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateForbiddenResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateForbiddenResponseBody {
+	body := &CurateRegistryPromotionCandidateForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateBadRequestResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateBadRequestResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateBadRequestResponseBody {
+	body := &CurateRegistryPromotionCandidateBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateNotFoundResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateNotFoundResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateNotFoundResponseBody {
+	body := &CurateRegistryPromotionCandidateNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateConflictResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateConflictResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateConflictResponseBody {
+	body := &CurateRegistryPromotionCandidateConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateUnsupportedMediaResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateUnsupportedMediaResponseBody {
+	body := &CurateRegistryPromotionCandidateUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateInvalidResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateInvalidResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateInvalidResponseBody {
+	body := &CurateRegistryPromotionCandidateInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateInvariantViolationResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateInvariantViolationResponseBody {
+	body := &CurateRegistryPromotionCandidateInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateUnexpectedResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateUnexpectedResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateUnexpectedResponseBody {
+	body := &CurateRegistryPromotionCandidateUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateGatewayErrorResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateGatewayErrorResponseBody {
+	body := &CurateRegistryPromotionCandidateGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "retryRegistryPromotionDocs" endpoint
+// of the "admin" service.
+func NewRetryRegistryPromotionDocsUnauthorizedResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsUnauthorizedResponseBody {
+	body := &RetryRegistryPromotionDocsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsForbiddenResponseBody builds the HTTP response
+// body from the result of the "retryRegistryPromotionDocs" endpoint of the
+// "admin" service.
+func NewRetryRegistryPromotionDocsForbiddenResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsForbiddenResponseBody {
+	body := &RetryRegistryPromotionDocsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsBadRequestResponseBody builds the HTTP response
+// body from the result of the "retryRegistryPromotionDocs" endpoint of the
+// "admin" service.
+func NewRetryRegistryPromotionDocsBadRequestResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsBadRequestResponseBody {
+	body := &RetryRegistryPromotionDocsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsNotFoundResponseBody builds the HTTP response
+// body from the result of the "retryRegistryPromotionDocs" endpoint of the
+// "admin" service.
+func NewRetryRegistryPromotionDocsNotFoundResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsNotFoundResponseBody {
+	body := &RetryRegistryPromotionDocsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsConflictResponseBody builds the HTTP response
+// body from the result of the "retryRegistryPromotionDocs" endpoint of the
+// "admin" service.
+func NewRetryRegistryPromotionDocsConflictResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsConflictResponseBody {
+	body := &RetryRegistryPromotionDocsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "retryRegistryPromotionDocs" endpoint
+// of the "admin" service.
+func NewRetryRegistryPromotionDocsUnsupportedMediaResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsUnsupportedMediaResponseBody {
+	body := &RetryRegistryPromotionDocsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsInvalidResponseBody builds the HTTP response
+// body from the result of the "retryRegistryPromotionDocs" endpoint of the
+// "admin" service.
+func NewRetryRegistryPromotionDocsInvalidResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsInvalidResponseBody {
+	body := &RetryRegistryPromotionDocsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "retryRegistryPromotionDocs" endpoint
+// of the "admin" service.
+func NewRetryRegistryPromotionDocsInvariantViolationResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsInvariantViolationResponseBody {
+	body := &RetryRegistryPromotionDocsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "retryRegistryPromotionDocs" endpoint of the
+// "admin" service.
+func NewRetryRegistryPromotionDocsUnexpectedResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsUnexpectedResponseBody {
+	body := &RetryRegistryPromotionDocsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "retryRegistryPromotionDocs" endpoint
+// of the "admin" service.
+func NewRetryRegistryPromotionDocsGatewayErrorResponseBody(res *goa.ServiceError) *RetryRegistryPromotionDocsGatewayErrorResponseBody {
+	body := &RetryRegistryPromotionDocsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetRegistryOktaCandidatesUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "getRegistryOktaCandidates" endpoint of
 // the "admin" service.
@@ -38391,6 +41363,306 @@ func NewRunUpstreamOAuthMigrationGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewEnableUpstreamAuthEnforcementUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementUnauthorizedResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementUnauthorizedResponseBody {
+	body := &EnableUpstreamAuthEnforcementUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementForbiddenResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementForbiddenResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementForbiddenResponseBody {
+	body := &EnableUpstreamAuthEnforcementForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementBadRequestResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementBadRequestResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementBadRequestResponseBody {
+	body := &EnableUpstreamAuthEnforcementBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementNotFoundResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementNotFoundResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementNotFoundResponseBody {
+	body := &EnableUpstreamAuthEnforcementNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementConflictResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementConflictResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementConflictResponseBody {
+	body := &EnableUpstreamAuthEnforcementConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementUnsupportedMediaResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody {
+	body := &EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementInvalidResponseBody builds the HTTP response
+// body from the result of the "enableUpstreamAuthEnforcement" endpoint of the
+// "admin" service.
+func NewEnableUpstreamAuthEnforcementInvalidResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementInvalidResponseBody {
+	body := &EnableUpstreamAuthEnforcementInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementInvariantViolationResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementInvariantViolationResponseBody {
+	body := &EnableUpstreamAuthEnforcementInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementUnexpectedResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementUnexpectedResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementUnexpectedResponseBody {
+	body := &EnableUpstreamAuthEnforcementUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementGatewayErrorResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementGatewayErrorResponseBody {
+	body := &EnableUpstreamAuthEnforcementGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementUnauthorizedResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementUnauthorizedResponseBody {
+	body := &DisableUpstreamAuthEnforcementUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementForbiddenResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementForbiddenResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementForbiddenResponseBody {
+	body := &DisableUpstreamAuthEnforcementForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementBadRequestResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementBadRequestResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementBadRequestResponseBody {
+	body := &DisableUpstreamAuthEnforcementBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementNotFoundResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementNotFoundResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementNotFoundResponseBody {
+	body := &DisableUpstreamAuthEnforcementNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementConflictResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementConflictResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementConflictResponseBody {
+	body := &DisableUpstreamAuthEnforcementConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementUnsupportedMediaResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody {
+	body := &DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementInvalidResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementInvalidResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementInvalidResponseBody {
+	body := &DisableUpstreamAuthEnforcementInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementInvariantViolationResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementInvariantViolationResponseBody {
+	body := &DisableUpstreamAuthEnforcementInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementUnexpectedResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementUnexpectedResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementUnexpectedResponseBody {
+	body := &DisableUpstreamAuthEnforcementUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementGatewayErrorResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementGatewayErrorResponseBody {
+	body := &DisableUpstreamAuthEnforcementGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -39287,6 +42559,90 @@ func NewMigrateExternalMcpServersPayload(body *MigrateExternalMcpServersRequestB
 	return v
 }
 
+// NewListRegistryPromotionCandidatesPayload builds a admin service
+// listRegistryPromotionCandidates endpoint payload.
+func NewListRegistryPromotionCandidatesPayload(cursor *string, status string, limit int, adminSessionToken *string) *admin.ListRegistryPromotionCandidatesPayload {
+	v := &admin.ListRegistryPromotionCandidatesPayload{}
+	v.Cursor = cursor
+	v.Status = status
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidatePayload builds a admin service
+// getRegistryPromotionCandidate endpoint payload.
+func NewGetRegistryPromotionCandidatePayload(body *GetRegistryPromotionCandidateRequestBody, adminSessionToken *string) *admin.GetRegistryPromotionCandidatePayload {
+	v := &admin.GetRegistryPromotionCandidatePayload{
+		OrganizationID: *body.OrganizationID,
+		ProjectID:      *body.ProjectID,
+		McpServerID:    *body.McpServerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewPromoteRegistryCandidatePayload builds a admin service
+// promoteRegistryCandidate endpoint payload.
+func NewPromoteRegistryCandidatePayload(body *PromoteRegistryCandidateRequestBody, adminSessionToken *string) *admin.PromoteRegistryCandidatePayload {
+	v := &admin.PromoteRegistryCandidatePayload{
+		OrganizationID:          *body.OrganizationID,
+		ProjectID:               *body.ProjectID,
+		McpServerID:             *body.McpServerID,
+		SourceRevision:          *body.SourceRevision,
+		CurationRevision:        *body.CurationRevision,
+		PublicName:              *body.PublicName,
+		PublicTitle:             *body.PublicTitle,
+		PublicDescription:       *body.PublicDescription,
+		PublicURL:               *body.PublicURL,
+		DocumentationURL:        *body.DocumentationURL,
+		DocsSlug:                *body.DocsSlug,
+		AuthMode:                *body.AuthMode,
+		RetryKey:                *body.RetryKey,
+		PublicMetadataConfirmed: *body.PublicMetadataConfirmed,
+	}
+	if body.OverrideEligibility != nil {
+		v.OverrideEligibility = *body.OverrideEligibility
+	}
+	if body.OverrideEligibility == nil {
+		v.OverrideEligibility = false
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidatePayload builds a admin service
+// curateRegistryPromotionCandidate endpoint payload.
+func NewCurateRegistryPromotionCandidatePayload(body *CurateRegistryPromotionCandidateRequestBody, adminSessionToken *string) *admin.CurateRegistryPromotionCandidatePayload {
+	v := &admin.CurateRegistryPromotionCandidatePayload{
+		OrganizationID:   *body.OrganizationID,
+		PromotionID:      *body.PromotionID,
+		CurationRevision: *body.CurationRevision,
+		Action:           *body.Action,
+		RetryKey:         *body.RetryKey,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsPayload builds a admin service
+// retryRegistryPromotionDocs endpoint payload.
+func NewRetryRegistryPromotionDocsPayload(body *RetryRegistryPromotionDocsRequestBody, adminSessionToken *string) *admin.RetryRegistryPromotionDocsPayload {
+	v := &admin.RetryRegistryPromotionDocsPayload{
+		OrganizationID: *body.OrganizationID,
+		PromotionID:    *body.PromotionID,
+		DocsRevision:   *body.DocsRevision,
+		RetryKey:       *body.RetryKey,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetRegistryOktaCandidatesPayload builds a admin service
 // getRegistryOktaCandidates endpoint payload.
 func NewGetRegistryOktaCandidatesPayload(id string, adminSessionToken *string) *admin.GetRegistryOktaCandidatesPayload {
@@ -39654,6 +43010,30 @@ func NewRunUpstreamOAuthMigrationPayload(body *RunUpstreamOAuthMigrationRequestB
 	return v
 }
 
+// NewEnableUpstreamAuthEnforcementPayload builds a admin service
+// enableUpstreamAuthEnforcement endpoint payload.
+func NewEnableUpstreamAuthEnforcementPayload(body *EnableUpstreamAuthEnforcementRequestBody, adminSessionToken *string) *admin.EnableUpstreamAuthEnforcementPayload {
+	v := &admin.EnableUpstreamAuthEnforcementPayload{
+		OrganizationID:                      *body.OrganizationID,
+		ShadowParityConfirmed:               *body.ShadowParityConfirmed,
+		CrossOrganizationDenialCommunicated: *body.CrossOrganizationDenialCommunicated,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementPayload builds a admin service
+// disableUpstreamAuthEnforcement endpoint payload.
+func NewDisableUpstreamAuthEnforcementPayload(body *DisableUpstreamAuthEnforcementRequestBody, adminSessionToken *string) *admin.DisableUpstreamAuthEnforcementPayload {
+	v := &admin.DisableUpstreamAuthEnforcementPayload{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -39667,8 +43047,8 @@ func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureReque
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "session_portability" || *body.FeatureName == "network_ingress" || *body.FeatureName == "signals_intelligence" || *body.FeatureName == "organization_gateway_disabled") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "session_portability", "network_ingress", "signals_intelligence", "organization_gateway_disabled"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "session_portability" || *body.FeatureName == "network_ingress" || *body.FeatureName == "signals_intelligence" || *body.FeatureName == "organization_gateway_disabled" || *body.FeatureName == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "session_portability", "network_ingress", "signals_intelligence", "organization_gateway_disabled", "code_mode"}))
 		}
 	}
 	if body.FeatureName != nil {
@@ -40178,6 +43558,145 @@ func ValidateMigrateExternalMcpServersRequestBody(body *MigrateExternalMcpServer
 	return
 }
 
+// ValidateGetRegistryPromotionCandidateRequestBody runs the validations
+// defined on GetRegistryPromotionCandidateRequestBody
+func ValidateGetRegistryPromotionCandidateRequestBody(body *GetRegistryPromotionCandidateRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateRequestBody runs the validations defined on
+// PromoteRegistryCandidateRequestBody
+func ValidatePromoteRegistryCandidateRequestBody(body *PromoteRegistryCandidateRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.CurationRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("curation_revision", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.PublicName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("public_name", "body"))
+	}
+	if body.PublicTitle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("public_title", "body"))
+	}
+	if body.PublicDescription == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("public_description", "body"))
+	}
+	if body.PublicURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("public_url", "body"))
+	}
+	if body.DocumentationURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("documentation_url", "body"))
+	}
+	if body.DocsSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_slug", "body"))
+	}
+	if body.AuthMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auth_mode", "body"))
+	}
+	if body.RetryKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("retry_key", "body"))
+	}
+	if body.PublicMetadataConfirmed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("public_metadata_confirmed", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.CurationRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", *body.CurationRevision, goa.FormatUUID))
+	}
+	if body.AuthMode != nil {
+		if !(*body.AuthMode == "none" || *body.AuthMode == "oauth") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_mode", *body.AuthMode, []any{"none", "oauth"}))
+		}
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateRequestBody runs the validations
+// defined on CurateRegistryPromotionCandidateRequestBody
+func ValidateCurateRegistryPromotionCandidateRequestBody(body *CurateRegistryPromotionCandidateRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.PromotionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("promotion_id", "body"))
+	}
+	if body.CurationRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("curation_revision", "body"))
+	}
+	if body.Action == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
+	}
+	if body.RetryKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("retry_key", "body"))
+	}
+	if body.PromotionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promotion_id", *body.PromotionID, goa.FormatUUID))
+	}
+	if body.CurationRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", *body.CurationRevision, goa.FormatUUID))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "reject" || *body.Action == "archive" || *body.Action == "restore") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"reject", "archive", "restore"}))
+		}
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsRequestBody runs the validations defined
+// on RetryRegistryPromotionDocsRequestBody
+func ValidateRetryRegistryPromotionDocsRequestBody(body *RetryRegistryPromotionDocsRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.PromotionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("promotion_id", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.RetryKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("retry_key", "body"))
+	}
+	if body.PromotionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promotion_id", *body.PromotionID, goa.FormatUUID))
+	}
+	if body.DocsRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_revision", *body.DocsRevision, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateCreateRegistryEntryRequestBody runs the validations defined on
 // CreateRegistryEntryRequestBody
 func ValidateCreateRegistryEntryRequestBody(body *CreateRegistryEntryRequestBody) (err error) {
@@ -40443,6 +43962,30 @@ func ValidateSetStripeSubscriptionRequestBody(body *SetStripeSubscriptionRequest
 // ValidateRunUpstreamOAuthMigrationRequestBody runs the validations defined on
 // RunUpstreamOAuthMigrationRequestBody
 func ValidateRunUpstreamOAuthMigrationRequestBody(body *RunUpstreamOAuthMigrationRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementRequestBody runs the validations
+// defined on EnableUpstreamAuthEnforcementRequestBody
+func ValidateEnableUpstreamAuthEnforcementRequestBody(body *EnableUpstreamAuthEnforcementRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ShadowParityConfirmed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("shadow_parity_confirmed", "body"))
+	}
+	if body.CrossOrganizationDenialCommunicated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cross_organization_denial_communicated", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementRequestBody runs the validations
+// defined on DisableUpstreamAuthEnforcementRequestBody
+func ValidateDisableUpstreamAuthEnforcementRequestBody(body *DisableUpstreamAuthEnforcementRequestBody) (err error) {
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}

@@ -55,11 +55,9 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("False Positive Test")})
 	require.NoError(t, err)
-	policyID, err2 := uuid.Parse(policy.ID)
-	require.NoError(t, err2)
 
 	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
-	resultUUID := seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "aws-access-key-id", "AKIAIOSFODNN7EXAMPLE")
+	resultUUID := uuid.New()
 	resultID := resultUUID.String()
 
 	// Seed the ClickHouse source row that the direct mark and unmark copies.
@@ -99,17 +97,8 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NotNil(t, dismissed.Results[0].FalsePositiveAt)
 	require.Equal(t, int64(1), dismissed.TotalCount)
 
-	// The reason isn't surfaced on the API type today (no UI sends one yet),
-	// but it must still land in Postgres from the RPC payload.
-	dismissedRows, err := riskrepo.New(ti.conn).ListFalsePositiveRiskResults(ctx, riskrepo.ListFalsePositiveRiskResultsParams{
-		ProjectID: projectID,
-		PageLimit: 10,
-	})
-	require.NoError(t, err)
-	require.Len(t, dismissedRows, 1)
-	require.Equal(t, resultUUID, dismissedRows[0].ID)
-	require.True(t, dismissedRows[0].FalsePositiveReason.Valid)
-	require.Equal(t, "noise", dismissedRows[0].FalsePositiveReason.String)
+	require.NotNil(t, dismissed.Results[0].SuppressedDetail)
+	require.Equal(t, "noise", *dismissed.Results[0].SuppressedDetail, "the dismissal reason lands on the ClickHouse suppression copy")
 
 	restoreCountBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultRestore)
 	require.NoError(t, err)
@@ -148,12 +137,8 @@ func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Concurrent False Positive Test")})
 	require.NoError(t, err)
-	policyID := uuid.MustParse(policy.ID)
 	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
-	resultIDs := []uuid.UUID{
-		seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "secret.github_pat", "token-a"),
-		seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "secret.aws_access_token", "token-b"),
-	}
+	resultIDs := []uuid.UUID{uuid.New(), uuid.New()}
 	resultIDStrings := []string{resultIDs[0].String(), resultIDs[1].String()}
 	reversedIDStrings := []string{resultIDStrings[1], resultIDStrings[0]}
 
@@ -162,7 +147,6 @@ func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultIDs[0], chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultIDs[1], chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 	}))
-	pgQueries := riskrepo.New(ti.conn)
 
 	for round := range 20 {
 		start := make(chan struct{})
@@ -191,16 +175,11 @@ func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.
 			dismissedIDs[result.ID] = struct{}{}
 		}
 
-		for _, resultID := range resultIDs {
-			falsePositiveAt, err := pgQueries.GetRiskResultFalsePositiveForTest(ctx, riskrepo.GetRiskResultFalsePositiveForTestParams{
-				ProjectID: projectID,
-				ID:        resultID,
-			})
-			require.NoError(t, err)
-			pgDismissed := falsePositiveAt.Valid
-			_, chDismissed := dismissedIDs[resultID.String()]
-			require.Equalf(t, pgDismissed, chDismissed, "round %d result %s diverged", round, resultID)
-		}
+		// Both batches lock every id in one order, so whichever ran last owns
+		// the state of both findings.
+		_, firstDismissed := dismissedIDs[resultIDs[0].String()]
+		_, secondDismissed := dismissedIDs[resultIDs[1].String()]
+		require.Equalf(t, firstDismissed, secondDismissed, "round %d left the batch half applied", round)
 	}
 }
 

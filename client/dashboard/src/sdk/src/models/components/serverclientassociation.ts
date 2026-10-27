@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ServerClientAssociationScope = {
 /**
  * Who owns the client.
  */
-export type ServerClientAssociationScope = ClosedEnum<
+export type ServerClientAssociationScope = OpenEnum<
   typeof ServerClientAssociationScope
 >;
 
@@ -67,9 +68,10 @@ export type ServerClientAssociation = {
 };
 
 /** @internal */
-export const ServerClientAssociationScope$inboundSchema: z.ZodMiniEnum<
-  typeof ServerClientAssociationScope
-> = z.enum(ServerClientAssociationScope);
+export const ServerClientAssociationScope$inboundSchema: z.ZodMiniType<
+  ServerClientAssociationScope,
+  unknown
+> = openEnums.inboundSchema(ServerClientAssociationScope);
 
 /** @internal */
 export const ServerClientAssociation$inboundSchema: z.ZodMiniType<

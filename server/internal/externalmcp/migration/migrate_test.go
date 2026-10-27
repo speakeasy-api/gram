@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -48,7 +49,7 @@ func TestRunSwitchesServerInPlace(t *testing.T) {
 
 	pluginServerID, err := repo.New(ti.conn).SeedPluginServerFixture(ctx, repo.SeedPluginServerFixtureParams{
 		OrganizationID: ti.organizationID, ProjectID: conv.ToNullUUID(ti.projectID), Name: "support-tools",
-		ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpServerID: conv.ToNullUUID(server.toolset.ID),
+		McpServerID: conv.ToNullUUID(server.toolset.ID),
 	})
 	require.NoError(t, err)
 	sessionID, err := repo.New(ti.conn).SeedRemoteSessionFixture(ctx, repo.SeedRemoteSessionFixtureParams{
@@ -247,12 +248,6 @@ func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 			require.NoError(t, repo.New(ti.conn).MakeClientSelfOwnedFixture(ctx, server.clientID))
 			return server
 		}},
-		{name: "assistant attachment", blocker: "attached to an assistant", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
-			t.Helper()
-			server := seedServer(t, ctx, ti, serverOptions{slug: "assisted", remoteURL: "https://mcp.example.com/mcp"})
-			require.NoError(t, repo.New(ti.conn).SeedAssistantToolsetFixture(ctx, repo.SeedAssistantToolsetFixtureParams{OrganizationID: ti.organizationID, ProjectID: ti.projectID, ToolsetID: server.toolset.ID}))
-			return server
-		}},
 		{name: "several recorded resources", blocker: "more than one upstream resource", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
 			t.Helper()
 			server := seedServer(t, ctx, ti, serverOptions{slug: "resources", remoteURL: "https://mcp.example.com/mcp"})
@@ -414,4 +409,16 @@ func TestRunDeletesToolsetsLeftWithNothingToMigrate(t *testing.T) {
 			require.Empty(t, endpoints)
 		})
 	}
+}
+
+func TestRunIgnoresRetiredOAuthProxyLink(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMigrator(t)
+	server := seedServer(t, ctx, ti, serverOptions{slug: "proxy-link", remoteURL: "https://mcp.example.com/mcp"})
+	testenv.LinkRetiredOAuthProxy(t, ctx, ti.conn, ti.projectID, server.toolset.ID)
+
+	outcomes := migrate(t, ctx, ti, false, server)
+	require.Equal(t, migration.StatusMigrated, outcomes[0].Status, outcomes[0].Reason)
+	require.False(t, containsSubstring(outcomes[0].Warnings, "dropped"), "warnings %q", outcomes[0].Warnings)
 }

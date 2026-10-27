@@ -5,7 +5,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PolicyStartChooser } from "./PolicyStart";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
+import { DraftReview, PolicyStartChooser } from "./PolicyStart";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn<(to: unknown, options?: unknown) => void>(),
@@ -82,7 +84,7 @@ const presets: RiskPreset[] = [
     label: "Secrets and credentials",
     description: "Block API keys, tokens, private keys and passwords.",
     policyType: "standard",
-    sources: ["secrets"],
+    sources: ["gitleaks"],
     presidioEntities: [],
     action: "block",
     score: 8,
@@ -210,4 +212,84 @@ describe("PolicyStartChooser Shadow AI use case", () => {
     );
     expect(mocks.setKind).not.toHaveBeenCalled();
   });
+});
+
+describe("unsupported policy drafts", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it.each([
+    { action: unrecognized("constructor") },
+    { sources: ["gitleaks", "future_detector"] },
+  ])(
+    "keeps unsupported presets visible without offering an unsafe conversion: %j",
+    (settings) => {
+      presets.push({
+        ...presets[0]!,
+        id: "future_preset",
+        label: "Newer settings",
+        ...settings,
+      });
+      try {
+        renderChooser();
+        const row = screen.getByRole("button", { name: /Newer settings/ });
+        expect(row.hasAttribute("disabled")).toBe(true);
+        fireEvent.click(row);
+        expect(mocks.navigate).not.toHaveBeenCalled();
+        expect(row.textContent).toContain("Refresh the page");
+      } finally {
+        presets.pop();
+      }
+    },
+  );
+
+  it.each([
+    { policyType: unrecognized("future_type") },
+    { action: unrecognized("future_action") },
+    { sources: ["gitleaks", "future_detector"] },
+  ])(
+    "shows a recoverable state for unsupported suggestion settings: %j",
+    (settings) => {
+      const suggestion: SuggestRiskPolicyResult = {
+        presetId: "",
+        name: "A newer policy",
+        policyType: "standard",
+        action: "block",
+        score: 8,
+        sources: [],
+        presidioEntities: [],
+        prompt: "",
+        userMessage: "",
+        rationale: "",
+        confidence: 1,
+        alternatives: [],
+        ...settings,
+      };
+      const onBack = vi.fn<() => void>();
+      const onContinue = vi.fn<() => void>();
+      render(
+        <DraftReview
+          description="A risk"
+          review={{ suggestion, overridePresetId: null }}
+          presets={[]}
+          mode="presidio"
+          promptPoliciesEnabled
+          onOverride={vi.fn<() => void>()}
+          onBack={onBack}
+          onContinue={onContinue}
+        />,
+      );
+      expect(
+        screen.getByText(/This draft uses newer policy settings/),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Continue/ })).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Choose another starting point" }),
+      );
+      expect(onBack).toHaveBeenCalledOnce();
+      expect(onContinue).not.toHaveBeenCalled();
+    },
+  );
 });

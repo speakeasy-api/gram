@@ -104,9 +104,6 @@ beforeEach(() => {
     data: { signalsIntelligenceEnabled: false },
   };
   testState.featureFlags = {
-    [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-    [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
-    [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
 });
@@ -167,6 +164,16 @@ describe("useProjectNavRoutes", () => {
     testState.projectId = "project_b";
     rerender();
     expect(sessions()?.resourceId).toBe("project_b");
+  });
+
+  it("keeps Agent Sessions discoverable for members who can read their own history", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const sessions = result.current.find(
+      (entry) => entry.route === routes.agentSessions,
+    );
+    // Command K registers these routes as page actions. Requiring chat:read
+    // here would hide the search destination from owners without that grant.
+    expect(sessions?.scope).toEqual(["project:read"]);
   });
 
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
@@ -230,12 +237,9 @@ describe("useProjectNavRoutes", () => {
   });
 
   it.each(["loading", "missing", "error"] as const)(
-    "preserves opt-in and opt-out navigation while flags are %s",
+    "keeps standard navigation while rollout flags are %s",
     (status) => {
       testState.featureFlags = {
-        [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-        [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
-        [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
 
@@ -243,7 +247,7 @@ describe("useProjectNavRoutes", () => {
       const navRoutes = result.current.map((entry) => entry.route);
 
       expect(navRoutes).toContain(routes.assistants);
-      expect(navRoutes).not.toContain(routes.watchdog);
+      expect(navRoutes).toContain(routes.watchdog);
       expect(navRoutes).not.toContain(routes.explore);
       expect(navRoutes).toContain(routes.deployments);
       expect(navRoutes).toContain(routes.riskEvents);
@@ -266,11 +270,17 @@ describe("useProjectNavRoutes", () => {
     expect(shownRoutes).toContain(routes.dashboards);
   });
 
+  it("requires organization admin for Watchdog navigation, matching its page", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const watchdog = result.current.find(
+      (entry) => entry.route === routes.watchdog,
+    );
+
+    expect(watchdog?.scope).toEqual(["org:admin"]);
+  });
+
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
-      [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
-      [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
-      [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
 
@@ -280,7 +290,7 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).toContain(routes.explore);
-    expect(navRoutes).not.toContain(routes.deployments);
+    expect(navRoutes).toContain(routes.deployments);
     expect(navRoutes).toContain(routes.riskEvents);
   });
 

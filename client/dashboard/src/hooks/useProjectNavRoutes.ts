@@ -48,17 +48,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
-  const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
-  const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
-  const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
-  // Deployments is opt-out: it remains visible unless PostHog explicitly
-  // resolves the flag to disabled.
-  const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
-  // Watchdog is opt-in: unavailable flags remain hidden.
-  const isRiskWatchdogEnabled = riskWatchdogFlag.status === "enabled";
   // Explore is opt-in while it is dogfooded: the flag is released to the
   // organizations trying it, and everyone else never sees the page.
   const isExploreEnabled = exploreFlag.status === "enabled";
@@ -84,15 +76,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       // redirects to the people.
       { route: routes.identities.people, scope: observe },
       { route: routes.identities.agents, scope: observe },
-      ...(userSessionsFlag.status === "enabled"
-        ? [
-            {
-              route: routes.mcpSessions,
-              scope: read,
-              resourceId: projectId,
-            },
-          ]
-        : []),
+      {
+        route: routes.mcpSessions,
+        scope: read,
+        resourceId: projectId,
+      },
       {
         route: routes.remoteIdentityProviders,
         scope: ["org:read", "org:admin"],
@@ -101,9 +89,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         route: routes.playground,
         scope: ["mcp:read", "mcp:write", "mcp:connect"],
       },
-      ...(isDeploymentsPageEnabled
-        ? [{ route: routes.deployments, scope: readWrite }]
-        : []),
+      { route: routes.deployments, scope: readWrite },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
       {
         route: routes.assistants,
@@ -117,9 +103,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      ...(isRiskWatchdogEnabled
-        ? [{ route: routes.watchdog, scope: read }]
-        : []),
+      { route: routes.watchdog, scope: ["org:admin"] as Scope[] },
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.costs, scope: observe },
@@ -148,12 +132,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     ];
   }, [
     routes,
-    userSessionsFlag.status,
     projectId,
-    isDeploymentsPageEnabled,
     isExploreEnabled,
     isOrgMemoryEnabled,
-    isRiskWatchdogEnabled,
     isSignalsIntelligenceEnabled,
   ]);
 }

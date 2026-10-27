@@ -1,10 +1,11 @@
 import { assert } from "@/lib/utils";
 import type { MCPServerEntry } from "@/elements/types";
 import { ToolsFilter } from "@/elements/types";
-import { createMCPClient } from "@ai-sdk/mcp";
+import type { createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
 import { trackError } from "@/elements/lib/errorTracking";
+import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
 import { Auth } from "./useAuth";
 
 type MCPToolsResult = Awaited<
@@ -106,7 +107,7 @@ export function useMCPTools({
 
       const settled = await Promise.allSettled(
         serverEntries.map(async ({ server, headers }) => {
-          const client = await createMCPClient({
+          const client = await createMCPClientWithVersionFallback({
             clientName: "gram-elements-mcp-client",
             transport: {
               type: "http",

@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 )
 
 // serversUserSession is one live user session row; offsets are Postgres
@@ -56,12 +59,13 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}
 
 	if err := s.q.ServersInsertUserSessionIssuers(ctx, repo.ServersInsertUserSessionIssuersParams{
-		WorkforceID: s.det("issuer-workforce"),
-		OrgID:       org,
-		LinearID:    s.det("issuer-linear"),
-		ProjectID:   proj,
-		SlackID:     s.det("issuer-slack"),
-		GatewayID:   s.det("issuer-gateway"),
+		WorkforceID:   s.det("issuer-workforce"),
+		OrgID:         org,
+		LinearID:      s.det("issuer-linear"),
+		ProjectID:     proj,
+		SlackID:       s.det("issuer-slack"),
+		GatewayID:     s.det("issuer-gateway"),
+		CodeGatewayID: s.det("issuer-code-gateway"),
 	}); err != nil {
 		return fmt.Errorf("insert demo user session issuers: %w", err)
 	}
@@ -85,14 +89,45 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo mcp servers: %w", err)
 	}
 
-	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, proj); err != nil {
+	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, repo.ServersInsertHostedToolsetMCPServersParams{
+		Toolset1:         s.toolset1(),
+		SupportMcpSlug:   s.spec.OrgSlug + "-support",
+		Toolset2:         s.toolset2(),
+		OpsMcpSlug:       s.spec.OrgSlug + "-ops",
+		Toolset3:         s.toolset3(),
+		PartnerMcpSlug:   s.spec.OrgSlug + "-partner",
+		PartnerIssuerID:  s.usIssuer(),
+		Toolset4:         s.toolset4(),
+		DiscoveryMcpSlug: s.spec.OrgSlug + "-oauth-discovery",
+		ProjectID:        proj,
+	}); err != nil {
 		return fmt.Errorf("insert demo hosted toolset mcp servers: %w", err)
+	}
+	for _, candidate := range []struct {
+		server  string
+		status  string
+		ageDays int32
+	}{
+		{server: "linear", status: "active", ageDays: 1},
+		{server: "slack", status: "rejected", ageDays: 2},
+		{server: "github", status: "archived", ageDays: 3},
+	} {
+		if err := s.q.ServersInsertRegistryPromotionCandidate(ctx, repo.ServersInsertRegistryPromotionCandidateParams{
+			ID: s.det("registry-promotion-" + candidate.status), OrgID: org, ProjectID: proj,
+			McpServerID: s.det("mcpserver-" + candidate.server), RemoteMcpServerID: s.det("remotemcp-" + candidate.server),
+			CurationStatus: candidate.status, AgeDays: candidate.ageDays,
+		}); err != nil {
+			return fmt.Errorf("insert synthetic catalogue promotion %s: %w", candidate.status, err)
+		}
 	}
 	if err := s.q.ServersInsertHostedToolsetEndpoints(ctx, repo.ServersInsertHostedToolsetEndpointsParams{
 		EndpointNamePrefix: s.name("endpoint-hosted-"),
 		ProjectID:          proj,
 	}); err != nil {
 		return fmt.Errorf("insert demo hosted toolset endpoints: %w", err)
+	}
+	if err := s.q.ServersMirrorHostedToolsets(ctx, proj); err != nil {
+		return fmt.Errorf("mirror demo hosted toolsets: %w", err)
 	}
 
 	if err := s.q.ServersInsertGitHubContractorsBlock(ctx, repo.ServersInsertGitHubContractorsBlockParams{
@@ -177,6 +212,14 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("bind demo linear remote session client: %w", err)
 	}
+	// The gateway serves Linear as a member, so its issuer binds Linear's
+	// client too, or no gateway sign-in could choose a client for Linear.
+	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
+		RemoteSessionClientID: s.det("remote-identity-client-linear"),
+		UserSessionIssuerID:   s.det("issuer-gateway"),
+	}); err != nil {
+		return fmt.Errorf("bind demo linear remote session client to the gateway: %w", err)
+	}
 	if err := s.q.ServersStampLinearRemoteSessionIssuer(ctx, repo.ServersStampLinearRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: s.det("remote-identity-provider-linear"),
 		McpServerID:           s.det("mcpserver-linear"),
@@ -229,6 +272,32 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo meta mcp server members: %w", err)
 	}
+	if err := s.q.ServersInsertCodeGateway(ctx, repo.ServersInsertCodeGatewayParams{
+		ID:                  s.det("metamcp-code"),
+		OrgID:               org,
+		ProjectID:           proj,
+		UserSessionIssuerID: s.det("issuer-code-gateway"),
+	}); err != nil {
+		return fmt.Errorf("insert demo code gateway: %w", err)
+	}
+	if err := s.q.ServersInsertCodeGatewayMembers(ctx, repo.ServersInsertCodeGatewayMembersParams{
+		SupportMemberID: s.det("metamember-code-support"),
+		ProjectID:       proj,
+		MetaID:          s.det("metamcp-code"),
+		SupportServerID: s.det("mcpserver-support"),
+		OpsMemberID:     s.det("metamember-code-ops"),
+		OpsServerID:     s.det("mcpserver-ops"),
+	}); err != nil {
+		return fmt.Errorf("insert demo code gateway members: %w", err)
+	}
+	if err := s.q.ServersInsertCodeGatewayEndpoint(ctx, repo.ServersInsertCodeGatewayEndpointParams{
+		ID:        s.det("endpoint-code"),
+		ProjectID: proj,
+		MetaID:    s.det("metamcp-code"),
+		Slug:      s.spec.OrgSlug + "-code-gateway",
+	}); err != nil {
+		return fmt.Errorf("insert demo code gateway endpoint: %w", err)
+	}
 	if err := s.q.ServersInsertRemovedGitHubMember(ctx, repo.ServersInsertRemovedGitHubMemberParams{
 		ID:             s.det("metamember-github"),
 		ProjectID:      proj,
@@ -250,6 +319,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		SlackSlug:         s.spec.OrgSlug + "-slack",
 	}); err != nil {
 		return fmt.Errorf("insert demo gateway endpoints: %w", err)
+	}
+	if err := s.seedServersTunnel(ctx); err != nil {
+		return err
 	}
 	if err := s.seedServersEMA(ctx); err != nil {
 		return err
@@ -323,6 +395,42 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		RemoteSessionClientID: s.det("attachment-client"),
 	}); err != nil {
 		return fmt.Errorf("associate demo linear server with the attachment client: %w", err)
+	}
+	// Each seeded sign-in carries the choice its consent page would have
+	// recorded for every server it reaches: Linear through its main client,
+	// Slack with no upstream authentication.
+	choices := []struct {
+		session int
+		server  string
+		client  string
+	}{
+		{session: 6, server: "linear", client: "remote-identity-client-linear"},
+		{session: 7, server: "linear", client: "remote-identity-client-linear"},
+		{session: 8, server: "slack", client: ""},
+		{session: 9, server: "slack", client: ""},
+		{session: 10, server: "linear", client: "remote-identity-client-linear"},
+		{session: 10, server: "slack", client: ""},
+		{session: 11, server: "linear", client: "remote-identity-client-linear"},
+		{session: 11, server: "slack", client: ""},
+	}
+	for _, c := range choices {
+		num := strconv.Itoa(c.session)
+		client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		if c.client != "" {
+			client = uuid.NullUUID{UUID: s.det(c.client), Valid: true}
+		}
+		if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
+			ID:                    s.det("upstream-client-choice-" + num + "-" + c.server),
+			ProjectID:             proj,
+			OrgID:                 org,
+			CredentialKind:        upstreamclients.CredentialKindUserSession,
+			CredentialID:          s.det("user-session-" + num),
+			McpServerID:           s.det("mcpserver-" + c.server),
+			RemoteSessionClientID: client,
+			Source:                upstreamclients.SelectionSourceIssuance,
+		}); err != nil {
+			return fmt.Errorf("insert demo upstream client choice for session %d on %s: %w", c.session, c.server, err)
+		}
 	}
 	if err := s.q.ServersInsertAttachmentSession(ctx, repo.ServersInsertAttachmentSessionParams{
 		ID:                    s.det("attachment-session"),
@@ -460,8 +568,94 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	return s.seedAuthClients(ctx)
+}
+
+// seedAuthClients records the typed auth clients the upstream OAuth migration
+// would derive, so server settings show a personal client, a client shared by
+// two servers, and who may use it.
+func (s *seeder) seedAuthClients(ctx context.Context) error {
+	org := s.orgID()
+	proj := s.projectID()
+
+	clients := []repo.ServersInsertAuthClientParams{
+		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Name: "Linear", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
+		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
+	}
+	for _, client := range clients {
+		if err := s.q.ServersInsertAuthClient(ctx, client); err != nil {
+			return fmt.Errorf("insert demo auth client %s: %w", client.Name, err)
+		}
+	}
+	if err := s.q.ServersInsertAuthClientHeader(ctx, repo.ServersInsertAuthClientHeaderParams{
+		ID: s.det("auth-client-github-token-header"), AuthClientID: s.det("auth-client-github-token"), OrgID: org,
+		Name: "Authorization", Value: "Bearer demo-placeholder",
+	}); err != nil {
+		return fmt.Errorf("insert demo auth client header: %w", err)
+	}
+
+	associations := []struct{ key, server, client string }{
+		{"auth-client-assoc-linear", "mcpserver-linear", "auth-client-linear"},
+		{"auth-client-assoc-github", "mcpserver-github", "auth-client-github-token"},
+		{"auth-client-assoc-linear-token", "mcpserver-linear", "auth-client-github-token"},
+	}
+	for _, a := range associations {
+		if err := s.q.ServersInsertServerAuthClient(ctx, repo.ServersInsertServerAuthClientParams{
+			ID: s.det(a.key), ProjectID: proj, OrgID: org, McpServerID: s.det(a.server), AuthClientID: s.det(a.client),
+		}); err != nil {
+			return fmt.Errorf("associate demo auth client %s: %w", a.key, err)
+		}
+	}
+	if err := s.q.ServersMarkRequiresUpstreamAuth(ctx, repo.ServersMarkRequiresUpstreamAuthParams{
+		ProjectID: proj,
+		Ids:       []uuid.UUID{s.det("mcpserver-linear"), s.det("mcpserver-github")},
+	}); err != nil {
+		return fmt.Errorf("mark demo servers as requiring upstream auth: %w", err)
+	}
+	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
+		OrgID: org, AuthClientID: s.det("auth-client-github-token"),
+		UseID: s.det("auth-client-github-token-use"), BlockID: s.det("auth-client-github-token-block"),
+	}); err != nil {
+		return fmt.Errorf("insert demo auth client role grants: %w", err)
+	}
 	return nil
 }
+
+// seedServersTunnel: a private MCP server reached through a disconnected
+// tunnel, so the tunnel Overview has a source to chart without a live agent.
+func (s *seeder) seedServersTunnel(ctx context.Context) error {
+	proj := s.projectID()
+	slug := s.spec.OrgSlug + "-private-inventory"
+	if err := s.q.ServersInsertPrivateInventoryTunnel(ctx, repo.ServersInsertPrivateInventoryTunnelParams{
+		ID:        s.tunnelSourceID(),
+		ProjectID: proj,
+		KeySeed:   s.name("inert-tunnel-key"),
+	}); err != nil {
+		return fmt.Errorf("insert demo private inventory tunnel: %w", err)
+	}
+	if err := s.q.ServersInsertPrivateInventoryMCPServer(ctx, repo.ServersInsertPrivateInventoryMCPServerParams{
+		ID:        s.tunnelServerID(),
+		ProjectID: proj,
+		Slug:      slug,
+		TunnelID:  s.tunnelSourceID(),
+	}); err != nil {
+		return fmt.Errorf("insert demo private inventory mcp server: %w", err)
+	}
+	if err := s.q.ServersInsertPrivateInventoryEndpoint(ctx, repo.ServersInsertPrivateInventoryEndpointParams{
+		ID:          s.det("endpoint-private-inventory"),
+		ProjectID:   proj,
+		McpServerID: s.tunnelServerID(),
+		Slug:        slug,
+	}); err != nil {
+		return fmt.Errorf("insert demo private inventory endpoint: %w", err)
+	}
+	return nil
+}
+
+// tunnelSourceID and tunnelServerID join the tunnel's Postgres rows to its
+// ClickHouse metric snapshots.
+func (s *seeder) tunnelSourceID() uuid.UUID { return s.det("tunneledmcp-private-inventory") }
+func (s *seeder) tunnelServerID() uuid.UUID { return s.det("mcpserver-private-inventory") }
 
 // seedServersEMA: Enterprise Managed Authorization. Acme Identity is a
 // fictional identity provider for two fictional services behind workforce

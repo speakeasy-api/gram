@@ -43,13 +43,8 @@ func TestRolePluginsForResource(t *testing.T) {
 		_, err := pr.AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{OrganizationID: org, PluginID: pluginID, PrincipalUrn: principal})
 		require.NoError(t, err)
 	}
-	attach := func(pluginID uuid.UUID, legacy bool) uuid.UUID {
+	attach := func(pluginID uuid.UUID) uuid.UUID {
 		t.Helper()
-		if legacy {
-			row, err := testrepo.New(ti.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{PluginID: pluginID, ToolsetID: server.ToolsetID, DisplayName: "Target", Policy: "required"})
-			require.NoError(t, err)
-			return row.ID
-		}
 		row, err := pr.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{PluginID: pluginID, McpServerID: uuid.NullUUID{UUID: id, Valid: true}, DisplayName: "Target", Policy: "required"})
 		require.NoError(t, err)
 		return row.ID
@@ -73,7 +68,7 @@ func TestRolePluginsForResource(t *testing.T) {
 	pluginID := create()
 	assign(pluginID, "role:admin")
 	assign(pluginID, "user:all")
-	membershipID := attach(pluginID, false)
+	membershipID := attach(pluginID)
 	require.Len(t, read(admin, org, projectID, id), 1)
 	// Disabled direct targets still explain stored membership.
 	visibility(id, "disabled")
@@ -81,8 +76,8 @@ func TestRolePluginsForResource(t *testing.T) {
 	visibility(id, "private")
 	// Both content and exact assignment are necessary; all matches are returned.
 	second, contentOnly, assignmentOnly := create(), create(), create()
-	attach(second, false)
-	attach(contentOnly, false)
+	attach(second)
+	attach(contentOnly)
 	assign(second, "role:admin")
 	assign(assignmentOnly, "role:admin")
 	matches := read(admin, org, projectID, id)
@@ -100,15 +95,6 @@ func TestRolePluginsForResource(t *testing.T) {
 	require.Empty(t, read(admin, org, uuid.New(), id))
 	reader := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgRead, org)})
 	require.Nil(t, read(reader, org, projectID, id))
-	// A legacy entry follows only its sole active wrapper.
-	remove(pluginID, membershipID)
-	membershipID = attach(pluginID, true)
-	require.Len(t, read(admin, org, projectID, id), 1)
-	other, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: uuid.New(), ProjectID: projectID, ToolsetID: server.ToolsetID, Visibility: "private"})
-	require.NoError(t, err)
-	require.Empty(t, read(admin, org, projectID, id))
-	visibility(other, "disabled")
-	require.Len(t, read(admin, org, projectID, id), 1)
 	// Gateways match only themselves, not a member server.
 	gatewayID, err := testrepo.New(ti.conn).CreateMCPGatewayFixture(ctx, testrepo.CreateMCPGatewayFixtureParams{ID: uuid.New(), OrganizationID: org, ProjectID: projectID, Name: "Audience gateway"})
 	require.NoError(t, err)
@@ -121,10 +107,10 @@ func TestRolePluginsForResource(t *testing.T) {
 	require.Len(t, read(admin, org, projectID, gatewayID), 1)
 	require.Empty(t, read(admin, org, projectID, id))
 	remove(pluginID, gatewayMembership.ID)
-	membershipID = attach(pluginID, true)
+	membershipID = attach(pluginID)
 	remove(pluginID, membershipID)
 	require.Empty(t, read(admin, org, projectID, id))
-	attach(pluginID, true)
+	attach(pluginID)
 	err = pr.DeletePlugin(ctx, pluginsrepo.DeletePluginParams{ID: pluginID, OrganizationID: org, ProjectID: projectID})
 	require.NoError(t, err)
 	rows := read(admin, org, projectID, id)

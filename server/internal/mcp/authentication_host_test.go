@@ -42,7 +42,7 @@ func newAuthenticationHostHarness(t *testing.T, ti *testInstance) authentication
 
 	authenticationHost, err := mcp.NewAuthenticationHost(testAuthenticationHostURL, ti.serverURL, "test")
 	require.NoError(t, err)
-	mcp.AttachAuthenticationHost(authenticationHost, ti.service)
+	mcp.AttachAuthenticationHost(authenticationHost, ti.service.Service)
 
 	passed := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -248,14 +248,14 @@ func TestAuthenticationHost_OtherAudiencesRefused(t *testing.T) {
 	} {
 		code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 		w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+slug+"/token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, aud)))
-		require.Equal(t, http.StatusUnauthorized, w.Code, "aud %q: %s", aud, w.Body.String())
+		require.Equal(t, http.StatusBadRequest, w.Code, "aud %q: %s", aud, w.Body.String())
 		require.Contains(t, w.Body.String(), "invalid_client")
 	}
 
 	// The authentication host's URL is not an audience on the MCP host.
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
 	w := postForm(t, ti, slug, "token", withAssertion(codeGrantForm(client, code, verifier), signer.assertion(t, client.ClientID, authenticationHostTokenURL(slug))))
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 }
 
 // The canonical resource is the MCP host's, so a resource naming the
@@ -647,7 +647,7 @@ func TestAuthenticationHost_ToggleClosesInFlightFlows(t *testing.T) {
 	routeCtx := chi.NewRouteContext()
 	routeCtx.URLParams.Add("mcpSlug", f.slugA)
 	err = ti.service.HandleConsent(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx)))
-	require.Contains(t, requireOopsCode(t, err, oops.CodeUnauthorized), "authn challenge state does not match this MCP server")
+	require.Contains(t, requireOopsCode(t, err, oops.CodeBadRequest), "authn challenge state does not match this MCP server")
 }
 
 // completeAuthenticationHostFederatedLogin finishes a federated login whose

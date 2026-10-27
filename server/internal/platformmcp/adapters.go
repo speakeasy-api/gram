@@ -385,10 +385,13 @@ type PostgresReader struct {
 	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
 	gateways                  *GatewayService
+	deploymentRedeploy        *DeploymentRedeployService
+	workloadAssertionReuse    *WorkloadAssertionReuseService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
 	dashboards                *DashboardsService
+	codeModeAvailable         CodeModeAvailability
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -425,16 +428,37 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewLinks:               nil,
 		toolExposure:              nil,
 		gateways:                  nil,
+		deploymentRedeploy:        nil,
+		workloadAssertionReuse:    nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
 		widgets:                   nil,
 		dashboards:                nil,
+		codeModeAvailable:         nil,
 	}
+}
+
+// WithCodeModeAvailability lets gateway connection settings report the
+// discovery mode a gateway serves while Code Mode is unavailable.
+func (r *PostgresReader) WithCodeModeAvailability(check CodeModeAvailability) *PostgresReader {
+	if r != nil {
+		r.codeModeAvailable = check
+	}
+	return r
 }
 
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithDeploymentRedeploy composes project snapshot redeployment; without it the
+// tool retains its contract and returns a bounded unavailable refusal.
+func (r *PostgresReader) WithDeploymentRedeploy(service *DeploymentRedeployService) *PostgresReader {
+	if r != nil {
+		r.deploymentRedeploy = service
 	}
 	return r
 }

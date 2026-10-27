@@ -34,6 +34,10 @@ var ConnectionStatusHTML string
 
 // Member sign-in states surfaced by connection_status.
 const (
+	// SignInVerifiedAtConsent records successful discovery without a live probe.
+	SignInVerifiedAtConsent = "verified_at_consent"
+	// SignInNeedsConsent reports a configuration change requiring new approval.
+	SignInNeedsConsent = "needs_consent"
 	// SignInConnected: the caller holds a credential that routes to the member.
 	SignInConnected = "connected"
 	// SignInNotConnected: the member is bound to a sign-in provider and the
@@ -71,13 +75,29 @@ var connectionStatusSchema = []byte(`{
 // model. It carries the same list and the same connect link as the view.
 func (r ConnectionStatusResult) Text() string {
 	var b strings.Builder
-	connected := 0
+	connected, verified := 0, 0
+	consented, needsConsent := false, false
 	for _, s := range r.Servers {
+		if s.Status == SignInVerifiedAtConsent {
+			verified++
+			consented = true
+		}
+		if s.Status == SignInNeedsConsent {
+			consented = true
+		}
 		if s.Status == SignInConnected || s.Status == SignInNotRequired {
 			connected++
 		}
 	}
-	fmt.Fprintf(&b, "%d of %d servers ready.\n\n", connected, len(r.Servers))
+	noun := "servers"
+	if len(r.Servers) == 1 {
+		noun = "server"
+	}
+	if consented {
+		fmt.Fprintf(&b, "%d of %d %s verified at consent; current sign-in status has not been checked.\n\n", verified, len(r.Servers), noun)
+	} else {
+		fmt.Fprintf(&b, "%d of %d %s ready.\n\n", connected, len(r.Servers), noun)
+	}
 	needsConnect := false
 	for _, s := range r.Servers {
 		label := s.Name
@@ -85,6 +105,11 @@ func (r ConnectionStatusResult) Text() string {
 			label = s.Slug
 		}
 		switch s.Status {
+		case SignInVerifiedAtConsent:
+			fmt.Fprintf(&b, "- %s: verified at consent (%s)\n", label, s.Detail)
+		case SignInNeedsConsent:
+			needsConsent = true
+			fmt.Fprintf(&b, "- %s: new consent required (%s)\n", label, s.Detail)
 		case SignInConnected:
 			fmt.Fprintf(&b, "- %s: signed in\n", label)
 		case SignInNotRequired:
@@ -96,6 +121,9 @@ func (r ConnectionStatusResult) Text() string {
 			needsConnect = true
 			fmt.Fprintf(&b, "- %s: needs attention (%s)\n", label, s.Detail)
 		}
+	}
+	if needsConsent {
+		b.WriteString("\nStart authorization again in your AI client to review access.\n")
 	}
 	if needsConnect {
 		if r.ConnectURL != "" {
