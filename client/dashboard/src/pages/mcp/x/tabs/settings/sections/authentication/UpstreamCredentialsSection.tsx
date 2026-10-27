@@ -15,6 +15,7 @@ import {
   UPSTREAM_AUTH_STATUS,
 } from "@/lib/auth-clients";
 import { enumPresentation } from "@/lib/enum";
+import { useUpstreamProbe } from "@/lib/remote-identity";
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
@@ -77,6 +78,7 @@ export function UpstreamCredentialsSection({
             <>
               <RequirementRow
                 mcpServerId={mcpServer.id}
+                remoteMcpServerId={mcpServer.remoteMcpServerId}
                 status={query.data.status}
                 requiresUpstreamAuth={query.data.requiresUpstreamAuth}
                 hasEnabledClient={query.data.clients.some((c) => c.enabled)}
@@ -149,20 +151,35 @@ export function UpstreamCredentialsSection({
   );
 }
 
+/** What probing the upstream found, phrased for the requirement row. */
+const DETECTED_REQUIREMENT: Partial<Record<string, string>> = {
+  "authentication-required":
+    "Speakeasy checked the upstream: it asks for sign-in.",
+  available:
+    "Speakeasy checked the upstream: it answers without sign-in. It can still need a header credential for its tools.",
+};
+
 function RequirementRow({
   mcpServerId,
+  remoteMcpServerId,
   status,
   requiresUpstreamAuth,
   hasEnabledClient,
   canManage,
 }: {
   mcpServerId: string;
+  remoteMcpServerId: string | undefined;
   status: string;
   requiresUpstreamAuth: boolean | undefined;
   hasEnabledClient: boolean;
   canManage: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const probe = useUpstreamProbe(
+    remoteMcpServerId ?? "",
+    canManage && !!remoteMcpServerId,
+  );
+  const detected = DETECTED_REQUIREMENT[probe];
   const presentation = enumPresentation(
     UPSTREAM_AUTH_STATUS,
     status,
@@ -227,6 +244,11 @@ function RequirementRow({
             },
           ]}
         />
+      ) : null}
+      {detected ? (
+        <Text muted small className="mt-2 block">
+          {detected}
+        </Text>
       ) : null}
     </AuthRow>
   );
