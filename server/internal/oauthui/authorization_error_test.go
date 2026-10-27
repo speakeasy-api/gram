@@ -216,3 +216,52 @@ func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
 		})
 	}
 }
+
+func TestAuthorizationErrorRecoveryLink(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		setup  bool
+		reason oauthui.Reason
+	}{
+		{name: "setup", setup: true},
+		{name: "canceled", reason: oauthui.ReasonCanceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			const destination = "https://app.example.test/@self/setup"
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{
+				Setup: tc.setup, Reason: tc.reason, Status: http.StatusForbidden,
+				Code: oautherr.CodeAccessDenied, Description: "forbidden",
+				Recovery: &oauthui.RecoveryLink{URL: destination, Label: "Open <organization> setup"},
+			}))
+			body := oauthtest.RequireAuthorizationErrorRecovery(t, response, http.StatusForbidden, destination)
+			require.Equal(t, oautherr.CodeAccessDenied, body.Code)
+			require.Equal(t, "forbidden", body.Description)
+			require.Contains(t, response.Body.String(), "Open &lt;organization&gt; setup")
+			require.NotContains(t, response.Body.String(), "Return to app.example.test", "recovery must not use OAuth callback wording")
+		})
+	}
+}
+
+func TestAuthorizationErrorRejectsUnsafeRecoveryLink(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{
+		"javascript:alert(1)", "data:text/html,example", "//untrusted.example/setup",
+		"/@self/setup", "https://", "https://user:password@app.example.test/setup", "com.example.app:callback",
+	} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			err := oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{
+				Status: http.StatusForbidden, Code: oautherr.CodeAccessDenied,
+				Recovery: &oauthui.RecoveryLink{URL: target, Label: "Open organization setup"},
+			})
+			require.Error(t, err)
+			require.Equal(t, http.StatusForbidden, response.Code)
+			require.NotContains(t, response.Body.String(), "href=")
+			require.Empty(t, response.Header().Get("Location"))
+		})
+	}
+}
