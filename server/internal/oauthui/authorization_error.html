@@ -1,0 +1,253 @@
+{{- /* Names in running copy. The client and server names are the ones the
+consent page shows, so the person recognizes the flow they started. */ -}}
+{{- define "Client"}}{{if .ClientName}}<span class="text-foreground">{{.ClientName}}</span>{{else}}Your MCP client{{end}}{{end}}
+{{- define "client"}}{{if .ClientName}}<span class="text-foreground">{{.ClientName}}</span>{{else}}your MCP client{{end}}{{end}}
+{{- define "server"}}{{if .ServerName}}<span class="text-foreground">{{.ServerName}}</span>{{else}}this MCP server{{end}}{{end -}}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{{if .Approval}}Couldn't approve{{else}}Couldn't connect{{end}} · Speakeasy</title>
+    {{/* The stylesheet is the one the MCP consent page uses, compiled from the
+    dashboard design system by `aube run -F dashboard build:consent-page` and
+    inlined, so every authorization page looks like the dashboard. */}}
+    <style>
+      {{.Styles}}
+    </style>
+  </head>
+  <body class="bg-background text-foreground min-h-screen">
+    <main
+      class="mx-auto flex min-h-screen w-full max-w-[52rem] flex-col gap-6 px-4 py-12 sm:py-16"
+    >
+      <div class="text-foreground">{{template "speakeasyWordmark"}}</div>
+
+      <section class="bg-card border" aria-labelledby="page-title">
+        {{/* Same header as the consent page, so the person sees the client and
+        server they were connecting. The OAuth error itself stays under
+        Technical details: it is written for developers, not for them. */}}
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          <p class="text-eyebrow text-default-destructive">{{if .Approval}}Couldn't approve{{else}}Couldn't connect{{end}}</p>
+          <h1
+            id="page-title"
+            class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1"
+          >
+            {{if .Approval}}<span>Change approval</span>{{else}}
+            <span>{{if .ClientName}}{{.ClientName}}{{else}}Your MCP client{{end}}</span>
+            {{if .ServerName}}
+            <span class="text-muted-foreground" aria-hidden="true">&rsaquo;</span>
+            <span class="break-all">{{.ServerName}}</span>
+            {{end}}
+            {{end}}
+          </h1>
+          <p class="text-sm text-muted-foreground">
+            {{if .Approval}}
+            {{if eq .Kind "expired"}}This approval link expired or was already used.
+            {{else if eq .Kind "session-changed"}}Your staff sign-in session changed. This approval could not be completed.
+            {{else}}This change could not be approved. The proposal may be unavailable or may have changed.{{end}}
+            {{else if eq .Kind "organization-blocked"}}
+            Your organization doesn't allow {{template "client" .}} to connect to {{template "server" .}}.
+            {{else if eq .Kind "expired"}}
+            This connection link expired or was already used.
+            {{else if eq .Kind "session-changed"}}
+            This connection link doesn't match your current browser or sign-in session.
+            {{else if eq .Kind "invalid-client"}}
+            Speakeasy couldn't verify {{template "client" .}} or its return address.
+            {{else if eq .Kind "invalid-link"}}
+            This connection link is incomplete or invalid.
+            {{else if eq .Kind "incompatible"}}
+            {{template "Client" .}} started sign-in in a way {{template "server" .}}
+            doesn't support. The connection could not be completed.
+            {{else if eq .Kind "wrong-server"}}
+            {{template "Client" .}} is set up with an address that doesn't match
+            {{template "server" .}}. The connection could not be completed.
+            {{else if eq .Kind "not-allowed"}}
+            {{template "Client" .}} isn't allowed to connect to
+            {{template "server" .}}.
+            {{else if eq .Kind "unavailable"}}
+            Speakeasy couldn't finish connecting {{template "client" .}} to
+            {{template "server" .}}. This is a problem on our side, not something
+            you did.
+            {{else}}
+            {{template "Client" .}} couldn't connect to {{template "server" .}}.
+            The connection could not be completed.
+            {{end}}
+          </p>
+        </header>
+
+        <p class="text-sm border-b px-6 py-6 sm:px-8">
+          {{if .Approval}}
+          Return to your MCP client to check the proposal and request a new approval link.
+          Use the same staff account that started the request.
+          {{else if eq .Kind "organization-blocked"}}
+          Ask your organization's administrators to review this connection.
+          Share the technical details below with them.
+          {{else if or (eq .Kind "expired") (eq .Kind "session-changed") (eq .Kind "invalid-link")}}
+          Close this tab and start connecting again from {{template "client" .}}.
+          {{else if eq .Kind "invalid-client"}}
+          Start connecting again from {{template "client" .}}. If it still fails,
+          share the technical details with the client's support.
+          {{else if eq .Kind "incompatible"}}
+          This isn't something you did. Check for an update to
+          {{template "client" .}} and try connecting again. If it still fails,
+          share the technical details below with your IT administrators or
+          {{template "client" .}}'s support.
+          {{else if eq .Kind "wrong-server"}}
+          Check the MCP server URL in {{template "client" .}}'s settings, or ask
+          your IT administrators for the correct one. If the URL is correct,
+          share the technical details below with them.
+          {{else if eq .Kind "not-allowed"}}
+          Ask your IT administrators if you need access, and share the technical
+          details below with them.
+          {{else if eq .Kind "unavailable"}}
+          Try connecting again in a few minutes. If it keeps happening, share the
+          technical details below with your IT administrators or Speakeasy
+          support.
+          {{else}}
+          Try connecting again from {{template "client" .}}. If it still fails,
+          share the technical details below with your IT administrators.
+          {{end}}
+        </p>
+
+        {{/* Closed by default, like the consent page's configuration: the
+        person only needs these to pass along. */}}
+        <details class="group border-b" data-error-code="{{.Code}}" data-error-description="{{.Description}}">
+          <summary
+            class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
+          >
+            <span class="text-xs text-muted-foreground">Technical details</span>
+            <span
+              class="text-eyebrow shrink-0 group-open:hidden"
+              aria-hidden="true"
+              >Show</span
+            >
+            <span
+              class="text-eyebrow hidden shrink-0 group-open:inline"
+              aria-hidden="true"
+              >Hide</span
+            >
+          </summary>
+
+          <div class="flex flex-col gap-4 px-6 pt-5 pb-6 sm:px-8">
+            {{/* The copy button mirrors the dashboard's CopyButton: icon only,
+            labeled for assistive tech, check mark for a second after copying.
+            It stays hidden until the script runs, since it needs it. */}}
+            <div class="flex items-start justify-between gap-3">
+              <p class="text-xs text-muted-foreground">
+                Your IT administrators and Speakeasy support can use these
+                details to find this connection attempt.
+              </p>
+              <button
+                type="button"
+                hidden
+                data-copy-details
+                data-copy-text="{{.TechnicalDetails}}"
+                aria-label="Copy technical details"
+                title="Copy technical details"
+                class="bg-card text-muted-foreground interact:bg-accent interact:text-foreground inline-flex size-8 shrink-0 cursor-pointer items-center justify-center border"
+              >
+                <span data-copy-icon class="inline-flex"><svg
+                  class="size-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                </svg></span>
+                <span data-copied-icon hidden class="inline-flex"><svg
+                  class="size-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M20 6 9 17l-5-5" />
+                </svg></span>
+              </button>
+            </div>
+            <p class="sr-only" role="status" data-copy-status></p>
+            <dl class="m-0 flex flex-col gap-4">
+              {{if .ErrorID}}
+              <div>
+                <dt class="text-eyebrow">Error ID</dt>
+                <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.ErrorID}}</dd>
+              </div>
+              {{end}}
+              {{if .Reference}}
+              <div>
+                <dt class="text-eyebrow">Reference</dt>
+                <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.Reference}}</dd>
+              </div>
+              {{end}}
+              <div>
+                <dt class="text-eyebrow">Time</dt>
+                <dd class="mt-1 ml-0 font-mono text-sm">{{.Time}}</dd>
+              </div>
+              <div>
+                <dt class="text-eyebrow">Error</dt>
+                <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.Code}}</dd>
+                {{if .Description}}
+                <dd class="mt-1 ml-0 text-sm text-muted-foreground break-words">
+                  {{.Description}}
+                </dd>
+                {{end}}
+              </div>
+              {{if .ClientID}}
+              <div>
+                <dt class="text-eyebrow">MCP client ID</dt>
+                <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.ClientID}}</dd>
+              </div>
+              {{end}}
+              {{if .ClientIDOrigin}}
+              <div>
+                <dt class="text-eyebrow">Client verified from</dt>
+                <dd class="mt-1 ml-0 font-mono text-sm break-all">
+                  {{.ClientIDOrigin}}
+                </dd>
+              </div>
+              {{end}}
+              {{if .Destination}}
+              <div>
+                <dt class="text-eyebrow">Returns to</dt>
+                <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.Destination}}</dd>
+              </div>
+              {{end}}
+            </dl>
+          </div>
+        </details>
+
+        <div class="flex flex-col gap-4 px-6 py-6 sm:px-8">
+          {{if .CallbackURL}}
+          <p class="text-sm text-muted-foreground">
+            You can close this tab, or go back to {{template "client" .}} so it
+            can show this error. Only continue if you recognize
+            <span class="text-foreground font-mono break-words">{{.Destination}}</span>.
+          </p>
+          <a
+            href="{{.CallbackURL}}"
+            rel="noreferrer"
+            class="bg-card interact:bg-accent inline-flex min-h-10 w-full items-center justify-center border px-6 py-2 text-center text-sm break-all sm:w-fit"
+            >Return to {{.Destination}}</a
+          >
+          {{else}}
+          <p class="text-sm text-muted-foreground">
+            You can close this tab and start again from {{template "client" .}}.
+          </p>
+          {{end}}
+        </div>
+      </section>
+
+      <p class="text-xs text-muted-foreground">Secured by Speakeasy.</p>
+    </main>
+    <script nonce="{{.ScriptNonce}}">{{.Script}}</script>
+  </body>
+</html>

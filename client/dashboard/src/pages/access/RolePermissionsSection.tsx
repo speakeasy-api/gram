@@ -285,11 +285,7 @@ export function RolePermissionsSection({
                           </div>
                         )}
                         {MCP_ADMIN_SCOPES.has(scope.slug) && (
-                          <Alert
-                            iconName="lock"
-                            alignTop
-                            className="mt-2 text-xs"
-                          >
+                          <Alert iconName="lock" className="mt-2 text-xs">
                             Also allows connecting to these servers with every
                             tool.
                             {renderMcpAccess &&

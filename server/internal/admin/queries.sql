@@ -508,6 +508,13 @@ SELECT EXISTS (
     WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE
 );
 
+-- name: AdminAuditProjectBelongsToOrganization :one
+-- Audit history remains readable after a project is soft-deleted.
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = @project_id AND organization_id = @organization_id
+);
+
 -- name: AdminListProjectMcpServerRows :many
 -- One row per live endpoint, and one with no endpoint columns for a server that
 -- has none. custom_domain is null for an endpoint whose domain cannot serve it;
@@ -969,7 +976,6 @@ SELECT
     m.created_at,
     m.user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     COALESCE((
         SELECT e.slug FROM mcp_endpoints e
         WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
@@ -1008,7 +1014,6 @@ SELECT
     t.created_at,
     t.user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     COALESCE(t.mcp_slug, '')::text AS url_slug,
     t.slug AS toolset_slug,
     0::bigint AS toolset_wrapper_count

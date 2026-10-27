@@ -17,9 +17,10 @@ import (
 )
 
 type ProcessDeploymentWorkflowParams struct {
-	ProjectID      uuid.UUID
-	DeploymentID   uuid.UUID
-	IdempotencyKey string
+	ProjectID                  uuid.UUID
+	DeploymentID               uuid.UUID
+	IdempotencyKey             string
+	ExpectedActiveDeploymentID *uuid.UUID
 }
 
 type ProcessDeploymentWorkflowResult struct {
@@ -30,13 +31,26 @@ type ProcessDeploymentWorkflowResult struct {
 
 func ExecuteProcessDeploymentWorkflow(ctx context.Context, env *tenv.Environment, params ProcessDeploymentWorkflowParams) (client.WorkflowRun, error) {
 	id := conv.Default(params.IdempotencyKey, params.DeploymentID.String())
+	implementation := ProcessDeploymentWorkflow
+	if params.ExpectedActiveDeploymentID != nil {
+		implementation = ProcessGuardedDeploymentWorkflow
+	}
 	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                       fmt.Sprintf("v1:process-deployment:%s", id),
 		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 		WorkflowRunTimeout:       15 * time.Minute,
-	}, ProcessDeploymentWorkflow, params)
+	}, implementation, params)
+}
+
+// ProcessGuardedDeploymentWorkflow has a distinct Temporal type so older workers
+// cannot silently decode away the expected-active guard during a rolling release.
+func ProcessGuardedDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWorkflowParams) (*ProcessDeploymentWorkflowResult, error) {
+	if params.ExpectedActiveDeploymentID == nil {
+		return nil, temporal.NewNonRetryableApplicationError("Guarded deployment requires an expected active snapshot", "MissingDeploymentGuard", nil)
+	}
+	return ProcessDeploymentWorkflow(ctx, params)
 }
 
 func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWorkflowParams) (*ProcessDeploymentWorkflowResult, error) {
@@ -161,13 +175,31 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 	}
 
 	var finalTransition activities.TransitionDeploymentResult
-	err = workflow.ExecuteActivity(
-		ctx,
-		a.TransitionDeployment,
-		params.ProjectID,
-		params.DeploymentID,
-		finalStatus,
-	).Get(ctx, &finalTransition)
+	if finalStatus == "completed" && params.ExpectedActiveDeploymentID != nil {
+		// Old workers sharing this queue may not yet know this activity. Retry
+		// registration failures through the rollout, bounded by the workflow's
+		// 15-minute lifetime, rather than exhausting the ordinary five attempts.
+		guardedCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout:    2 * time.Minute,
+			ScheduleToCloseTimeout: 15 * time.Minute,
+			RetryPolicy:            &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2, MaximumInterval: time.Minute, MaximumAttempts: 0},
+		})
+		err = workflow.ExecuteActivity(
+			guardedCtx,
+			a.CompleteDeploymentWithExpectedActive,
+			params.ProjectID,
+			params.DeploymentID,
+			*params.ExpectedActiveDeploymentID,
+		).Get(guardedCtx, &finalTransition)
+	} else {
+		err = workflow.ExecuteActivity(
+			ctx,
+			a.TransitionDeployment,
+			params.ProjectID,
+			params.DeploymentID,
+			finalStatus,
+		).Get(ctx, &finalTransition)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to transition deployment: %w", err)
 	}

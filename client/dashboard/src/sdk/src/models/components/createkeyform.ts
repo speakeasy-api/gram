@@ -9,6 +9,11 @@ import {
   AgentPolicyGrantForm$Outbound,
   AgentPolicyGrantForm$outboundSchema,
 } from "./agentpolicygrantform.js";
+import {
+  APIKeyPolicyGrant,
+  APIKeyPolicyGrant$Outbound,
+  APIKeyPolicyGrant$outboundSchema,
+} from "./apikeypolicygrant.js";
 
 export type CreateKeyForm = {
   /**
@@ -27,6 +32,10 @@ export type CreateKeyForm = {
    * The name of the key
    */
   name: string;
+  /**
+   * Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth client access is evaluated against. Not yet enforced. Requires org admin.
+   */
+  policyGrants?: Array<APIKeyPolicyGrant> | undefined;
   /**
    * Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
    */
@@ -47,6 +56,7 @@ export type CreateKeyForm$Outbound = {
   delegated_grants_version?: number | undefined;
   expires_at?: string | undefined;
   name: string;
+  policy_grants?: Array<APIKeyPolicyGrant$Outbound> | undefined;
   project_id?: string | undefined;
   requested_grants?: Array<AgentPolicyGrantForm$Outbound> | undefined;
   scopes?: Array<string> | undefined;
@@ -62,6 +72,7 @@ export const CreateKeyForm$outboundSchema: z.ZodMiniType<
     delegatedGrantsVersion: z.optional(z.int()),
     expiresAt: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     name: z.string(),
+    policyGrants: z.optional(z.array(APIKeyPolicyGrant$outboundSchema)),
     projectId: z.optional(z.string()),
     requestedGrants: z.optional(z.array(AgentPolicyGrantForm$outboundSchema)),
     scopes: z.optional(z.array(z.string())),
@@ -71,6 +82,7 @@ export const CreateKeyForm$outboundSchema: z.ZodMiniType<
       agentId: "agent_id",
       delegatedGrantsVersion: "delegated_grants_version",
       expiresAt: "expires_at",
+      policyGrants: "policy_grants",
       projectId: "project_id",
       requestedGrants: "requested_grants",
     });

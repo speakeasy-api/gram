@@ -45,6 +45,7 @@ func TestEnforceHandler_WritesOKReplyWithFindings(t *testing.T) {
 	require.Equal(t, riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, reply.GetScanner())
 	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK, reply.GetStatus())
 	require.Empty(t, reply.GetReason())
+	require.False(t, reply.GetIncomplete())
 	require.Empty(t, reply.GetPolicyId())
 	require.Equal(t, int32(2), reply.GetDiagnostics().GetDeliveryAttempt())
 	require.NotEmpty(t, reply.GetDiagnostics().GetConsumerId())
@@ -111,6 +112,7 @@ func TestEnforceHandler_ReportsTimeoutAsErrorReply(t *testing.T) {
 	require.Equal(t, riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, reply.GetScanner())
 	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR, reply.GetStatus())
 	require.True(t, strings.HasPrefix(reply.GetReason(), llmanalyzer.ReasonTimeout+": "), reply.GetReason())
+	require.True(t, reply.GetIncomplete())
 	require.Contains(t, reply.GetReason(), llmanalyzer.ErrTimeout.Error())
 	require.Empty(t, reply.GetFindings())
 	require.NotEmpty(t, reply.GetDiagnostics().GetConsumerId())
@@ -198,6 +200,7 @@ func TestEnforceHandler_DisabledAnalyzerRepliesDeadLetter(t *testing.T) {
 	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_DEAD_LETTER, reply.GetStatus())
 	require.Equal(t, llmanalyzer.ReasonDisabled, reply.GetReason())
 	require.Empty(t, reply.GetFindings())
+	require.True(t, reply.GetIncomplete())
 
 	data := collectMetrics(t, reader)
 	require.Equal(t, int64(1), counterValue(t, data, "risk.enforcement.llm.requests",

@@ -15,6 +15,7 @@ import (
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -275,7 +276,7 @@ func TestListProjectMcpServers_ToolsetWithoutMCPSlugUsesLegacyPath(t *testing.T)
 	requireLegacyURL()
 
 	domainID := seedCustomDomain(t, ctx, conn, "org_one", "mcp.example.org", true)
-	require.NoError(t, toolsets.SetToolsetCustomDomain(ctx, toolsetsRepo.SetToolsetCustomDomainParams{
+	require.NoError(t, testrepo.New(conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
 		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true},
 		Slug:           "old-toolset",
 		ProjectID:      projectID,

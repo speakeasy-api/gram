@@ -1,6 +1,6 @@
 // Package hostedmcpbackfill gives legacy hosted toolsets their canonical
-// mcp_servers wrapper and endpoint through hostedmcp.Sync, then moves their
-// toolset-keyed dependents onto it; see HOSTED_MCP_WRAPPERS_MIGRATION.md.
+// mcp_servers wrapper and endpoint through hostedmcp.BackfillSync; see
+// HOSTED_MCP_WRAPPERS_MIGRATION.md.
 package hostedmcpbackfill
 
 import (
@@ -10,7 +10,6 @@ import (
 	"io"
 	"net"
 	"reflect"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -25,24 +24,16 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // ActorComponent is the system principal (system:<ActorComponent>) the backfill's audit entries carry.
 const ActorComponent = "hosted-mcp-wrapper-backfill"
 
-const (
-	phaseWrappers   = "wrappers"
-	phaseDependents = "dependents"
-	phaseOrphans    = "orphans"
-)
+const phaseWrappers = "wrappers"
 
 // defaultPageSize bounds each candidate page; rows are processed one transaction at a time regardless.
 const defaultPageSize = 100
-
-// defaultLockTimeout bounds each dependent move's lock waits; a timeout stops the run as transient.
-const defaultLockTimeout = 5 * time.Second
 
 // Outcome classifies what the run did, or would do, for one toolset.
 type Outcome string
@@ -50,35 +41,12 @@ type Outcome string
 const (
 	OutcomeWouldCreate              Outcome = "would_create"
 	OutcomeCreated                  Outcome = "created"
-	OutcomeWouldReconcile           Outcome = "would_reconcile"
-	OutcomeReconciled               Outcome = "reconciled"
 	OutcomeAlreadyComplete          Outcome = "already_complete"
 	OutcomeDeadCustomDomain         Outcome = "dead_custom_domain"
-	OutcomeBlockedMultipleEndpoints Outcome = "blocked_multiple_endpoints"
 	OutcomeBlockedSlugCollision     Outcome = "blocked_slug_collision"
 	OutcomeBlockedCanonicalConflict Outcome = "blocked_canonical_conflict"
 	OutcomeBlockedSyncRejected      Outcome = "blocked_sync_rejected"
 	OutcomeSkipped                  Outcome = "skipped"
-
-	OutcomeWouldMove        Outcome = "would_move"
-	OutcomeMoved            Outcome = "moved"
-	OutcomeBlockedTwin      Outcome = "blocked_twin"
-	OutcomeBlockedNoWrapper Outcome = "blocked_no_wrapper"
-	// OutcomeWouldMoveCollapsingTwin predicts removing the server-keyed twin before moving the toolset-keyed row; OutcomeMovedCollapsedTwin reports that completed move.
-	OutcomeWouldMoveCollapsingTwin Outcome = "would_move_collapsing_twin"
-	OutcomeMovedCollapsedTwin      Outcome = "moved_collapsed_twin"
-	// OutcomeCommitUnknown is a move whose commit errored after the server may have committed it.
-	OutcomeCommitUnknown Outcome = "commit_unknown"
-	// OutcomeBlockedUnattachable is an assistant attachment the assistants reader does not dial (toolset MCP off or no mcp slug).
-	OutcomeBlockedUnattachable Outcome = "blocked_unattachable"
-	OutcomeOrphaned            Outcome = "orphaned"
-
-	OutcomeWouldDelete Outcome = "would_delete"
-	OutcomeDeleted     Outcome = "deleted"
-	// OutcomeBlockedDistributed is an orphan plugin member a platform distribution references.
-	OutcomeBlockedDistributed Outcome = "blocked_distributed"
-	// OutcomeBlockedForeignConfig is orphan metadata with an env config in another project, which the delete would cascade to.
-	OutcomeBlockedForeignConfig Outcome = "blocked_foreign_config"
 )
 
 // Options controls one run.
@@ -97,30 +65,11 @@ type Options struct {
 
 	// Apply commits writes; otherwise every candidate transaction rolls back.
 	Apply bool
-
-	// MoveDependents re-keys toolset-keyed dependents onto the canonical wrapper instead of syncing wrappers.
-	MoveDependents bool
-
-	// CleanupOrphans removes toolset-keyed dependents whose toolset or project is deleted.
-	CleanupOrphans bool
-
-	// Publication enqueues a plugin publication request when the cleanup removes a member of a live project.
-	Publication plugins.PublicationRequests
-
-	// Journal receives each dependent write before and after its commit; required to apply MoveDependents or CleanupOrphans.
-	Journal Journal
-
-	// LockTimeout bounds each dependent move's lock waits; 0 selects defaultLockTimeout.
-	LockTimeout time.Duration
 }
 
 // RowReport carries ids and slugs only, never names or emails.
 type RowReport struct {
 	ToolsetID uuid.UUID `json:"toolset_id"`
-
-	// Table and RowID name the dependent row in a -move-dependents run.
-	Table string     `json:"table,omitempty"`
-	RowID *uuid.UUID `json:"row_id,omitempty"`
 
 	ProjectID uuid.UUID `json:"project_id"`
 
@@ -144,15 +93,6 @@ type RowReport struct {
 
 	// DomainsToReconcile are custom domains whose root the sync cleared; they need a domain reconcile.
 	DomainsToReconcile []uuid.UUID `json:"domains_to_reconcile,omitempty"`
-
-	// CollapsedTwin is the server-keyed row a dependent move removed, as rollback needs it.
-	CollapsedTwin *RowImage `json:"collapsed_twin,omitempty"`
-
-	// Removed names the orphan a -cleanup-orphans run deleted; row images go to the journal only.
-	Removed *RowImage `json:"removed,omitempty"`
-
-	// PublicationRequested reports a plugin publication request enqueued with an applied cleanup.
-	PublicationRequested bool `json:"publication_requested,omitempty"`
 }
 
 // Report summarizes a run.
@@ -168,7 +108,7 @@ type Report struct {
 
 	Outcomes map[Outcome]int `json:"outcomes"`
 
-	// Writes counts transactions that committed (apply) or would commit (dry run): one per toolset, or per dependent row.
+	// Writes counts toolset transactions that committed (apply) or would commit (dry run).
 	Writes int `json:"writes"`
 
 	// FreshIDServersPresent counts toolsets that also back fresh-id servers.
@@ -191,9 +131,6 @@ func NewRunner(pool *pgxpool.Pool, options Options) *Runner {
 	if options.PageSize <= 0 {
 		options.PageSize = defaultPageSize
 	}
-	if options.LockTimeout <= 0 {
-		options.LockTimeout = defaultLockTimeout
-	}
 	return &Runner{pool: pool, audit: audit.NewLogger(audit.WithoutOutbox()), options: options}
 }
 
@@ -209,16 +146,6 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 		FreshIDServersPresent: 0,
 		LastCursor:            r.options.Cursor,
 		Rows:                  nil,
-	}
-	switch {
-	case r.options.MoveDependents && r.options.CleanupOrphans:
-		return report, errors.New("the dependent move and the orphan cleanup are separate phases")
-	case r.options.MoveDependents:
-		report.Phase = phaseDependents
-		return r.runDependents(ctx, report, r.moveOne)
-	case r.options.CleanupOrphans:
-		report.Phase = phaseOrphans
-		return r.runDependents(ctx, report, r.cleanupOne)
 	}
 	after := r.options.Cursor
 	for {
@@ -281,8 +208,8 @@ func loadCanonical(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset)
 
 func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsetsRow) (RowReport, error) {
 	row := RowReport{
-		ToolsetID: candidate.ID, Table: "", RowID: nil, ProjectID: candidate.ProjectID, McpSlug: "", CustomDomainID: nil, Outcome: "", Reason: "",
-		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil, Removed: nil, PublicationRequested: false,
+		ToolsetID: candidate.ID, ProjectID: candidate.ProjectID, McpSlug: "", CustomDomainID: nil, Outcome: "", Reason: "",
+		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil,
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -296,7 +223,7 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return row, fmt.Errorf("advisory lock: %w", err)
 	}
 
-	// Toolset row first, as every hostedmcp.Sync caller holds it before Sync locks domains, endpoints, then the server.
+	// Toolset row first, as hostedmcp.BackfillSync expects before it locks domains, endpoints, then the server.
 	toolsets := toolsetsrepo.New(tx)
 	current, err := toolsets.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: candidate.ID, ProjectID: candidate.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -340,6 +267,15 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return blocked(row, OutcomeBlockedCanonicalConflict, "canonical id belongs to another backend"), nil
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return row, fmt.Errorf("load canonical identity: %w", err)
+	case err == nil:
+		// An existing canonical wrapper owns its hosting state; the toolset columns never overwrite it.
+		existing, err := loadCanonical(ctx, tx, toolset)
+		if err != nil {
+			return row, err
+		}
+		row.LiveEndpoints = len(existing.endpoints)
+		row.Outcome = OutcomeAlreadyComplete
+		return row, nil
 	}
 
 	dead := false
@@ -356,9 +292,6 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return row, err
 	}
 	row.LiveEndpoints = len(before.endpoints)
-	if before.server != nil && len(before.endpoints) > 1 {
-		return blocked(row, OutcomeBlockedMultipleEndpoints, "canonical wrapper has multiple live endpoints"), nil
-	}
 	if !dead {
 		held, err := q.EndpointAddressHeldElsewhere(ctx, EndpointAddressHeldElsewhereParams{Slug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID, McpServerID: toolset.ID})
 		if err != nil {
@@ -378,7 +311,7 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		}
 	}
 
-	domains, err := hostedmcp.Sync(ctx, tx, r.audit, hostedmcp.SystemActor(ActorComponent), toolset, nil)
+	domains, err := hostedmcp.BackfillSync(ctx, tx, r.audit, hostedmcp.SystemActor(ActorComponent), toolset)
 	if err != nil {
 		outcome, ok := classifySyncError(err)
 		if !ok {
@@ -402,8 +335,6 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		row.Outcome = OutcomeDeadCustomDomain
 	case before.server == nil:
 		row.Outcome = conv.Ternary(r.options.Apply, OutcomeCreated, OutcomeWouldCreate)
-	case row.Wrote:
-		row.Outcome = conv.Ternary(r.options.Apply, OutcomeReconciled, OutcomeWouldReconcile)
 	default:
 		row.Outcome = OutcomeAlreadyComplete
 	}

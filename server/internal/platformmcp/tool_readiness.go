@@ -8,7 +8,7 @@ import (
 )
 
 type GetMCPReadinessToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that owns the MCP registration; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
 	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this registration; unavailable to managed project assistants"`
 }
@@ -43,13 +43,13 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_readiness",
 		Title:       "Check If an MCP Server Is Working",
-		Description: "Say whether one MCP server is working, from the last stored check, when its registration ID is known. Constraints: forcing a fresh authenticated check is limited to three per minute for that MCP server, and is unavailable to managed project assistants.",
+		Description: "Say whether one MCP server is working, from the last stored check, when its registration ID is known. Without a project named, it looks in the organization's default project; project_slug in the result says which project was read. Constraints: forcing a fresh authenticated check is limited to three per minute for that MCP server, and is unavailable to managed project assistants.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistants only read their own persisted, actor-scoped evidence. A
 		// forced provider probe stays external because it requires a connection.
-		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
+		Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetMCPReadinessToolOutput{}, err
@@ -57,6 +57,13 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 		if principal.surface() == SurfaceProjectAssistant && input.Force {
 			result, _ := operationBudgetToolResult(ErrReadinessInvalid)
 			return result, GetMCPReadinessToolOutput{}, nil
+		}
+		input.ProjectSlug, err = projectSlugOrDefault(ctx, readiness.store, principal.OrganizationID, input.ProjectSlug)
+		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, GetMCPReadinessToolOutput{}, nil
+			}
+			return nil, GetMCPReadinessToolOutput{}, err
 		}
 		var project ResolvedProject
 		var result Readiness

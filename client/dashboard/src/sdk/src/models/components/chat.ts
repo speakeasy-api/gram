@@ -29,6 +29,14 @@ export type Chat = {
    * Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
    */
   accountType?: string | undefined;
+  /**
+   * The ID of the agent that produced this session, recorded from the authenticated actor at capture. Set for sessions an agent drove directly, such as a channel session, which has no assistant record.
+   */
+  agentId?: string | undefined;
+  /**
+   * The current name of the agent that produced this session. Absent when the agent has since been deleted, in which case agent_id is still reported.
+   */
+  agentName?: string | undefined;
   agentUsage?: AgentUsage | undefined;
   /**
    * The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity
@@ -185,6 +193,8 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
   z.object({
     account_email: z.optional(z.string()),
     account_type: z.optional(z.string()),
+    agent_id: z.optional(z.string()),
+    agent_name: z.optional(z.string()),
     agent_usage: z.optional(AgentUsage$inboundSchema),
     assistant_agent_id: z.optional(z.string()),
     assistant_id: z.optional(z.string()),
@@ -239,6 +249,8 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     return remap$(v, {
       "account_email": "accountEmail",
       "account_type": "accountType",
+      "agent_id": "agentId",
+      "agent_name": "agentName",
       "agent_usage": "agentUsage",
       "assistant_agent_id": "assistantAgentId",
       "assistant_id": "assistantId",

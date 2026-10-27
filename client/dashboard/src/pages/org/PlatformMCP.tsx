@@ -1601,7 +1601,7 @@ function PlatformMCPSetupBody({
               "If a browser page opens, finish the requested sign-in or setup there. Then return to your agent so it can check the connection.",
             )}
             {showSecureSetupRecovery && (
-              <Alert className="p-5" alignTop>
+              <Alert className="p-5">
                 <div className="space-y-4">
                   <div>
                     <AlertTitle>

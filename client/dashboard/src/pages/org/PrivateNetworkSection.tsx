@@ -191,7 +191,7 @@ function ConfiguredPrivateNetwork({
     <SettingsSection.Panel>
       <SettingsSection.Body>
         {!entitled && (
-          <Alert variant="warning" dismissible={false} alignTop>
+          <Alert variant="warning" dismissible={false}>
             {enterprise
               ? "Private network access is no longer enabled for this organization."
               : "Private network access requires an Enterprise plan."}{" "}

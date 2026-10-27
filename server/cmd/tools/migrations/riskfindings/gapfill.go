@@ -9,7 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
 
 type findingMatchKey struct {
@@ -33,7 +35,18 @@ func (r FindingRow) matchKey() findingMatchKey {
 		ruleID:            r.RuleID,
 		startPos:          r.StartPos,
 		endPos:            r.EndPos,
+	}.normalized()
+}
+
+// normalized drops span offsets for judge sources. A judge finding covers the
+// whole rendered event, and the live writer and the batch path render it with
+// different lengths, so the same verdict carries different offsets per store.
+func (k findingMatchKey) normalized() findingMatchKey {
+	switch k.source {
+	case risk_analysis.SourcePromptInjection, promptpolicy.Source:
+		k.startPos, k.endPos = 0, 0
 	}
+	return k
 }
 
 type latestFinding struct {
@@ -340,6 +353,7 @@ WHERE rn = 1`
 		); err != nil {
 			return fmt.Errorf("scan existing finding: %w", err)
 		}
+		current.key = current.key.normalized()
 		result.byID[current.id] = current
 		previous := result.byKey[current.key]
 		if previous == nil || current.insertedAt.After(previous.insertedAt) ||
