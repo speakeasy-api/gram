@@ -72,6 +72,8 @@ type OrganizationMetadatum struct {
 	// @access: confidential
 	DefaultHost pgtype.Text
 	// @access: confidential
+	GatewayDiscoveryMode pgtype.Text
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz

@@ -84,6 +84,10 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   -- changes. New orgs store GRAM_NEW_ORG_DEFAULT_HOST. Validated in application
   -- code and re-checked on read.
   default_host TEXT,
+  -- Discovery mode the organization gateway serves connections that do not
+  -- choose one: progressive, direct or code_mode. NULL means progressive.
+  -- Validated in application code.
+  gateway_discovery_mode TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -109,6 +113,7 @@ COMMENT ON COLUMN organization_metadata.sso_enabled IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.verified_domains IS '@access: opaque-confidential';
 COMMENT ON COLUMN organization_metadata.creation_source IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.default_host IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.gateway_discovery_mode IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.created_at IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.updated_at IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.disabled_at IS '@access: confidential';

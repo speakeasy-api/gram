@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 )
@@ -157,8 +158,11 @@ func organizationMetadata(result UpsertOrganizationMetadataWithRequestsRow) Orga
 		VerifiedDomains:    result.VerifiedDomains,
 		CreationSource:     result.CreationSource,
 		DefaultHost:        result.DefaultHost,
-		CreatedAt:          result.CreatedAt,
-		UpdatedAt:          result.UpdatedAt,
-		DisabledAt:         result.DisabledAt,
+		// Distribution results do not return the gateway discovery mode;
+		// nothing that reads them uses it.
+		GatewayDiscoveryMode: pgtype.Text{String: "", Valid: false},
+		CreatedAt:            result.CreatedAt,
+		UpdatedAt:            result.UpdatedAt,
+		DisabledAt:           result.DisabledAt,
 	}
 }
