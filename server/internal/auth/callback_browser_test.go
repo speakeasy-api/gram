@@ -31,6 +31,7 @@ func TestCallbackBrowserFailuresRedirectToLogin(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, url.Values{"signin_error": {tc.reason}}, location.Query())
 			require.NotContains(t, response.Body.String(), "private-provider-detail")
+			require.Empty(t, response.Header().Get("Gram-Session"), "failed sign-in must not issue a credential")
 			for _, cookie := range response.Result().Cookies() {
 				require.Empty(t, cookie.Value, "failed sign-in must not issue a credential")
 			}

@@ -316,7 +316,7 @@ func TestRemoteLoginCallback_AccessDeniedReturnsToConsent(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
-	require.Contains(t, w.Header().Get("Location"), "/connect?state=")
+	require.Equal(t, "http://localhost/mcp/synthetic-mcp-unchanged-denied/connect?"+url.Values{"state": {env.parentID}}.Encode(), w.Header().Get("Location"))
 	var shareable *oops.ShareableError
 	require.Equal(t, 0, spy.count(), "a denial never exchanges a code")
 
@@ -505,8 +505,8 @@ func TestRemoteLoginCallback_RetiredRouteBaseFailsClosed(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-// A provider denial on a retired-route state is still reported as a denial.
-func TestRemoteLoginCallback_RetiredRouteBaseDenialStillDenied(t *testing.T) {
+// A provider denial on a retired-route state reports an expired connection link.
+func TestRemoteLoginCallback_RetiredRouteBaseDenialReportsExpiredState(t *testing.T) {
 	t.Parallel()
 
 	const slug = "retired-route-denied"

@@ -335,7 +335,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
 		if intent != nil && intent.PartnerCode != "" {
-			return s.redirectPartnerSignupError(ctx, payload, err, intent)
+			return s.redirectPartnerSignupError(ctx, payload, code, err, intent)
 		}
 		logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
@@ -343,13 +343,6 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			SessionToken:  "",
 			SessionCookie: "",
 		}, nil
-	}
-
-	if conv.PtrValOr(payload.Error, "") == oautherr.CodeAccessDenied {
-		return redirectWithError(authErrCanceled, errors.New("sign-in was canceled"))
-	}
-	if conv.PtrValOr(payload.Code, "") == "" {
-		return redirectWithError(authErrLinkInvalid, errors.New("code is required"))
 	}
 
 	stateProvided := conv.PtrValOr(payload.State, "") != ""
@@ -396,6 +389,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 	if supportLogin != nil && supportLogin.OrganizationID == "" {
 		return redirectWithError(authErrInit, errors.New("support login intent is missing an organization"))
+	}
+
+	if conv.PtrValOr(payload.Error, "") == oautherr.CodeAccessDenied {
+		return redirectWithError(authErrCanceled, errors.New("sign-in was canceled"))
+	}
+	if conv.PtrValOr(payload.Code, "") == "" {
+		return redirectWithError(authErrLinkInvalid, errors.New("code is required"))
 	}
 
 	// Taken before the exchange so a revocation that lands meanwhile wins.
@@ -520,17 +520,17 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				CreationSource:        orgprovision.SourceSignup,
 			})
 			if err != nil {
-				return s.redirectPartnerSignupError(ctx, payload, err, intent)
+				return s.redirectPartnerSignupError(ctx, payload, authErrInit, err, intent)
 			}
 
 			partnerSignup, err := s.hasPartnerSignup(ctx, org.ID)
 			if err != nil {
-				return s.redirectPartnerSignupError(ctx, payload, err, intent)
+				return s.redirectPartnerSignupError(ctx, payload, authErrInit, err, intent)
 			}
 
 			session.ActiveOrganizationID = org.ID
 			if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
-				return s.redirectPartnerSignupError(ctx, payload, err, intent)
+				return s.redirectPartnerSignupError(ctx, payload, authErrInit, err, intent)
 			}
 
 			if err := s.notifySignupTrialStarted(ctx, org.ID, partnerSignup); err != nil {
@@ -597,7 +597,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if login.Reactivated && intent != nil && intent.OrgName != "" {
 		activeOrgID, orgMetadata, err = s.applySignupWhitelist(ctx, userInfo.Organizations, activeOrgID, orgMetadata)
 		if err != nil {
-			return s.redirectPartnerSignupError(ctx, payload, err, intent)
+			return s.redirectPartnerSignupError(ctx, payload, authErrInit, err, intent)
 		}
 	}
 
@@ -605,7 +605,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if intent != nil && intent.PartnerCode != "" {
 		partnerBilling, err = s.hasPartnerSignup(ctx, activeOrgID)
 		if err != nil {
-			return s.redirectPartnerSignupError(ctx, payload, err, intent)
+			return s.redirectPartnerSignupError(ctx, payload, authErrInit, err, intent)
 		}
 	}
 
@@ -1678,19 +1678,18 @@ func (s *Service) persistProvisionedOrganization(
 }
 
 // redirectSignupError sends a failed signup back to the page it started on.
-// The user is authenticated by this point but has no org, so /sign-up renders
-// the error and a retry: hitting the CTA again is a fast bounce through the
-// identity provider, since the browser still holds a live IDP session.
+// The sign-up page renders the selected error and a retry, retaining the
+// destination for the next login attempt.
 //
 // Only the immediate redirect is origin-aware. Any later visit to the app hits
 // the blanket zero-org redirect in the dashboard's app layout and lands on
 // /register — making that split persist would mean storing the flow origin on
 // the session, which is not worth it for this path.
-func (s *Service) redirectSignupError(ctx context.Context, payload *gen.CallbackPayload, err error) (*gen.CallbackResult, error) {
-	s.logger.ErrorContext(ctx, "signup provisioning failed", attr.SlogError(err), attr.SlogReason(string(authErrInit)))
+func (s *Service) redirectSignupError(ctx context.Context, payload *gen.CallbackPayload, code authErr, err error) (*gen.CallbackResult, error) {
+	s.logger.ErrorContext(ctx, "signup failed", attr.SlogError(err), attr.SlogReason(string(code)))
 
 	base := strings.TrimRight(s.platformHostURL(ctx, s.cfg.SignInRedirectURL), "/")
-	location := fmt.Sprintf("%s/sign-up?signin_error=%s", base, authErrInit)
+	location := fmt.Sprintf("%s/sign-up?signin_error=%s", base, code)
 	// Keep the destination on the retry: /sign-up threads ?redirect= back
 	// through the next login attempt, so a signup that arrived with one (e.g.
 	// a marketing CTA deep link) still lands there once provisioning succeeds.

@@ -246,7 +246,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			if idpErr == "access_denied" {
 				s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 				logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
-				return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "login was declined").LogWarn(ctx, logger), oauthui.ReasonCanceled))
+				return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserClient(oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "login was declined").LogWarn(ctx, logger), oauthui.ReasonCanceled), "Speakeasy dashboard"))
 			}
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))

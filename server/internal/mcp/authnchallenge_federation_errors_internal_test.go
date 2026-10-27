@@ -72,6 +72,12 @@ func TestFederatedFailureResponse(t *testing.T) {
 					var failure *oops.ShareableError
 					require.ErrorAs(t, err, &failure)
 					require.Equal(t, code, failure.Code)
+					if declined {
+						oops.BrowserErrHandle(logger, func(http.ResponseWriter, *http.Request) error { return err }).ServeHTTP(w, r)
+						require.Contains(t, w.Body.String(), "Speakeasy dashboard")
+						require.NotContains(t, w.Body.String(), "your MCP client")
+						require.Contains(t, w.Body.String(), "Sign-in was canceled")
+					}
 					require.Empty(t, w.Header().Get("Location"))
 				} else {
 					require.NoError(t, err)

@@ -99,7 +99,11 @@ func TestSetupCallbackDomainVerification(t *testing.T) {
 			if tc.stored {
 				require.NoError(t, repo.SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: org.ID, VerifiedDomains: []string{"example.com"}}))
 			} else {
-				ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, org.WorkosID.String).Return(&workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{{Domain: "example.com", State: tc.state}}}, tc.lookupErr).Once()
+				calls := 1
+				if tc.lookupErr != nil || (tc.state != workos.OrganizationDomainStateVerified && tc.state != workos.OrganizationDomainStateLegacyVerified) {
+					calls = 2
+				}
+				ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, org.WorkosID.String).Return(&workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{{Domain: "example.com", State: tc.state}}}, tc.lookupErr).Times(calls)
 			}
 			mux := goahttp.NewMuxer()
 			organizations.Attach(mux, ti.service)
@@ -111,6 +115,10 @@ func TestSetupCallbackDomainVerification(t *testing.T) {
 			}
 			require.Equal(t, http.StatusTemporaryRedirect, rec.Code)
 			require.Equal(t, want, rec.Header().Get("Location"))
+			revisit := httptest.NewRecorder()
+			mux.ServeHTTP(revisit, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?intent=domain_verification&task=identity-provider", nil))
+			require.Equal(t, http.StatusTemporaryRedirect, revisit.Code)
+			require.Equal(t, want, revisit.Header().Get("Location"), "valid domain setup revisits remain usable")
 			org, err = repo.GetOrganizationMetadata(ctx, org.ID)
 			require.NoError(t, err)
 			if tc.stored || tc.state == workos.OrganizationDomainStateVerified || tc.state == workos.OrganizationDomainStateLegacyVerified {
