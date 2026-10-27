@@ -120,7 +120,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	p.GatewayToken = nil
 	p.TLSCertificate, p.TLSPrivateKey = nil, nil
 	raw, err := json.Marshal(map[string]any{
-		"tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4, "template_naming": 2,
+		"tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
 		"identity": p.Identity.labels(), "namespace": p.Identity.Namespace, "image": p.Image,
 		"ingress_cidr": p.IngressCIDR, "guest_port": p.GuestPort, "command": p.Command, "args": p.Args,
 		"allow_insecure_http": p.AllowInsecureHTTP, "resources": p.Resources, "work_size_limit": p.WorkSizeLimit,
@@ -279,7 +279,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	for _, step := range []struct {
 		gvr  schema.GroupVersionResource
 		name string
-	}{{gkeSandboxClaimGVR, name}, {kitTemplateGVR, kitGKETemplateName(name)}} {
+	}{{gkeSandboxClaimGVR, name}, {kitTemplateGVR, kitGKETemplateName(name)}, {kitTemplateGVR, name}} {
 		_, err := k.config.GKE.Dynamic.Resource(step.gvr).Namespace(k.config.GKE.Namespace).Get(ctx, step.name, metav1.GetOptions{})
 		if err == nil {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("unrecorded Kit GKE resources require fenced operator reconciliation")
