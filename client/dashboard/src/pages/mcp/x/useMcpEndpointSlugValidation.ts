@@ -21,6 +21,8 @@ export function useMcpEndpointSlugValidation(
   customDomainId: string | null,
   currentSlug?: string,
   hosted = false,
+  // The server the slug is for; its own addresses (such as its legacy alias) read as available.
+  mcpServerId?: string,
 ): string | null {
   const client = useSdkClient();
 
@@ -51,12 +53,14 @@ export function useMcpEndpointSlugValidation(
       "mcpEndpointSlugAvailability",
       debouncedSlug,
       customDomainId,
+      mcpServerId ?? null,
     ] as const,
     enabled: shouldCheck,
     queryFn: () =>
       client.mcpEndpoints.checkSlugAvailability({
         slug: debouncedSlug,
         customDomainId: customDomainId ?? undefined,
+        mcpServerId,
       }),
   });
 
