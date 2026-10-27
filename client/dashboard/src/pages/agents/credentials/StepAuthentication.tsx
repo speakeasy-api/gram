@@ -38,11 +38,14 @@ export function StepAuthentication({
 }): JSX.Element {
   const { user } = useSession();
   const oauth = useOAuthPopup(connections.refetch);
+  const displayedConnections = agent
+    ? (connections.assignedByServer ?? connections.byServer)
+    : connections.byServer;
   const missing = servers.filter(
     (server) =>
       server.issuerId &&
       ["missing", "ended", "error"].includes(
-        connections.byServer.get(server.id)?.status ?? "checking",
+        displayedConnections.get(server.id)?.status ?? "checking",
       ),
   );
   return (
@@ -66,11 +69,7 @@ export function StepAuthentication({
       )}
       <Accordion type="multiple" className="border-border border">
         {servers.map((server) => {
-          const connection = (
-            agent
-              ? (connections.assignedByServer ?? connections.byServer)
-              : connections.byServer
-          ).get(server.id);
+          const connection = displayedConnections.get(server.id);
           const shared =
             !server.issuerId || connection?.status === "not-required";
           const expired = connection?.status === "ended";
@@ -223,7 +222,9 @@ export function StepAuthentication({
                       size="sm"
                       aria-label={`Refresh ${server.name} connection status`}
                       title="Refresh connection status"
-                      onClick={connections.refetch}
+                      onClick={() => {
+                        void connections.refetch();
+                      }}
                     >
                       <RefreshCw className="size-4" />
                     </Button>

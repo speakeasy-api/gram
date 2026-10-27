@@ -132,8 +132,8 @@ export function AgentIdentityFacts({
       {agent.connectionNeedsRefresh && agent.lifecycle === "active" && (
         <Text role="alert" small>
           An assigned connection has expired or is no longer available. The
-          connection owner needs to reauthenticate before the agent can use that
-          server.{" "}
+          connection needs to be reauthenticated or replaced before the agent
+          can use that server.{" "}
           {agent.permissions.write && (
             <Link
               className="underline underline-offset-4"

@@ -672,7 +672,13 @@ describe("Agent key MCP servers", () => {
     mocks.candidates.mockResolvedValue([
       { ...live, id: "unrelated_later_login" },
     ]);
+    const callsBeforeLaterFocus = mocks.candidates.mock.calls.length;
     fireEvent(window, new Event("focus"));
+    await waitFor(() =>
+      expect(mocks.candidates.mock.calls.length).toBeGreaterThan(
+        callsBeforeLaterFocus,
+      ),
+    );
     await waitFor(() =>
       expect(
         (

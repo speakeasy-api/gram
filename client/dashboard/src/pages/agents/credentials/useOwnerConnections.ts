@@ -15,7 +15,7 @@ export interface OwnerConnections {
   /** Actual assignments only; candidates must not appear connected in edit summaries. */
   assignedByServer?: Map<string, ServerConnection>;
   /** Re-read assignments and the caller's connections, after they sign in elsewhere. */
-  refetch: () => void;
+  refetch: () => Promise<void>;
 }
 
 /**
@@ -187,13 +187,12 @@ export function useOwnerConnections(
   return {
     byServer,
     assignedByServer,
-    refetch: () => {
-      for (const read of [
-        ...sessions,
-        ...clients,
-        ...(agentId ? bindings : []),
-      ])
-        void read.refetch();
+    refetch: async () => {
+      await Promise.all(
+        [...sessions, ...clients, ...(agentId ? bindings : [])].map((read) =>
+          read.refetch(),
+        ),
+      );
     },
   };
 }

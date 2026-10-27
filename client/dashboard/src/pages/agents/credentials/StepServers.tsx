@@ -96,9 +96,7 @@ export function StepServers({
   const isSelected = (id: string) =>
     allServers || selected.some((entry) => entry.server.id === id);
   const isRefused = (id: string) => refusedServers?.has(id) ?? false;
-  // A server that authorizes each person separately needs an account attached
-  // to the agent before a key can call it. It is chosen
-  // only when the creator's own connection to it can be attached.
+  // Selection does not require a connection; the next step handles authentication.
   const matches = servers.filter((server) => {
     if (showSelectedOnly && !isSelected(server.id)) return false;
     if (!query) return true;

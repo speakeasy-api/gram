@@ -51,6 +51,13 @@ vi.mock("@gram/client/react-query/remoteSessionsDetachBinding.js", () => ({
   useRemoteSessionsDetachBindingMutation: () => ({ mutateAsync: vi.fn() }),
 }));
 
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  firstPartyConnectUrl: (url: string | undefined) =>
+    url
+      ? `${new URL(url, "https://speakeasy.example")}/connect/first-party`
+      : undefined,
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: "org_example",
@@ -283,7 +290,10 @@ async function enabledAllServers() {
   return box;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.projectId = "project_one";
@@ -1044,7 +1054,7 @@ describe("Agent project", () => {
       expect(next.disabled).toBe(false);
 
       mocks.checkPolicyGrants.mockRejectedValueOnce(new Error("network down"));
-      fireEvent(window, new Event("visibilitychange"));
+      fireEvent(document, new Event("visibilitychange"));
       await screen.findByText("Could not check which servers you can reach.");
       expect(next.disabled).toBe(true);
       fireEvent.click(next);
@@ -1811,6 +1821,7 @@ describe("Servers that sign in as a person", () => {
     id: "server_linear",
     name: "Linear",
     slug: "linear",
+    platformEndpointSlug: "linear",
     projectId: "project_one",
     remoteMcpServerId: "remote_linear",
     userSessionIssuerId: "issuer_linear",
@@ -1971,6 +1982,49 @@ describe("Servers that sign in as a person", () => {
       fireEvent.click(next);
       expect(mocks.createAgent).not.toHaveBeenCalled();
       expect(mocks.createKey).not.toHaveBeenCalled();
+      const popup = {
+        location: { href: "" },
+        closed: false,
+        opener: window as Window | null,
+        focus: vi.fn(),
+      };
+      const open = vi
+        .spyOn(window, "open")
+        .mockReturnValue(popup as unknown as Window);
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /Linear.*(?:Expired|Requires connection)/,
+        }),
+      );
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: state === "expired" ? "Reauthenticate" : "Connect account",
+        }),
+      );
+      expect(open).toHaveBeenCalled();
+      const reads = mocks.sessions.mock.calls.length;
+      mocks.sessions.mockResolvedValue([mine]);
+      popup.closed = true;
+      fireEvent(window, new Event("focus"));
+      await waitFor(() =>
+        expect(mocks.sessions.mock.calls.length).toBeGreaterThan(reads),
+      );
+      await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
+      fireEvent.click(next);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Create agent" }),
+      );
+      await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+      expect(mocks.attach).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachBindingRequestBody: expect.objectContaining({
+            remoteSessionId: mine.id,
+          }),
+        }),
+        undefined,
+        expect.anything(),
+      );
+      open.mockRestore();
     },
   );
 

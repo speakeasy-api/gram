@@ -466,11 +466,12 @@ export function ServerAccounts({
   };
   const refetchAccounts = useRef(query.refetch);
   refetchAccounts.current = query.refetch;
-  const connectionPopup = useOAuthPopup(async () => {
+  const connectionPopup = useOAuthPopup(async (reason) => {
     await refetchAccounts.current();
-    setRefreshing((current) =>
-      current ? { ...current, returned: true } : current,
-    );
+    if (reason === "popup-closed")
+      setRefreshing((current) =>
+        current ? { ...current, returned: true } : current,
+      );
     await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
   });
   // A row earns a card when it asks for an account, or when it still holds a
