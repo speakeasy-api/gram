@@ -674,16 +674,23 @@ export function ServerAccounts({
               You need permission to edit this agent to change its connections.
             </Text>
           )}
-          {canManage && row.server.connectUrl && row.bindings.length === 0 && (
-            <Button
-              size="sm"
-              onClick={() => {
-                connectionPopup.open(row.server.connectUrl!);
-              }}
-            >
-              Connect an account
-            </Button>
-          )}
+          {canManage &&
+            row.server.connectUrl &&
+            row.clients.some(
+              (client) =>
+                !row.bindings.some(
+                  (binding) => binding.remoteSessionClientId === client.id,
+                ),
+            ) && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  connectionPopup.open(row.server.connectUrl!);
+                }}
+              >
+                Connect an account
+              </Button>
+            )}
           {row.bindings
             .filter((binding) => binding.remoteSession)
             .map((binding) => {

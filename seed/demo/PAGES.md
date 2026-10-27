@@ -108,9 +108,9 @@ agent identifier and must show unavailable, never human-owner activity or zeros.
 
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
-PG `agents` ×5 includes Release assistant, Support triage, Retired
-documentation bot, the active Release notes assistant, and the dedicated
-Identity-bound assistant agent (empty grants), covering active,
+PG `agents` ×6 includes Release assistant, Support triage, Retired
+documentation bot, the active Release notes assistant, the dedicated
+Identity-bound assistant agent (empty grants), and Inference summary worker, covering active,
 suspended, and revoked identities with three existing fictional owners (display names and
 avatar initials fallback). One inert agent-subject `user_sessions` row shows the
 credential relationship and approving human; its refresh hash is invalid and its

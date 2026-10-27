@@ -137,7 +137,16 @@ The trimmed file is the one you publish, so it is the one section 3 applies to. 
 
 When narration is requested, use a natural, expressive voice with conversational pacing, varied intonation, deliberate emphasis, and short pauses between steps. Explain the action and its result; do not read every label or narrate clicks mechanically. Prefer a high-quality expressive speech engine available in the environment. Do not use the stock macOS `say` Daniel voice or another flat system voice as the default: it produced a recording the user found “very hard to listen to.” Use such a voice only if the user explicitly selects it after hearing a sample. Increasing speaking speed or volume does not fix monotonous delivery.
 
-For this user, the selected narration voice is **Kokoro `bm_george`**. Use it by default for narrated recordings unless the user requests another voice. The working local configuration is `voice="bm_george", lang="en-gb", speed=1.0` with `kokoro-onnx`. Keep downloaded models and generated audio in ignored local artifact directories. An isolated invocation that worked here is `uv run --no-project --python 3.12 --with kokoro-onnx --with soundfile python <narration-script.py>`; `--no-project` avoids changing the repository Python environment.
+For this user, the selected narration voice is **Kokoro `bm_george`**. Use it by default for narrated recordings unless the user requests another voice. The working local configuration is `voice="bm_george", lang="en-gb", speed=1.0` with `kokoro-onnx`. Keep downloaded models and generated audio in ignored local artifact directories. An isolated invocation that worked here is `uv run --no-project --python 3.12 --with kokoro-onnx --with soundfile python "$DIR/narration.py" "$DIR"`; `--no-project` avoids changing the repository Python environment.
+
+Download the model and voice bundle once into the ignored recording directory, then pass both paths to `Kokoro`:
+
+```bash
+curl -fL --retry 3 -o "$DIR/kokoro-v1.0.onnx" https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx
+curl -fL --retry 3 -o "$DIR/voices-v1.0.bin" https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin
+```
+
+In the narration script, accept `$DIR` as its first argument and initialize `Kokoro(str(Path(sys.argv[1]) / "kokoro-v1.0.onnx"), str(Path(sys.argv[1]) / "voices-v1.0.bin"))` after importing `sys`, `Path` from `pathlib`, and `Kokoro` from `kokoro_onnx`. Keep these downloaded files out of commits.
 
 Honor an existing user voice selection without asking for approval again. When choosing a new voice, generate a short sample from the actual script before rendering the full recording. Listen to it when audio review is available; otherwise present the sample for the user's voice choice, state that you cannot assess its sound yourself, and wait for that choice before rendering the full narration. If no expressive voice is available, keep the captured video and surface that limitation instead of silently substituting a robotic voice. Never claim to have reviewed expressiveness from a transcript, waveform, or volume check alone.
 

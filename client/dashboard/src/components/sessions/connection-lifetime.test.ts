@@ -10,6 +10,55 @@ const now = Date.parse("2026-10-23T12:00:00Z");
 const hours = (n: number) => new Date(now + n * 3_600_000);
 
 describe("connectionLifetime", () => {
+  it("retains an earlier access expiry when authorization has also ended", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(-3),
+          authorizationExpiresAt: hours(-1),
+          hasRefreshToken: false,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "ended", at: hours(-3) });
+  });
+  it("does not invent access validity from a future authorization deadline", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: "invalid" as unknown as Date,
+          authorizationExpiresAt: hours(1),
+          hasRefreshToken: false,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "unknown" });
+  });
+  it("rejects ended authorization even when access expiry is unreadable", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: "invalid" as unknown as Date,
+          authorizationExpiresAt: hours(-1),
+          hasRefreshToken: false,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "ended", at: hours(-1) });
+  });
+  it("ends a refreshable connection at authorization rather than an older access token", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(-3),
+          refreshExpiresAt: hours(24),
+          authorizationExpiresAt: hours(-1),
+          hasRefreshToken: true,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "ended", at: hours(-1) });
+  });
   it("ends authorization even when access and refresh tokens remain valid", () => {
     expect(
       connectionLifetime(

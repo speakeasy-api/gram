@@ -48,31 +48,37 @@ export function connectionLifetime(
   now: number = Date.now(),
 ): ConnectionLifetime {
   const authorization = instant(session.authorizationExpiresAt);
-  if (authorization && authorization.getTime() <= now)
-    return { kind: "ended", at: authorization };
-  const bounded = (at: Date | undefined) =>
-    authorization && (!at || authorization < at) ? authorization : at;
-  const access = bounded(instant(session.accessExpiresAt));
+  const bounded = (at: Date) =>
+    authorization && authorization < at ? authorization : at;
   if (session.hasRefreshToken) {
-    const refresh = bounded(instant(session.refreshExpiresAt));
-    if (!refresh) return { kind: "refreshes" };
-    if (refresh.getTime() > now)
+    const refresh = instant(session.refreshExpiresAt);
+    if (!refresh || refresh.getTime() > now) {
+      const deadline = refresh ? bounded(refresh) : authorization;
+      if (!deadline) return { kind: "refreshes" };
+      if (deadline.getTime() <= now) return { kind: "ended", at: deadline };
       return {
         kind: "refreshes-until",
-        at: refresh,
-        soon: refresh.getTime() - now <= ENDING_SOON_MS,
+        at: deadline,
+        soon: deadline.getTime() - now <= ENDING_SOON_MS,
       };
+    }
     // A lapsed refresh token still leaves the access token it last minted,
     // which works until its own expiry and is then the end.
   }
-  if (!access) return { kind: "unknown" };
-  if (access.getTime() > now)
+  const access = instant(session.accessExpiresAt);
+  if (!access) {
+    if (authorization && authorization.getTime() <= now)
+      return { kind: "ended", at: authorization };
+    return { kind: "unknown" };
+  }
+  const deadline = bounded(access);
+  if (deadline.getTime() > now)
     return {
       kind: "expires",
-      at: access,
-      soon: access.getTime() - now <= ENDING_SOON_MS,
+      at: deadline,
+      soon: deadline.getTime() - now <= ENDING_SOON_MS,
     };
-  return { kind: "ended", at: access };
+  return { kind: "ended", at: deadline };
 }
 
 /** Whether a connection stops working within the day, so it reads as a warning. */

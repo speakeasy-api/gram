@@ -126,7 +126,7 @@ var _ = Service("remoteSessions", func() {
 	})
 
 	Method("listRemoteSessions", func() {
-		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).")
+		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).")
 
 		Payload(func() {
 			Attribute("principal_id", String, "Owned agent whose eligible sessions to list; requires user_session_issuer_id.", func() { Format(FormatUUID) })

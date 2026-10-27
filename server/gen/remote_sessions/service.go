@@ -79,7 +79,7 @@ type Service interface {
 	// eligible sessions for an agent they own, without requiring project read
 	// permission. Both filters must be supplied together. access_token_encrypted
 	// and refresh_token_encrypted are never returned — only metadata
-	// (access_expires_at, refresh_expires_at, scopes).
+	// (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).
 	ListRemoteSessions(context.Context, *ListRemoteSessionsPayload) (res *ListRemoteSessionsResult, err error)
 	// Count the distinct people (user subjects) holding a live remote_session
 	// minted through one remote_session_client. Scoped like listRemoteSessions:

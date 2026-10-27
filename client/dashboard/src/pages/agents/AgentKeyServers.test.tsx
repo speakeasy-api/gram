@@ -585,7 +585,9 @@ describe("Agent key MCP servers", () => {
       const callsBeforeFocus = mocks.candidates.mock.calls.length;
       await act(async () => {
         fireEvent(window, new Event("focus"));
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 0);
+        });
       });
       expect(mocks.candidates.mock.calls.length).toBe(callsBeforeFocus);
       expect(mocks.attach).not.toHaveBeenCalled();
@@ -681,6 +683,40 @@ describe("Agent key MCP servers", () => {
       ).toBe(false),
     );
     expect(mocks.attach).not.toHaveBeenCalled();
+  });
+  it("keeps sign-in available for a second required upstream account", async () => {
+    mocks.clients.mockResolvedValue([
+      {
+        result: {
+          items: [
+            { id: "client_example", clientId: "First upstream" },
+            { id: "client_second", clientId: "Second upstream" },
+          ],
+        },
+      },
+    ]);
+    mocks.bindings.mockResolvedValue([
+      {
+        id: "first_binding",
+        remoteSessionClientId: "client_example",
+        remoteSessionId: "first_session",
+        remoteSession: {
+          id: "first_session",
+          subjectUrn: "user:user_example",
+          remoteSessionClientId: "client_example",
+          hasRefreshToken: false,
+          accessExpiresAt: new Date(Date.now() + 86_400_000),
+        },
+      },
+    ]);
+    mocks.candidates.mockResolvedValue([]);
+    const { ready } = setup(1, [server]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect an account" }),
+    );
+    expect(window.open).toHaveBeenCalled();
+    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(ready).not.toHaveBeenCalledWith(true);
   });
   it("reports blocked popups without detaching an account", async () => {
     vi.mocked(window.open).mockReturnValue(null);

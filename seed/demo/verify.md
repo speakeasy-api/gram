@@ -470,7 +470,7 @@ open their effective assignments; the dropdown always offers compact member sear
       survive. Reattach the same exact session twice: only one active binding
       per agent/issuer/client slot. Reauthorization changes the generation and
       must not silently authorize an old attachment.
-    - Rerun `mise run seed` twice. Expect five managed agents, two inert
+    - Rerun `mise run seed` twice. Expect six managed agents, two inert
       attachment sessions, two bindings and two exact project/server-scoped
       grants, with no usable upstream credentials. The separate six Linear
       validation sessions remain intact. These fixtures prove display and
