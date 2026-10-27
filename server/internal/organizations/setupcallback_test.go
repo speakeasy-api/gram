@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -57,6 +58,10 @@ func TestSetupCallbackUsesVisibleConfiguredTask(t *testing.T) {
 			}
 			require.Equal(t, http.StatusTemporaryRedirect, rec.Code)
 			require.Equal(t, want, rec.Header().Get("Location"))
+			revisit := httptest.NewRecorder()
+			mux.ServeHTTP(revisit, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?"+tc.query, nil))
+			require.Equal(t, http.StatusTemporaryRedirect, revisit.Code)
+			require.Equal(t, want, revisit.Header().Get("Location"), "valid setup revisits remain usable")
 		})
 	}
 }
@@ -124,7 +129,7 @@ func TestSetupCallbackRejectsInvalidOrigin(t *testing.T) {
 	mux := goahttp.NewMuxer()
 	organizations.Attach(mux, ti.service)
 	for _, query := range []string{
-		"intent=sso&task=directory-sync", "intent=dsync&task=connect-idp",
+		"", "intent=sso&task=directory-sync", "intent=dsync&task=connect-idp",
 		"intent=sso&task=connect-idp", "intent=dsync&task=directory-sync",
 		"intent=domain_verification&task=domain-verification",
 		"intent=dsync&task=anthropic-observability", "intent=sso&task=unknown",
@@ -132,7 +137,8 @@ func TestSetupCallbackRejectsInvalidOrigin(t *testing.T) {
 	} {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/setup/callback?"+query, nil))
-		require.Equal(t, http.StatusBadRequest, rec.Code, query)
+		require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, rec, http.StatusBadRequest).Code)
+		require.Contains(t, rec.Body.String(), "Organization setup")
 		require.Empty(t, rec.Header().Get("Location"), query)
 	}
 }
@@ -169,7 +175,9 @@ func TestSetupCallbackRequiresActiveOrganizationAdmin(t *testing.T) {
 					mux.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?intent="+intent+origin, nil))
 					require.Equal(t, http.StatusForbidden, rec.Code)
 					require.Empty(t, rec.Header().Get("Location"))
-					require.Equal(t, "forbidden\n", rec.Body.String())
+					require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, rec, http.StatusForbidden).Code)
+					require.Contains(t, rec.Body.String(), "Organization setup")
+					require.Contains(t, rec.Body.String(), "Speakeasy dashboard")
 					require.Empty(t, ti.orgs.Calls, "denied callbacks must not call WorkOS")
 					afterOrg, err := repo.GetOrganizationMetadata(ctx, org.ID)
 					require.NoError(t, err)

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -410,6 +411,9 @@ func (s *Service) finishFederatedFailure(w http.ResponseWriter, r *http.Request,
 		return responseErr
 	}
 	if state.FirstParty {
+		if declined {
+			return fmt.Errorf("complete identity login: %w", oops.WithBrowserReason(failure, oauthui.ReasonCanceled))
+		}
 		return failure
 	}
 	w.Header().Set("Cache-Control", "no-store")

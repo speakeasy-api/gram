@@ -22,8 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	goahttp "goa.design/goa/v3/http"
 )
 
 func newCIMDAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
@@ -489,8 +491,11 @@ func TestHandleMCPAuthCallbackInvalidClientRetiresCIMDClient(t *testing.T) {
 	rctx.URLParams.Add("id", "flow-1")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	rec := httptest.NewRecorder()
-	require.NoError(t, service.handleMCPAuthCallback(rec, req))
-	require.Equal(t, http.StatusOK, rec.Code)
+	mux := goahttp.NewMuxer()
+	Attach(mux, service)
+	mux.ServeHTTP(rec, req)
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, rec, http.StatusBadRequest).Code)
+	require.NotContains(t, rec.Body.String(), "Authentication complete")
 
 	row, err := assistantrepo.New(conn).GetAssistantMCPOAuthClient(t.Context(), assistantrepo.GetAssistantMCPOAuthClientParams{
 		ProjectID:         projectID,

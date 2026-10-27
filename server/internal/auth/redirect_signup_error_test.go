@@ -65,7 +65,7 @@ func TestService_redirectSignupError_PreservesDestination(t *testing.T) {
 	}
 
 	state := encodeStateParam("/@self/projects/default/toolsets?tab=all", "nonce")
-	payload := &gen.CallbackPayload{Code: "code", State: &state}
+	payload := &gen.CallbackPayload{Code: new("code"), State: &state}
 
 	result, err := svc.redirectSignupError(t.Context(), payload, errors.New("provisioning failed"))
 	require.NoError(t, err)
@@ -87,7 +87,7 @@ func TestService_redirectSignupError_DropsForeignDestination(t *testing.T) {
 	}
 
 	state := encodeStateParam("https://evil.example/phish", "nonce")
-	payload := &gen.CallbackPayload{Code: "code", State: &state}
+	payload := &gen.CallbackPayload{Code: new("code"), State: &state}
 
 	result, err := svc.redirectSignupError(t.Context(), payload, errors.New("provisioning failed"))
 	require.NoError(t, err)

@@ -9,7 +9,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>{{if .Approval}}Couldn't approve{{else}}Couldn't connect{{end}} · Speakeasy</title>
+    <title>{{if .Setup}}Couldn't finish setup{{else if .Approval}}Couldn't approve{{else}}Couldn't connect{{end}} · Speakeasy</title>
     {{/* The stylesheet is the one the MCP consent page uses, compiled from the
     dashboard design system by `aube run -F dashboard build:consent-page` and
     inlined, so every authorization page looks like the dashboard. */}}
@@ -28,12 +28,12 @@ consent page shows, so the person recognizes the flow they started. */ -}}
         server they were connecting. The OAuth error itself stays under
         Technical details: it is written for developers, not for them. */}}
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
-          <p class="text-eyebrow text-default-destructive">{{if .Approval}}Couldn't approve{{else}}Couldn't connect{{end}}</p>
+          <p class="text-eyebrow text-default-destructive">{{if .Setup}}Couldn't finish setup{{else if .Approval}}Couldn't approve{{else}}Couldn't connect{{end}}</p>
           <h1
             id="page-title"
             class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1"
           >
-            {{if .Approval}}<span>Change approval</span>{{else}}
+            {{if .Setup}}<span>Organization setup</span>{{else if .Approval}}<span>Change approval</span>{{else}}
             <span>{{if .ClientName}}{{.ClientName}}{{else}}Your MCP client{{end}}</span>
             {{if .ServerName}}
             <span class="text-muted-foreground" aria-hidden="true">&rsaquo;</span>
@@ -42,10 +42,16 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{end}}
           </h1>
           <p class="text-sm text-muted-foreground">
-            {{if .Approval}}
+            {{if .Setup}}
+            {{if eq .Kind "not-allowed"}}Your account can't continue this organization's setup.
+            {{else if eq .Kind "unavailable"}}Speakeasy couldn't finish checking your setup. Please try again.
+            {{else}}This setup link is incomplete or no longer valid.{{end}}
+            {{else if .Approval}}
             {{if eq .Kind "expired"}}This approval link expired or was already used.
             {{else if eq .Kind "session-changed"}}Your staff sign-in session changed. This approval could not be completed.
             {{else}}This change could not be approved. The proposal may be unavailable or may have changed.{{end}}
+            {{else if eq .Kind "canceled"}}
+            Sign-in was canceled. The connection was not completed.
             {{else if eq .Kind "organization-blocked"}}
             Your organization doesn't allow {{template "client" .}} to connect to {{template "server" .}}.
             {{else if eq .Kind "expired"}}
@@ -77,13 +83,16 @@ consent page shows, so the person recognizes the flow they started. */ -}}
         </header>
 
         <p class="text-sm border-b px-6 py-6 sm:px-8">
-          {{if .Approval}}
+          {{if .Setup}}
+          Return to the Speakeasy dashboard and open your organization’s setup.
+          Sign in again if needed, or ask an organization administrator for help.
+          {{else if .Approval}}
           Return to your MCP client to check the proposal and request a new approval link.
           Use the same staff account that started the request.
           {{else if eq .Kind "organization-blocked"}}
           Ask your organization's administrators to review this connection.
           Share the technical details below with them.
-          {{else if or (eq .Kind "expired") (eq .Kind "session-changed") (eq .Kind "invalid-link")}}
+          {{else if or (eq .Kind "expired") (eq .Kind "session-changed") (eq .Kind "invalid-link") (eq .Kind "canceled")}}
           Close this tab and start connecting again from {{template "client" .}}.
           {{else if eq .Kind "invalid-client"}}
           Start connecting again from {{template "client" .}}. If it still fails,
@@ -225,6 +234,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           </div>
         </details>
 
+        {{if and (not .Setup) (ne .Kind "canceled")}}
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8">
           {{if .CallbackURL}}
           <p class="text-sm text-muted-foreground">
@@ -244,6 +254,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           </p>
           {{end}}
         </div>
+        {{end}}
       </section>
 
       <p class="text-xs text-muted-foreground">Secured by Speakeasy.</p>

@@ -129,7 +129,7 @@ func testPartnerSignupCallback(t *testing.T, resolutionErr, offerErr error) {
 	}
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", " FiXtUrE ", "")
 	resolver.AssertNumberOfCalls(t, "ResolveGatewayPromotionCode", 0)
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	resolver.AssertExpectations(t)
 	if resolutionErr != nil || offerErr != nil {
@@ -187,7 +187,7 @@ func TestPartnerSignupExistingOrganizationIsNotAttributed(t *testing.T) {
 		require.NoError(t, inst.createTestOrganization(ctx, org, user.UserID))
 	}
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", " FiXtUrE ", "")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error")
 	_, err = orgRepo.New(inst.conn).GetOrganizationPromotionApplication(ctx, user.Organizations[0].ID)
@@ -203,7 +203,7 @@ func TestPartnerSignupCallbackToRegisterPreservesCode(t *testing.T) {
 	ctx, inst := newTestAuthServiceForOrganizationProvisioning(t, user, partnerSignupConfiguration(t, resolver))
 	seedPartnerOffer(t, ctx, inst)
 	ctx, state := partnerSignupLogin(t, ctx, inst, "", "fixture", "")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	location, err := url.Parse(result.Location)
 	require.NoError(t, err)
@@ -275,7 +275,7 @@ func testPartnerSignupCommittedOrganizationRetry(t *testing.T, redeemed bool, of
 	require.NoError(t, orgRepo.New(inst.conn).SetOrganizationDefaultHostForTest(ctx, orgRepo.SetOrganizationDefaultHostForTestParams{ID: org.ID, DefaultHost: conv.ToPGText("https://" + testExtraPlatformHost)}))
 	ctx = requestorigin.WithContext(ctx, originAt(requestorigin.SurfacePlatform, testServerURL.String()))
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", " FiXtUrE ", "")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	require.Equal(t, extraHostTransfer("/"+org.Slug+"/billing"), result.Location)
 	persisted, err := orgRepo.New(inst.conn).GetOrganizationPromotionApplication(ctx, org.ID)
@@ -297,7 +297,7 @@ func TestPartnerSignupInvalidCodeRedirectsAfterLogin(t *testing.T) {
 	resolver.On("ResolveGatewayPromotionCode", mock.Anything, "invalid").Return("", errors.New("promotion code not found")).Once()
 	ctx, inst := newTestAuthServiceForOrganizationProvisioning(t, user, partnerSignupConfiguration(t, resolver))
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", " INVALID ", "/destination")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	location, err := url.Parse(result.Location)
 	require.NoError(t, err)
@@ -500,7 +500,7 @@ func testPartnerSignupRejectsIneligibleOffer(t *testing.T, promotionID, flow str
 		changePartnerOffer(t, ctx, inst, promotionID, flow, enabled)
 	}
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", "fixture", "")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	require.Contains(t, result.Location, "signin_error=")
 	_, err = orgRepo.New(inst.conn).GetOrganizationMetadataBySlug(ctx, "fixture-company")

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -112,21 +113,21 @@ func (s *Service) HandleRemoteLoginBind(w http.ResponseWriter, r *http.Request) 
 	}
 	stateID := r.URL.Query().Get("state")
 	if _, err := uuid.Parse(stateID); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "remote login handoff expired")
+		return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "remote login handoff expired"), oauthui.ReasonExpired))
 	}
 	state, err := s.remoteLoginHopCache.GetAndDelete(ctx, "remoteLoginHop:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "remote login handoff expired")
+		return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "remote login handoff expired"), oauthui.ReasonExpired))
 	}
 	remaining := time.Until(state.CreatedAt.Add(state.TTL()))
 	if state.CreatedAt.IsZero() || remaining <= 0 || state.CreatedAt.After(time.Now().Add(time.Minute)) {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login handoff expired")
+		return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login handoff expired"), oauthui.ReasonExpired))
 	}
 	var target string
 	switch state.Phase {
 	case remoteLoginHopBind:
 		if state.Browser == "" || state.CookieID == "" {
-			return oops.E(oops.CodeUnauthorized, nil, "invalid remote login handoff")
+			return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "invalid remote login handoff"), oauthui.ReasonSessionChanged))
 		}
 		http.SetCookie(w, federatedBrowserCookie(state.CookieID, state.Browser, int(remaining.Seconds())))
 		state.ID = uuid.NewString()
@@ -138,7 +139,7 @@ func (s *Service) HandleRemoteLoginBind(w http.ResponseWriter, r *http.Request) 
 		target = state.ConfirmURL + "?" + url.Values{"state": {state.ID}}.Encode()
 	case remoteLoginHopConfirm:
 		if err := s.validateRemoteLoginHopOwner(r, state); err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "invalid remote login browser")
+			return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid remote login browser"), oauthui.ReasonSessionChanged))
 		}
 		target = state.AuthorizationURL
 		confirmed := state
@@ -149,7 +150,7 @@ func (s *Service) HandleRemoteLoginBind(w http.ResponseWriter, r *http.Request) 
 			return fmt.Errorf("store remote login browser confirmation: %w", err)
 		}
 	default:
-		return oops.E(oops.CodeUnauthorized, nil, "invalid remote login handoff")
+		return fmt.Errorf("validate login handoff: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "invalid remote login handoff"), oauthui.ReasonSessionChanged))
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")

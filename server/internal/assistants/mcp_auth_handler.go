@@ -29,6 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -235,16 +237,17 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	})
 }
 
-func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) (retErr error) {
+	defer func() { retErr = oops.WithBrowserClient(retErr, "Speakeasy Assistant") }()
 	ctx := r.Context()
 	callbackID := chi.URLParam(r, "id")
 	state := r.URL.Query().Get("state")
 	claims, err := s.core.assistantTokens.ValidateMCPAuthFlow(state)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid mcp auth callback state").LogError(ctx, s.logger)
+		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid or expired mcp auth callback state").LogWarn(ctx, s.logger), oauthui.ReasonExpired))
 	}
 	if claims.FlowID != callbackID {
-		return oops.E(oops.CodeBadRequest, nil, "mcp auth callback flow mismatch").LogError(ctx, s.logger)
+		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "mcp auth callback flow mismatch").LogWarn(ctx, s.logger), oauthui.ReasonInvalidLink))
 	}
 
 	projectID, err := uuid.Parse(claims.ProjectID)
@@ -321,6 +324,17 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		if err := s.signaler.SignalCoordinator(ctx, assistantID); err != nil {
 			return fmt.Errorf("signal assistant coordinator: %w", err)
 		}
+	}
+
+	if !eventCreated {
+		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "this connection callback was already processed"), oauthui.ReasonExpired))
+	}
+	if payload.Status == mcpAuthStatusFailed {
+		reason := oauthui.ReasonDefault
+		if payload.Error == oautherr.CodeAccessDenied {
+			reason = oauthui.ReasonCanceled
+		}
+		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "connection was not completed; return to your assistant conversation and try again"), reason))
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

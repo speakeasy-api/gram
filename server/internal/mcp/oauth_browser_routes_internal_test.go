@@ -6,10 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
+
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/stretchr/testify/require"
 )
 
 func TestOAuthBrowserRoutePolicy(t *testing.T) {
@@ -124,4 +128,48 @@ func TestConsentActionMalformedFormRetainsParseFailure(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestCallbackRoutesRenderExpiredPages(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{
+		"/mcp/idp_callback", "/mcp/idp_callback/test-client", "/mcp/example/idp_callback",
+		"/mcp/remote_login_callback", "/mcp/example/remote_login_callback", "/mcp/remote_login_bind",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			service := browserTestService(t)
+			mux := goahttp.NewMuxer()
+			Attach(mux, service, nil)
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, path+"?state=expired&code=unused", nil)
+			request.Header.Set("Accept", "application/json")
+			mux.ServeHTTP(response, request)
+			status := http.StatusBadRequest
+			if strings.Contains(path, "remote_login") {
+				status = http.StatusUnauthorized
+			}
+			require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, response, status).Code)
+			require.Contains(t, response.Body.String(), "expired or was already used")
+			require.Empty(t, response.Header().Get("Location"))
+			require.NotContains(t, response.Body.String(), "unused")
+		})
+	}
+}
+
+func TestRemoteCallbackBrowserMismatchPagePreservesState(t *testing.T) {
+	t.Parallel()
+	service := browserTestService(t)
+	parent := browserTestState()
+	require.NoError(t, service.authnChallengeCache.Store(t.Context(), parent))
+	remote := remotesessions.RemoteLoginState{ID: uuid.NewString(), ParentChallengeID: parent.ID, Subject: parent.Subject, UserSessionIssuerID: parent.UserSessionIssuerID}
+	require.NoError(t, service.remoteLoginCache.Store(t.Context(), remote))
+	mux := goahttp.NewMuxer()
+	Attach(mux, service, nil)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+remote.ID+"&code=unused", nil))
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusUnauthorized).Code)
+	require.Contains(t, response.Body.String(), "doesn't match your current browser")
+	_, err := service.remoteLoginCache.Get(t.Context(), "remoteLogin:"+remote.ID)
+	require.NoError(t, err)
 }

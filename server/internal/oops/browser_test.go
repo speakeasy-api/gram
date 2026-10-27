@@ -17,7 +17,7 @@ import (
 func TestBrowserErrHandlePreservesPublicError(t *testing.T) {
 	t.Parallel()
 	public := oops.E(oops.CodeForbidden, errors.New("private database detail"), "public refusal")
-	annotated := oops.WithBrowserReason(public, oauthui.ReasonExpired)
+	annotated := oops.WithBrowserClient(oops.WithBrowserReason(public, oauthui.ReasonExpired), "Example Client")
 	handler := func(http.ResponseWriter, *http.Request) error { return fmt.Errorf("validate request: %w", annotated) }
 	logger := testenv.NewLogger(t)
 	request := httptest.NewRequest(http.MethodGet, "/connect", nil)
@@ -29,6 +29,7 @@ func TestBrowserErrHandlePreservesPublicError(t *testing.T) {
 	require.Equal(t, "public refusal", body.Description)
 	require.Contains(t, browser.Body.String(), public.AsGoa(t.Context()).ID)
 	require.Contains(t, browser.Body.String(), "link expired or was already used")
+	require.Contains(t, browser.Body.String(), "Example Client")
 	require.NotContains(t, browser.Body.String(), "private database detail")
 
 	machine := httptest.NewRecorder()

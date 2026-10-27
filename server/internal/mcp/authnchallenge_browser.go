@@ -8,7 +8,9 @@ import (
 	"net/url"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -109,22 +111,33 @@ func (s *Service) completeFederatedBrowserHandoff(w http.ResponseWriter, r *http
 func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	remote, err := s.remoteLoginCache.Get(r.Context(), "remoteLogin:"+r.URL.Query().Get("state"))
 	if err != nil {
-		return fmt.Errorf("load remote login browser state: %w", err)
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "remote login link expired or was already used"), oauthui.ReasonExpired))
+		}
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnavailable, err, "remote login state is temporarily unavailable"), oauthui.ReasonUnavailable))
 	}
 	if remote.FinalRedirectURI != "" {
 		return nil
 	}
 	parent, err := s.authnChallengeCache.Get(r.Context(), "authnChallenge:"+remote.ParentChallengeID)
 	if err != nil {
-		return fmt.Errorf("load parent browser state: %w", err)
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "remote login link expired or was already used"), oauthui.ReasonExpired))
+		}
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnavailable, err, "parent login state is temporarily unavailable"), oauthui.ReasonUnavailable))
 	}
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
-		return errors.New("remote login parent mismatch")
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login parent mismatch"), oauthui.ReasonSessionChanged))
 	}
 	// A login on another callback host carries its own browser binding, set
 	// there by the bind stop of the remote login browser hop.
 	if remote.BrowserHash != "" {
-		return s.validateRemoteLoginHopBrowser(r, parent, remote)
+		err = s.validateRemoteLoginHopBrowser(r, parent, remote)
+	} else {
+		err = validateChallengeBrowser(r, parent, true)
 	}
-	return validateChallengeBrowser(r, parent, true)
+	if err != nil {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding"), oauthui.ReasonSessionChanged))
+	}
+	return nil
 }

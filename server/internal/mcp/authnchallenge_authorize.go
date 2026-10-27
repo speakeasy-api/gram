@@ -386,6 +386,7 @@ func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWr
 // presented, which the browser already holds.
 func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientID, serverName string) oauthui.AuthorizationError {
 	page := oauthui.AuthorizationError{
+		Setup:          false,
 		Status:         http.StatusBadRequest,
 		Reason:         oauthui.ReasonDefault,
 		Approval:       false,

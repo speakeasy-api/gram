@@ -1543,6 +1543,7 @@ func writePreAuthenticationOAuthError(w http.ResponseWriter, r *http.Request, cl
 	setOAuthTelemetryOutcome(w, oauthError.Code)
 	callback := redirectURL(redirectURI, "", state, oauthError.Code, oauthError.Description)
 	page := oauthui.AuthorizationError{
+		Setup:          false,
 		Status:         http.StatusBadRequest,
 		Reason:         oauthui.ReasonDefault,
 		Approval:       false,
@@ -1600,6 +1601,7 @@ func opaqueToken() (string, error) {
 func writeBrowserOAuthError(ctx context.Context, w http.ResponseWriter, status int, code, description string, reason oauthui.Reason) {
 	setOAuthTelemetryOutcome(w, code)
 	_ = oauthui.WriteAuthorizationError(ctx, w, oauthui.AuthorizationError{
+		Setup:          false,
 		Status:         status,
 		Reason:         reason,
 		Approval:       false,

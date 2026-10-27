@@ -55,6 +55,9 @@ var authorizationErrorFallbackStart, authorizationErrorFallbackEnd = func() (str
 // AuthorizationError describes a refused browser authorization or approval
 // request. Protocol values only appear under Technical details.
 type AuthorizationError struct {
+	// Setup selects organization setup recovery instructions.
+	Setup bool
+
 	// Status is the original HTTP failure status. Zero defaults to 400.
 	Status int
 
@@ -101,6 +104,8 @@ type Reason string
 const (
 	// ReasonDefault derives the explanation from the error code and status.
 	ReasonDefault Reason = ""
+	// ReasonCanceled identifies a sign-in the person declined.
+	ReasonCanceled Reason = "canceled"
 	// ReasonOrganizationBlocked identifies an explicit organization policy refusal.
 	ReasonOrganizationBlocked Reason = "organization-blocked"
 	// ReasonExpired identifies a link that expired or was already used.
@@ -161,6 +166,9 @@ func classifyError(page AuthorizationError) errorKind {
 }
 
 type authorizationErrorView struct {
+	// Setup selects organization setup copy.
+	Setup bool
+
 	// Approval selects staff change approval wording.
 	Approval bool
 
@@ -284,6 +292,7 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 	}
 	view := authorizationErrorView{
 		Styles:         consentpage.Styles,
+		Setup:          page.Setup,
 		Approval:       page.Approval,
 		ErrorID:        page.ErrorID,
 		Kind:           classifyError(page),

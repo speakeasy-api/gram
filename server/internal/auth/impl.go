@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -103,7 +104,11 @@ type authErr string
 
 const (
 	authErrCodeLookup authErr = "lookup_error"
-	authErrInit       authErr = "init_error"
+	// authErrLinkInvalid asks the person to restart an expired or mismatched login.
+	authErrLinkInvalid authErr = "signin_link_invalid"
+	// authErrCanceled identifies an ordinary provider cancellation.
+	authErrCanceled authErr = "signin_canceled"
+	authErrInit     authErr = "init_error"
 	// authErrSignInRevoked asks the user to sign in again: the identity
 	// provider handed back a session whose sign-in was revoked.
 	authErrSignInRevoked authErr = "sign_in_revoked"
@@ -340,8 +345,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}, nil
 	}
 
-	if payload.Code == "" {
-		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
+	if conv.PtrValOr(payload.Error, "") == oautherr.CodeAccessDenied {
+		return redirectWithError(authErrCanceled, errors.New("sign-in was canceled"))
+	}
+	if conv.PtrValOr(payload.Code, "") == "" {
+		return redirectWithError(authErrLinkInvalid, errors.New("code is required"))
 	}
 
 	stateProvided := conv.PtrValOr(payload.State, "") != ""
@@ -349,7 +357,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if stateProvided {
 		supportExpected, err = s.validateAuthNonce(ctx, payload)
 		if err != nil {
-			return redirectWithError(authErrCodeLookup, err)
+			return redirectWithError(authErrLinkInvalid, err)
 		}
 	}
 
@@ -392,8 +400,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	// Taken before the exchange so a revocation that lands meanwhile wins.
 	authenticatedAt := time.Now()
-	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, payload.Code)
+	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, *payload.Code)
 	if err != nil {
+		if errors.Is(err, identity.ErrCodeRejected) {
+			return redirectWithError(authErrLinkInvalid, err)
+		}
 		return redirectWithError(authErrCodeLookup, err)
 	}
 	if !stateProvided && idpUser.ImpersonatorEmail() == "" {

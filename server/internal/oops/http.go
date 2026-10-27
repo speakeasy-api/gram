@@ -65,10 +65,13 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 		}
 		if browser {
 			reason := oauthui.ReasonDefault
+			clientName := ""
 			if presentation, ok := errors.AsType[*browserError](err); ok {
 				reason = presentation.reason
+				clientName = presentation.clientName
 			}
 			page := oauthui.AuthorizationError{
+				Setup:          false,
 				Status:         code,
 				Reason:         reason,
 				Approval:       false,
@@ -76,7 +79,7 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 				Code:           payload.Name,
 				Description:    payload.Message,
 				CallbackURL:    "",
-				ClientName:     "",
+				ClientName:     clientName,
 				ClientID:       "",
 				ClientIDOrigin: "",
 				ServerName:     "",
@@ -103,6 +106,9 @@ type browserError struct {
 
 	// reason selects actionable browser copy.
 	reason oauthui.Reason
+
+	// clientName is a display name from validated flow state.
+	clientName string
 }
 
 func (e *browserError) Error() string { return e.cause.Error() }
@@ -114,5 +120,22 @@ func WithBrowserReason(err error, reason oauthui.Reason) error {
 	if err == nil {
 		return nil
 	}
-	return &browserError{cause: err, reason: reason}
+	name := ""
+	if presentation, ok := errors.AsType[*browserError](err); ok {
+		name = presentation.clientName
+	}
+	return &browserError{cause: err, reason: reason, clientName: name}
+}
+
+// WithBrowserClient identifies the client to restart from without adding a redirect.
+// Callers must use a fixed label or a name from validated flow state.
+func WithBrowserClient(err error, name string) error {
+	if err == nil {
+		return nil
+	}
+	reason := oauthui.ReasonDefault
+	if presentation, ok := errors.AsType[*browserError](err); ok {
+		reason = presentation.reason
+	}
+	return &browserError{cause: err, reason: reason, clientName: name}
 }
