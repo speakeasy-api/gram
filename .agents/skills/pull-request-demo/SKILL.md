@@ -133,6 +133,16 @@ Every `mise run playwright` subcommand costs one to two seconds of process start
 
 The trimmed file is the one you publish, so it is the one section 3 applies to. GitHub serves `.webm` back as `video/webm` and renders it as a player, so no further conversion is needed. If a take goes wrong, stop it, restore the starting state in a new session, and record again. Do not include setup, login, exploration, or unrelated page tours.
 
+### Narration: expressive and easy to listen to
+
+When narration is requested, use a natural, expressive voice with conversational pacing, varied intonation, deliberate emphasis, and short pauses between steps. Explain the action and its result; do not read every label or narrate clicks mechanically. Prefer a high-quality expressive speech engine available in the environment. Do not use the stock macOS `say` Daniel voice or another flat system voice as the default: it produced a recording the user found “very hard to listen to.” Use such a voice only if the user explicitly selects it after hearing a sample. Increasing speaking speed or volume does not fix monotonous delivery.
+
+Generate a short sample from the actual script before rendering the full recording. Listen to it when audio review is available; otherwise present the sample for the user's voice choice, state that you cannot assess its sound yourself, and wait for that choice before rendering the full narration. If no expressive voice is available, keep the captured video and surface that limitation instead of silently substituting a robotic voice. Never claim to have reviewed expressiveness from a transcript, waveform, or volume check alone.
+
+Time each sentence to the visible action, leave room to read the result, and avoid rushed acronyms. Review the final muxed audio for intelligibility, natural phrasing, clipped words, long silences, and alignment with the screen. When direct audio review is unavailable, present the final narrated file for user review and clearly state that its sound has not been assessed. Regenerate weak narration before publishing. Disclose synthesized narration without implying a real person recorded it.
+
+The trim example above uses `-an` for a silent capture. For already narrated footage, trim while preserving audio. For silent footage, trim first and then mux narration. Never publish a version whose narration was removed by `-an`, or use a silent GIF as the only deliverable. Inspect and publish the final file containing both picture and sound.
+
 ### GIF fallback
 
 Convert only when the reviewer needs the demo inline where a player will not render, notably GitHub notification emails. Convert the trimmed file, not the raw take, so the GIF does not carry the dead air you just removed. Two-pass palette:
