@@ -1052,7 +1052,7 @@ func (s *Service) authorizeProxyBackendAccess(
 	if authorized != nil {
 		shadowCtx = authorized
 	}
-	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequire(shadowCtx, surface, err, connect)
+	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequireServer(shadowCtx, surface, err, mandatoryVisibility(mcpServer.Visibility == mcpservers.VisibilityPublic), connect)
 	if err != nil {
 		return nil, err
 	}
