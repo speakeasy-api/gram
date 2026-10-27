@@ -132,7 +132,7 @@ func TestToolUsageHookEventsFilterByAgentIdentity(t *testing.T) {
 
 	t.Run("it offers each agent as one option however many harnesses it used", func(t *testing.T) {
 		t.Parallel()
-		options, err := queries.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
+		options, err := queries.GetToolUsageFilterOptions(ctx, repo.GetToolUsageSummaryParams{
 			GramProjectID: projectID,
 			TimeStart:     timeStart,
 			TimeEnd:       timeEnd,
