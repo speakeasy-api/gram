@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
@@ -95,6 +96,13 @@ type Service struct {
 	// connectionsLimiter bounds getMyConnections reads per member. Nil leaves
 	// it unlimited.
 	connectionsLimiter *ratelimit.Limiter
+
+	// crashReportLimiter bounds reportCrash batches per device. Nil leaves it
+	// unlimited.
+	crashReportLimiter *ratelimit.Limiter
+
+	// crashReports counts forwarded crash reports. Nil only logs them.
+	crashReports metric.Int64Counter
 }
 
 // WorkloadTokenTargets resolves where a workload exchanges an identity
@@ -144,6 +152,8 @@ func NewService(
 		agentVersions:      nil,
 		connectionStatuses: nil,
 		connectionsLimiter: nil,
+		crashReportLimiter: nil,
+		crashReports:       nil,
 	}
 }
 
@@ -161,6 +171,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	// Only getPlugins accepts device-agent tokens.
 	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
+	server.ReportCrash = limitCrashReportBody(server.ReportCrash)
 	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.

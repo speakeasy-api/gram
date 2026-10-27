@@ -101,6 +101,12 @@ type Service interface {
 	// scans. Fire-and-forget from the agent's perspective: the daemon must never
 	// block on this call.
 	ReportAIScan(context.Context, *ReportAIScanPayload) (err error)
+	// Report device agent crashes: fatal crashes, recovered panics and
+	// self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring
+	// and not stored. Accepts the per-user key and the org install key (with a
+	// vouched email), mirroring reportAIScan. The agent scrubs every report before
+	// sending it; the server scrubs again.
+	ReportCrash(context.Context, *ReportCrashPayload) (res *ReportCrashResult, err error)
 	// Mint a short-lived capability URL for a rendered session-handoff document
 	// (session portability). The device agent uploads the handoff it rendered from
 	// the local transcript; the returned URL serves the markdown exactly once
@@ -135,7 +141,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"getPlugins", "getMyConnections", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
+var MethodNames = [13]string{"getPlugins", "getMyConnections", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportCrash", "createSessionHandoff"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -152,6 +158,62 @@ type AIScanMatch struct {
 	// Installed version, when the scan could read one statically (e.g. from the
 	// app bundle's Info.plist).
 	Version *string
+}
+
+type AgentCrashBuild struct {
+	// speakeasyd or speakeasy-ui.
+	Binary  string
+	Version string
+	// Release channel.
+	Channel *string
+	Os      *string
+	Arch    *string
+}
+
+type AgentCrashFrame struct {
+	// Fully qualified function name.
+	Function string
+	// Module-relative source file.
+	File *string
+	Line *int
+}
+
+// One device agent crash: a fatal crash, a recovered panic, or a self-rollback.
+type AgentCrashReport struct {
+	// Report schema version.
+	SchemaVersion int
+	// Random report id; repeats of the same id are one report.
+	ID string
+	// fatal, recovered or rollback.
+	Kind string
+	// Where it happened: ipc, policy_scheduler, update_scheduler, aiscan,
+	// sessions, ui or runtime.
+	Component string
+	// When it happened, by the device clock.
+	OccurredAt string
+	// Times this crash recurred in one process before it was reported.
+	Count int
+	// The build that crashed, which is not always the build that reports it.
+	Build *AgentCrashBuild
+	// Go runtime error text, when the panic was one. Other panics send panic_type
+	// instead.
+	Message *string
+	// Go type of a non-runtime panic value.
+	PanicType *string
+	// Frames of the crashing goroutine, innermost first.
+	Stack []*AgentCrashFrame
+	// Goroutines in a fatal dump besides the crashing one. Their stacks are not
+	// sent.
+	OtherGoroutines *int
+	// For a rollback: the version that failed and the one restored.
+	Rollback *AgentCrashRollback
+}
+
+type AgentCrashRollback struct {
+	// Version that failed to stabilize.
+	From *string
+	// Version restored.
+	To *string
 }
 
 type AgentMCPServer struct {
@@ -577,6 +639,30 @@ type ReportAIScanPayload struct {
 	SerialNumber *string
 	// Hostname of the machine that was scanned, when the agent can read it.
 	Hostname *string
+}
+
+// ReportCrashPayload is the payload type of the agent service reportCrash
+// method.
+type ReportCrashPayload struct {
+	ApikeyToken *string
+	// Queued crash reports, oldest first.
+	Reports []*AgentCrashReport
+	// Email of the enrolled user, sent in the Gram-User-Email header.
+	// Authoritative when authenticating with an org-scoped agent install key;
+	// ignored for a per-user key, whose owner is the enrolled user.
+	Email *string
+	// Hardware serial number of the machine that crashed, when the agent can read
+	// it.
+	SerialNumber *string
+	// Kind of machine the agent runs on (endpoint, server or ephemeral), sent in
+	// the Gram-Device-Environment header.
+	Environment *string
+}
+
+// ReportCrashResult is the result type of the agent service reportCrash method.
+type ReportCrashResult struct {
+	// Reports accepted. The agent removes every report in the batch on success.
+	Accepted int
 }
 
 // ReportSessionMovedPayload is the payload type of the agent service

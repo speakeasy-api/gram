@@ -445,6 +445,81 @@ func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApi
 	return v, nil
 }
 
+// BuildReportCrashPayload builds the payload for the agent reportCrash
+// endpoint from CLI flags.
+func BuildReportCrashPayload(agentReportCrashBody string, agentReportCrashApikeyToken string, agentReportCrashEmail string, agentReportCrashSerialNumber string, agentReportCrashEnvironment string) (*agent.ReportCrashPayload, error) {
+	var err error
+	var body ReportCrashRequestBody
+	{
+		err = json.Unmarshal([]byte(agentReportCrashBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reports\": [\n         {\n            \"build\": {\n               \"arch\": \"aaa\",\n               \"binary\": \"aaa\",\n               \"channel\": \"aaa\",\n               \"os\": \"aaa\",\n               \"version\": \"aaa\"\n            },\n            \"component\": \"aaa\",\n            \"count\": 2,\n            \"id\": \"aa\",\n            \"kind\": \"aaa\",\n            \"message\": \"aaa\",\n            \"occurred_at\": \"1970-01-01T00:00:01Z\",\n            \"other_goroutines\": 1,\n            \"panic_type\": \"aaa\",\n            \"rollback\": {\n               \"from\": \"aaa\",\n               \"to\": \"aaa\"\n            },\n            \"schema_version\": 2,\n            \"stack\": [\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               },\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               },\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               }\n            ]\n         },\n         {\n            \"build\": {\n               \"arch\": \"aaa\",\n               \"binary\": \"aaa\",\n               \"channel\": \"aaa\",\n               \"os\": \"aaa\",\n               \"version\": \"aaa\"\n            },\n            \"component\": \"aaa\",\n            \"count\": 2,\n            \"id\": \"aa\",\n            \"kind\": \"aaa\",\n            \"message\": \"aaa\",\n            \"occurred_at\": \"1970-01-01T00:00:01Z\",\n            \"other_goroutines\": 1,\n            \"panic_type\": \"aaa\",\n            \"rollback\": {\n               \"from\": \"aaa\",\n               \"to\": \"aaa\"\n            },\n            \"schema_version\": 2,\n            \"stack\": [\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               },\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               },\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               }\n            ]\n         }\n      ]\n   }'")
+		}
+		if body.Reports == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("reports", "body"))
+		}
+		if len(body.Reports) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reports", body.Reports, len(body.Reports), 1, true))
+		}
+		if len(body.Reports) > 10 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reports", body.Reports, len(body.Reports), 10, false))
+		}
+		for _, e := range body.Reports {
+			if e != nil {
+				if err2 := ValidateAgentCrashReportRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentReportCrashApikeyToken != "" {
+			apikeyToken = &agentReportCrashApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentReportCrashEmail != "" {
+			email = &agentReportCrashEmail
+		}
+	}
+	var serialNumber *string
+	{
+		if agentReportCrashSerialNumber != "" {
+			serialNumber = &agentReportCrashSerialNumber
+		}
+	}
+	var environment *string
+	{
+		if agentReportCrashEnvironment != "" {
+			environment = &agentReportCrashEnvironment
+		}
+	}
+	v := &agent.ReportCrashPayload{}
+	if body.Reports != nil {
+		v.Reports = make([]*agent.AgentCrashReport, len(body.Reports))
+		for i, val := range body.Reports {
+			if val == nil {
+				v.Reports[i] = nil
+				continue
+			}
+			v.Reports[i] = marshalAgentCrashReportRequestBodyToAgentAgentCrashReport(val)
+		}
+	} else {
+		v.Reports = []*agent.AgentCrashReport{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+	v.SerialNumber = serialNumber
+	v.Environment = environment
+
+	return v, nil
+}
+
 // BuildCreateSessionHandoffPayload builds the payload for the agent
 // createSessionHandoff endpoint from CLI flags.
 func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agentCreateSessionHandoffApikeyToken string, agentCreateSessionHandoffSerialNumber string, agentCreateSessionHandoffHostname string) (*agent.CreateSessionHandoffPayload, error) {

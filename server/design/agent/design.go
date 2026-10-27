@@ -418,6 +418,44 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReportAgentAIScan"}`)
 	})
 
+	Method("reportCrash", func() {
+		Description("Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring and not stored. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan. The agent scrubs every report before sending it; the server scrubs again.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("reports", ArrayOf(AgentCrashReportModel), "Queued crash reports, oldest first.", func() {
+				MinLength(1)
+				MaxLength(10)
+			})
+			// Identity attributes mirror reportAIScan and ride in headers.
+			Attribute("email", String, "Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.")
+			Attribute("serial_number", String, "Hardware serial number of the machine that crashed, when the agent can read it.")
+			// No hostname: the agent leaves Gram-Device-Hostname off crash reports,
+			// since hostnames often name a person (device-agent ADR-0030).
+			Attribute("environment", String, "Kind of machine the agent runs on (endpoint, server or ephemeral), sent in the Gram-Device-Environment header.")
+			Required("reports")
+		})
+
+		Result(ReportCrashResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.reportCrash")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Header("serial_number:Gram-Device-Serial")
+			Header("environment:Gram-Device-Environment")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "reportAgentCrash")
+		Meta("openapi:extension:x-speakeasy-name-override", "reportCrash")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReportAgentCrash"}`)
+	})
+
 	Method("createSessionHandoff", func() {
 		Description("Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).")
 
@@ -602,6 +640,96 @@ var AIScanMatchModel = Type("AIScanMatch", func() {
 	Attribute("version", String, "Installed version, when the scan could read one statically (e.g. from the app bundle's Info.plist).", func() {
 		MaxLength(64)
 	})
+})
+
+// Enumerated report fields (kind, component) are validated in the handler, not
+// as Goa enums: a newer agent may send a value this server does not know, and
+// it is logged as "unknown" rather than losing the report.
+var AgentCrashReportModel = Type("AgentCrashReport", func() {
+	Description("One device agent crash: a fatal crash, a recovered panic, or a self-rollback.")
+	Required("schema_version", "id", "kind", "component", "occurred_at", "count", "build")
+	Attribute("schema_version", Int, "Report schema version.", func() {
+		Minimum(1)
+	})
+	Attribute("id", String, "Random report id; repeats of the same id are one report.", func() {
+		MinLength(1)
+		MaxLength(64)
+	})
+	Attribute("kind", String, "fatal, recovered or rollback.", func() {
+		MaxLength(32)
+	})
+	Attribute("component", String, "Where it happened: ipc, policy_scheduler, update_scheduler, aiscan, sessions, ui or runtime.", func() {
+		MaxLength(32)
+	})
+	Attribute("occurred_at", String, "When it happened, by the device clock.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("count", Int, "Times this crash recurred in one process before it was reported.", func() {
+		Minimum(1)
+		Maximum(1000000)
+	})
+	Attribute("build", AgentCrashBuildModel, "The build that crashed, which is not always the build that reports it.")
+	Attribute("message", String, "Go runtime error text, when the panic was one. Other panics send panic_type instead.", func() {
+		MaxLength(512)
+	})
+	Attribute("panic_type", String, "Go type of a non-runtime panic value.", func() {
+		MaxLength(256)
+	})
+	Attribute("stack", ArrayOf(AgentCrashFrameModel), "Frames of the crashing goroutine, innermost first.", func() {
+		MaxLength(50)
+	})
+	Attribute("other_goroutines", Int, "Goroutines in a fatal dump besides the crashing one. Their stacks are not sent.", func() {
+		Minimum(0)
+		Maximum(1000000)
+	})
+	Attribute("rollback", AgentCrashRollbackModel, "For a rollback: the version that failed and the one restored.")
+})
+
+var AgentCrashBuildModel = Type("AgentCrashBuild", func() {
+	Required("binary", "version")
+	Attribute("binary", String, "speakeasyd or speakeasy-ui.", func() {
+		MaxLength(32)
+	})
+	Attribute("version", String, func() {
+		MaxLength(64)
+	})
+	Attribute("channel", String, "Release channel.", func() {
+		MaxLength(32)
+	})
+	Attribute("os", String, func() {
+		MaxLength(16)
+	})
+	Attribute("arch", String, func() {
+		MaxLength(16)
+	})
+})
+
+var AgentCrashFrameModel = Type("AgentCrashFrame", func() {
+	Required("function")
+	Attribute("function", String, "Fully qualified function name.", func() {
+		MaxLength(512)
+	})
+	Attribute("file", String, "Module-relative source file.", func() {
+		MaxLength(512)
+	})
+	Attribute("line", Int, func() {
+		Minimum(0)
+		Maximum(10000000)
+	})
+})
+
+var AgentCrashRollbackModel = Type("AgentCrashRollback", func() {
+	Attribute("from", String, "Version that failed to stabilize.", func() {
+		MaxLength(64)
+	})
+	Attribute("to", String, "Version restored.", func() {
+		MaxLength(64)
+	})
+})
+
+var ReportCrashResult = Type("ReportCrashResult", func() {
+	Required("accepted")
+	Attribute("accepted", Int, "Reports accepted. The agent removes every report in the batch on success.")
 })
 
 // Mirrors aitargets.Validate and the device agent's validator.
