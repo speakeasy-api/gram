@@ -23,6 +23,6 @@ func reject(reason Reason, err error) error { return &Error{Reason: reason, Err:
 // identity maps to an active Speakeasy member in the same organization.
 var ErrNotProvisioned = errors.New("enterprise identity is not provisioned")
 
-// ErrNoTrustedIssuer is returned when the user session issuer has no active,
-// organization-accessible trusted issuer.
+// ErrNoTrustedIssuer is returned when the user session issuer is not in shared
+// mode or has no active, organization-accessible trusted issuer.
 var ErrNoTrustedIssuer = errors.New("user session issuer has no trusted remote issuer")

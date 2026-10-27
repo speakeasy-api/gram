@@ -385,8 +385,10 @@ func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuer(t *testing.
 	require.Empty(t, meta.GrantProfiles)
 }
 
-func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testing.T) {
-	t.Parallel()
+// seedTrustedIssuerMetadataEndpoint attaches an MCP server to an organization
+// issuer trusting a remote issuer, and returns the server's slug.
+func seedTrustedIssuerMetadataEndpoint(t *testing.T, sharedMode bool, jwksURI pgtype.Text) (context.Context, *testInstance, string) {
+	t.Helper()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -399,7 +401,7 @@ func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testin
 		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:                              "metadata-id-jag-" + uuid.NewString(),
 		Issuer:                            "https://identity.example.test",
-		JwksUri:                           conv.ToPGText("https://identity.example.test/jwks"),
+		JwksUri:                           jwksURI,
 		ScopesSupported:                   []string{},
 		GrantTypesSupported:               []string{},
 		ResponseTypesSupported:            []string{},
@@ -414,14 +416,41 @@ func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testin
 		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true},
 	})
 	require.NoError(t, err)
+	if sharedMode {
+		setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
+	}
 	toolset, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 		Slug:                toolset.Slug,
 		ProjectID:           *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
+	return ctx, ti, toolset.McpSlug.String
+}
 
-	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
+func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, slug := seedTrustedIssuerMetadataEndpoint(t, true, conv.ToPGText("https://identity.example.test/jwks"))
+	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, slug)
 	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Equal(t, []string{oauthwire.GrantProfileIDJAG}, meta.GrantProfiles)
+}
+
+// Inbound EMA needs one assertion audience for every MCP server, which only a
+// shared authorization server gives.
+func TestHandleGetAuthorizationServer_OmitsIDJAGOutsideSharedMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, slug := seedTrustedIssuerMetadataEndpoint(t, false, conv.ToPGText("https://identity.example.test/jwks"))
+	require.Empty(t, loadAuthorizationServerGrantMetadata(t, ctx, ti, slug).GrantProfiles)
+}
+
+// A trusted issuer without a jwks_uri cannot have its assertions verified, so
+// the grant is not advertised.
+func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuerJWKS(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, slug := seedTrustedIssuerMetadataEndpoint(t, true, pgtype.Text{})
+	require.Empty(t, loadAuthorizationServerGrantMetadata(t, ctx, ti, slug).GrantProfiles)
 }

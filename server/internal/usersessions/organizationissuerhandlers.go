@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -47,30 +48,31 @@ func (s *Service) requireOrganizationIssuerScope(ctx context.Context, scope auth
 
 var errTrustedRemoteSessionClientConfiguration = errors.New("invalid trusted remote session client configuration")
 
-func lockTrustedRemoteSessionIssuer(ctx context.Context, q *remotesessionsrepo.Queries, issuerID uuid.UUID, organizationID string) error {
+func lockTrustedRemoteSessionIssuer(ctx context.Context, q *remotesessionsrepo.Queries, issuerID uuid.UUID, organizationID string) (remotesessionsrepo.RemoteSessionIssuer, error) {
 	getParams := remotesessionsrepo.GetTrustedRemoteSessionIssuerForOrganizationParams{
 		ID:             issuerID,
 		OrganizationID: organizationID,
 	}
 	if _, err := q.GetTrustedRemoteSessionIssuerForOrganization(ctx, getParams); err != nil {
-		return fmt.Errorf("get trusted remote session issuer before lock: %w", err)
+		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("get trusted remote session issuer before lock: %w", err)
 	}
 	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
-		return fmt.Errorf("lock trusted remote session issuer: %w", err)
+		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("lock trusted remote session issuer: %w", err)
 	}
-	if _, err := q.LockTrustedRemoteSessionIssuerForOrganization(ctx, remotesessionsrepo.LockTrustedRemoteSessionIssuerForOrganizationParams{
+	locked, err := q.LockTrustedRemoteSessionIssuerForOrganization(ctx, remotesessionsrepo.LockTrustedRemoteSessionIssuerForOrganizationParams{
 		ID:             issuerID,
 		OrganizationID: organizationID,
-	}); err != nil {
-		return fmt.Errorf("lock trusted remote session issuer row: %w", err)
+	})
+	if err != nil {
+		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("lock trusted remote session issuer row: %w", err)
 	}
-	return nil
+	return locked, nil
 }
 
 // lockTrustedRemoteSessionPair uses one eligibility predicate before and after
 // locking. The global order is an existing user-session issuer row first, then
 // the remote issuer advisory lock, then the remote issuer and client row locks.
-func lockTrustedRemoteSessionPair(ctx context.Context, q *remotesessionsrepo.Queries, issuerID, clientID uuid.UUID, organizationID string) error {
+func lockTrustedRemoteSessionPair(ctx context.Context, q *remotesessionsrepo.Queries, issuerID, clientID uuid.UUID, organizationID string) (remotesessionsrepo.RemoteSessionIssuer, error) {
 	getParams := remotesessionsrepo.GetTrustedRemoteSessionClientForOrganizationParams{
 		ClientID:       clientID,
 		IssuerID:       issuerID,
@@ -78,13 +80,13 @@ func lockTrustedRemoteSessionPair(ctx context.Context, q *remotesessionsrepo.Que
 	}
 	before, err := q.GetTrustedRemoteSessionClientForOrganization(ctx, getParams)
 	if err != nil {
-		return fmt.Errorf("get trusted remote session client before lock: %w", err)
+		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("get trusted remote session client before lock: %w", err)
 	}
 	if err := remotesessions.ValidateTrustedIdentityProviderClient(before.RemoteSessionClient, before.RemoteSessionIssuer); err != nil {
-		return fmt.Errorf("%w: %w", errTrustedRemoteSessionClientConfiguration, err)
+		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("%w: %w", errTrustedRemoteSessionClientConfiguration, err)
 	}
 	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
-		return fmt.Errorf("lock trusted remote session issuer: %w", err)
+		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("lock trusted remote session issuer: %w", err)
 	}
 	locked, err := q.LockTrustedRemoteSessionClientForOrganization(ctx, remotesessionsrepo.LockTrustedRemoteSessionClientForOrganizationParams{
 		ClientID:       clientID,
@@ -92,12 +94,28 @@ func lockTrustedRemoteSessionPair(ctx context.Context, q *remotesessionsrepo.Que
 		OrganizationID: organizationID,
 	})
 	if err != nil {
-		return fmt.Errorf("lock trusted remote session client: %w", err)
+		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("lock trusted remote session client: %w", err)
 	}
 	if err := remotesessions.ValidateTrustedIdentityProviderClient(locked.RemoteSessionClient, locked.RemoteSessionIssuer); err != nil {
-		return fmt.Errorf("%w: %w", errTrustedRemoteSessionClientConfiguration, err)
+		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("%w: %w", errTrustedRemoteSessionClientConfiguration, err)
 	}
 
+	return locked.RemoteSessionIssuer, nil
+}
+
+// trustLinkRequirementError refuses a trust link that cannot work: a trusted
+// issuer without a jwks_uri, whose assertions and ID tokens cannot be
+// verified, or an inbound-only link (no trusted client) on an issuer that is
+// not in shared mode. Inbound EMA addresses every MCP server through the one
+// shared authorization server, so it needs shared mode; a link with a trusted
+// client also serves browser sign-in, which works in either mode.
+func trustLinkRequirementError(ctx context.Context, logger *slog.Logger, trusted remotesessionsrepo.RemoteSessionIssuer, hasTrustedClient, sharedMode bool) error {
+	if !trusted.JwksUri.Valid || strings.TrimSpace(trusted.JwksUri.String) == "" {
+		return oops.E(oops.CodeBadRequest, nil, "the trusted remote session issuer has no jwks_uri, so Speakeasy cannot verify tokens it signs; add its JWKS URL first").LogWarn(ctx, logger)
+	}
+	if !hasTrustedClient && !sharedMode {
+		return oops.E(oops.CodeBadRequest, nil, "inbound EMA (a trusted remote session issuer without a trusted client) requires this MCP Authentication to use a shared authorization server; switch it to shared mode first").LogWarn(ctx, logger)
+	}
 	return nil
 }
 
@@ -172,11 +190,12 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	if trustedIssuerID.Valid {
+		var trusted remotesessionsrepo.RemoteSessionIssuer
 		var trustErr error
 		if trustedClientID.Valid {
-			trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, trustedClientID.UUID, authCtx.ActiveOrganizationID)
+			trusted, trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, trustedClientID.UUID, authCtx.ActiveOrganizationID)
 		} else {
-			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, authCtx.ActiveOrganizationID)
+			trusted, trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, authCtx.ActiveOrganizationID)
 		}
 		if trustErr != nil {
 			if errors.Is(trustErr, pgx.ErrNoRows) {
@@ -186,6 +205,10 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 				return nil, oops.E(oops.CodeBadRequest, trustErr, "trusted remote session client is not eligible for identity-provider login: %v", trustErr).LogError(ctx, logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, trustErr, "validate trusted remote session issuer or issuer/client pair").LogError(ctx, logger)
+		}
+		// Organization issuers are created in endpoint mode.
+		if err := trustLinkRequirementError(ctx, logger, trusted, trustedClientID.Valid, false); err != nil {
+			return nil, err
 		}
 	}
 
@@ -448,11 +471,12 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 		return nil, oops.E(oops.CodeBadRequest, nil, "trusted_remote_session_client_id requires trusted_remote_session_issuer_id").LogError(ctx, logger)
 	}
 	if resultingTrustedIssuerID.Valid {
+		var trusted remotesessionsrepo.RemoteSessionIssuer
 		var trustErr error
 		if resultingTrustedClientID.Valid {
-			trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, resultingTrustedClientID.UUID, authCtx.ActiveOrganizationID)
+			trusted, trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, resultingTrustedClientID.UUID, authCtx.ActiveOrganizationID)
 		} else {
-			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, authCtx.ActiveOrganizationID)
+			trusted, trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, authCtx.ActiveOrganizationID)
 		}
 		if trustErr != nil {
 			if errors.Is(trustErr, pgx.ErrNoRows) {
@@ -462,6 +486,13 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 				return nil, oops.E(oops.CodeBadRequest, trustErr, "trusted remote session client is not eligible for identity-provider login: %v", trustErr).LogError(ctx, logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, trustErr, "validate trusted remote session issuer or issuer/client pair").LogError(ctx, logger)
+		}
+		// Only a change to the link is checked, so edits to other fields of an
+		// issuer linked before these requirements keep working.
+		if payload.TrustedRemoteSessionIssuerID != nil || payload.TrustedRemoteSessionClientID != nil {
+			if err := trustLinkRequirementError(ctx, logger, trusted, resultingTrustedClientID.Valid, authserver.IssuerInSharedMode(existing)); err != nil {
+				return nil, err
+			}
 		}
 	}
 	var trustedIssuerIDParam pgtype.Text

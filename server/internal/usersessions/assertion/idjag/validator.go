@@ -102,7 +102,10 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	if len(claims.Audience) != 1 || claims.Audience[0] != request.Audience {
 		return nil, reject(ReasonAudienceMismatch, errors.New("aud must be only the authorization server issuer"))
 	}
-	if extra.Resource == "" || extra.Resource != request.Resource {
+	switch {
+	case extra.Resource == "" && !request.ResourceIndicated:
+		return nil, reject(ReasonResourceNotIndicated, errors.New("assertion has no resource and the request names none"))
+	case extra.Resource != "" && extra.Resource != request.Resource:
 		return nil, reject(ReasonResourceMismatch, errors.New("resource does not name this MCP server"))
 	}
 	if extra.ClientID == "" || extra.ClientID != request.ClientID {

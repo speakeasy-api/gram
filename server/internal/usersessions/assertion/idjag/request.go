@@ -13,6 +13,11 @@ type Request struct {
 	Audience string
 	// Resource is the MCP server expected by the assertion.
 	Resource string
+
+	// ResourceIndicated reports that the token request named Resource in an
+	// RFC 8707 resource parameter. An assertion without a resource claim is
+	// accepted only then, bound by its audience and that parameter.
+	ResourceIndicated bool
 	// ClientID is the authenticated client expected by the assertion.
 	ClientID string
 }

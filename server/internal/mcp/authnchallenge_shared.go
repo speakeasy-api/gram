@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -177,10 +178,25 @@ func (s *Service) sharedAuthorizationServerHosts() authserver.Hosts {
 	}
 }
 
-// issuerIDJAGConfigured reports whether an issuer accepts the ID-JAG grant:
-// an organization issuer with an explicit trust link to an upstream issuer.
-func issuerIDJAGConfigured(issuer usersessions_repo.UserSessionIssuer) bool {
-	return !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
+// issuerIDJAGConfigured reports whether an issuer accepts the ID-JAG grant: an
+// organization issuer in shared mode, so every MCP server shares one assertion
+// audience, with an explicit trust link to an upstream issuer that publishes a
+// jwks_uri to verify assertions against.
+func (s *Service) issuerIDJAGConfigured(ctx context.Context, issuer usersessions_repo.UserSessionIssuer) (bool, error) {
+	if issuer.ProjectID.Valid || !issuer.OrganizationID.Valid || !issuer.TrustedRemoteSessionIssuerID.Valid || !authserver.IssuerInSharedMode(issuer) {
+		return false, nil
+	}
+	trusted, err := remotesessions_repo.New(s.db).GetTrustedRemoteSessionIssuerForOrganization(ctx, remotesessions_repo.GetTrustedRemoteSessionIssuerForOrganizationParams{
+		ID:             issuer.TrustedRemoteSessionIssuerID.UUID,
+		OrganizationID: issuer.OrganizationID.String,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("load trusted remote session issuer: %w", err)
+	}
+	return trusted.JwksUri.Valid && trusted.JwksUri.String != "", nil
 }
 
 // sharedAuthorizationServerFor builds the shared authorization server of an
@@ -213,7 +229,7 @@ type sharedIssuer struct {
 	// organizationID scopes capability queries to the issuer's organization.
 	organizationID string
 
-	// idJAGConfigured reports an organization issuer's explicit trust link.
+	// idJAGConfigured reports whether the issuer accepts the ID-JAG grant.
 	idJAGConfigured bool
 
 	// logger carries the issuer id for every line the request logs.
@@ -262,11 +278,16 @@ func (s *Service) sharedIssuerForRequest(r *http.Request) (*sharedIssuer, error)
 		return nil, notFound
 	}
 
+	idJAGConfigured, err := s.issuerIDJAGConfigured(ctx, row.UserSessionIssuer)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load ID-JAG configuration").LogError(ctx, logger)
+	}
+
 	return &sharedIssuer{
 		authorizationServer:  authorizationServer,
 		cimdAdmissionModeRaw: row.UserSessionIssuer.ClientIDMetadataAdmissionMode,
 		organizationID:       row.ResolvedOrganizationID,
-		idJAGConfigured:      issuerIDJAGConfigured(row.UserSessionIssuer),
+		idJAGConfigured:      idJAGConfigured,
 		logger:               logger.With(attr.SlogOrganizationID(row.ResolvedOrganizationID)),
 	}, nil
 }

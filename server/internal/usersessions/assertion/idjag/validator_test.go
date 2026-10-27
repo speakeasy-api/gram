@@ -239,7 +239,10 @@ func TestValidateRejectsInvalidClaimsBeforeSpendingJTI(t *testing.T) {
 		{name: "token endpoint audience", mutate: func(claims *jwt.Claims, _ *additionalClaims) {
 			claims.Audience = jwt.Audience{"https://gram.example.com/token"}
 		}, reason: ReasonAudienceMismatch},
-		{name: "missing resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = "" }, reason: ReasonResourceMismatch},
+		{name: "missing resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = "" }, reason: ReasonResourceNotIndicated},
+		{name: "resource mismatch", mutate: func(_ *jwt.Claims, extra *additionalClaims) {
+			extra.Resource = "https://gram.example.com/mcp/other/mcp"
+		}, reason: ReasonResourceMismatch},
 		{name: "client mismatch", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.ClientID = "https://other.example.com/client" }, reason: ReasonClientMismatch},
 	}
 	for _, testCase := range cases {
@@ -251,4 +254,48 @@ func TestValidateRejectsInvalidClaimsBeforeSpendingJTI(t *testing.T) {
 		require.Equal(t, testCase.reason, ReasonOf(err), testCase.name)
 		require.Zero(t, guard.calls, testCase.name)
 	}
+}
+
+// oktaStyleExtra is an ID-JAG's additional claims as Okta issues them: no
+// resource claim at all.
+type oktaStyleExtra struct {
+	ClientID string `json:"client_id"`
+	Email    string `json:"email"`
+}
+
+func TestValidateAcceptsAssertionWithoutResourceWhenRequestIndicatesOne(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	validator, _, _, guard, request := newTestValidator(t, assertion.key)
+	request.ResourceIndicated = true
+	raw, err := jwt.Signed(assertion.signer).Claims(validTestClaims()).Claims(oktaStyleExtra{ClientID: testClientID, Email: "person@example.com"}).Serialize()
+	require.NoError(t, err)
+	result, err := validator.Validate(t.Context(), raw, request)
+	require.NoError(t, err)
+	require.Empty(t, result.Claims.Resource)
+	require.Equal(t, 1, guard.calls)
+}
+
+func TestValidateRejectsAssertionWithoutResourceWhenRequestIndicatesNone(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	validator, _, _, guard, request := newTestValidator(t, assertion.key)
+	raw, err := jwt.Signed(assertion.signer).Claims(validTestClaims()).Claims(oktaStyleExtra{ClientID: testClientID, Email: "person@example.com"}).Serialize()
+	require.NoError(t, err)
+	_, err = validator.Validate(t.Context(), raw, request)
+	require.Equal(t, ReasonResourceNotIndicated, ReasonOf(err))
+	require.Zero(t, guard.calls)
+}
+
+func TestValidateRejectsMismatchedResourceClaimEvenWhenRequestIndicatesOne(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	validator, _, _, guard, request := newTestValidator(t, assertion.key)
+	request.ResourceIndicated = true
+	extra := validTestExtra()
+	extra.Resource = "https://gram.example.com/mcp/other/mcp"
+	raw := signTestAssertion(t, assertion.signer, validTestClaims(), extra)
+	_, err := validator.Validate(t.Context(), raw, request)
+	require.Equal(t, ReasonResourceMismatch, ReasonOf(err))
+	require.Zero(t, guard.calls)
 }

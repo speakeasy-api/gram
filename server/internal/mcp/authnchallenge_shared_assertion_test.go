@@ -31,7 +31,6 @@ func sharedIDJAGFixture(t *testing.T) (context.Context, *testInstance, idJAGTest
 	ctx, ti, signer, jwksURL := newIDJAGTestService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, sharedTestUpstreamIssuer, jwksURL)
-	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
 	f := sharedIssuerFixture{
 		issuer: issuer, client: createIDJAGClient(t, ctx, ti, issuer.ID),
 		slugA:     seedPublicServerOnIssuer(t, ctx, ti, issuer.ID),
@@ -292,4 +291,82 @@ func TestSharedAuthorizationServer_MetadataRequiresPublicWorkloadResource(t *tes
 		}
 		require.Empty(t, metadata.GrantProfiles)
 	}
+}
+
+// Okta's ID-JAGs carry no resource claim. The token request's resource
+// parameter then names the MCP server, and the session is bound to it alone.
+func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimBindsRequestedResource(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	resource := f.resource(ti, f.slugA)
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.signWithoutResource(t, sharedTestUpstreamIssuer, f.issuerURL, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+		oauthwire.ParamResource:  {resource},
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	resp := decodeSharedTokenResponse(t, w)
+	require.Equal(t, []any{resource}, unverifiedClaims(t, resp.AccessToken)["aud"])
+	for _, target := range []string{f.slugA, f.slugB} {
+		endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, target, "mcp")
+		require.NoError(t, err)
+		_, _, _, err = ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), resp.AccessToken, ti.serverURL.String(), endpoint)
+		if target == f.slugA {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+		}
+	}
+}
+
+// Without a resource claim or a resource parameter nothing names the MCP
+// server, so the per-endpoint token endpoint refuses the target and leaves the
+// assertion unspent.
+func TestTokenIDJAGWithoutResourceClaimRequiresResourceParameter(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	audience, resource := idJAGAudienceAndResource(t, ctx, ti, f.slugA)
+	assertion := signer.signWithoutResource(t, sharedTestUpstreamIssuer, audience, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+
+	rejected := postIDJAGToken(t, ctx, ti, f.slugA, f.client.ClientID, assertion)
+	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, rejected).Error)
+
+	accepted := postIDJAGToken(t, ctx, ti, f.slugA, f.client.ClientID, assertion, resource)
+	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
+	require.Equal(t, []any{resource}, unverifiedClaims(t, decodeSharedTokenResponse(t, accepted).AccessToken)["aud"])
+}
+
+// A resource-less assertion cannot reach another issuer's MCP server, whether
+// that issuer is in the same organization or not.
+func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimRefusesForeignResource(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	foreign := seedSharedIssuer(t, ctx, ti)
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.signWithoutResource(t, sharedTestUpstreamIssuer, f.issuerURL, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+		oauthwire.ParamResource:  {foreign.resource(ti, foreign.slugA)},
+	})
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+}
+
+// Shared metadata does not advertise the ID-JAG profile for a trusted issuer
+// without a jwks_uri.
+func TestSharedAuthorizationServer_MetadataOmitsIDJAGWithoutTrustedIssuerJWKS(t *testing.T) {
+	t.Parallel()
+	ctx, ti, _, _ := newIDJAGTestService(t)
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, requireProjectAuthContext(t, ctx).ActiveOrganizationID, sharedTestUpstreamIssuer, "")
+	issuerURL := ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String()
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleSharedAuthorizationServerMetadata(w, sharedRequest(ctx, http.MethodGet, issuerURL+"/.well-known/oauth-authorization-server", issuer.ID.String(), nil)))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var metadata struct {
+		Profiles []string `json:"authorization_grant_profiles_supported"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+	require.NotContains(t, metadata.Profiles, oauthwire.GrantProfileIDJAG)
 }
