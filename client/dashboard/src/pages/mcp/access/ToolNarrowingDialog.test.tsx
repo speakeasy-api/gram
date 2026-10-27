@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
 
@@ -13,7 +14,8 @@ const catalog = [
 describe("ToolNarrowingDialog", () => {
   it("toggles tool selection once by label and Space and saves tool names", async () => {
     const user = userEvent.setup();
-    const onSave = vi.fn();
+    const onSave =
+      vi.fn<ComponentProps<typeof ToolNarrowingDialog>["onSave"]>();
     render(
       <ToolNarrowingDialog
         serverId="server-a"
@@ -23,7 +25,7 @@ describe("ToolNarrowingDialog", () => {
         dispositions={[]}
         pending={false}
         onSave={onSave}
-        onClose={vi.fn()}
+        onClose={vi.fn<() => void>()}
       />,
     );
     const dialog = screen.getByRole("dialog");
@@ -58,7 +60,8 @@ describe("ToolNarrowingDialog", () => {
 
   it("disables saving while pending", async () => {
     const user = userEvent.setup();
-    const onSave = vi.fn();
+    const onSave =
+      vi.fn<ComponentProps<typeof ToolNarrowingDialog>["onSave"]>();
     render(
       <ToolNarrowingDialog
         serverId="server-a"
@@ -67,7 +70,7 @@ describe("ToolNarrowingDialog", () => {
         dispositions={[]}
         pending
         onSave={onSave}
-        onClose={vi.fn()}
+        onClose={vi.fn<() => void>()}
       />,
     );
     const done = screen.getByRole("button", { name: "Done" });
