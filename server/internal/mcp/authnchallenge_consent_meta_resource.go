@@ -174,14 +174,14 @@ func (s *Service) authorizedMetaMembers(
 		connect := authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), row.ProjectID.String())
 		switch row.McpServerVisibility {
 		case mcpservers.VisibilityPublic:
-			shadow.record(ctx, mandatorySurfaceConsent, true, connect)
+			shadow.recordServer(ctx, mandatorySurfaceConsent, true, authz.MandatoryServerPublic, connect)
 		case mcpservers.VisibilityPrivate:
 			// Only a denial drops a member (Unauthorized is an anonymous
 			// caller, as the runtime snapshot treats it); dropping on a fault
 			// narrows the candidate set and turns ambiguous into a confident
 			// wrong answer.
 			err := s.authz.Require(ctx, connect)
-			shadow.shadowRequire(ctx, mandatorySurfaceConsent, err, connect)
+			shadow.shadowRequireServer(ctx, mandatorySurfaceConsent, err, authz.MandatoryServerPrivate, connect)
 			if err != nil {
 				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
 					continue
