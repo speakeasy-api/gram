@@ -482,8 +482,8 @@ describe("useGatewayCandidates", () => {
     renderCandidates();
 
     expect(mocks.rbacCalls).toContainEqual({
-      fn: "hasAnyScope",
-      scopes: ["mcp:read", "mcp:write"],
+      fn: "hasScope",
+      scopes: ["mcp:read"],
       resourceId: "project-default",
     });
   });
@@ -1601,7 +1601,13 @@ describe("useRuleCandidates", () => {
 
 describe("useLauncherCandidates", () => {
   it("orders sources: actions, recents, marketplace, mcp servers, gateways, catalog, …, people", () => {
-    mocks.scopes = ["org:read", "org:admin", "mcp:write", "project:read"];
+    mocks.scopes = [
+      "org:read",
+      "org:admin",
+      "mcp:read",
+      "mcp:write",
+      "project:read",
+    ];
     mocks.actions = [
       { id: "a", label: "A", group: "Pages", onSelect: vi.fn() },
     ];
@@ -1851,16 +1857,17 @@ describe("gateway candidates", () => {
     await gateway?.run("open");
     expect(mocks.goToGatewayOverview).toHaveBeenCalledWith("gateway-example");
     expect(mocks.rbacCalls).toContainEqual({
-      fn: "hasAnyScope",
-      scopes: ["mcp:read", "mcp:write"],
+      fn: "hasScope",
+      scopes: ["mcp:read"],
       resourceId: "project-default",
     });
   });
 
-  it.each(["closed", "organization shell", "unauthorized"])(
+  it.each(["closed", "organization shell", "unauthorized", "write-only"])(
     "does not fetch or expose cached gateways when %s",
     (state) => {
       if (state === "unauthorized") mocks.scopes = [];
+      if (state === "write-only") mocks.scopes = ["mcp:write"];
       if (state === "organization shell") mocks.inProject = false;
       const { result } = renderCandidates({ enabled: state !== "closed" });
       expect(result.current.some((c) => c.id.startsWith("gateway:"))).toBe(
