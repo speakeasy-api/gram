@@ -52,7 +52,7 @@ function renderPanel(
       <OrganizationGatewayAccessPanel
         serverUserSessionIssuerId={SERVER_ISSUER}
         clients={[client("client-a", [SERVER_ISSUER])]}
-        otherServersOnClient={0}
+        otherServerCounts={[0]}
         canWrite
         {...props}
       />
@@ -158,9 +158,45 @@ describe("OrganizationGatewayAccessPanel", () => {
   });
 
   it("names the other servers that share the sign-in", () => {
-    renderPanel({ otherServersOnClient: 2 });
+    renderPanel({ otherServerCounts: [2] });
 
-    expect(screen.getByText(/2 other MCP servers/)).toBeDefined();
+    expect(
+      screen.getByText(
+        "This sign-in is shared, so the change also applies to 2 other MCP servers.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("counts every client the switch changes, not only the first", () => {
+    renderPanel({
+      clients: [
+        client("client-a", [SERVER_ISSUER]),
+        client("client-b", [SERVER_ISSUER]),
+      ],
+      otherServerCounts: [0, 3],
+    });
+
+    expect(
+      screen.getByText(
+        "This sign-in is shared, so the change also applies to 3 other MCP servers.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("states a lower bound when several clients are shared", () => {
+    renderPanel({
+      clients: [
+        client("client-a", [SERVER_ISSUER]),
+        client("client-b", [SERVER_ISSUER]),
+      ],
+      otherServerCounts: [1, 3],
+    });
+
+    expect(
+      screen.getByText(
+        "This sign-in is shared, so the change also applies to at least 3 other MCP servers.",
+      ),
+    ).toBeDefined();
   });
 
   it("is read-only without edit access", () => {

@@ -1000,7 +1000,13 @@ export function RemoteMcpIdentitySectionBody({
         <OrganizationGatewayAccessPanel
           serverUserSessionIssuerId={target.userSessionIssuerId}
           clients={subjectClients}
-          otherServersOnClient={otherServersOnClient}
+          otherServerCounts={subjectClients.map(
+            (linked) =>
+              (associationsQuery.data?.associations.find(
+                (association) =>
+                  association.remoteSessionClientId === linked.id,
+              )?.serverCount ?? 1) - 1,
+          )}
           canWrite={canWrite}
         />
       ) : null}

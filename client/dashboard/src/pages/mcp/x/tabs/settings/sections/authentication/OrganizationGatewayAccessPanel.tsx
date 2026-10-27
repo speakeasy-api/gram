@@ -26,15 +26,15 @@ import { AuthRow } from "./AuthRow";
 export function OrganizationGatewayAccessPanel({
   serverUserSessionIssuerId,
   clients,
-  otherServersOnClient,
+  otherServerCounts,
   canWrite,
 }: {
   /** The issuer this server signs people in through. */
   serverUserSessionIssuerId: string;
   /** The per-person sign-in clients attached to this server. */
   clients: RemoteSessionClient[];
-  /** How many other servers share these clients and so change with them. */
-  otherServersOnClient: number;
+  /** For each client, how many other servers share it and so change with it. */
+  otherServerCounts: number[];
   canWrite: boolean;
 }): JSX.Element | null {
   const queryClient = useQueryClient();
@@ -56,6 +56,17 @@ export function OrganizationGatewayAccessPanel({
   ) {
     return null;
   }
+
+  // Counts are per client, without the servers behind them, so servers shared
+  // by two clients cannot be told apart: with more than one client sharing,
+  // the largest single count is the most that can be stated.
+  const sharingCounts = otherServerCounts.filter((count) => count > 0);
+  const otherServers = Math.max(0, ...sharingCounts);
+  const otherServersLabel = `${sharingCounts.length > 1 ? "at least " : ""}${
+    otherServers === 1
+      ? "1 other MCP server"
+      : `${otherServers} other MCP servers`
+  }`;
 
   const offered = clients.every((client) =>
     client.userSessionIssuerIds.includes(gatewayIssuerId),
@@ -111,13 +122,10 @@ export function OrganizationGatewayAccessPanel({
                 : "Not offered on the organization gateway"}
             </Text>
           </div>
-          {otherServersOnClient > 0 ? (
+          {otherServers > 0 ? (
             <Text muted small className="block">
               This sign-in is shared, so the change also applies to{" "}
-              {otherServersOnClient === 1
-                ? "1 other MCP server"
-                : `${otherServersOnClient} other MCP servers`}
-              .
+              {otherServersLabel}.
             </Text>
           ) : null}
           {!canWrite ? (
