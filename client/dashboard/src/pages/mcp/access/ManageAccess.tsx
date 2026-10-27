@@ -30,8 +30,15 @@ import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { invalidateAllPlugin } from "@gram/client/react-query/plugin.js";
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useDirectoryRoleMappings } from "@gram/client/react-query/directoryRoleMappings.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  type RoleDirectorySource,
+  roleDirectorySources,
+} from "@/pages/access/directorySourcesForRole";
+import { RoleDirectorySourceLine } from "./RoleDirectorySourceLine";
+import {
+  Ban,
   Bot,
   ChevronLeft,
   ChevronRight,
@@ -60,6 +67,7 @@ import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
 import { pageCount, pageOf } from "./manageAccessState";
 import {
   accessSummary,
+  blockedScopes,
   buildAccessRows,
   cappingBlocks,
   keptIndividually,
@@ -165,6 +173,24 @@ export function ManageAccess({
     );
   }, [membersData]);
 
+  // Where the directory hands out each role. Administrators only: the
+  // mappings name attribute values, which can carry personal data.
+  const { data: mappingsData } = useDirectoryRoleMappings(
+    undefined,
+    undefined,
+    { enabled: isAdmin, throwOnError: false },
+  );
+  const sourcesFor = useMemo(() => {
+    const members = membersData?.members ?? [];
+    // Disabling the query keeps cached data, so a lost admin scope hides it
+    // here too rather than waiting for the cache to go.
+    const data = isAdmin ? mappingsData : undefined;
+    return (row: AccessRow): RoleDirectorySource[] =>
+      data && row.kind === "role"
+        ? roleDirectorySources(data, members, row)
+        : [];
+  }, [isAdmin, mappingsData, membersData]);
+
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
 
   // Agents a role's or everyone's unnarrowed connect block reaches. Unlike a
@@ -201,6 +227,7 @@ export function ManageAccess({
       // Check access answers from the same rules, so an open answer is redone.
       await Promise.all([
         invalidateAllResourceAudience(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["mcpAssignments"] }),
         invalidateAllExplainResourceAccess(queryClient),
         invalidateAllRoles(queryClient),
         invalidateAllPlugin(queryClient),
@@ -400,6 +427,8 @@ export function ManageAccess({
                 key={row.principalUrn}
                 row={row}
                 rolePlugins={showPlugins ? rolePlugins : undefined}
+                directorySources={sourcesFor(row)}
+                reviewHref={orgRoutes.identity.href()}
                 faces={row.memberIds
                   .map((id) => facesById.get(id))
                   .filter((member) => member !== undefined)}
@@ -545,6 +574,8 @@ export function ManageAccess({
 function PrincipalRow({
   row,
   rolePlugins,
+  directorySources,
+  reviewHref,
   faces,
   catalog,
   onAllow,
@@ -560,6 +591,10 @@ function PrincipalRow({
 }: {
   row: AccessRow;
   rolePlugins?: ResourceAudienceRolePlugin[];
+  /** The directory groups and attribute values that give out a role. */
+  directorySources: RoleDirectorySource[];
+  /** The IDP and SSO tab, where a removed source's review item waits. */
+  reviewHref: string;
   /** The people a role reaches, for the facepile on its row. */
   faces: FacepileMember[];
   /** The server's tools, for resolving what a rule and a block leave. */
@@ -583,6 +618,7 @@ function PrincipalRow({
   const reaches = inheritedGrants(row).length > 0;
   const canRemove = canManage;
   const showFaces = row.kind === "role" && faces.length > 0;
+  const blocked = blockedScopes(row, catalog).length > 0;
 
   return (
     <div className="border-border col-span-full grid grid-cols-subgrid border-b last:border-b-0">
@@ -604,11 +640,24 @@ function PrincipalRow({
               row.displayName
             )}
           </span>
+          <RoleDirectorySourceLine
+            sources={directorySources}
+            reviewHref={reviewHref}
+          />
         </div>
 
-        <Text muted small className="min-w-0 truncate">
-          {accessSummary(row, catalog)}
-        </Text>
+        {/* A blocking row outranks grants reaching the same people, so it
+            reads as an exception rather than as an empty row. */}
+        {blocked ? (
+          <Text small destructive className="flex min-w-0 items-center gap-1.5">
+            <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{accessSummary(row, catalog)}</span>
+          </Text>
+        ) : (
+          <Text muted small className="min-w-0 truncate">
+            {accessSummary(row, catalog)}
+          </Text>
+        )}
 
         {rolePlugins !== undefined && (
           <div className="min-w-0">
@@ -767,7 +816,7 @@ function ScopeLine({
         </Text>
       </div>
       {options.length === 0 ? (
-        <Text small className="px-1">
+        <Text small destructive={state.blocked} className="px-1">
           {state.value}
         </Text>
       ) : (
@@ -780,6 +829,11 @@ function ScopeLine({
             value={state.value}
             disabled={pending || !canManage}
             options={options}
+            className={
+              state.blocked
+                ? "text-default-destructive hover:text-default-destructive"
+                : undefined
+            }
           />
         </RequireScope>
       )}
@@ -832,12 +886,15 @@ function scopeOptions({
   // A block this row cannot lift closes the line, and nothing granted here
   // would survive it: the change has to be made where the block is.
   if (!state.granted && state.capped) return [];
+  // Closing a line something else grants writes a block, which then
+  // outranks those grants, so the choice is named for what it leaves.
+  const revokeLabel = state.subtracts ? "Blocked" : "No access";
 
   if (scope !== "use") {
     // View and manage cover the server itself; there is nothing inside one
     // to narrow, so the line is on or off.
     if (state.granted) {
-      return [{ label: "No access", onSelect: onRevoke }];
+      return [{ label: revokeLabel, onSelect: onRevoke }];
     }
     return [{ label: "Allowed", onSelect: onAllow }];
   }
@@ -869,7 +926,7 @@ function scopeOptions({
     }
   }
   if (state.canRevoke) {
-    options.push({ label: "No access", onSelect: onRevoke });
+    options.push({ label: revokeLabel, onSelect: onRevoke });
   }
   return options;
 }

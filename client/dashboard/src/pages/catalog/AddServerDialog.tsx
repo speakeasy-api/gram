@@ -1422,7 +1422,7 @@ function InstallStatusRow({
     // Created, but held disabled until identity is finished: a next step,
     // not a failure, so it reads in warning tones and says what to do.
     return (
-      <routes.mcp.x.settings.Link
+      <routes.mcp.details.settings.Link
         params={[status.mcpServerParam!]}
         hash="authentication"
         className="block no-underline transition-opacity hover:no-underline hover:opacity-80"
@@ -1442,7 +1442,7 @@ function InstallStatusRow({
             <ArrowRight className="h-3 w-3" />
           </span>
         </div>
-      </routes.mcp.x.settings.Link>
+      </routes.mcp.details.settings.Link>
     );
   }
 
@@ -1469,12 +1469,12 @@ function InstallStatusRow({
 
   if (isCompleted) {
     return (
-      <routes.mcp.x.Link
+      <routes.mcp.details.Link
         params={[status.mcpServerParam!]}
         className="block no-underline transition-opacity hover:no-underline hover:opacity-80"
       >
         {content}
-      </routes.mcp.x.Link>
+      </routes.mcp.details.Link>
     );
   }
 
@@ -1546,7 +1546,7 @@ function NextSteps({
             </div>
           </a>
         )}
-        <routes.mcp.x.Link
+        <routes.mcp.details.Link
           params={[status.mcpServerParam!]}
           className="no-underline hover:no-underline"
         >
@@ -1561,7 +1561,7 @@ function NextSteps({
             </div>
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
-        </routes.mcp.x.Link>
+        </routes.mcp.details.Link>
       </div>
     </div>
   );

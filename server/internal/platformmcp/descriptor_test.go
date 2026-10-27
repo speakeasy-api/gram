@@ -690,7 +690,7 @@ func TestAdvertisedInventoryBackendKindIsClosed(t *testing.T) {
 	require.NotNil(t, mcps.Items)
 	backendKind := mcps.Items.Properties["backend_kind"]
 	require.NotNil(t, backendKind)
-	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "legacy"}, backendKind.Enum)
+	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "built_in", "legacy"}, backendKind.Enum)
 }
 
 func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
@@ -702,4 +702,12 @@ func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
 	schema, err := jsonschema.For[SetMCPClientAdmissionToolInput](nil)
 	require.NoError(t, err)
 	require.Contains(t, schema.Properties["mode"].Description, "presets, open, or disabled")
+}
+
+func TestPlatformOverviewExplainsAssertionReuseSafeguards(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, platformOverview, "use set_workload_assertion_reuse only after explicit confirmation of the exact issuer, desired policy, and organization-wide impact")
+	require.Contains(t, platformOverview, "Reuse of assertions with jti or uti identifiers defaults to disabled")
+	require.Contains(t, platformOverview, "authorized workload administrator must explicitly opt in")
+	require.Contains(t, platformOverview, "Tokens without replay identifiers retain existing exact-token compatibility")
 }

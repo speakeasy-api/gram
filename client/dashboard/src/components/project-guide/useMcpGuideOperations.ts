@@ -873,7 +873,7 @@ export function useMcpGuideOperations(): {
     connectionPrompts,
     toolLogsHref: canViewToolLogs ? routes.logs.href() : undefined,
     mcpServerHref: mcpServer
-      ? routes.mcp.x.overview.href(mcpServerRouteParam(mcpServer))
+      ? routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))
       : routes.home.href(),
   };
 }

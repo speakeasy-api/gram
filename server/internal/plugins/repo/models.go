@@ -89,8 +89,6 @@ type PluginServer struct {
 	// @access: confidential
 	ProjectID uuid.NullUUID
 	// @access: confidential
-	ToolsetID uuid.NullUUID
-	// @access: confidential
 	McpServerID uuid.NullUUID
 	// @access: confidential
 	MetaMcpServerID uuid.NullUUID

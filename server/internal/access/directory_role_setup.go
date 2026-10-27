@@ -345,6 +345,28 @@ func (s *Service) ApplyDirectoryRoleSetup(ctx context.Context, payload *gen.Appl
 	}, nil
 }
 
+// countDirectorySetupRoles counts the distinct roles an item asks for: each
+// existing role once, and each new role once per name slug, since names with
+// the same slug become one role.
+func countDirectorySetupRoles(roles []*gen.ApplyDirectoryRoleSetupRole) int {
+	distinct := map[string]struct{}{}
+	for _, role := range roles {
+		switch {
+		case role == nil:
+		case role.RoleUrn != nil:
+			distinct["urn:"+*role.RoleUrn] = struct{}{}
+		case role.CreateName != nil:
+			slug, err := slugify(*role.CreateName)
+			if err != nil {
+				// Refused when the role is created.
+				slug = *role.CreateName
+			}
+			distinct["new:"+slug] = struct{}{}
+		}
+	}
+	return len(distinct)
+}
+
 // lockDirectoryRoleSources takes the sources' advisory locks in one fixed
 // order, so two overlapping batches cannot deadlock.
 func (s *Service) lockDirectoryRoleSources(ctx context.Context, dbtx pgx.Tx, lockKeys []string) error {
@@ -379,6 +401,11 @@ func (s *Service) applyDirectoryRoleSetupTx(ctx context.Context, dbtx pgx.Tx, ac
 		}
 		if version != planned.item.Version {
 			return nil, oops.E(oops.CodeConflict, nil, "the directory or its role mappings changed since the preview; preview again").LogWarn(ctx, s.logger)
+		}
+		// Checked before any role is created, so an over-cap item never
+		// leaves new roles behind. writeDirectoryRoleSetTx checks again.
+		if err := s.requireDirectoryRoleSetWithinCap(ctx, countDirectorySetupRoles(planned.item.Roles)); err != nil {
+			return nil, err
 		}
 	}
 

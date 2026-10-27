@@ -1,3 +1,4 @@
+import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 
@@ -9,6 +10,7 @@ import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentiti
  */
 export function useAgentAdmissions(agentID: string): {
   admissions: WorkloadAdmission[];
+  issuers: WorkloadIssuer[];
   isPending: boolean;
   isError: boolean;
   refetch: () => void;
@@ -21,6 +23,7 @@ export function useAgentAdmissions(agentID: string): {
   if (!known) {
     return {
       admissions: [],
+      issuers: [],
       // Nothing was asked for, so nothing is in flight and nothing failed.
       isPending: false,
       isError: false,
@@ -28,6 +31,7 @@ export function useAgentAdmissions(agentID: string): {
     };
   }
   return {
+    issuers: identities.data?.issuers ?? [],
     admissions: (identities.data?.admissions ?? []).filter(
       (admission) => admission.agentId === agentID,
     ),

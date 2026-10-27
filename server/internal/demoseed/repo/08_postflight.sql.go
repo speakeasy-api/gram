@@ -28,6 +28,90 @@ func (q *Queries) PostflightCountActiveQuarantines(ctx context.Context, arg Post
 	return count, err
 }
 
+const postflightCountAgentAttributedChats = `-- name: PostflightCountAgentAttributedChats :one
+SELECT count(*)
+FROM chats c
+JOIN agents a ON a.id = c.agent_id AND a.organization_id = c.organization_id
+  AND a.deleted IS FALSE
+WHERE c.project_id = $1::uuid AND c.organization_id = $2::text
+`
+
+type PostflightCountAgentAttributedChatsParams struct {
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// Channel sessions carry the agent that produced them; without that stamp the
+// session list cannot name an actor for them at all, because they have no
+// assistant record. The join to agents is what proves the stamp still resolves:
+// an id pointing at an agent the seed no longer creates renders as a bare id.
+func (q *Queries) PostflightCountAgentAttributedChats(ctx context.Context, arg PostflightCountAgentAttributedChatsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAgentAttributedChats, arg.ProjectID, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountApprovals = `-- name: PostflightCountApprovals :one
+SELECT count(*) FROM risk_policy_approvals
+WHERE organization_id = $1::text AND deleted IS FALSE
+`
+
+// The Tool approvals tab needs its four seeded approval requests: pending,
+// used, denied and expired.
+func (q *Queries) PostflightCountApprovals(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountApprovals, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountApprovalsServers = `-- name: PostflightCountApprovalsServers :one
+
+SELECT count(*)
+FROM mcp_servers s
+JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
+JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
+WHERE s.project_id = $1::uuid AND s.builtin_backend = 'approvals'
+  AND s.deleted IS FALSE
+`
+
+// The approval policy is only usable when the approvals server it points
+// agents at has an endpoint and sits in the Default plugin.
+func (q *Queries) PostflightCountApprovalsServers(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountApprovalsServers, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountAuthClientAssociations = `-- name: PostflightCountAuthClientAssociations :one
+SELECT count(*) FROM mcp_server_auth_clients
+WHERE organization_id = $1::text AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightCountAuthClientAssociations(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAuthClientAssociations, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountCanonicalWrappers = `-- name: PostflightCountCanonicalWrappers :one
+SELECT count(*)
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = $1::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE
+`
+
+func (q *Queries) PostflightCountCanonicalWrappers(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountCanonicalWrappers, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountChats = `-- name: PostflightCountChats :one
 SELECT count(*) FROM chats WHERE organization_id = $1::text
 `
@@ -231,6 +315,33 @@ FROM http_tool_definitions WHERE project_id = $1::uuid AND deleted IS FALSE
 
 func (q *Queries) PostflightCountHTTPTools(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountHTTPTools, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountHostedToolsetDrift = `-- name: PostflightCountHostedToolsetDrift :one
+SELECT count(*)
+FROM toolsets t
+JOIN mcp_servers s
+  ON s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
+WHERE t.project_id = $1::uuid AND t.deleted IS FALSE
+  AND (s.name IS DISTINCT FROM t.name
+    OR s.slug IS DISTINCT FROM t.mcp_slug
+    OR s.tool_variations_group_id IS DISTINCT FROM t.tool_variations_group_id
+    OR s.user_session_issuer_id IS DISTINCT FROM t.user_session_issuer_id
+    OR s.visibility <> CASE WHEN NOT t.mcp_enabled THEN 'disabled' WHEN t.mcp_is_public THEN 'public' ELSE 'private' END
+    OR 1 <> (SELECT count(*) FROM mcp_endpoints e WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE)
+    OR NOT EXISTS (
+      SELECT 1 FROM mcp_endpoints e
+      WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+        AND e.slug = t.mcp_slug AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id))
+`
+
+// Hosted toolsets mirror their canonical wrapper: name, tool variations group, visibility, issuer, and the
+// single endpoint's address, so the toolset-to-server sync older pods run writes nothing.
+func (q *Queries) PostflightCountHostedToolsetDrift(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountHostedToolsetDrift, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -761,6 +872,24 @@ func (q *Queries) PostflightCountQuarantineOpenAudits(ctx context.Context, arg P
 	return count, err
 }
 
+const postflightCountRegistryPromotionCandidates = `-- name: PostflightCountRegistryPromotionCandidates :one
+SELECT count(*) FROM registry_promotion_candidates
+WHERE organization_id = $1::text AND project_id = $2::uuid
+ AND eligible IS FALSE AND promoted_at IS NULL
+`
+
+type PostflightCountRegistryPromotionCandidatesParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) PostflightCountRegistryPromotionCandidates(ctx context.Context, arg PostflightCountRegistryPromotionCandidatesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountRegistryPromotionCandidates, arg.OrgID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountRemovedGatewayMembers = `-- name: PostflightCountRemovedGatewayMembers :one
 SELECT count(*)
 FROM meta_mcp_server_members m
@@ -807,6 +936,21 @@ func (q *Queries) PostflightCountShadowPolicyGrants(ctx context.Context, arg Pos
 	return count, err
 }
 
+const postflightCountTunnelEndpoints = `-- name: PostflightCountTunnelEndpoints :one
+SELECT count(*)
+FROM mcp_endpoints e
+JOIN mcp_servers s ON s.id = e.mcp_server_id
+WHERE e.project_id = $1::uuid AND e.deleted IS FALSE
+  AND s.tunneled_mcp_server_id IS NOT NULL
+`
+
+func (q *Queries) PostflightCountTunnelEndpoints(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountTunnelEndpoints, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountUnservableGatewayMembers = `-- name: PostflightCountUnservableGatewayMembers :one
 
 SELECT count(*)
@@ -822,35 +966,6 @@ WHERE m.project_id = $1::uuid AND m.deleted IS FALSE
 // would sit in the gateway's table permanently unavailable.
 func (q *Queries) PostflightCountUnservableGatewayMembers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountUnservableGatewayMembers, projectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const postflightCountUnwrappedToolsets = `-- name: PostflightCountUnwrappedToolsets :one
-SELECT count(*)
-FROM toolsets t
-LEFT JOIN mcp_servers s
-  ON s.id = t.id AND s.toolset_id = t.id AND s.deleted IS FALSE
- AND s.slug = t.mcp_slug AND s.name = t.name
- AND s.user_session_issuer_id IS NOT DISTINCT FROM t.user_session_issuer_id
- AND s.tool_variations_group_id IS NOT DISTINCT FROM t.tool_variations_group_id
- AND s.visibility = CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-                         WHEN t.mcp_is_public THEN 'public'
-                         ELSE 'private' END
-WHERE t.project_id = $1::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
-  AND (s.id IS NULL
-    OR 1 <> (SELECT count(*) FROM mcp_endpoints e
-             WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE)
-    OR NOT EXISTS (
-      SELECT 1 FROM mcp_endpoints e
-      WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE
-        AND e.slug = t.mcp_slug
-        AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id))
-`
-
-func (q *Queries) PostflightCountUnwrappedToolsets(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightCountUnwrappedToolsets, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

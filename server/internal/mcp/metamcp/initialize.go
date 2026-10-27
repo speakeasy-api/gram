@@ -23,7 +23,7 @@ Never execute a name you have not described: arguments guessed from a tool name 
 
 If a call fails, re-check list_servers before retrying. "unknown" means unobserved, not broken — such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.
 
-If a member says it needs authentication, call connection_status: it shows which members you are signed in to and, when this gateway has a sign-in page, links to it. Call it again after signing in to refresh.`
+If a member says it needs authentication, call connection_status. Live connections show current sign-in status and, when this gateway has a sign-in page, link to it. Cached connections report verification at consent without a new probe; tool calls check current authorization. If new consent is required, restart authorization in your AI client.`
 
 // ResolveInstructions returns custom instructions verbatim when nonblank,
 // otherwise falling back to the built-in gateway instructions.
@@ -42,6 +42,9 @@ func ResolveDiscoveryInstructions(custom *string, mode DiscoveryMode) string {
 	}
 	if mode == DiscoveryModeDirect {
 		return "This gateway exposes the tools from its MCP servers directly. Use tools/list to discover tool definitions, then call each tool by its qualified server--tool name."
+	}
+	if mode == DiscoveryModeCode {
+		return "Code Mode exposes one execute tool for Python. Inside execute, tools is prebound and top-level await works. Discover with tools.search, inspect tools.describe, call tools.call; await each. Use described input schemas and exact server--tool paths. Fresh state per run. Limits, results and retry rules are in the execute description."
 	}
 	return Instructions
 }
