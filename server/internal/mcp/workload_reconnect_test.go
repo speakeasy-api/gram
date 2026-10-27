@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -76,7 +77,11 @@ func TestDirectWorkloadReconnect(t *testing.T) {
 			} `json:"error"`
 		}
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
-		require.NotEmpty(t, result.ID)
+		var request struct {
+			ID string `json:"id"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(body), &request))
+		require.Equal(t, request.ID, result.ID)
 		require.Equal(t, -32042, result.Error.Code)
 		require.Len(t, result.Error.Data.Elicitations, 1)
 		link = result.Error.Data.Elicitations[0].URL
@@ -208,6 +213,7 @@ func TestWorkloadReconnectIDPCallbackOwner(t *testing.T) {
 			if tc.otherOwner || tc.expired {
 				require.Error(t, err)
 				require.Empty(t, w.Header().Get("Location"))
+				require.Empty(t, mock.memberChecks, "owner rejection must precede sign-in recording and credential handoff")
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, http.StatusFound, w.Code)
@@ -220,4 +226,27 @@ func TestWorkloadReconnectIDPCallbackOwner(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWorkloadReconnectRejectsBeforeFederatedCredentialHandoff(t *testing.T) {
+	t.Parallel()
+	ctx, f := newFederationLoginFixture(t, true)
+	consumed := false
+	f.ti.service.SetFederatedLoginConsumer(federatedLoginConsumerFunc(func(context.Context, mcp.AuthorizedFederatedLogin) error {
+		consumed = true
+		return nil
+	}))
+	_, id, nonce, challenge, state, cookie := f.begin(t, ctx, true)
+	state.WorkloadReconnect = &mcp.WorkloadReconnectBinding{OwnerUserID: "different-test-owner", ClientID: f.clientID, ExpiresAt: time.Now().Add(time.Minute)}
+	require.NoError(t, f.ti.authnChallengeCache.Store(ctx, state))
+	f.provider.issueCode(t, "one-use-code", federationToken{challenge: challenge, nonce: nonce, email: mockidp.MockUserEmail, issuer: f.provider.URL, verified: true, secret: "selected-secret"})
+	query := url.Values{"state": {id}, "code": {"one-use-code"}, "iss": {f.provider.URL}}
+	request := httptest.NewRequest(http.MethodGet, f.ti.serverURL.String()+f.callbackPath()+"?"+query.Encode(), nil).WithContext(ctx)
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	require.Error(t, f.ti.service.HandleIDPCallback(response, routeIDPCallback(request)))
+	require.Equal(t, 1, f.provider.exchangeCount(), "the real signed identity exchange must be exercised")
+	require.False(t, consumed, "a non-owner must never reach the federated credential consumer")
+	require.Empty(t, f.resolver.memberChecks, "owner rejection must precede sign-in recording")
+	require.Empty(t, response.Header().Get("Location"))
 }

@@ -28,6 +28,12 @@ func TestWorkloadReconnectOwnerBinding(t *testing.T) {
 	changed = base
 	changed.AuthorizerUserID = other.ID
 	require.Error(t, validateChallengeBrowser(httptest.NewRequest("GET", "/", nil), changed, true))
+	ticket := *base.WorkloadReconnect
+	ticket.Ticket = true
+	changed = base
+	changed.WorkloadReconnect = &ticket
+	require.Error(t, validateChallengeBrowser(httptest.NewRequest("GET", "/", nil), changed, false))
+	require.Error(t, ticket.authorize(owner.ID, false, now))
 	// Ordinary consent and OAuth flows remain unaffected by this binding.
 	var absent *WorkloadReconnectBinding
 	require.NoError(t, absent.authorize(other.ID, true, now))

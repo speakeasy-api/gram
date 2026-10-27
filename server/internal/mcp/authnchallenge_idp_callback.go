@@ -356,6 +356,14 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		}
 	}
 
+	// Resolve identity first, then enforce the reconnect owner before recording
+	// a sign-in or handing federated credentials to any consumer.
+	if err := challengeState.WorkloadReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		logger.WarnContext(ctx, "workload reconnect owner authorization rejected", attr.SlogError(err))
+		return err
+	}
+
 	// Validate the user belongs to the endpoint's organization before
 	// issuing a token. The mcp:connect RBAC policy operates at org level;
 	// this is the first gate. Read from the database, not the user-info
@@ -465,9 +473,6 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// Mint a fresh state ID so the /connect URL we redirect to is NOT the
 	// same value that just bounced through the IDP. The IDP-returned state
 	// is consumed; the new ID is what /connect's GetAndDelete will burn.
-	if err := challengeState.WorkloadReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
-		return err
-	}
 	subject := urn.NewUserSubject(gramUserID)
 	// Rotate only the cache-key ID (replay protection). challengeState.FlowID
 	// is deliberately left untouched so the flow stays correlatable across the
