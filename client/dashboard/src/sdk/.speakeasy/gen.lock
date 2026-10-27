@@ -307,6 +307,8 @@ trackedFiles:
   src/funcs/featuresGet.ts: {}
   src/funcs/featuresSet.ts: {}
   src/funcs/featuresSetRemoteSessionAutoRefreshPolicy.ts: {}
+  src/funcs/gatewaySessionsList.ts: {}
+  src/funcs/gatewaySessionsListFacets.ts: {}
   src/funcs/hooksGetStatus.ts: {}
   src/funcs/hooksHooksNumberClaude.ts: {}
   src/funcs/hooksHooksNumberCodex.ts: {}
@@ -761,7 +763,6 @@ trackedFiles:
   src/funcs/tokenExchangeExchange.ts: {}
   src/funcs/toolsList.ts: {}
   src/funcs/toolsetsAddExternalOAuthServer.ts: {}
-  src/funcs/toolsetsCheckMCPSlugAvailability.ts: {}
   src/funcs/toolsetsCloneBySlug.ts: {}
   src/funcs/toolsetsCreate.ts: {}
   src/funcs/toolsetsDeleteBySlug.ts: {}
@@ -1224,6 +1225,9 @@ trackedFiles:
   src/models/components/functionenvironmentvariable.ts: {}
   src/models/components/functionresourcedefinition.ts: {}
   src/models/components/functiontooldefinition.ts: {}
+  src/models/components/gatewaysessionfacet.ts: {}
+  src/models/components/gatewaysessionfacets.ts: {}
+  src/models/components/gatewaysessionsresult.ts: {}
   src/models/components/gcpiamcredential.ts: {}
   src/models/components/gcpkmskey.ts: {}
   src/models/components/gcpsetupinfo.ts: {}
@@ -1290,6 +1294,7 @@ trackedFiles:
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
+  src/models/components/hookdeliveryfailuredata.ts: {}
   src/models/components/hookingestdata.ts: {}
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
@@ -2207,7 +2212,6 @@ trackedFiles:
   src/models/operations/checkagentpolicygrants.ts: {}
   src/models/operations/checkdomainhealth.ts: {}
   src/models/operations/checkmcpendpointslugavailability.ts: {}
-  src/models/operations/checkmcpslugavailability.ts: {}
   src/models/operations/checknetworkingresshealth.ts: {}
   src/models/operations/clearmcpregistrycache.ts: {}
   src/models/operations/cliauthauthorize.ts: {}
@@ -2610,6 +2614,8 @@ trackedFiles:
   src/models/operations/listexternalcredentials.ts: {}
   src/models/operations/listexternalkeys.ts: {}
   src/models/operations/listfilteroptions.ts: {}
+  src/models/operations/listgatewaysessionfacets.ts: {}
+  src/models/operations/listgatewaysessions.ts: {}
   src/models/operations/listgcpiamcredentials.ts: {}
   src/models/operations/listgcpkmskeys.ts: {}
   src/models/operations/listglobalremotesessionclients.ts: {}
@@ -3109,8 +3115,6 @@ trackedFiles:
   src/react-query/chatSubmitFeedback.ts: {}
   src/react-query/checkAgentPolicyGrants.ts: {}
   src/react-query/checkDomainHealth.ts: {}
-  src/react-query/checkMCPSlugAvailability.core.ts: {}
-  src/react-query/checkMCPSlugAvailability.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.core.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.ts: {}
   src/react-query/cimdClientPresets.core.ts: {}
@@ -3303,6 +3307,10 @@ trackedFiles:
   src/react-query/fetchOpenAPIv3FromURL.ts: {}
   src/react-query/fetchOrganizationRemoteSessionIssuerMetadata.ts: {}
   src/react-query/fetchRemoteSessionIssuerMetadata.ts: {}
+  src/react-query/gatewaySessionFacets.core.ts: {}
+  src/react-query/gatewaySessionFacets.ts: {}
+  src/react-query/gatewaySessions.core.ts: {}
+  src/react-query/gatewaySessions.ts: {}
   src/react-query/gcpSetupInfo.core.ts: {}
   src/react-query/gcpSetupInfo.ts: {}
   src/react-query/generateWorkOSAdminPortalLink.ts: {}
@@ -4222,6 +4230,7 @@ trackedFiles:
   src/sdk/externalcredentials.ts: {}
   src/sdk/externalkeys.ts: {}
   src/sdk/features.ts: {}
+  src/sdk/gatewaysessions.ts: {}
   src/sdk/gramoverview.ts: {}
   src/sdk/gramrules.ts: {}
   src/sdk/hooks.ts: {}
@@ -8507,7 +8516,7 @@ examples:
   getToolUsageFilterOptions:
     speakeasy-default-get-tool-usage-filter-options:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"clients": [{"client_key": "<value>", "client_label": "<value>", "event_count": 411092}], "gateways": [{"event_count": 411092, "meta_mcp_server_id": "<id>", "name": "<value>"}], "hosted_servers": [{"event_count": 411092, "toolset_name": "<value>", "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
@@ -9754,6 +9763,29 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listGatewaySessionFacets:
+    speakeasy-default-list-gateway-session-facets:
+      responses:
+        "200":
+          application/json: {"providers": [], "servers": [{"label": "<value>", "value": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listGatewaySessions:
+    speakeasy-default-list-gateway-sessions:
+      parameters:
+        query:
+          status: "active"
+          sort: "newest"
+          limit: 50
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listGcpIamCredentials:
     speakeasy-default-list-gcp-iam-credentials:
       responses:

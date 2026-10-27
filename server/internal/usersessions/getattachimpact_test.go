@@ -131,11 +131,14 @@ func TestGetAttachImpactCanonicalServer(t *testing.T) {
 		return byToolset
 	}
 
-	// The legacy alias on the platform host answers beside a custom-domain endpoint.
-	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-canonical-domain")
+	// Without a live endpoint the frozen alias domain decides.
 	impact := preview()
 	require.Equal(t, currentID.String(), impact.CurrentIssuer.ID)
-	require.True(t, impact.AuthorizationServerChanges)
+	require.True(t, impact.AuthorizationServerChanges, "the alias is on the platform host")
+
+	// A live endpoint governs: the platform-host alias no longer counts.
+	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-canonical-domain")
+	require.False(t, preview().AuthorizationServerChanges)
 
 	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
 		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
@@ -374,4 +377,46 @@ func TestGetAttachImpactHonorsProjectScopedAuthorization(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A frozen platform alias keeps serving beside custom-domain endpoints while the server is enabled.
+func TestGetAttachImpactCountsFrozenPlatformAlias(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	currentID := seedIssuer(t, ctx, ti, "impact-alias-current")
+	candidateID := seedIssuer(t, ctx, ti, "impact-alias-candidate")
+	useAuthenticationHost(t, ctx, ti, candidateID)
+	domainID := createCustomDomain(t, ctx, ti)
+	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Name: "impact-alias", Slug: "impact-alias",
+		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{String: "impact-alias-frozen", Valid: true}, McpEnabled: true,
+	})
+	require.NoError(t, err)
+	servers := mcpserversrepo.New(ti.conn)
+	server, err := servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: toolset.ID, ProjectID: projectID,
+		Name: pgtype.Text{String: toolset.Slug, Valid: true}, Slug: pgtype.Text{String: toolset.Slug, Valid: true},
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{UUID: currentID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{},
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ToolVariationsGroupID: uuid.NullUUID{}, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-alias-domain")
+	preview := func() bool {
+		t.Helper()
+		impact, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{McpServerID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
+		require.NoError(t, err)
+		return impact.AuthorizationServerChanges
+	}
+	require.True(t, preview(), "the platform alias still serves")
+
+	_, err = servers.SyncHostedMCPServer(ctx, mcpserversrepo.SyncHostedMCPServerParams{
+		Name: server.Name, Slug: server.Slug, Visibility: mcpservers.VisibilityDisabled, UserSessionIssuerID: server.UserSessionIssuerID,
+		ToolVariationsGroupID: server.ToolVariationsGroupID, NetworkAccessMode: server.NetworkAccessMode, ID: server.ID, ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.False(t, preview(), "a disabled server's alias serves nobody")
 }

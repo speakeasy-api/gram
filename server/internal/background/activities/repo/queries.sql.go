@@ -1444,16 +1444,18 @@ JOIN projects p ON p.id = t.project_id
     AND p.deleted IS FALSE
 JOIN organization_metadata om ON om.id = p.organization_id
 WHERE t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
-  -- Serving denies a toolset whose id a server kept after leaving it, and a canonical
-  -- wrapper that disagrees with its toolset (hostedmcp.LoadServerState).
+  -- The canonical wrapper owns whether a hosted toolset serves; the column stands only without one.
+  AND COALESCE((
+      SELECT w.visibility IN ('public', 'private')
+      FROM mcp_servers w
+      WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+  ), t.mcp_enabled) IS TRUE
+  -- Serving denies a toolset whose id a server kept after leaving it (hostedmcp.LoadServerState).
   AND NOT EXISTS (
       SELECT 1
       FROM mcp_servers w
       WHERE w.id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
-        AND (w.toolset_id IS DISTINCT FROM t.id
-          OR w.visibility <> (CASE WHEN t.mcp_is_public THEN 'public' ELSE 'private' END)
-          OR w.user_session_issuer_id IS DISTINCT FROM t.user_session_issuer_id)
+        AND w.toolset_id IS DISTINCT FROM t.id
   )
   AND NOT EXISTS (
       SELECT 1
@@ -2006,16 +2008,18 @@ WITH latest_toolsets AS (
         LIMIT 1
     ) tv ON TRUE
     WHERE t.deleted IS FALSE
-      AND t.mcp_enabled IS TRUE
-      -- Serving denies a toolset whose id a server kept after leaving it, and a canonical
-      -- wrapper that disagrees with its toolset (hostedmcp.LoadServerState).
+      -- The canonical wrapper owns whether a hosted toolset serves; the column stands only without one.
+      AND COALESCE((
+          SELECT w.visibility IN ('public', 'private')
+          FROM mcp_servers w
+          WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+      ), t.mcp_enabled) IS TRUE
+      -- Serving denies a toolset whose id a server kept after leaving it (hostedmcp.LoadServerState).
       AND NOT EXISTS (
           SELECT 1
           FROM mcp_servers w
           WHERE w.id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
-            AND (w.toolset_id IS DISTINCT FROM t.id
-              OR w.visibility <> (CASE WHEN t.mcp_is_public THEN 'public' ELSE 'private' END)
-              OR w.user_session_issuer_id IS DISTINCT FROM t.user_session_issuer_id)
+            AND w.toolset_id IS DISTINCT FROM t.id
       )
       AND NOT EXISTS (
           SELECT 1

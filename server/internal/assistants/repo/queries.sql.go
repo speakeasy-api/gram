@@ -1062,46 +1062,6 @@ func (q *Queries) DisableAttachedMCPServerForTest(ctx context.Context, arg Disab
 	return err
 }
 
-const enableMCPForToolsets = `-- name: EnableMCPForToolsets :many
-UPDATE toolsets
-SET mcp_enabled = TRUE,
-    updated_at = clock_timestamp()
-WHERE id = ANY($1::UUID[])
-  AND project_id = $2
-  AND mcp_enabled IS FALSE
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-RETURNING id
-`
-
-type EnableMCPForToolsetsParams struct {
-	ToolsetIds []uuid.UUID
-	ProjectID  uuid.UUID
-}
-
-// Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
-// attached toolsets are enabled so users don't have to do it separately; the
-// caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
-func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const endAssistantRuntimeForTest = `-- name: EndAssistantRuntimeForTest :exec
 UPDATE assistant_runtimes SET ended_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2
@@ -4560,7 +4520,19 @@ func (q *Queries) ResolveThreadProjectID(ctx context.Context, threadID uuid.UUID
 }
 
 const resolveToolsetsForWrite = `-- name: ResolveToolsetsForWrite :many
-SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
+SELECT t.id, t.slug, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+    AND (
+      t.mcp_slug IS NOT NULL
+      OR EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
+    )
+)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = $1
   AND t.deleted IS FALSE

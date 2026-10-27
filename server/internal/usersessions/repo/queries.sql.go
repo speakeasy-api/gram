@@ -420,6 +420,7 @@ FROM (
     AND toolset.deleted IS FALSE
     AND project.organization_id = $3::text
     AND toolset.project_id <> $2::uuid
+    AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
   UNION ALL
 
@@ -1230,6 +1231,7 @@ WHERE issuer.id = $1
       AND toolset.deleted IS FALSE
       AND project.deleted IS FALSE
       AND project.organization_id = issuer.organization_id
+      AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
   )
 RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 ), tombstones AS (
@@ -1379,6 +1381,7 @@ WHERE issuer.id = $1
     WHERE toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
       AND toolset.project_id = issuer.project_id
+      AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
     UNION ALL
 
@@ -1492,6 +1495,30 @@ func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg Del
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getGatewaySessionScope = `-- name: GetGatewaySessionScope :one
+SELECT g.project_id, g.user_session_issuer_id
+FROM meta_mcp_servers g
+JOIN projects p ON p.id = g.project_id AND p.organization_id = g.organization_id AND p.deleted IS FALSE
+WHERE g.id = $1 AND g.organization_id = $2 AND g.deleted IS FALSE
+`
+
+type GetGatewaySessionScopeParams struct {
+	GatewayID      uuid.UUID
+	OrganizationID string
+}
+
+type GetGatewaySessionScopeRow struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+func (q *Queries) GetGatewaySessionScope(ctx context.Context, arg GetGatewaySessionScopeParams) (GetGatewaySessionScopeRow, error) {
+	row := q.db.QueryRow(ctx, getGatewaySessionScope, arg.GatewayID, arg.OrganizationID)
+	var i GetGatewaySessionScopeRow
+	err := row.Scan(&i.ProjectID, &i.UserSessionIssuerID)
 	return i, err
 }
 
@@ -2656,6 +2683,404 @@ func (q *Queries) ListAssistantWorkloadRuntimeRoots(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listGatewaySessionEndpoints = `-- name: ListGatewaySessionEndpoints :many
+SELECT e.slug, e.is_domain_root, d.domain
+FROM mcp_endpoints e
+JOIN meta_mcp_servers g ON g.id = e.meta_mcp_server_id AND g.project_id = e.project_id
+LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.organization_id = g.organization_id AND d.deleted IS FALSE
+WHERE e.meta_mcp_server_id = $1 AND e.project_id = $2
+AND g.organization_id = $3 AND e.deleted IS FALSE AND g.deleted IS FALSE
+`
+
+type ListGatewaySessionEndpointsParams struct {
+	GatewayID      uuid.NullUUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListGatewaySessionEndpointsRow struct {
+	Slug         string
+	IsDomainRoot pgtype.Bool
+	Domain       pgtype.Text
+}
+
+func (q *Queries) ListGatewaySessionEndpoints(ctx context.Context, arg ListGatewaySessionEndpointsParams) ([]ListGatewaySessionEndpointsRow, error) {
+	rows, err := q.db.Query(ctx, listGatewaySessionEndpoints, arg.GatewayID, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGatewaySessionEndpointsRow
+	for rows.Next() {
+		var i ListGatewaySessionEndpointsRow
+		if err := rows.Scan(&i.Slug, &i.IsDomainRoot, &i.Domain); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewaySessionFacets = `-- name: ListGatewaySessionFacets :many
+WITH members AS (
+SELECT ms.id, ms.name, a.remote_session_client_id
+ FROM mcp_servers ms
+ JOIN projects p ON p.id = ms.project_id AND p.organization_id = $2 AND p.deleted IS FALSE
+ JOIN mcp_server_remote_session_clients a ON a.mcp_server_id = ms.id AND a.deleted IS FALSE
+ WHERE ms.deleted IS FALSE AND ms.project_id = ANY($1::uuid[])
+ AND ($3::uuid IS NULL OR EXISTS (
+   SELECT 1 FROM meta_mcp_server_members m WHERE m.meta_mcp_server_id = $3
+   AND m.project_id = ms.project_id AND m.mcp_server_id = ms.id AND m.deleted IS FALSE
+ ))
+)
+SELECT DISTINCT members.id AS server_id, members.name AS server_name,
+ ri.id AS provider_id, ri.slug AS provider_name
+FROM members
+JOIN remote_session_clients rc ON rc.id = members.remote_session_client_id AND rc.deleted IS FALSE
+JOIN remote_session_issuers ri ON ri.id = rc.remote_session_issuer_id AND ri.deleted IS FALSE
+WHERE (rc.project_id = ANY($1::uuid[]) OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $2)))
+ AND (ri.project_id = ANY($1::uuid[]) OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = $2)))
+ORDER BY members.name, members.id, ri.slug, ri.id
+`
+
+type ListGatewaySessionFacetsParams struct {
+	ProjectIds     []uuid.UUID
+	OrganizationID pgtype.Text
+	GatewayID      uuid.NullUUID
+}
+
+type ListGatewaySessionFacetsRow struct {
+	ServerID     uuid.UUID
+	ServerName   pgtype.Text
+	ProviderID   uuid.UUID
+	ProviderName string
+}
+
+// Configuration facets are complete, independent of session pages and filters.
+func (q *Queries) ListGatewaySessionFacets(ctx context.Context, arg ListGatewaySessionFacetsParams) ([]ListGatewaySessionFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listGatewaySessionFacets, arg.ProjectIds, arg.OrganizationID, arg.GatewayID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGatewaySessionFacetsRow
+	for rows.Next() {
+		var i ListGatewaySessionFacetsRow
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.ServerName,
+			&i.ProviderID,
+			&i.ProviderName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewaySessionIssuers = `-- name: ListGatewaySessionIssuers :many
+SELECT id FROM user_session_issuers
+WHERE organization_id = $1 AND project_id IS NULL AND deleted IS FALSE
+`
+
+// Keep existing organization authorizations visible even when several issuers
+// temporarily make the gateway unavailable for new connections.
+func (q *Queries) ListGatewaySessionIssuers(ctx context.Context, organizationID pgtype.Text) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listGatewaySessionIssuers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewaySessionProjects = `-- name: ListGatewaySessionProjects :many
+SELECT id FROM projects WHERE organization_id = $1 AND deleted IS FALSE
+`
+
+func (q *Queries) ListGatewaySessionProjects(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listGatewaySessionProjects, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewaySessions = `-- name: ListGatewaySessions :many
+WITH members AS (
+SELECT ms.id, ms.name, a.remote_session_client_id
+ FROM mcp_servers ms
+ JOIN projects p ON p.id = ms.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
+ JOIN mcp_server_remote_session_clients a ON a.mcp_server_id = ms.id AND a.deleted IS FALSE
+ WHERE ms.deleted IS FALSE AND ms.project_id = ANY($10::uuid[])
+ AND ($15::uuid IS NULL OR EXISTS (
+   SELECT 1 FROM meta_mcp_server_members m WHERE m.meta_mcp_server_id = $15
+   AND m.project_id = ms.project_id AND m.mcp_server_id = ms.id AND m.deleted IS FALSE
+ ))
+)
+SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
+       s.refresh_expires_at, s.expires_at, s.last_used_at,
+       s.created_at, s.updated_at, s.deleted_at, s.deleted,
+       iss.slug AS issuer_slug,
+       c.client_name AS client_name,
+       -- A dashboard mint stores no user_session_clients row. The refresh-token
+       -- sentinel (sessiontokens.DashboardMintRefreshTokenHashPrefix) is the
+       -- only mark, and the view turns it into FirstPartyClientName. Real
+       -- refresh hashes are base64url and cannot contain ':', so the prefix
+       -- cannot match one of those.
+       COALESCE(s.refresh_token_hash LIKE 'dashboard-mint:%', false)::boolean AS dashboard_mint,
+       c.client_id_metadata_uri AS client_id_metadata_uri,
+       c.token_endpoint_auth_method AS client_token_endpoint_auth_method,
+       -- Whether the client stores a secret, never the hash itself: the
+       -- credential kind cannot be derived from the declared method alone (a
+       -- method predating the column resolves by whether a secret is on the
+       -- row), and the management API must not carry the hash.
+       (c.client_secret_hash IS NOT NULL)::boolean AS client_has_secret,
+       u.display_name AS user_display_name,
+       u.email AS user_email,
+       u.photo_url AS user_photo_url,
+       k.name AS api_key_name
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.organization_id = s.organization_id
+LEFT JOIN users AS u
+  ON s.subject_urn::text LIKE 'user:%'
+  AND u.id = split_part(s.subject_urn::text, ':', 2)
+  AND u.deleted_at IS NULL
+LEFT JOIN api_keys AS k
+  ON k.id = CASE
+             WHEN s.subject_urn::text LIKE 'apikey:%'
+             THEN split_part(s.subject_urn::text, ':', 2)::uuid
+           END
+  AND k.organization_id = s.organization_id
+LEFT JOIN agents agent ON s.subject_urn::text = 'agent:' || agent.id::text AND agent.organization_id = $1 AND agent.deleted IS FALSE
+WHERE s.organization_id = $1
+ AND iss.organization_id = $1 AND iss.deleted IS FALSE
+ AND s.user_session_issuer_id = ANY($2::uuid[])
+ AND (s.resource IS NULL OR s.resource = ANY($3::text[]))
+ AND CASE $4::text
+   WHEN 'active' THEN s.deleted IS FALSE AND s.refresh_expires_at > now()
+   WHEN 'expired' THEN s.deleted IS FALSE AND s.refresh_expires_at <= now()
+   WHEN 'revoked' THEN s.deleted IS TRUE
+   ELSE TRUE END
+ AND ($5::text = '' OR strpos(lower(s.subject_urn::text || ' ' || COALESCE(u.display_name, '') || ' ' || COALESCE(u.email, '') || ' ' || COALESCE(k.name, '') || ' ' || COALESCE(agent.name, '')), lower($5)) > 0)
+ AND ($6::timestamptz IS NULL OR s.created_at >= $6)
+ AND ($7::timestamptz IS NULL OR s.created_at < $7)
+ AND (($8::uuid IS NULL AND $9::uuid IS NULL) OR EXISTS (
+ SELECT 1
+FROM remote_sessions AS rs
+JOIN LATERAL (SELECT s.subject_urn::text AS subject_urn, s.user_session_issuer_id AS issuer_id) AS pair
+  ON (
+    (pair.subject_urn NOT LIKE 'agent:%' AND rs.subject_urn = pair.subject_urn)
+    OR EXISTS (
+      SELECT 1
+      FROM principal_remote_session_bindings AS b
+      JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+        AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+        AND a.owner_reassignment_required_at IS NULL
+      JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+      JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+        AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+      JOIN remote_sessions AS attached ON attached.id = b.remote_session_id
+        AND attached.subject_urn = 'user:' || a.owner_user_id
+        AND b.attached_by_subject_id = attached.subject_urn
+        AND attached.grant_generation = b.grant_generation
+        AND attached.remote_session_client_id = b.remote_session_client_id
+      JOIN remote_session_clients AS c ON c.id = attached.remote_session_client_id
+      JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
+      JOIN user_session_issuers AS provenance ON provenance.id = attached.user_session_issuer_id
+      JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+      JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
+      JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+      WHERE b.project_id = ANY($10::uuid[])
+        AND b.organization_id = $1::text
+        AND 'agent:' || b.principal_id::text = pair.subject_urn
+        AND b.user_session_issuer_id = pair.issuer_id
+        AND b.remote_session_client_id = rs.remote_session_client_id
+        AND b.revoked_at IS NULL
+        AND attached.deleted IS FALSE
+        AND c.deleted IS FALSE
+        AND target.deleted IS FALSE
+        AND provenance.deleted IS FALSE
+        AND issuer.deleted IS FALSE
+        AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+        AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = $1::text))
+        AND (target.project_id = p.id OR (target.project_id IS NULL AND target.organization_id = $1::text))
+        AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $1::text)))
+        AND attached.id = rs.id
+    )
+  )
+JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
+JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+WHERE (usi.project_id = ANY($10::uuid[]) OR (usi.project_id IS NULL AND usi.organization_id = $1::text))
+  AND (rc.project_id = ANY($10::uuid[]) OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $1)))
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS blink
+      WHERE blink.remote_session_client_id = rs.remote_session_client_id
+        AND blink.user_session_issuer_id = pair.issuer_id
+    )
+    OR rs.user_session_issuer_id = pair.issuer_id
+  )
+  AND rs.deleted IS FALSE
+  AND rc.deleted IS FALSE
+  AND ri.deleted IS FALSE
+  AND (ri.project_id = ANY($10::uuid[]) OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = $1)))
+
+ AND ($9::uuid IS NULL OR rc.remote_session_issuer_id = $9)
+ AND ($8::uuid IS NULL OR EXISTS (
+ SELECT 1 FROM members WHERE members.id = $8 AND members.remote_session_client_id = rc.id
+ ))
+ ))
+ AND ($11::uuid IS NULL OR
+ CASE WHEN $12::text IN ('oldest', 'expiry') THEN
+ (CASE $12::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN s.refresh_expires_at ELSE s.created_at END, s.id) > ($13::timestamptz, $11::uuid)
+ ELSE (CASE $12::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN s.refresh_expires_at ELSE s.created_at END, s.id) < ($13::timestamptz, $11::uuid) END)
+ ORDER BY
+ CASE WHEN $12::text IN ('oldest','expiry') THEN CASE $12::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN s.refresh_expires_at ELSE s.created_at END END ASC,
+ CASE WHEN $12::text NOT IN ('oldest','expiry') THEN CASE $12::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN s.refresh_expires_at ELSE s.created_at END END DESC,
+ CASE WHEN $12::text IN ('oldest','expiry') THEN s.id END ASC,
+ CASE WHEN $12::text NOT IN ('oldest','expiry') THEN s.id END DESC
+ LIMIT $14
+`
+
+type ListGatewaySessionsParams struct {
+	OrganizationID string
+	IssuerIds      []uuid.UUID
+	Resources      []string
+	Status         string
+	Search         string
+	CreatedAfter   pgtype.Timestamptz
+	CreatedBefore  pgtype.Timestamptz
+	ServerID       uuid.NullUUID
+	ProviderID     uuid.NullUUID
+	ProjectIds     []uuid.UUID
+	CursorID       uuid.NullUUID
+	Sort           string
+	CursorTime     pgtype.Timestamptz
+	LimitValue     int32
+	GatewayID      uuid.NullUUID
+}
+
+type ListGatewaySessionsRow struct {
+	ID                            uuid.UUID
+	UserSessionIssuerID           uuid.UUID
+	UserSessionClientID           uuid.NullUUID
+	SubjectUrn                    urn.SessionSubject
+	Jti                           string
+	RefreshExpiresAt              pgtype.Timestamptz
+	ExpiresAt                     pgtype.Timestamptz
+	LastUsedAt                    pgtype.Timestamptz
+	CreatedAt                     pgtype.Timestamptz
+	UpdatedAt                     pgtype.Timestamptz
+	DeletedAt                     pgtype.Timestamptz
+	Deleted                       bool
+	IssuerSlug                    string
+	ClientName                    pgtype.Text
+	DashboardMint                 bool
+	ClientIDMetadataUri           pgtype.Text
+	ClientTokenEndpointAuthMethod pgtype.Text
+	ClientHasSecret               bool
+	UserDisplayName               pgtype.Text
+	UserEmail                     pgtype.Text
+	UserPhotoUrl                  pgtype.Text
+	ApiKeyName                    pgtype.Text
+}
+
+// Only authorized tenant/project identifiers reach this query. Issuer-scoped
+// sessions authorize all endpoints using that issuer; resource-bound sessions
+// authorize only the selected gateway's endpoint URLs.
+func (q *Queries) ListGatewaySessions(ctx context.Context, arg ListGatewaySessionsParams) ([]ListGatewaySessionsRow, error) {
+	rows, err := q.db.Query(ctx, listGatewaySessions,
+		arg.OrganizationID,
+		arg.IssuerIds,
+		arg.Resources,
+		arg.Status,
+		arg.Search,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
+		arg.ServerID,
+		arg.ProviderID,
+		arg.ProjectIds,
+		arg.CursorID,
+		arg.Sort,
+		arg.CursorTime,
+		arg.LimitValue,
+		arg.GatewayID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGatewaySessionsRow
+	for rows.Next() {
+		var i ListGatewaySessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserSessionIssuerID,
+			&i.UserSessionClientID,
+			&i.SubjectUrn,
+			&i.Jti,
+			&i.RefreshExpiresAt,
+			&i.ExpiresAt,
+			&i.LastUsedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.IssuerSlug,
+			&i.ClientName,
+			&i.DashboardMint,
+			&i.ClientIDMetadataUri,
+			&i.ClientTokenEndpointAuthMethod,
+			&i.ClientHasSecret,
+			&i.UserDisplayName,
+			&i.UserEmail,
+			&i.UserPhotoUrl,
+			&i.ApiKeyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServerProjectIDsForUserSessionIssuerMigration = `-- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
 SELECT DISTINCT server.project_id
 FROM mcp_servers AS server
@@ -2925,21 +3350,35 @@ func (q *Queries) ListOrganizationUserSessionIssuerMCPServers(ctx context.Contex
 }
 
 const listOrganizationUserSessionIssuerToolsets = `-- name: ListOrganizationUserSessionIssuerToolsets :many
-SELECT toolset.id,
-       toolset.name,
-       project.id AS project_id,
-       project.name AS project_name
-FROM user_session_issuers AS issuer
-JOIN toolsets AS toolset ON toolset.user_session_issuer_id = issuer.id
-JOIN projects AS project ON project.id = toolset.project_id
-WHERE issuer.id = $1
-  AND issuer.project_id IS NULL
-  AND issuer.organization_id = $2::text
-  AND issuer.deleted IS FALSE
-  AND toolset.deleted IS FALSE
-  AND project.deleted IS FALSE
-  AND project.organization_id = issuer.organization_id
-ORDER BY project.name, toolset.name, toolset.id
+SELECT listed.id, listed.name, listed.project_id, listed.project_name
+FROM (
+  SELECT toolset.id, toolset.name, project.id AS project_id, project.name AS project_name
+  FROM user_session_issuers AS issuer
+  JOIN mcp_servers AS wrapper ON wrapper.user_session_issuer_id = issuer.id AND wrapper.deleted IS FALSE
+  JOIN toolsets AS toolset ON toolset.id = wrapper.id AND toolset.id = wrapper.toolset_id AND toolset.project_id = wrapper.project_id
+  JOIN projects AS project ON project.id = toolset.project_id
+  WHERE issuer.id = $1
+    AND issuer.project_id IS NULL
+    AND issuer.organization_id = $2::text
+    AND issuer.deleted IS FALSE
+    AND toolset.deleted IS FALSE
+    AND project.deleted IS FALSE
+    AND project.organization_id = issuer.organization_id
+  UNION ALL
+  SELECT toolset.id, toolset.name, project.id AS project_id, project.name AS project_name
+  FROM user_session_issuers AS issuer
+  JOIN toolsets AS toolset ON toolset.user_session_issuer_id = issuer.id
+  JOIN projects AS project ON project.id = toolset.project_id
+  WHERE issuer.id = $1
+    AND issuer.project_id IS NULL
+    AND issuer.organization_id = $2::text
+    AND issuer.deleted IS FALSE
+    AND toolset.deleted IS FALSE
+    AND project.deleted IS FALSE
+    AND project.organization_id = issuer.organization_id
+    AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
+) AS listed
+ORDER BY listed.project_name, listed.name, listed.id
 `
 
 type ListOrganizationUserSessionIssuerToolsetsParams struct {
@@ -2954,6 +3393,7 @@ type ListOrganizationUserSessionIssuerToolsetsRow struct {
 	ProjectName string
 }
 
+// Toolsets on the issuer: through their canonical wrapper's issuer, or their own column when they have none.
 func (q *Queries) ListOrganizationUserSessionIssuerToolsets(ctx context.Context, arg ListOrganizationUserSessionIssuerToolsetsParams) ([]ListOrganizationUserSessionIssuerToolsetsRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationUserSessionIssuerToolsets, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {
@@ -3102,7 +3542,7 @@ JOIN (
       JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
       JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
       JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
-      WHERE b.project_id = $3::uuid
+      WHERE b.project_id = ANY($3::uuid[])
         AND b.organization_id = $4::text
         AND 'agent:' || b.principal_id::text = pair.subject_urn
         AND b.user_session_issuer_id = pair.issuer_id
@@ -3114,17 +3554,17 @@ JOIN (
         AND provenance.deleted IS FALSE
         AND issuer.deleted IS FALSE
         AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
-        AND (provenance.project_id = $3::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = $4::text))
-        AND (target.project_id = $3::uuid OR (target.project_id IS NULL AND target.organization_id = $4::text))
-        AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
+        AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = $4::text))
+        AND (target.project_id = p.id OR (target.project_id IS NULL AND target.organization_id = $4::text))
+        AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
         AND s.id = rs.id
     )
   )
 JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-WHERE (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization_id = $4::text))
-  AND (rc.project_id = $3::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $4)))
+WHERE (usi.project_id = ANY($3::uuid[]) OR (usi.project_id IS NULL AND usi.organization_id = $4::text))
+  AND (rc.project_id = ANY($3::uuid[]) OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $4)))
   AND (
     EXISTS (
       SELECT 1
@@ -3137,13 +3577,14 @@ WHERE (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
+  AND (ri.project_id = ANY($3::uuid[]) OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = $4)))
 ORDER BY ri.slug ASC, rs.id ASC
 `
 
 type ListRemoteSessionUpstreamsForSubjectsParams struct {
 	SubjectUrns    []string
 	IssuerIds      []uuid.UUID
-	ProjectID      uuid.UUID
+	ProjectIds     []uuid.UUID
 	OrganizationID string
 }
 
@@ -3201,7 +3642,7 @@ func (q *Queries) ListRemoteSessionUpstreamsForSubjects(ctx context.Context, arg
 	rows, err := q.db.Query(ctx, listRemoteSessionUpstreamsForSubjects,
 		arg.SubjectUrns,
 		arg.IssuerIds,
-		arg.ProjectID,
+		arg.ProjectIds,
 		arg.OrganizationID,
 	)
 	if err != nil {
@@ -4049,7 +4490,7 @@ JOIN (
   ON w.workload_issuer_id = wia.workload_issuer_id
   AND w.subject = wia.subject
 WHERE wia.organization_id = $3::text
-  AND (wia.project_id = $4::uuid OR wia.project_id IS NULL)
+  AND (wia.project_id = ANY($4::uuid[]) OR wia.project_id IS NULL)
   AND wia.deleted IS FALSE
 ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC
 `
@@ -4058,7 +4499,7 @@ type ListWorkloadSessionAdmissionsParams struct {
 	WorkloadIssuerIds []uuid.UUID
 	Subjects          []string
 	OrganizationID    string
-	ProjectID         uuid.UUID
+	ProjectIds        []uuid.UUID
 }
 
 type ListWorkloadSessionAdmissionsRow struct {
@@ -4081,7 +4522,7 @@ func (q *Queries) ListWorkloadSessionAdmissions(ctx context.Context, arg ListWor
 		arg.WorkloadIssuerIds,
 		arg.Subjects,
 		arg.OrganizationID,
-		arg.ProjectID,
+		arg.ProjectIds,
 	)
 	if err != nil {
 		return nil, err
@@ -4123,7 +4564,7 @@ FROM (
 LEFT JOIN workload_issuers AS wi
   ON wi.id = w.workload_issuer_id
   AND wi.organization_id = $3::text
-  AND (wi.project_id = $4::uuid OR wi.project_id IS NULL)
+  AND (wi.project_id = ANY($4::uuid[]) OR wi.project_id IS NULL)
   AND wi.deleted IS FALSE
 LEFT JOIN workload_issuers AS live
   ON live.id = w.workload_issuer_id
@@ -4145,7 +4586,7 @@ type ListWorkloadSessionLabelsParams struct {
 	WorkloadIssuerIds []uuid.UUID
 	Subjects          []string
 	OrganizationID    string
-	ProjectID         uuid.UUID
+	ProjectIds        []uuid.UUID
 }
 
 type ListWorkloadSessionLabelsRow struct {
@@ -4181,7 +4622,7 @@ func (q *Queries) ListWorkloadSessionLabels(ctx context.Context, arg ListWorkloa
 		arg.WorkloadIssuerIds,
 		arg.Subjects,
 		arg.OrganizationID,
-		arg.ProjectID,
+		arg.ProjectIds,
 	)
 	if err != nil {
 		return nil, err
@@ -5785,12 +6226,14 @@ func (q *Queries) TouchUserSessionLastUsed(ctx context.Context, arg TouchUserSes
 	return err
 }
 
-const updateMCPServersToUserSessionIssuer = `-- name: UpdateMCPServersToUserSessionIssuer :execrows
+const updateMCPServersToUserSessionIssuer = `-- name: UpdateMCPServersToUserSessionIssuer :many
 UPDATE mcp_servers AS server
 SET user_session_issuer_id = $1,
     updated_at = clock_timestamp()
-FROM projects AS project
+FROM projects AS project, mcp_servers AS previous
 WHERE server.user_session_issuer_id = $2
+  AND previous.id = server.id
+  AND previous.project_id = server.project_id
   AND project.id = server.project_id
   AND project.organization_id = $3::text
   AND 2 = (
@@ -5804,6 +6247,7 @@ WHERE server.user_session_issuer_id = $2
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = $3::text AND issuer_project.deleted IS FALSE)
       )
   )
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical, previous.updated_at AS previous_updated_at
 `
 
 type UpdateMCPServersToUserSessionIssuerParams struct {
@@ -5812,12 +6256,37 @@ type UpdateMCPServersToUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMCPServersToUserSessionIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+type UpdateMCPServersToUserSessionIssuerRow struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	Canonical         bool
+	PreviousUpdatedAt pgtype.Timestamptz
+}
+
+// Returns each moved server, with its updated_at before the move, so live hosted ones can be audited as their own update.
+func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMCPServersToUserSessionIssuerParams) ([]UpdateMCPServersToUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, updateMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []UpdateMCPServersToUserSessionIssuerRow
+	for rows.Next() {
+		var i UpdateMCPServersToUserSessionIssuerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Canonical,
+			&i.PreviousUpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateMetaMCPServersToUserSessionIssuer = `-- name: UpdateMetaMCPServersToUserSessionIssuer :execrows
@@ -6052,6 +6521,7 @@ type UpdateToolsetsToUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
+// Wrapped toolsets keep their issuer column equal to their canonical server's for pods that still read it.
 func (q *Queries) UpdateToolsetsToUserSessionIssuer(ctx context.Context, arg UpdateToolsetsToUserSessionIssuerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateToolsetsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
@@ -6602,6 +7072,7 @@ SELECT EXISTS (
         WHERE toolset.user_session_issuer_id = issuer.id
           AND toolset.deleted IS FALSE
           AND toolset.project_id = issuer.project_id
+          AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
         UNION ALL
 

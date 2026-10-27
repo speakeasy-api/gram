@@ -38,7 +38,6 @@ func assistantKitRuntimeFlags() []cli.Flag {
 		&cli.StringFlag{Name: "assistant-kit-mcp-resource", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_RESOURCE"}, Usage: "Exact HTTPS URL of the attached issuer-gated MCP resource to provision for Kit."},
 		&cli.StringFlag{Name: "assistant-kit-mcp-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_ISSUER"}, Usage: "Expected OAuth issuer advertised by the configured Kit MCP resource."},
 		&cli.StringFlag{Name: "assistant-kit-mcp-issuer-id", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_ISSUER_ID"}, Usage: "Persisted user-session issuer UUID for the configured Kit resource."},
-		&cli.StringFlag{Name: "assistant-kit-root-trigger-id", EnvVars: []string{"GRAM_ASSISTANT_KIT_ROOT_TRIGGER_ID"}, Usage: "Local-only existing root trigger UUID; required when the local assistant has multiple roots. Production selects its persisted root."},
 	}
 }
 
@@ -55,7 +54,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	}
 	var provision assistants.KitGKEProvisionInput
 	if base.Provider == assistants.RuntimeProviderGKE {
-		for _, name := range []string{"assistant-kit-root-trigger-id", "assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
+		for _, name := range []string{"assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
 			if c.String(name) != "" {
 				return fmt.Errorf("%s is local-only", name)
 			}
@@ -80,13 +79,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	if err != nil {
 		return fmt.Errorf("assistant-kit-mcp-issuer-id must identify the configured resource's issuer")
 	}
-	var root uuid.UUID
-	if raw := c.String("assistant-kit-root-trigger-id"); raw != "" {
-		root, err = uuid.Parse(raw)
-		if err != nil {
-			return fmt.Errorf("invalid assistant-kit-root-trigger-id")
-		}
-	}
+
 	if serverURL == nil {
 		return fmt.Errorf("kit requires the deployment server URL")
 	}
@@ -98,7 +91,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		PersistedMCP: base.Provider != assistants.RuntimeProviderLocal,
 		Environment:  c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
 		Origin: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, Network: c.String("assistant-kit-network"), AllowInsecureInference: false,
-		MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: issuerID, RootTriggerID: root, TurnStream: chat.NewTurnStream(redisClient),
+		MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: issuerID, TurnStream: chat.NewTurnStream(redisClient),
 		WorkloadJWKSURL:       c.String("assistant-kit-workload-jwks-url"),
 		WorkloadIssuerURL:     c.String("assistant-kit-workload-issuer"),
 		WorkloadSubject:       c.String("assistant-kit-workload-subject"),

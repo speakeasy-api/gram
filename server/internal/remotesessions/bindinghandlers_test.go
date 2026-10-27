@@ -36,6 +36,10 @@ func (bindingOwnerOnlyEngine) EvaluateLoadedGrants(context.Context, []authz.Gran
 	return oops.C(oops.CodeForbidden)
 }
 
+func (bindingOwnerOnlyEngine) GetScopeOverrides(context.Context) ([]authz.RoleGrant, bool) {
+	return nil, false
+}
+
 func TestBindingsRequireOrdinaryHuman(t *testing.T) {
 	t.Parallel()
 	svc := &remotesessions.Service{}
