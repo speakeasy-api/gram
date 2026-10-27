@@ -206,8 +206,13 @@ func FollowAlias(ctx context.Context, tx toolsetsrepo.DBTX, organizationID strin
 	}
 	if domainID.Valid && slug.Valid {
 		// The platform host also serves custom-domain aliases, so the move must not contend with another one there.
-		if err := mcpendpointsrepo.New(tx).LockSlugScope(ctx, mcpendpointsrepo.LockSlugScopeParams{CustomDomainID: domainID, Slug: slug.String}); err != nil {
+		// The caller already holds another slug's lock, so waiting here could deadlock.
+		locked, err := mcpendpointsrepo.New(tx).TryLockPlatformSlugScope(ctx, slug.String)
+		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "lock hosted MCP alias address")
+		}
+		if !locked {
+			return oops.E(oops.CodeConflict, nil, "hosted MCP address changed concurrently; retry the request")
 		}
 		served, err := toolsetsrepo.New(tx).OtherCustomDomainAliasServedOnPlatform(ctx, toolsetsrepo.OtherCustomDomainAliasServedOnPlatformParams{Slug: slug, ToolsetID: toolsetID})
 		if err != nil {
