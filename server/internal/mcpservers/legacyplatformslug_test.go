@@ -13,7 +13,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -26,9 +26,10 @@ func TestGetMcpServer_LegacyPlatformSlug(t *testing.T) {
 	slug := "legacy-" + uuid.NewString()[:8]
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: slug, Slug: slug, McpSlug: conv.ToPGText(slug), McpEnabled: true,
+		Name: slug, Slug: slug,
 	})
 	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: toolset.ID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug),
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "public",
@@ -47,9 +48,7 @@ func TestGetMcpServer_LegacyPlatformSlug(t *testing.T) {
 		IngressName: pgtype.Text{String: "", Valid: false}, CertSecretName: pgtype.Text{String: "", Valid: false}, IpAllowlist: []string{},
 	})
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
-		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, Slug: toolset.Slug, ProjectID: *authCtx.ProjectID,
-	}))
+	testenv.SetLegacyAlias(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, uuid.NullUUID{UUID: domain.ID, Valid: true})
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: *authCtx.ProjectID, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: slug,
