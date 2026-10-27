@@ -89,6 +89,21 @@ func TestReportCrash_RateLimitedPerDevice(t *testing.T) {
 	requireCode(t, err, oops.CodeRateLimitExceeded)
 }
 
+func TestReportCrash_RateLimitedPerCredential(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAgentService(t)
+	ti.service.WithCrashReportCredentialLimiter(ratelimit.New(ratelimit.NewRedisStore(ti.redis), "test-report-crash-credential-"+uuid.NewString(), ratelimit.PerMinute(1)))
+
+	_, err := ti.service.ReportCrash(ctx, crashPayload(new("dev@example.com"), crashReport("a")))
+	require.NoError(t, err)
+	// A new serial does not buy the same key a fresh budget.
+	rotated := crashPayload(new("dev@example.com"), crashReport("b"))
+	rotated.SerialNumber = new("C02XYZ")
+	_, err = ti.service.ReportCrash(ctx, rotated)
+	requireCode(t, err, oops.CodeRateLimitExceeded)
+}
+
 func TestReportCrash_DropsReportsNotShapedLikeACrash(t *testing.T) {
 	t.Parallel()
 

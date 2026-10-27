@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -28,10 +29,23 @@ import (
 // device stays far below it; it stops a leaked org key from flooding logs.
 var CrashReportRate = ratelimit.PerMinute(10)
 
+// CrashReportCredentialRate bounds crash report batches per credential. The
+// device serial is caller-supplied, so rotating it buys fresh device budgets;
+// this caps what one key can send in total. An org install key is shared by a
+// fleet, hence the headroom.
+var CrashReportCredentialRate = ratelimit.PerMinute(600)
+
 // WithCrashReportLimiter sets the per-device limit on reportCrash. Nil leaves
 // it unlimited.
 func (s *Service) WithCrashReportLimiter(limiter *ratelimit.Limiter) *Service {
 	s.crashReportLimiter = limiter
+	return s
+}
+
+// WithCrashReportCredentialLimiter sets the per-credential limit on
+// reportCrash. Nil leaves it unlimited.
+func (s *Service) WithCrashReportCredentialLimiter(limiter *ratelimit.Limiter) *Service {
+	s.crashReportCredentialLimiter = limiter
 	return s
 }
 
@@ -78,8 +92,9 @@ var (
 
 const crashUnknown = "unknown"
 
-// crashVersionPattern admits release versions as metric tags; dev builds and
-// anything else are tagged unknown, though the log keeps what was sent.
+// crashVersionPattern is a release or dev build version. A report with any
+// other version is rejected. Versions are never metric tags: a key holder
+// could mint unbounded series. Per-version views come from the log.
 var crashVersionPattern = regexp.MustCompile(`^v?\d{1,4}\.\d{1,4}\.\d{1,4}(-[0-9A-Za-z.]{1,32})?$`)
 
 // agentModulePrefix marks the agent's own frames, which are what a crash
@@ -123,8 +138,20 @@ func (s *Service) ReportCrash(ctx context.Context, payload *gen.ReportCrashPaylo
 		reporter = "email:" + email
 	}
 
+	// The key that authenticated, or the workload or agent behind a token.
+	credential := "key:" + authCtx.APIKeyID
+	if authCtx.APIKeyID == "" {
+		credential = reporter
+	}
+	if err := s.allowCrashReport(ctx, s.crashReportCredentialLimiter, authCtx.ActiveOrganizationID+":"+credential, "too many crash reports for this credential; retry shortly"); err != nil {
+		return nil, err
+	}
 	serial := deviceidentity.NormalizeSerial(payload.SerialNumber)
-	if err := s.allowCrashReport(ctx, authCtx.ActiveOrganizationID, serial, reporter); err != nil {
+	deviceKey := authCtx.ActiveOrganizationID + ":serial:" + serial
+	if serial == "" {
+		deviceKey = authCtx.ActiveOrganizationID + ":" + reporter
+	}
+	if err := s.allowCrashReport(ctx, s.crashReportLimiter, deviceKey, "too many crash reports from this device; retry shortly"); err != nil {
 		return nil, err
 	}
 	environment := deviceidentity.NormalizeEnvironment(payload.Environment)
@@ -146,24 +173,20 @@ func (s *Service) ReportCrash(ctx context.Context, payload *gen.ReportCrashPaylo
 	return &gen.ReportCrashResult{Accepted: accepted}, nil
 }
 
-// allowCrashReport charges one batch to the device's budget, keyed like
-// reportState's, or by reporter when the device has no serial. A limiter
-// store outage fails open: it isn't a throttle.
-func (s *Service) allowCrashReport(ctx context.Context, organizationID, serial, reporter string) error {
-	if s.crashReportLimiter == nil {
+// allowCrashReport charges one batch to key's budget on limiter: a device's
+// (keyed like reportState's, or by reporter when there is no serial) or a
+// credential's. A limiter store outage fails open: it isn't a throttle.
+func (s *Service) allowCrashReport(ctx context.Context, limiter *ratelimit.Limiter, key, refusal string) error {
+	if limiter == nil {
 		return nil
 	}
-	key := organizationID + ":serial:" + serial
-	if serial == "" {
-		key = organizationID + ":" + reporter
-	}
-	res, err := s.crashReportLimiter.Allow(ctx, key)
+	res, err := limiter.Allow(ctx, key)
 	switch {
 	case err != nil:
-		s.logger.WarnContext(ctx, "reportCrash rate limit unavailable", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		s.logger.WarnContext(ctx, "reportCrash rate limit unavailable", attr.SlogError(err))
 		return nil
 	case !res.Allowed:
-		return oops.E(oops.CodeRateLimitExceeded, nil, "too many crash reports from this device; retry shortly")
+		return oops.E(oops.CodeRateLimitExceeded, nil, "%s", refusal)
 	}
 	return nil
 }
@@ -176,31 +199,34 @@ var (
 	// crashFunctionPattern is a Go symbol: package path, receiver, closures
 	// and generic brackets, never whitespace.
 	crashFunctionPattern = regexp.MustCompile(`^[A-Za-z0-9_.\-/()*\[\]{},~@]+$`)
-	// crashFilePattern is a module-relative or stdlib-relative .go path, which
-	// is what a -trimpath build records; the agent reduces anything absolute to
-	// its base name.
+	// crashFilePattern is a module-relative or stdlib-relative path, which is
+	// what a -trimpath build records; the agent reduces anything absolute to
+	// its base name. Frames in the runtime's assembly (runtime.goexit) are in
+	// .s files.
 	crashFilePattern = regexp.MustCompile(`^[A-Za-z0-9_.\-+@~]+(/[A-Za-z0-9_.\-+@~]+)*\.(go|s)$`)
 	// crashTypePattern is a Go type as reflect prints it.
 	crashTypePattern = regexp.MustCompile(`^[A-Za-z0-9_.*/\[\]{}(),\- ]+$`)
-	// crashBuildVersionPattern admits release and dev versions.
-	crashBuildVersionPattern = regexp.MustCompile(`^v?[0-9A-Za-z.+\-]{1,64}$`)
-	// crashMessagePattern is printable ASCII: the runtime's messages are built
-	// from types and numbers.
-	crashMessagePattern = regexp.MustCompile(`^[\x20-\x7E]+$`)
 )
 
-// crashMessagePrefixes and crashPlainMessages are the Go runtime's own panic
-// and fatal messages. The agent sends only those (ADR-0030); a message that is
-// not one is dropped here while the rest of the report is kept.
-var (
-	crashMessagePrefixes = []string{"runtime error: ", "fatal error: ", "interface conversion: "}
-	crashPlainMessages   = []string{
-		"assignment to entry in nil map",
-		"close of nil channel",
-		"close of closed channel",
-		"send on closed channel",
-	}
-)
+// crashGoType is a Go type as the runtime prints it in its messages.
+const crashGoType = `[A-Za-z0-9_.*/\[\]{}(), ]{1,200}`
+
+// crashMessagePatterns are the Go runtime's own panic and fatal messages,
+// whole: each is built from fixed words, numbers and type names. The agent
+// sends only those (ADR-0030); any other message is dropped here while the
+// rest of the report is kept.
+var crashMessagePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`^runtime error: index out of range \[-?\d{1,20}\]( with length \d{1,20})?$`),
+	regexp.MustCompile(`^runtime error: slice bounds out of range \[[\d:-]{1,64}\]( with (length|capacity) \d{1,20})?$`),
+	regexp.MustCompile(`^runtime error: cannot convert slice with length \d{1,20} to array or pointer to array with length \d{1,20}$`),
+	regexp.MustCompile(`^runtime error: (invalid memory address or nil pointer dereference|integer divide by zero|integer overflow|negative shift amount|(makeslice|unsafe\.Slice|unsafe\.String): (len|cap|ptr) out of range|makechan: size out of range|growslice: len out of range)$`),
+	regexp.MustCompile(`^runtime error: (hash of unhashable|comparing uncomparable) type ` + crashGoType + `$`),
+	regexp.MustCompile(`^interface conversion: ` + crashGoType + ` is (nil|` + crashGoType + `), not ` + crashGoType + `$`),
+	regexp.MustCompile(`^interface conversion: ` + crashGoType + ` is not ` + crashGoType + `: missing method [A-Za-z_][A-Za-z0-9_]{0,100}$`),
+	// The runtime's fatal errors are constant lowercase strings.
+	regexp.MustCompile(`^fatal error: [a-z][a-z0-9 :;,'()!.-]{0,120}$`),
+	regexp.MustCompile(`^(assignment to entry in nil map|close of nil channel|close of closed channel|send on closed channel)$`),
+}
 
 // validCrashReport returns why a report is not shaped like one the device
 // agent produces, or "" when it is. Closed-set fields are not checked here:
@@ -211,14 +237,16 @@ func validCrashReport(r *gen.AgentCrashReport) string {
 		return "id"
 	case r.SchemaVersion != 1:
 		return "schema_version"
-	case !crashBuildVersionPattern.MatchString(r.Build.Version):
+	case !validCrashTime(r.OccurredAt):
+		return "occurred_at"
+	case !crashVersionPattern.MatchString(r.Build.Version):
 		return "build.version"
 	case r.PanicType != nil && *r.PanicType != "" && !crashTypePattern.MatchString(*r.PanicType):
 		return "panic_type"
 	}
 	if r.Kind == "rollback" {
 		rb := r.Rollback
-		if rb == nil || !crashBuildVersionPattern.MatchString(conv.PtrValOr(rb.From, "")) || !crashBuildVersionPattern.MatchString(conv.PtrValOr(rb.To, "")) {
+		if rb == nil || !crashVersionPattern.MatchString(conv.PtrValOr(rb.From, "")) || !crashVersionPattern.MatchString(conv.PtrValOr(rb.To, "")) {
 			return "rollback"
 		}
 		return ""
@@ -234,21 +262,28 @@ func validCrashReport(r *gen.AgentCrashReport) string {
 		if f == nil || !crashFunctionPattern.MatchString(f.Function) {
 			return "stack.function"
 		}
-		if f.File != nil && *f.File != "" && (!crashFilePattern.MatchString(*f.File) || slices.ContainsFunc(strings.Split(*f.File, "/"), isDotSegment)) {
+		// Every frame in a Go traceback names its file.
+		file := conv.PtrValOr(f.File, "")
+		if !crashFilePattern.MatchString(file) || slices.ContainsFunc(strings.Split(file, "/"), isDotSegment) {
 			return "stack.file"
 		}
 	}
 	return ""
 }
 
+// validCrashTime reports whether s is an RFC 3339 time. Goa's DateTime format
+// already enforces this on decode; checking here keeps the log field safe if
+// the design changes.
+func validCrashTime(s string) bool {
+	_, err := time.Parse(time.RFC3339, s)
+	return err == nil
+}
+
 func isDotSegment(s string) bool { return s == "." || s == ".." }
 
 // crashMessage returns msg if it is a Go runtime message, else "".
 func crashMessage(msg string) string {
-	if !crashMessagePattern.MatchString(msg) {
-		return ""
-	}
-	if slices.Contains(crashPlainMessages, msg) || slices.ContainsFunc(crashMessagePrefixes, func(p string) bool { return strings.HasPrefix(msg, p) }) {
+	if slices.ContainsFunc(crashMessagePatterns, func(p *regexp.Regexp) bool { return p.MatchString(msg) }) {
 		return msg
 	}
 	return ""
@@ -276,11 +311,7 @@ func (s *Service) recordCrash(ctx context.Context, organizationID, serial, envir
 	kind := closedValue(report.Kind, crashKinds)
 	component := closedValue(report.Component, crashComponents)
 	build := report.Build
-	version := strings.TrimSpace(build.Version)
-	versionTag := crashUnknown
-	if crashVersionPattern.MatchString(version) {
-		versionTag = strings.TrimPrefix(version, "v")
-	}
+	version := strings.TrimPrefix(build.Version, "v")
 	binary := closedValue(build.Binary, crashBinaries)
 	channel := closedValue(conv.PtrValOr(build.Channel, ""), crashChannels)
 	goos := closedValue(conv.PtrValOr(build.Os, ""), crashOSes)
@@ -308,7 +339,7 @@ func (s *Service) recordCrash(ctx context.Context, organizationID, serial, envir
 		attr.SlogAgentCrashCount(report.Count),
 		attr.SlogAgentCrashSchemaVersion(report.SchemaVersion),
 		attr.SlogAgentBuildBinary(binary),
-		attr.SlogAgentBuildVersion(scrubCrashText(version)),
+		attr.SlogAgentBuildVersion(version),
 		attr.SlogAgentBuildChannel(channel),
 		attr.SlogAgentBuildOS(goos),
 		attr.SlogAgentBuildArch(arch),
@@ -333,7 +364,6 @@ func (s *Service) recordCrash(ctx context.Context, organizationID, serial, envir
 			attribute.String("kind", kind),
 			attribute.String("component", component),
 			attribute.String("binary", binary),
-			attribute.String("version", versionTag),
 			attribute.String("channel", channel),
 			attribute.String("os", goos),
 		))

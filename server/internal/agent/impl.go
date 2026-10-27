@@ -100,6 +100,9 @@ type Service struct {
 	// crashReportLimiter bounds reportCrash batches per device. Nil leaves it
 	// unlimited.
 	crashReportLimiter *ratelimit.Limiter
+	// crashReportCredentialLimiter bounds reportCrash batches per credential.
+	// Nil leaves it unlimited.
+	crashReportCredentialLimiter *ratelimit.Limiter
 
 	// crashReports counts forwarded crash reports. Nil only logs them.
 	crashReports metric.Int64Counter
@@ -134,26 +137,27 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:             logger,
-		db:                 db,
-		repo:               repo.New(db),
-		auth:               auth.New(logger, db, sessions, authzEngine),
-		authz:              authzEngine,
-		audit:              auditLogger,
-		productFeatures:    productFeatures,
-		serverURL:          serverURL,
-		orgHosts:           orgHosts,
-		blobStore:          blobStore,
-		telemetry:          telemetryLogger,
-		growth:             growthEmitter,
-		workloadTokens:     nil,
-		deviceAgentTokens:  deviceAgentTokens,
-		agentVersions:      nil,
-		connectionStatuses: nil,
-		connectionsLimiter: nil,
-		crashReportLimiter: nil,
-		crashReports:       nil,
+		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:                       logger,
+		db:                           db,
+		repo:                         repo.New(db),
+		auth:                         auth.New(logger, db, sessions, authzEngine),
+		authz:                        authzEngine,
+		audit:                        auditLogger,
+		productFeatures:              productFeatures,
+		serverURL:                    serverURL,
+		orgHosts:                     orgHosts,
+		blobStore:                    blobStore,
+		telemetry:                    telemetryLogger,
+		growth:                       growthEmitter,
+		workloadTokens:               nil,
+		deviceAgentTokens:            deviceAgentTokens,
+		agentVersions:                nil,
+		connectionStatuses:           nil,
+		connectionsLimiter:           nil,
+		crashReportLimiter:           nil,
+		crashReports:                 nil,
+		crashReportCredentialLimiter: nil,
 	}
 }
 
