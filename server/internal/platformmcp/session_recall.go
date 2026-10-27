@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -78,44 +77,39 @@ type RecallRiskFindingReader interface {
 // carry organization + owner user_id + not-deleted + the personal-account
 // exclusion), so there is no fetch-then-authorize step anywhere in this file.
 type SessionRecallService struct {
-	logger        *slog.Logger
-	db            *pgxpool.Pool
-	repo          *platformrepo.Queries
-	auditor       *audit.Logger
-	portability   FeatureChecker
-	cutover       feature.Provider
-	organizations OrganizationSlugResolver
-	findings      RecallRiskFindingReader
-	budget        OperationBudget
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	repo        *platformrepo.Queries
+	auditor     *audit.Logger
+	portability FeatureChecker
+	findings    RecallRiskFindingReader
+	budget      OperationBudget
 }
 
-// NewSessionRecallService composes recall with optional cutover dependencies.
+// NewSessionRecallService composes recall. A nil findings reader leaves recall
+// unavailable, since a digest cannot be masked without it.
 func NewSessionRecallService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	repo *platformrepo.Queries,
 	auditor *audit.Logger,
 	portability FeatureChecker,
-	cutover feature.Provider,
-	organizations OrganizationSlugResolver,
 	findings RecallRiskFindingReader,
 	budget OperationBudget,
 ) *SessionRecallService {
 	return &SessionRecallService{
-		logger:        logger,
-		db:            db,
-		repo:          repo,
-		auditor:       auditor,
-		portability:   portability,
-		cutover:       cutover,
-		organizations: organizations,
-		findings:      findings,
-		budget:        budget,
+		logger:      logger,
+		db:          db,
+		repo:        repo,
+		auditor:     auditor,
+		portability: portability,
+		findings:    findings,
+		budget:      budget,
 	}
 }
 
 func (s *SessionRecallService) valid() bool {
-	return s != nil && s.logger != nil && s.db != nil && s.repo != nil && s.auditor != nil && s.portability != nil && s.budget.valid()
+	return s != nil && s.logger != nil && s.db != nil && s.repo != nil && s.auditor != nil && s.portability != nil && s.findings != nil && s.budget.valid()
 }
 
 type ListMySessionsInput struct {
@@ -185,54 +179,12 @@ func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Pri
 	return ListMySessionsOutput{Sessions: sessions}, nil
 }
 
-// useClickHouseFindings fails closed: a cut-over org's ClickHouse-only
-// findings are absent from Postgres, so an unresolved flag must not downgrade
-// the masking source.
-func (s *SessionRecallService) useClickHouseFindings(ctx context.Context, principal Principal) (bool, error) {
-	if s.cutover == nil || s.organizations == nil {
-		return false, nil
-	}
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil {
-		return false, fmt.Errorf("resolve organization for risk findings cutover: %w", err)
-	}
-	enabled, err := s.cutover.IsFlagEnabled(
-		ctx,
-		feature.FlagRiskFindingsClickHouseCutover,
-		principal.OrganizationID,
-		feature.OrgProjectGroups(organizationSlug, ""),
-	)
-	if err != nil {
-		return false, fmt.Errorf("check risk findings clickhouse cutover flag: %w", err)
-	}
-	return enabled, nil
-}
-
 func (s *SessionRecallService) riskFindingMasks(
 	ctx context.Context,
 	principal Principal,
 	chatID, projectID uuid.UUID,
 	messages []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow,
 ) (findingMasks, error) {
-	useClickHouse, err := s.useClickHouseFindings(ctx, principal)
-	if err != nil {
-		return findingMasks{}, err
-	}
-	if !useClickHouse {
-		findings, err := s.repo.ListRiskFindingSpansForRecall(ctx, platformrepo.ListRiskFindingSpansForRecallParams{
-			ChatID:         chatID,
-			ProjectID:      projectID,
-			OrganizationID: principal.OrganizationID,
-			UserID:         principal.UserID,
-		})
-		if err != nil {
-			return findingMasks{}, fmt.Errorf("read risk findings for recall: %w", err)
-		}
-		return maskFindingSpans(messages, findings), nil
-	}
-	if s.findings == nil {
-		return findingMasks{}, errors.New("clickhouse risk findings for recall are unavailable")
-	}
 	policies, err := riskrepo.New(s.db).ListEnabledRiskPolicyIDsByOrganizationProject(ctx, riskrepo.ListEnabledRiskPolicyIDsByOrganizationProjectParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      projectID,
@@ -253,7 +205,7 @@ func (s *SessionRecallService) riskFindingMasks(
 	if err != nil {
 		return findingMasks{}, fmt.Errorf("read clickhouse risk findings for recall: %w", err)
 	}
-	return maskClickHouseFindingSpans(messages, findings), nil
+	return maskFindingSpans(messages, findings), nil
 }
 
 func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Principal, input ContinueSessionInput) (ContinueSessionOutput, error) {
@@ -431,18 +383,6 @@ func valueOrUnknown(s string) string {
 	return s
 }
 
-// findingSpanEntry mirrors one element of the risk_results.spans JSONB column
-// ({match,field,path,start_pos,end_pos} per the schema comment). Declared
-// locally so this package does not depend on the risk-analysis activity
-// package that writes it.
-type findingSpanEntry struct {
-	Match    string `json:"match"`
-	Field    string `json:"field"`
-	Path     string `json:"path"`
-	StartPos int    `json:"start_pos"`
-	EndPos   int    `json:"end_pos"`
-}
-
 // withheldContentPlaceholder replaces a message's entire prose when a finding
 // targeting it cannot be masked precisely — the fail-closed alternative to
 // serving content known to carry an un-applied finding.
@@ -481,89 +421,14 @@ type findingMasks struct {
 }
 
 // maskFindingSpans replaces every content-anchored finding span with
-// maskdisplay.Display's partial-mask form — byte-identical with what the
+// maskdisplay.Display's partial-mask form, byte-identical with what the
 // dashboard already shows masked, so the digest never reveals more than
 // existing UI. Fail-closed: a message with any finding that cannot be applied
-// exactly (undecodable or absent span data, offsets that don't fit the
-// content, overlapping spans, spans anchored somewhere other than the content
-// column) has its entire prose replaced by withheldContentPlaceholder rather
-// than served with a known finding unmasked.
-func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, findings []platformrepo.ListRiskFindingSpansForRecallRow) findingMasks {
-	out := findingMasks{content: nil, neutralized: 0, withheld: 0}
-	if len(findings) == 0 {
-		return out
-	}
-	byMessage := make(map[uuid.UUID]*recallMessageSpans)
-	for _, finding := range findings {
-		if !finding.ChatMessageID.Valid {
-			continue
-		}
-		ms := byMessage[finding.ChatMessageID.UUID]
-		if ms == nil {
-			ms = &recallMessageSpans{spans: nil, unappliable: 0}
-			byMessage[finding.ChatMessageID.UUID] = ms
-		}
-		ruleID := conv.FromPGTextOrEmpty[string](finding.RuleID)
-		var entries []findingSpanEntry
-		if len(finding.Spans) > 0 && json.Unmarshal(finding.Spans, &entries) != nil {
-			// Span data exists but cannot be read.
-			ms.unappliable++
-			continue
-		}
-		if len(entries) == 0 {
-			if !finding.StartPos.Valid || !finding.EndPos.Valid {
-				// A finding with no span data at all cannot be masked.
-				ms.unappliable++
-				continue
-			}
-			// Legacy rows carry only the primary span.
-			entries = []findingSpanEntry{{
-				Match:    conv.FromPGTextOrEmpty[string](finding.Match),
-				Field:    "",
-				Path:     "",
-				StartPos: int(finding.StartPos.Int32),
-				EndPos:   int(finding.EndPos.Int32),
-			}}
-		}
-		for _, entry := range entries {
-			if strings.HasPrefix(entry.Field, "tool.") {
-				// Spans anchored in tool-call structures are never rendered:
-				// tool payloads are redacted unconditionally.
-				continue
-			}
-			switch scanners.FindingSurface(finding.Source, entry.Field, entry.Path) {
-			case scanners.SurfaceContent:
-				expected := entry.Match
-				if expected == "" {
-					// Older span entries omit the per-span match; the
-					// finding's primary match is the same text for them.
-					expected = conv.FromPGTextOrEmpty[string](finding.Match)
-				}
-				ms.spans = append(ms.spans, contentMaskSpan{
-					start: entry.StartPos,
-					end:   entry.EndPos,
-					// The resolved match, not entry.Match: a span entry with
-					// no per-span match would otherwise render an empty
-					// display, deleting the bytes instead of masking them.
-					display: maskdisplay.Display(finding.Source, ruleID, expected),
-					match:   expected,
-				})
-			case scanners.SurfaceDerived, scanners.SurfaceNone:
-				// Derived metadata (a tool name, an account email, a judge
-				// verdict): the offsets index no rendered text, and the
-				// dashboard shows these findings without masking prose.
-			default:
-				// json_path (offsets index a `.get(...)`-extracted sub-value,
-				// not the outer content) or an unrecognized attribution:
-				// cannot be applied precisely.
-				ms.unappliable++
-			}
-		}
-	}
-	return applyFindingMasks(rows, byMessage)
-}
-
-func maskClickHouseFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, findings []chrepo.RiskFindingUnmaskRow) findingMasks {
+// exactly (offsets that don't fit the content or no longer select the
+// finding's bytes, overlapping spans, spans anchored somewhere other than the
+// content column) has its entire prose replaced by withheldContentPlaceholder
+// rather than served with a known finding unmasked.
+func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, findings []chrepo.RiskFindingUnmaskRow) findingMasks {
 	if len(findings) == 0 {
 		return findingMasks{content: nil, neutralized: 0, withheld: 0}
 	}

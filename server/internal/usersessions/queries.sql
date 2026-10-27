@@ -538,6 +538,7 @@ FROM (
     AND toolset.deleted IS FALSE
     AND project.organization_id = @organization_id::text
     AND toolset.project_id <> @target_project_id::uuid
+    AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
   UNION ALL
 
@@ -1004,12 +1005,15 @@ WHERE binding.user_session_issuer_id = @source_issuer_id
       )
   );
 
--- name: UpdateMCPServersToUserSessionIssuer :execrows
+-- name: UpdateMCPServersToUserSessionIssuer :many
+-- Returns each moved server, with its updated_at before the move, so live hosted ones can be audited as their own update.
 UPDATE mcp_servers AS server
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
-FROM projects AS project
+FROM projects AS project, mcp_servers AS previous
 WHERE server.user_session_issuer_id = @source_issuer_id
+  AND previous.id = server.id
+  AND previous.project_id = server.project_id
   AND project.id = server.project_id
   AND project.organization_id = @organization_id::text
   AND 2 = (
@@ -1022,7 +1026,8 @@ WHERE server.user_session_issuer_id = @source_issuer_id
         (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = @organization_id::text AND issuer_project.deleted IS FALSE)
       )
-  );
+  )
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical, previous.updated_at AS previous_updated_at;
 
 -- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
 -- Every affected project must recompute its denormalized remote-session issuer
@@ -1037,6 +1042,7 @@ WHERE server.user_session_issuer_id IN (@source_issuer_id, @target_issuer_id)
 ORDER BY server.project_id;
 
 -- name: UpdateToolsetsToUserSessionIssuer :execrows
+-- Wrapped toolsets keep their issuer column equal to their canonical server's for pods that still read it.
 UPDATE toolsets AS toolset
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
@@ -1138,6 +1144,7 @@ WHERE issuer.id = @id
     WHERE toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
       AND toolset.project_id = issuer.project_id
+      AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
     UNION ALL
 
@@ -1181,6 +1188,7 @@ SELECT EXISTS (
         WHERE toolset.user_session_issuer_id = issuer.id
           AND toolset.deleted IS FALSE
           AND toolset.project_id = issuer.project_id
+          AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
         UNION ALL
 
@@ -1210,21 +1218,36 @@ WHERE issuer.id = @user_session_issuer_id
 ORDER BY project.name, COALESCE(server.name, server.slug, server.id::text), server.id;
 
 -- name: ListOrganizationUserSessionIssuerToolsets :many
-SELECT toolset.id,
-       toolset.name,
-       project.id AS project_id,
-       project.name AS project_name
-FROM user_session_issuers AS issuer
-JOIN toolsets AS toolset ON toolset.user_session_issuer_id = issuer.id
-JOIN projects AS project ON project.id = toolset.project_id
-WHERE issuer.id = @user_session_issuer_id
-  AND issuer.project_id IS NULL
-  AND issuer.organization_id = @organization_id::text
-  AND issuer.deleted IS FALSE
-  AND toolset.deleted IS FALSE
-  AND project.deleted IS FALSE
-  AND project.organization_id = issuer.organization_id
-ORDER BY project.name, toolset.name, toolset.id;
+-- Toolsets on the issuer: through their canonical wrapper's issuer, or their own column when they have none.
+SELECT listed.id, listed.name, listed.project_id, listed.project_name
+FROM (
+  SELECT toolset.id, toolset.name, project.id AS project_id, project.name AS project_name
+  FROM user_session_issuers AS issuer
+  JOIN mcp_servers AS wrapper ON wrapper.user_session_issuer_id = issuer.id AND wrapper.deleted IS FALSE
+  JOIN toolsets AS toolset ON toolset.id = wrapper.id AND toolset.id = wrapper.toolset_id AND toolset.project_id = wrapper.project_id
+  JOIN projects AS project ON project.id = toolset.project_id
+  WHERE issuer.id = @user_session_issuer_id
+    AND issuer.project_id IS NULL
+    AND issuer.organization_id = @organization_id::text
+    AND issuer.deleted IS FALSE
+    AND toolset.deleted IS FALSE
+    AND project.deleted IS FALSE
+    AND project.organization_id = issuer.organization_id
+  UNION ALL
+  SELECT toolset.id, toolset.name, project.id AS project_id, project.name AS project_name
+  FROM user_session_issuers AS issuer
+  JOIN toolsets AS toolset ON toolset.user_session_issuer_id = issuer.id
+  JOIN projects AS project ON project.id = toolset.project_id
+  WHERE issuer.id = @user_session_issuer_id
+    AND issuer.project_id IS NULL
+    AND issuer.organization_id = @organization_id::text
+    AND issuer.deleted IS FALSE
+    AND toolset.deleted IS FALSE
+    AND project.deleted IS FALSE
+    AND project.organization_id = issuer.organization_id
+    AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
+) AS listed
+ORDER BY listed.project_name, listed.name, listed.id;
 
 -- name: CountOrganizationUserSessionIssuerClients :one
 SELECT COUNT(*)::int
@@ -1273,6 +1296,7 @@ WHERE issuer.id = @id
       AND toolset.deleted IS FALSE
       AND project.deleted IS FALSE
       AND project.organization_id = issuer.organization_id
+      AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
   )
 RETURNING issuer.*
 ), tombstones AS (
@@ -2373,61 +2397,6 @@ WHERE si.id = @id
   AND si.organization_id = @organization_id
 FOR SHARE OF si;
 
--- name: BindAssistantWorkloadClient :one
--- Pin a newly registered client to the current root binding, never infer it
--- from client metadata or accept a subject supplied at the token endpoint.
-UPDATE user_session_clients c
-SET assistant_trigger_workload_binding_id = tb.id, assistant_runtime_id = r.id, updated_at = clock_timestamp()
-FROM trigger_workload_bindings tb
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
-  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
-  AND ab.generation = tb.assistant_binding_generation
-JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
-JOIN assistant_runtimes r ON r.assistant_id = a.id AND r.project_id = a.project_id
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
-WHERE c.id = @client_id AND c.deleted IS FALSE
-  AND c.assistant_trigger_workload_binding_id IS NULL AND c.assistant_runtime_id IS NULL
-  AND r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
-  AND c.organization_id = @organization_id
-  AND (c.project_id = @project_id OR c.project_id IS NULL)
-  AND tb.organization_id = @organization_id AND tb.project_id = @project_id
-  AND ab.original_assistant_id = @assistant_id AND tb.original_trigger_id = @trigger_id
-  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
-  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
-  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text
-RETURNING c.id;
-
--- name: GetAssistantWorkloadClientBinding :one
-SELECT tb.id AS binding_id, r.id AS runtime_id, ab.original_assistant_id AS assistant_id,
-  tb.original_trigger_id AS trigger_id, tb.original_workload_issuer_id AS workload_issuer_id,
-  tb.subject
-FROM user_session_clients c
-JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
-  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
-  AND ab.generation = tb.assistant_binding_generation
-JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
-JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.assistant_id = a.id AND r.project_id = a.project_id
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
-WHERE c.id = @client_id AND c.user_session_issuer_id = @user_session_issuer_id
-  AND c.organization_id = @organization_id AND c.deleted IS FALSE
-  AND (c.project_id = @project_id OR c.project_id IS NULL)
-  AND tb.organization_id = @organization_id AND tb.project_id = @project_id
-  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
-  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
-  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
-  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text;
-
--- name: GetAssistantWorkloadRuntime :one
--- Trusted worker bootstrap resolves tenancy from the persisted incarnation.
-SELECT r.id, r.assistant_id, r.project_id, a.organization_id
-FROM assistant_runtimes r
-JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
-WHERE r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
-  AND a.deleted IS FALSE AND a.status = 'active';
-
 -- name: ListAssistantWorkloadRuntimeRoots :many
 SELECT tb.original_trigger_id AS trigger_id
 FROM trigger_workload_bindings tb
@@ -2440,34 +2409,6 @@ WHERE tb.project_id = @project_id AND tb.organization_id = @organization_id
   AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
   AND t.target_kind = 'assistant' AND t.target_ref = ab.original_assistant_id::text
 ORDER BY tb.original_trigger_id;
-
--- name: RevokeAssistantRuntimeWorkloadClients :many
-UPDATE user_session_clients c
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-FROM assistant_runtimes r
-WHERE c.assistant_runtime_id = @runtime_id AND r.id = c.assistant_runtime_id
-  AND c.organization_id = @organization_id AND r.project_id = @project_id
-  AND (c.project_id = @project_id OR c.project_id IS NULL) AND c.deleted IS FALSE
-RETURNING c.id;
-
--- name: GetAssistantRuntimeForWorkloadSession :one
--- Input comes only from the already authenticated workload context. The caller
--- locks/rechecks the returned runtime in its wake-creation transaction.
-SELECT r.id AS runtime_id, r.assistant_id, c.id AS client_registration_id
-FROM user_sessions s
-JOIN user_session_clients c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = s.user_session_issuer_id
-JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id AND tb.organization_id = c.organization_id AND tb.deleted IS FALSE
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id AND ab.deleted IS FALSE AND ab.generation = tb.assistant_binding_generation
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id AND t.deleted IS FALSE AND t.status = 'active'
-JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.project_id = tb.project_id AND r.assistant_id = ab.assistant_id
-JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
-WHERE s.jti = @jti AND s.subject_urn = @subject_urn
-  AND s.organization_id = @organization_id AND r.project_id = @project_id
-  AND s.deleted IS FALSE AND s.expires_at > clock_timestamp() AND c.deleted IS FALSE
-  AND r.state IN ('starting', 'active')
-  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
-  AND a.deleted IS FALSE AND a.status = 'active' AND a.organization_id = @organization_id
-  AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = a.id::text;
 
 -- name: RecordUpstreamClientSelections :execrows
 -- Records, for one inbound credential, the upstream OAuth client it uses for
@@ -2945,9 +2886,3 @@ LEFT JOIN projects project ON project.id = issuer.project_id
 WHERE issuer.id = @id AND issuer.deleted IS FALSE
   AND ((issuer.project_id = @project_id::uuid AND project.organization_id = @organization_id::text)
     OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text));
-
--- name: ClearAssistantWorkloadClientMarkersForTest :exec
--- Test fixture: simulate ON DELETE SET NULL cleanup of both binding references.
-UPDATE user_session_clients
-SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
-WHERE id = @client_id AND organization_id = @organization_id;

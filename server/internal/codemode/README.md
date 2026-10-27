@@ -98,6 +98,15 @@ limit, and its error says so. After cancellation or the deadline the runner
 discards queued callbacks and the server stops reading, so only calls already
 read are listed.
 
+A failed run still returns what its program printed before the failure, within
+the same 16 KiB bound and with `output_truncated` set when cut. The runner's
+error frame carries that output for Python exceptions, its CPU, memory, result
+and callback limits, and its wall deadline. The server gives the runner a wall
+deadline half a second before its own, so the runner's deadline report arrives
+first. A failure without a runner report, such as cancellation or a lost
+connection, leaves the output empty, as does an error frame from a runner that
+sends no output.
+
 ## Local runtime
 
 Run `mise run zero:code-mode`, then `mise exec -- pitchfork start code-runtime`.
@@ -368,6 +377,13 @@ then contains one `execute` tool. Its description lists the caller's permitted
 member prefixes and the Python helper workflow. Tools chosen on the consent
 screen limit the underlying tools that search, describe and calls can reach, not
 the native execute tool.
+
+A connection approved with "Gateway default" records the default in effect at
+consent and keeps it until it reconnects, as does an explicit choice, so a
+change to the gateway's default reaches only new connections. Clients cache
+`tools/list` and the gateway advertises no `listChanged`, so a call for a tool
+the connection's mode does not serve, such as `execute` after leaving Code
+Mode, is refused with a message to reconnect and refresh the tool list.
 
 The organization gateway has no stored default: its connections choose Code
 Mode on the consent page, the default stays Progressive, and agent gateways

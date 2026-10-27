@@ -21,10 +21,20 @@ export type PromoteRegistryCandidateRequestBody = {
   documentationUrl: string;
   mcpServerId: string;
   organizationId: string;
+  /**
+   * Explicitly accept insufficient, failed, or unavailable health evidence. Source safety checks still apply.
+   */
+  overrideEligibility?: boolean | undefined;
   projectId: string;
+  /**
+   * Public description, at most 100 Unicode code points.
+   */
   publicDescription: string;
   publicMetadataConfirmed: boolean;
   publicName: string;
+  /**
+   * Public title, at most 100 Unicode code points.
+   */
   publicTitle: string;
   publicUrl: string;
   retryKey: string;
@@ -45,6 +55,7 @@ export type PromoteRegistryCandidateRequestBody$Outbound = {
   documentation_url: string;
   mcp_server_id: string;
   organization_id: string;
+  override_eligibility: boolean;
   project_id: string;
   public_description: string;
   public_metadata_confirmed: boolean;
@@ -67,6 +78,7 @@ export const PromoteRegistryCandidateRequestBody$outboundSchema: z.ZodMiniType<
     documentationUrl: z.string(),
     mcpServerId: z.string(),
     organizationId: z.string(),
+    overrideEligibility: z._default(z.boolean(), false),
     projectId: z.string(),
     publicDescription: z.string(),
     publicMetadataConfirmed: z.boolean(),
@@ -84,6 +96,7 @@ export const PromoteRegistryCandidateRequestBody$outboundSchema: z.ZodMiniType<
       documentationUrl: "documentation_url",
       mcpServerId: "mcp_server_id",
       organizationId: "organization_id",
+      overrideEligibility: "override_eligibility",
       projectId: "project_id",
       publicDescription: "public_description",
       publicMetadataConfirmed: "public_metadata_confirmed",

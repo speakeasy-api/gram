@@ -16,7 +16,6 @@ import (
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 )
@@ -64,66 +63,64 @@ type chatMetadataReader interface {
 	CountChats(ctx context.Context, arg chatrepo.CountChatsParams) (int64, error)
 }
 
+// chatRiskProject reads one project's live ClickHouse findings for a listing.
+type chatRiskProject interface {
+	QualifyingChatIDs(ctx context.Context, minCount uint64) ([]uuid.UUID, error)
+	Counts(ctx context.Context, chatIDs []uuid.UUID) (map[uuid.UUID]int64, error)
+}
+
+// chatRiskFindings resolves a project's findings reader once per listing, so
+// unit tests can serve finding counts without ClickHouse.
+type chatRiskFindings interface {
+	ForProject(ctx context.Context, scope chatfindings.Scope) (chatRiskProject, error)
+}
+
+// chatFindingsReader adapts chatfindings.Reader to chatRiskFindings.
+type chatFindingsReader struct {
+	reader *chatfindings.Reader
+}
+
+func (r chatFindingsReader) ForProject(ctx context.Context, scope chatfindings.Scope) (chatRiskProject, error) {
+	project, err := r.reader.ForProject(ctx, scope)
+	if err != nil {
+		return nil, fmt.Errorf("resolve chat findings project: %w", err)
+	}
+	return project, nil
+}
+
 // ChatMetadataService serves list_chats: one project's conversations reduced
 // to when they were active, how long they ran, which app produced them, whether
 // risk analysis found anything, and a masked participant. It never reads
 // chat_messages, so no path through it can return what was said.
 type ChatMetadataService struct {
-	projects      riskProjectResolver
-	chats         chatMetadataReader
-	references    *subjectReferenceCodec
-	budget        OperationBudget
-	now           func() time.Time
-	flags         feature.Provider
-	organizations OrganizationSlugResolver
-	riskFindings  *chatfindings.Reader
+	projects     riskProjectResolver
+	chats        chatMetadataReader
+	references   *subjectReferenceCodec
+	budget       OperationBudget
+	now          func() time.Time
+	riskFindings chatRiskFindings
 }
 
-// NewChatMetadataService composes the listing. A nil database, an invalid
-// budget, or missing key material leaves the service nil, which registers the
-// unavailable stub rather than a tool that always fails.
-func NewChatMetadataService(db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *ChatMetadataService {
+// NewChatMetadataService composes the listing. A nil database or findings
+// reader, an invalid budget, or missing key material leaves the service nil,
+// which registers the unavailable stub rather than a tool that always fails.
+func NewChatMetadataService(db *pgxpool.Pool, findings *chatfindings.Reader, budget OperationBudget, keyMaterial string) *ChatMetadataService {
 	codec, err := newSubjectReferenceCodec(keyMaterial)
-	if db == nil || err != nil || !budget.valid() {
+	if db == nil || findings == nil || err != nil || !budget.valid() {
 		return nil
 	}
 	return &ChatMetadataService{
-		projects:      postgresRiskProjectResolver{queries: platformrepo.New(db)},
-		chats:         chatrepo.New(db),
-		references:    codec,
-		budget:        budget,
-		now:           time.Now,
-		flags:         nil,
-		organizations: nil,
-		riskFindings:  nil,
+		projects:     postgresRiskProjectResolver{queries: platformrepo.New(db)},
+		chats:        chatrepo.New(db),
+		references:   codec,
+		budget:       budget,
+		now:          time.Now,
+		riskFindings: chatFindingsReader{reader: findings},
 	}
-}
-
-// WithRiskFindingsClickHouse enables flagged ClickHouse risk enrichment.
-func (s *ChatMetadataService) WithRiskFindingsClickHouse(findings *chatfindings.Reader, flags feature.Provider, organizations OrganizationSlugResolver) *ChatMetadataService {
-	if s == nil {
-		return nil
-	}
-	s.riskFindings = findings
-	s.flags = flags
-	s.organizations = organizations
-	return s
-}
-
-func (s *ChatMetadataService) riskFindingsClickHouseEnabled(ctx context.Context, principal Principal, project ResolvedProject) bool {
-	if s.riskFindings == nil || s.organizations == nil {
-		return false
-	}
-	orgSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil || orgSlug == "" {
-		return false
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskFindingsClickHouseCutover, principal.OrganizationID, feature.OrgProjectGroups(orgSlug, project.Slug))
-	return err == nil && evaluation == feature.EvaluationEnabled
 }
 
 func (s *ChatMetadataService) valid() bool {
-	return s != nil && s.projects != nil && s.chats != nil && s.references != nil && s.budget.valid() && s.now != nil
+	return s != nil && s.projects != nil && s.chats != nil && s.references != nil && s.budget.valid() && s.now != nil && s.riskFindings != nil
 }
 
 // ListChatsInput narrows one project's chats. Every filter is optional; an
@@ -225,22 +222,18 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 	list.projectID = project.ID
 
 	hasRiskFilter := chatListHasRiskFilter(list.risk)
-	riskFindingsClickHouse := s.riskFindingsClickHouseEnabled(ctx, principal, project)
-	var findingsProject *chatfindings.Project
+	findingsProject, err := s.riskFindings.ForProject(ctx, chatfindings.Scope{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	if err != nil {
+		return zero, fmt.Errorf("prepare project chat findings: %w", err)
+	}
 	var riskChatIDs []uuid.UUID
-	if riskFindingsClickHouse {
-		findingsProject, err = s.riskFindings.ForProject(ctx, chatfindings.Scope{
-			OrganizationID: principal.OrganizationID,
-			ProjectID:      project.ID,
-		})
+	if hasRiskFilter != "" {
+		riskChatIDs, err = findingsProject.QualifyingChatIDs(ctx, 0)
 		if err != nil {
-			return zero, fmt.Errorf("prepare project chat findings: %w", err)
-		}
-		if hasRiskFilter != "" {
-			riskChatIDs, err = findingsProject.QualifyingChatIDs(ctx, 0)
-			if err != nil {
-				return zero, fmt.Errorf("filter project chats by findings: %w", err)
-			}
+			return zero, fmt.Errorf("filter project chats by findings: %w", err)
 		}
 	}
 
@@ -263,15 +256,14 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 	}
 
 	rows, err := s.chats.ListChats(ctx, chatrepo.ListChatsParams{
-		ChatID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ProjectID:              list.projectID,
-		HasRiskFilter:          hasRiskFilter,
-		MinRiskScore:           -1,
-		RiskFindingsClickhouse: riskFindingsClickHouse,
-		RiskChatIds:            riskChatIDs,
-		ExternalUserID:         externalUserID,
-		UserID:                 userID,
-		Pinned:                 "",
+		ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ProjectID:      list.projectID,
+		HasRiskFilter:  hasRiskFilter,
+		MinRiskScore:   -1,
+		RiskChatIds:    riskChatIDs,
+		ExternalUserID: externalUserID,
+		UserID:         userID,
+		Pinned:         "",
 		// The search parameter also matches titles and emails, which would turn
 		// the listing into a content oracle; it is never populated here.
 		Search:            "",
@@ -294,20 +286,6 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		return zero, fmt.Errorf("list project chats: %w", err)
 	}
 
-	if riskFindingsClickHouse {
-		chatIDs := make([]uuid.UUID, len(rows))
-		for i := range rows {
-			chatIDs[i] = rows[i].ID
-		}
-		counts, err := findingsProject.Counts(ctx, chatIDs)
-		if err != nil {
-			return zero, fmt.Errorf("count project chat findings: %w", err)
-		}
-		for i := range rows {
-			rows[i].RiskFindingsCount = conv.SafeInt32(conv.SafeInt(counts[rows[i].ID]))
-		}
-	}
-
 	// Postgres is the system of record for chats, so the read is current
 	// through the moment it ran; the envelope keeps the shape every other
 	// project read carries.
@@ -327,22 +305,21 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		// of a set that shrank has none, so the count is read on its own rather
 		// than guessed from the cursor.
 		total, err := s.chats.CountChats(ctx, chatrepo.CountChatsParams{
-			FromTime:               pgtype.Timestamptz{Time: list.window.start, InfinityModifier: pgtype.Finite, Valid: true},
-			ToTime:                 pgtype.Timestamptz{Time: list.window.end, InfinityModifier: pgtype.Finite, Valid: true},
-			HasRiskFilter:          hasRiskFilter,
-			MinRiskScore:           -1,
-			RiskFindingsClickhouse: riskFindingsClickHouse,
-			RiskChatIds:            riskChatIDs,
-			ProjectID:              list.projectID,
-			ExternalUserID:         externalUserID,
-			UserID:                 userID,
-			Pinned:                 "",
-			Search:                 "",
-			AssistantID:            list.assistantID,
-			SourceKind:             "",
-			ExcludeSourceKind:      "",
-			AccountType:            "",
-			Sources:                nonEmpty(list.source),
+			FromTime:          pgtype.Timestamptz{Time: list.window.start, InfinityModifier: pgtype.Finite, Valid: true},
+			ToTime:            pgtype.Timestamptz{Time: list.window.end, InfinityModifier: pgtype.Finite, Valid: true},
+			HasRiskFilter:     hasRiskFilter,
+			MinRiskScore:      -1,
+			RiskChatIds:       riskChatIDs,
+			ProjectID:         list.projectID,
+			ExternalUserID:    externalUserID,
+			UserID:            userID,
+			Pinned:            "",
+			Search:            "",
+			AssistantID:       list.assistantID,
+			SourceKind:        "",
+			ExcludeSourceKind: "",
+			AccountType:       "",
+			Sources:           nonEmpty(list.source),
 		})
 		if err != nil {
 			return zero, fmt.Errorf("count project chats: %w", err)
@@ -356,6 +333,14 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		rows = rows[:max(remaining, 0)]
 		more = false
 	}
+	chatIDs := make([]uuid.UUID, len(rows))
+	for i := range rows {
+		chatIDs[i] = rows[i].ID
+	}
+	riskCounts, err := findingsProject.Counts(ctx, chatIDs)
+	if err != nil {
+		return zero, fmt.Errorf("count project chat findings: %w", err)
+	}
 	chats := make([]ChatSummary, 0, len(rows))
 	seen := make(map[uuid.UUID]struct{}, len(rows))
 	for _, row := range rows {
@@ -363,7 +348,7 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 			return zero, errChatListDuplicateRow
 		}
 		seen[row.ID] = struct{}{}
-		summary, err := s.chatSummary(principal, list, row)
+		summary, err := s.chatSummary(principal, list, row, riskCounts[row.ID])
 		if err != nil {
 			return zero, err
 		}
@@ -486,7 +471,7 @@ func (s *ChatMetadataService) chatListUserFilter(principal Principal, reference 
 // chatSummary projects one row. The identity is masked and, when it is recorded
 // under a column the listing can filter on, accompanied by a reference a
 // follow-up listing can be narrowed with.
-func (s *ChatMetadataService) chatSummary(principal Principal, list chatList, row chatrepo.ListChatsRow) (ChatSummary, error) {
+func (s *ChatMetadataService) chatSummary(principal Principal, list chatList, row chatrepo.ListChatsRow, riskFindings int64) (ChatSummary, error) {
 	lastMessage := row.CreatedAt.Time
 	if row.LastMessageTimestamp.Valid {
 		lastMessage = row.LastMessageTimestamp.Time
@@ -496,7 +481,7 @@ func (s *ChatMetadataService) chatSummary(principal Principal, list chatList, ro
 		CreatedAt:         row.CreatedAt.Time.UTC().Format(time.RFC3339),
 		LastMessageAt:     lastMessage.UTC().Format(time.RFC3339),
 		MessageCount:      int(row.NumMessages),
-		RiskFindingsCount: int(row.RiskFindingsCount),
+		RiskFindingsCount: int(riskFindings),
 		Source:            findingLabel(conv.FromPGTextOrEmpty[string](row.Source)),
 		Client:            findingLabel(row.OriginatingClient),
 		AccountType:       findingLabel(row.AccountType),

@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
@@ -159,7 +160,8 @@ func TestGatewayConsentPicksToolsPerSource(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, grant.ToolSelection)
 	require.NotNil(t, grant.GatewayPolicy)
-	require.Nil(t, grant.GatewayPolicy.Gateway.DiscoveryMode, "the gateway default still applies")
+	require.NotNil(t, grant.GatewayPolicy.Gateway.DiscoveryMode, "consent records the gateway default")
+	require.Equal(t, metamcp.DiscoveryModeProgressive, *grant.GatewayPolicy.Gateway.DiscoveryMode)
 	// The token exchange persists the policy as JSON; parse it back the same way.
 	raw, err := json.Marshal(grant.GatewayPolicy)
 	require.NoError(t, err)

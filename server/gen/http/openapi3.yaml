@@ -5710,7 +5710,7 @@ paths:
             x-speakeasy-name-override: getRegistryPromotionCandidate
     /admin/registry.promotionCandidates:
         get:
-            description: List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.
+            description: List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.
             operationId: adminListRegistryPromotionCandidates
             parameters:
                 - allowEmptyValue: true
@@ -16734,6 +16734,93 @@ paths:
             x-speakeasy-name-override: blockOnConnection
             x-speakeasy-react-hook:
                 name: BlockAgentOnConnection
+    /rpc/agents.checkPolicyGrants:
+        post:
+            description: 'Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.'
+            operationId: checkAgentPolicyGrants
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CheckAgentPolicyGrantsForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CheckAgentPolicyGrantsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: checkPolicyGrants agents
+            tags:
+                - agents
+            x-speakeasy-name-override: checkPolicyGrants
+            x-speakeasy-react-hook:
+                name: CheckAgentPolicyGrants
     /rpc/agents.create:
         post:
             operationId: createAgent
@@ -26669,7 +26756,7 @@ paths:
             x-speakeasy-name-override: revoke
     /rpc/cliAuth.authorize:
         post:
-            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.
+            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
             operationId: cliAuthAuthorize
             parameters:
                 - allowEmptyValue: true
@@ -80896,118 +80983,6 @@ paths:
             x-speakeasy-name-override: addExternalOAuthServer
             x-speakeasy-react-hook:
                 name: AddExternalOAuthServer
-    /rpc/toolsets.checkMCPSlugAvailability:
-        get:
-            deprecated: true
-            description: |-
-                Check if a MCP slug is taken in any scope (true means taken).
-
-                Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
-            operationId: checkMCPSlugAvailability
-            parameters:
-                - allowEmptyValue: true
-                  description: The slug to check
-                  in: query
-                  name: slug
-                  required: true
-                  schema:
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    maxLength: 40
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                type: boolean
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-            summary: checkMCPSlugAvailability toolsets
-            tags:
-                - toolsets
-            x-speakeasy-name-override: checkMCPSlugAvailability
-            x-speakeasy-react-hook:
-                name: CheckMCPSlugAvailability
     /rpc/toolsets.clone:
         post:
             description: Clone an existing toolset with a new name
@@ -82056,7 +82031,7 @@ paths:
             description: |-
                 Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
 
-                Deprecated: use mcpServers.update instead.
+                Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.
             operationId: setToolsetUserSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -90443,7 +90418,7 @@ paths:
                 name: RegisterWorkloadIssuer
     /rpc/workloadIdentities.updateIssuer:
         post:
-            description: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+            description: Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
             operationId: updateWorkloadIssuer
             parameters:
                 - allowEmptyValue: true
@@ -92789,7 +92764,6 @@ components:
                     description: Legacy authentication in force. Set only when the server has no user session issuer.
                     enum:
                         - external_oauth
-                        - oauth_proxy
                         - gram_private
                 server:
                     $ref: '#/components/schemas/AdminMcpServerHealthServer'
@@ -94099,6 +94073,9 @@ components:
         AdminRegistryPromotionCandidate:
             type: object
             properties:
+                can_override_eligibility:
+                    type: boolean
+                    description: Whether staff may explicitly accept this candidate's health evidence.
                 checked_at:
                     type: string
                     format: date-time
@@ -94178,6 +94155,7 @@ components:
                 - remote_mcp_server_id
                 - source_revision
                 - eligible
+                - can_override_eligibility
                 - reason
                 - status
                 - observed_successes
@@ -95193,6 +95171,21 @@ components:
                 - selector
                 - created_at
                 - updated_at
+        AgentPolicyGrantCheck:
+            type: object
+            properties:
+                allowed:
+                    type: boolean
+                    description: Whether the grant fits within the caller's and the owner's permissions.
+                limited_by:
+                    type: string
+                    description: Whose permissions the grant exceeds; absent when allowed.
+                    enum:
+                        - caller
+                        - owner
+            description: Whether one policy grant could be written, by the same rule agents.create and agents.createPolicyGrant enforce.
+            required:
+                - allowed
         AgentPolicyGrantForm:
             type: object
             properties:
@@ -98583,6 +98576,35 @@ components:
                 - tool_calls
                 - tool_results
                 - risk_only
+        CheckAgentPolicyGrantsForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: The agent the grants would be written to. Omit for an agent the caller would create.
+                    format: uuid
+                owner_user_id:
+                    type: string
+                    description: Owner of the agent the caller would create, as agents.create takes it; defaults to the caller. Not allowed with agent_id, whose owner is its own.
+                policy_grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentPolicyGrantForm'
+                    description: The grants to check, answered in the same order.
+                    minItems: 1
+                    maxItems: 100
+            required:
+                - policy_grants
+        CheckAgentPolicyGrantsResult:
+            type: object
+            properties:
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentPolicyGrantCheck'
+                    description: One answer per requested grant, in request order.
+            required:
+                - results
         CimdClientPreset:
             type: object
             properties:
@@ -105745,11 +105767,51 @@ components:
         GetToolUsageFilterOptionsPayload:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Optional account type filter ('team' or 'personal').
+                agent_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Agent identities to narrow by. Not applied to the agent user options.
+                client_keys:
+                    type: array
+                    items:
+                        type: string
+                    description: MCP client keys to narrow by. Not applied to the client options.
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LogFilter'
+                    description: Arbitrary attribute filter conditions from the af URL param
                 from:
                     type: string
                     description: Start time in ISO 8601 format
                     example: "2025-12-19T10:00:00Z"
                     format: date-time
+                hook_sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Hook plugin sources to narrow by.
+                hosted_toolset_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not applied to the server options.'
+                mcp_server_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: MCP server ids to narrow by. Not applied to the server options.
+                    maxItems: 100
+                meta_mcp_server_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Gateway (meta MCP server) ids to narrow by. Not applied to the server options.
                 option_types:
                     type: array
                     items:
@@ -105762,11 +105824,48 @@ components:
                             - users
                             - clients
                     description: Filter option types to include. Empty means all option types.
+                query:
+                    type: string
+                    description: Free-text attribute search string from the q URL param.
+                shadow_server_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Shadow MCP server names to narrow by. Not applied to the server options.
+                statuses:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage trace outcome
+                        enum:
+                            - error
+                            - success
+                            - blocked
+                            - pending
+                    description: Trace outcomes to narrow by. Empty means all.
+                target_types:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage target type
+                        enum:
+                            - hosted_mcp_server
+                            - tunneled_mcp_server
+                            - meta_mcp_server
+                            - shadow_mcp_server
+                            - local_tool
+                            - skill
+                    description: Target types to include. Empty means all target types.
                 to:
                     type: string
                     description: End time in ISO 8601 format
                     example: "2025-12-19T11:00:00Z"
                     format: date-time
+                user_filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserFilter'
+                    description: Typed user identities to narrow by. Not applied to the email user options.
             description: Payload for target-aware MCP and tool usage filter options
             required:
                 - from
@@ -106272,9 +106371,110 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+        HookDeliveryFailureData:
+            type: object
+            properties:
+                arch:
+                    type: string
+                    description: CPU architecture of the device.
+                    maxLength: 32
+                attempted_at:
+                    type: string
+                    description: RFC3339 time the failed send started, on the device clock.
+                    format: date-time
+                attempts:
+                    type: integer
+                    description: Number of send attempts the client made.
+                    format: int64
+                binary_version:
+                    type: string
+                    description: speakeasy-hooks binary version that made the attempt.
+                    maxLength: 64
+                cause:
+                    type: string
+                    description: Failure class the hook sender observed. http means the control plane answered with a retryable status.
+                    enum:
+                        - dns
+                        - tls
+                        - timeout
+                        - canceled
+                        - connection
+                        - unreadable-response
+                        - unknown
+                        - http
+                delivery_phase:
+                    type: string
+                    description: Whether a failed send was a live hook or a spool-drain replay.
+                    enum:
+                        - live
+                        - drain
+                elapsed_ms:
+                    type: integer
+                    description: Wall time the client spent on the send across its attempts, in milliseconds.
+                    format: int64
+                failed_event_type:
+                    type: string
+                    description: Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
+                    enum:
+                        - session.started
+                        - session.updated
+                        - session.ended
+                        - mcp.inventory
+                        - prompt.submitted
+                        - tool.requested
+                        - tool.completed
+                        - tool.failed
+                        - assistant.responded
+                        - assistant.thought
+                        - usage.reported
+                        - skill.activated
+                        - notification.reported
+                failed_idempotency_key:
+                    type: string
+                    description: Idempotency key of the event that failed, so the report joins to the row its eventual replay produces.
+                    maxLength: 256
+                gating:
+                    type: boolean
+                    description: Whether the send gated an agent action (a verdict was awaited) rather than observing one.
+                harness:
+                    type: string
+                    description: Coding agent harness the hook ran under.
+                    maxLength: 64
+                harness_variant:
+                    type: string
+                    description: Harness variant, when the harness distinguishes one.
+                    maxLength: 64
+                harness_version:
+                    type: string
+                    description: Harness version, when known.
+                    maxLength: 64
+                os:
+                    type: string
+                    description: Operating system of the device.
+                    maxLength: 32
+                session_id:
+                    type: string
+                    description: Session id of the event that failed.
+                    maxLength: 256
+                spool_depth:
+                    type: integer
+                    description: Events waiting in the device's offline spool when the report was written.
+                    format: int64
+                status_code:
+                    type: integer
+                    description: HTTP status of the final attempt, 0 when no response arrived.
+                    format: int64
+            description: Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
+            required:
+                - failed_event_type
+                - delivery_phase
+                - cause
+                - attempted_at
         HookIngestData:
             type: object
             properties:
+                delivery_failure:
+                    $ref: '#/components/schemas/HookDeliveryFailureData'
                 mcp:
                     $ref: '#/components/schemas/HookMCPData'
                 mcp_attribution:
@@ -106332,6 +106532,7 @@ components:
                         - usage.reported
                         - skill.activated
                         - notification.reported
+                        - client.delivery_failed
             description: Canonical Speakeasy feature event.
             required:
                 - type
@@ -115166,17 +115367,23 @@ components:
                     format: uuid
                 organization_id:
                     type: string
+                override_eligibility:
+                    type: boolean
+                    description: Explicitly accept insufficient, failed, or unavailable health evidence. Source safety checks still apply.
+                    default: false
                 project_id:
                     type: string
                     format: uuid
                 public_description:
                     type: string
+                    description: Public description, at most 100 Unicode code points.
                 public_metadata_confirmed:
                     type: boolean
                 public_name:
                     type: string
                 public_title:
                     type: string
+                    description: Public title, at most 100 Unicode code points.
                 public_url:
                     type: string
                 retry_key:
@@ -116049,6 +116256,9 @@ components:
         RegisterWorkloadIssuerForm:
             type: object
             properties:
+                allow_assertion_reuse:
+                    type: boolean
+                    description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
                 allow_wildcard_admission:
                     type: boolean
                     description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
@@ -116396,6 +116606,9 @@ components:
                     enum:
                         - subject
                         - self
+                display_name:
+                    type: string
+                    description: Administrator-chosen name for the client. Null when unset, in which case the client is shown by its client_id.
                 federated_callback_url:
                     type: string
                     description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
@@ -126277,7 +126490,7 @@ components:
                     format: date-time
                 user_session_issuer_id:
                     type: string
-                    description: The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.
+                    description: The id of the user_session_issuer wired to this toolset's hosted MCP server. Set via mcpServers.update; null when no USI is linked.
                 user_session_issuer_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -128148,6 +128361,9 @@ components:
         UpdateMcpServerForm:
             type: object
             properties:
+                clear_user_session_issuer:
+                    type: boolean
+                    description: Detach the current user session issuer, so the server no longer requires user sessions. Must not be true when user_session_issuer_id is set.
                 environment_id:
                     type: string
                     description: The ID of the environment to associate with the server
@@ -128197,7 +128413,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: 'Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.'
+            description: 'Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value, and set clear_user_session_issuer to detach the issuer; the slug is recomputed server-side from the resulting name.'
             required:
                 - id
                 - visibility
@@ -128548,9 +128764,17 @@ components:
                     description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
                     pattern: ^[!-~]+$
                     maxLength: 512
+                client_id:
+                    type: string
+                    description: Correct the client_id registered with the issuer. Refused for Client ID Metadata Document (CIMD) clients and clients managed by an identity provider connection. A changed value revokes every remote session obtained through the client, so each user must reconnect. Omit to leave unchanged.
+                    minLength: 1
                 client_secret:
                     type: string
                     description: Rotate the client secret. Speakeasy re-encrypts before persisting.
+                display_name:
+                    type: string
+                    description: Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
+                    maxLength: 200
                 id:
                     type: string
                     description: The remote_session_client id.
@@ -129225,7 +129449,7 @@ components:
             type: object
             properties:
                 custom_domain_id:
-                    description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
+                    description: 'Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
                     type: string
                     x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
                 default_environment_slug:
@@ -129237,11 +129461,11 @@ components:
                     type: string
                     description: The new description of the toolset
                 mcp_enabled:
-                    description: 'Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP'
+                    description: 'Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled for MCP'
                     type: boolean
                     x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_is_public:
-                    description: 'Deprecated: use mcpServers.update. Whether the toolset is public in MCP'
+                    description: 'Deprecated: rejected; use mcpServers.update. Whether the toolset is public in MCP'
                     type: boolean
                     x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_slug:
@@ -129290,7 +129514,7 @@ components:
             type: object
             properties:
                 custom_domain_id:
-                    description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
+                    description: 'Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
                     type: string
                     x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
                 default_environment_slug:
@@ -129302,15 +129526,15 @@ components:
                     type: string
                     description: The new description of the toolset
                 mcp_enabled:
-                    description: 'Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP'
+                    description: 'Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled for MCP'
                     type: boolean
                     x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_is_public:
-                    description: 'Deprecated: use mcpServers.update. Whether the toolset is public in MCP'
+                    description: 'Deprecated: rejected; use mcpServers.update. Whether the toolset is public in MCP'
                     type: boolean
                     x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_slug:
-                    description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset'
+                    description: 'Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset'
                     maxLength: 40
                     pattern: ^[a-z0-9_-]{1,128}$
                     type: string
@@ -129319,7 +129543,7 @@ components:
                     type: string
                     description: The new name of the toolset
                 network_access_mode:
-                    description: 'Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only'
+                    description: 'Deprecated: rejected; use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only'
                     enum:
                         - public_only
                         - dual
@@ -129482,6 +129706,9 @@ components:
         UpdateWorkloadIssuerForm:
             type: object
             properties:
+                allow_assertion_reuse:
+                    type: boolean
+                    description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Omit to preserve the current setting; false disables this opt-in. Tokens without replay identifiers retain existing exact-token compatibility.
                 description:
                     type: string
                     description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.
@@ -131283,6 +131510,9 @@ components:
         WorkloadIssuer:
             type: object
             properties:
+                allow_assertion_reuse:
+                    type: boolean
+                    description: Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
                 allow_wildcard_admission:
                     type: boolean
                     description: Whether subjects under this issuer may be admitted by a wildcard rule.
@@ -131329,6 +131559,7 @@ components:
                 - jwks_uri
                 - description
                 - allow_wildcard_admission
+                - allow_assertion_reuse
                 - tags
                 - created_at
                 - updated_at

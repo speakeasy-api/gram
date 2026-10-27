@@ -27,27 +27,23 @@ import (
 // tools/call enforcement does. A tool with no recorded metadata resolves to
 // the empty disposition, leaving a pure tool-name match.
 //
-// Every response this interceptor sees is labelled caller-varying, whether or
-// not filtering removed anything: a catalog that survived intact is still the
-// product of this caller's grants, and is the widest such catalog. Labelling
-// on attachment rather than on effect also keeps the label from becoming an
-// oracle for whether the caller was filtered, and keeps one logical listing
-// from taking a split stance across pages.
+// The filter leaves cache labelling to the proxy, which marks every tools/list
+// result relayed through a chain with this filter attached caller-varying with
+// a zero ttl, whether or not anything was filtered.
 //
-// "Sees" is the limit of that guarantee. A 2xx tools/list whose result does
-// not decode as [mcp.ListToolsResult] never reaches the typed interceptor loop
-// at all, and unless the proxy's StrictToolSelection is set (only when a
-// consent selection is attached) such a response relays unfiltered and
-// unlabelled. That gap predates this interceptor and skips the filtering too,
-// so closing it belongs with the strict-handling gate.
+// A 2xx tools/list whose result does not decode as [mcp.ListToolsResult]
+// never reaches the typed interceptor loop at all, and unless the proxy's
+// StrictToolSelection is set (only when a consent selection is attached) such
+// a response relays unfiltered. That gap predates this interceptor, so
+// closing it belongs with the strict-handling gate.
 //
-// An unfiltered rewrite touches only the two caching members, leaving the
-// tools member's original wire bytes; a filtering rewrite also replaces the
-// tools member, re-marshaling kept tools through [mcp.Tool] and dropping
-// per-tool members the SDK does not model. Every other member of the upstream
-// result relays untouched, including members future protocol revisions add.
-// Should such a member ever carry tool identities the way tools does, this
-// filter will not scrub it.
+// A catalog that survives intact is not rewritten, so its tools member keeps
+// its original values. A filtering rewrite replaces the tools member,
+// re-marshaling kept tools through [mcp.Tool] and dropping per-tool members
+// the SDK does not model. Every other member of the upstream result relays
+// untouched, including members future protocol revisions add. Should such a
+// member ever carry tool identities the way tools does, this filter will not
+// scrub it.
 type ToolsListMCPConnectFilterInterceptor struct {
 	authz       *authz.Engine
 	resolver    ToolDispositionResolver
@@ -86,22 +82,19 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 // keeping only authorized entries.
 //
 // A response carrying a JSON-RPC error rather than a result is left alone: it
-// holds no inventory to filter or label. Every other response is labelled
-// caller-varying before returning, including the ones with no filtering left
-// to do, since an upstream that offered no tools and a nil engine both still
-// describe what this caller may reach. An empty filtered result is a valid
-// outcome, meaning the caller can reach nothing in this server, and commits
-// via [proxy.ToolsListResponse.SetPrivateTools] as an empty array.
+// holds no inventory to filter. An empty filtered result is a valid outcome,
+// meaning the caller can reach nothing in this server, and commits via
+// [proxy.ToolsListResponse.SetTools] as an empty array.
 func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx context.Context, list *proxy.ToolsListResponse) error {
 	if list == nil || list.Result == nil {
 		return nil
 	}
 	if i.authz == nil {
-		return markCallerVarying(list)
+		return nil
 	}
 	tools := list.Result.Tools
 	if len(tools) == 0 {
-		return markCallerVarying(list)
+		return nil
 	}
 
 	// Fail closed: if disposition resolution fails, surface the error rather
@@ -134,26 +127,15 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		}
 	}
 
-	// Replacing an unchanged catalog is not free: SetPrivateTools re-marshals
-	// every kept tool through mcp.Tool, dropping per-tool members the SDK does
-	// not model. Label instead and let the original bytes relay.
+	// Replacing an unchanged catalog is not free: SetTools re-marshals every
+	// kept tool through mcp.Tool, dropping per-tool members the SDK does not
+	// model. Leave it alone so the tools member keeps its original values.
 	if len(allowed) == len(tools) {
-		return markCallerVarying(list)
+		return nil
 	}
 
-	if err := list.SetPrivateTools(allowed); err != nil {
+	if err := list.SetTools(allowed); err != nil {
 		return fmt.Errorf("commit filtered tools/list result: %w", err)
-	}
-	return nil
-}
-
-// markCallerVarying labels a tools/list result this filter left intact.
-// Failing here is an internal invariant break, not a caller error: relaying
-// the result unlabelled would defeat the point of the filter, so the error
-// propagates.
-func markCallerVarying(list *proxy.ToolsListResponse) error {
-	if err := list.MarkCallerVarying(); err != nil {
-		return fmt.Errorf("label unfiltered tools/list result caller-varying: %w", err)
 	}
 	return nil
 }

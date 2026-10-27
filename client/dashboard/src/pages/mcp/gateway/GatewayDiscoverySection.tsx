@@ -166,7 +166,7 @@ export function GatewayDiscoverySection({
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
             {supportsEditing
-              ? "Applies to connections using the gateway default. Clients may need to reconnect to refresh their tool list."
+              ? "Applies to new connections that use the gateway default. Existing connections keep their mode until they reconnect."
               : "Refresh the page before changing this gateway’s unsupported discovery mode."}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>

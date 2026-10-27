@@ -44,11 +44,6 @@ const (
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
 
-	// FlagRiskFindingsClickHouseCutover means the organization is on the ClickHouse findings path:
-	// batch judges run in the analysis handlers, and finding reads and webhooks use ClickHouse.
-	// Server-side org-group targeting fails closed to the Postgres path.
-	FlagRiskFindingsClickHouseCutover Flag = "risk-findings-clickhouse-cutover"
-
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
 	// at invocation time and fails closed when absent, disabled, or indeterminate.

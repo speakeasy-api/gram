@@ -247,7 +247,8 @@ type Service interface {
 	// the upstream.
 	MigrateExternalMcpServers(context.Context, *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error)
 	// List observed remote MCP candidates and durable promotion delivery status.
-	// No source URLs or credentials are returned.
+	// Active excludes endpoints already in the catalogue; candidate includes all
+	// unpublished active entries. No source URLs or credentials are returned.
 	ListRegistryPromotionCandidates(context.Context, *ListRegistryPromotionCandidatesPayload) (res *AdminRegistryPromotionCandidates, err error)
 	// Refresh health evidence for one exact remote MCP deployment before staff
 	// review.
@@ -1439,24 +1440,26 @@ type AdminRegistryPromotionCandidate struct {
 	SuggestedMetadata *AdminRegistryPromotionSuggestions
 	SourceRevision    string
 	Eligible          bool
-	Reason            string
-	Status            string
-	ObservedSuccesses int64
-	ObservedFailures  int64
-	ObservedDays      int
-	CheckedAt         *string
-	RegistryEntryID   *string
-	DocsStatus        *string
-	DocsURL           *string
-	DocsRevision      string
-	DocsRetryAllowed  bool
-	DocsAttempts      int
-	DocsLastAttemptAt *string
-	DocsNextAttemptAt *string
-	DocsQueuedAt      *string
-	PromotedAt        *string
-	PublicTitle       *string
-	DeliveryError     *string
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility bool
+	Reason                 string
+	Status                 string
+	ObservedSuccesses      int64
+	ObservedFailures       int64
+	ObservedDays           int
+	CheckedAt              *string
+	RegistryEntryID        *string
+	DocsStatus             *string
+	DocsURL                *string
+	DocsRevision           string
+	DocsRetryAllowed       bool
+	DocsAttempts           int
+	DocsLastAttemptAt      *string
+	DocsNextAttemptAt      *string
+	DocsQueuedAt           *string
+	PromotedAt             *string
+	PublicTitle            *string
+	DeliveryError          *string
 }
 
 // AdminRegistryPromotionCandidates is the result type of the admin service
@@ -2962,14 +2965,16 @@ type ProductFeatures struct {
 // PromoteRegistryCandidatePayload is the payload type of the admin service
 // promoteRegistryCandidate method.
 type PromoteRegistryCandidatePayload struct {
-	AdminSessionToken       *string
-	OrganizationID          string
-	ProjectID               string
-	McpServerID             string
-	SourceRevision          string
-	CurationRevision        string
-	PublicName              string
-	PublicTitle             string
+	AdminSessionToken *string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
+	SourceRevision    string
+	CurationRevision  string
+	PublicName        string
+	// Public title, at most 100 Unicode code points.
+	PublicTitle string
+	// Public description, at most 100 Unicode code points.
 	PublicDescription       string
 	PublicURL               string
 	DocumentationURL        string
@@ -2977,6 +2982,9 @@ type PromoteRegistryCandidatePayload struct {
 	AuthMode                string
 	RetryKey                string
 	PublicMetadataConfirmed bool
+	// Explicitly accept insufficient, failed, or unavailable health evidence.
+	// Source safety checks still apply.
+	OverrideEligibility bool
 }
 
 // RearmTrialPayload is the payload type of the admin service rearmTrial method.

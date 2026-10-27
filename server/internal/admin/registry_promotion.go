@@ -27,7 +27,7 @@ func promotionCandidateView(c catalogpromotion.Candidate) *gen.AdminRegistryProm
 		suggestions = &gen.AdminRegistryPromotionSuggestions{PublicName: conv.PtrEmpty(v.Name), PublicTitle: conv.PtrEmpty(v.Title), PublicDescription: conv.PtrEmpty(v.Description), PublicURL: conv.PtrEmpty(v.URL), DocumentationURL: conv.PtrEmpty(v.DocumentationURL), DocsSlug: conv.PtrEmpty(v.DocsSlug), AuthMode: conv.PtrEmpty(v.AuthMode)}
 	}
 	return &gen.AdminRegistryPromotionCandidate{CreatedAt: c.CreatedAt, CurationRevision: c.CurationRevision, SuggestedMetadata: suggestions, ID: c.ID, OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, McpServerID: c.MCPServerID, RemoteMcpServerID: c.RemoteMCPServerID,
-		SourceName: conv.PtrEmpty(c.SourceName), SourceRevision: c.SourceRevision, Eligible: c.Eligible, Reason: c.Reason, Status: c.Status, ObservedSuccesses: c.ObservedSuccesses, ObservedFailures: c.ObservedFailures, ObservedDays: c.ObservedDays,
+		SourceName: conv.PtrEmpty(c.SourceName), SourceRevision: c.SourceRevision, Eligible: c.Eligible, CanOverrideEligibility: c.CanOverrideEligibility(), Reason: c.Reason, Status: c.Status, ObservedSuccesses: c.ObservedSuccesses, ObservedFailures: c.ObservedFailures, ObservedDays: c.ObservedDays,
 		CheckedAt: conv.PtrEmpty(c.CheckedAt), RegistryEntryID: conv.PtrEmpty(c.RegistryEntryID), DocsStatus: conv.PtrEmpty(c.DocsStatus), DocsURL: conv.PtrEmpty(c.DocsURL), DeliveryError: conv.PtrEmpty(c.DeliveryError), DocsRevision: c.DocsRevision, DocsRetryAllowed: c.DocsRetryAllowed, DocsAttempts: c.DocsAttempts,
 		DocsLastAttemptAt: conv.PtrEmpty(c.DocsLastAttemptAt), DocsNextAttemptAt: conv.PtrEmpty(c.DocsNextAttemptAt), DocsQueuedAt: conv.PtrEmpty(c.DocsQueuedAt), PromotedAt: conv.PtrEmpty(c.PromotedAt), PublicTitle: conv.PtrEmpty(c.PublicTitle)}
 }
@@ -55,6 +55,10 @@ func promotionError(err error) error {
 		return oops.C(oops.CodeNotFound)
 	case errors.Is(err, catalogpromotion.ErrStale), errors.Is(err, catalogpromotion.ErrConflict):
 		return oops.E(oops.CodeConflict, nil, "promotion source changed or was already promoted; refresh before retrying")
+	case errors.Is(err, catalogpromotion.ErrPublicTitleTooLong):
+		return oops.E(oops.CodeBadRequest, nil, "%s", catalogpromotion.ErrPublicTitleTooLong.Error())
+	case errors.Is(err, catalogpromotion.ErrPublicDescriptionTooLong):
+		return oops.E(oops.CodeBadRequest, nil, "%s", catalogpromotion.ErrPublicDescriptionTooLong.Error())
 	case errors.Is(err, catalogpromotion.ErrInvalid):
 		return oops.E(oops.CodeBadRequest, nil, "invalid catalogue promotion input; check target identifiers, pagination cursor, retry key, and reviewed public metadata")
 	case errors.Is(err, catalogpromotion.ErrIneligible):
@@ -114,7 +118,7 @@ func (s *Service) PromoteRegistryCandidate(ctx context.Context, p *gen.PromoteRe
 	})
 	result, err := s.catalogPromotion.PromoteTx(ctx, tx, catalogpromotion.Request{Target: target, SourceRevision: p.SourceRevision, CurationRevision: p.CurationRevision,
 		Public:                  catalogpromotion.PublicMetadata{Name: p.PublicName, Title: p.PublicTitle, Description: p.PublicDescription, URL: p.PublicURL, DocumentationURL: p.DocumentationURL, DocsSlug: p.DocsSlug, AuthMode: p.AuthMode},
-		PublicMetadataConfirmed: p.PublicMetadataConfirmed, RetryKey: p.RetryKey}, actor.String())
+		PublicMetadataConfirmed: p.PublicMetadataConfirmed, OverrideEligibility: p.OverrideEligibility, RetryKey: p.RetryKey}, actor.String())
 	if err != nil {
 		return nil, promotionError(err)
 	}

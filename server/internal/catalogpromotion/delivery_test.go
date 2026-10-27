@@ -3,11 +3,14 @@ package catalogpromotion
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
@@ -414,4 +417,42 @@ func TestDispatchUnwiredDeliveryDoesNotClaimOrParkJobs(t *testing.T) {
 	require.Equal(t, "pending", candidate.DocsStatus)
 	require.Zero(t, candidate.DocsAttempts)
 	require.Empty(t, candidate.DeliveryError)
+}
+
+type discoveryQueryCapture struct {
+	contexts []context.Context
+	budgets  []time.Duration
+}
+
+func (c *discoveryQueryCapture) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.HasPrefix(data.SQL, "-- name: DiscoveryTargets :many") {
+		deadline, ok := ctx.Deadline()
+		budget := time.Duration(0)
+		if ok {
+			budget = time.Until(deadline)
+		}
+		c.contexts = append(c.contexts, ctx)
+		c.budgets = append(c.budgets, budget)
+	}
+	return ctx
+}
+func (*discoveryQueryCapture) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+func TestDiscoveryRemainingQueryHasIndependentBoundedContext(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	capture := &discoveryQueryCapture{}
+	config := f.db.Config()
+	config.ConnConfig.Tracer = capture
+	pool, err := pgxpool.NewWithConfig(t.Context(), config)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	f.service.db = pool
+	batch, err := f.service.DiscoverBatch(t.Context())
+	require.NoError(t, err)
+	require.False(t, batch.More)
+	require.Len(t, capture.contexts, 2)
+	require.Positive(t, capture.budgets[1])
+	require.LessOrEqual(t, capture.budgets[1], DiscoveryRecordTimeout)
+	require.ErrorIs(t, capture.contexts[1].Err(), context.Canceled)
 }

@@ -864,8 +864,8 @@ func TestGenerateCodexMarketplaceDescriptions(t *testing.T) {
 		require.LessOrEqual(t, len([]rune(manifest.Interface.ShortDescription)), 240, name)
 		require.Equal(t, manifest.Description, manifest.Interface.LongDescription, name)
 	}
-	// Native, shared Agent Plugins overlay, and observability manifests.
-	require.GreaterOrEqual(t, count, 3)
+	// Only the native and observability packages carry Codex manifests.
+	require.Equal(t, 2, count)
 }
 
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
@@ -1623,7 +1623,7 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 func TestHooksBootstrapFallsBackToPython3WithoutUnzip(t *testing.T) {
 	t.Parallel()
 	path := hooksBootstrapToolPath(t)
-	require.NoError(t, os.Symlink(workingPython3(t), filepath.Join(path, "python3")))
+	require.NoError(t, os.Symlink(workingTool(t, "python3", "-c", "import sys, zipfile; print(sys.executable)"), filepath.Join(path, "python3")))
 	target := currentHooksBootstrapTarget(t)
 	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"))
 	sum := sha256.Sum256(archive)
@@ -1664,7 +1664,7 @@ func TestHooksBootstrapNamesUnpackToolsWhenNoneInstalled(t *testing.T) {
 		"PATH=" + hooksBootstrapToolPath(t),
 	}, "")
 	require.Error(t, err)
-	require.Contains(t, string(out), "unzip, busybox, python3 or bsdtar is required for first install")
+	require.Contains(t, string(out), "unzip, busybox, python3, bsdtar or node is required for first install")
 	require.NotContains(t, string(out), "ran")
 }
 
@@ -1701,25 +1701,52 @@ func TestHooksBootstrapFallsBackToBsdtarWithoutPython3(t *testing.T) {
 	require.Equal(t, "args:--first\n", string(out))
 }
 
-// workingPython3 returns the interpreter behind the first python3 on PATH that
-// can import zipfile. Version-manager shims such as mise's resolve their
-// version from the environment, which the bootstrap's restricted PATH lacks,
-// so the test links the real executable rather than the shim.
-func workingPython3(t *testing.T) string {
+// TestHooksBootstrapFallsBackToNodeWithoutBsdtar checks that a machine whose
+// only unpack tool is node, like a slim image built to run a Node app, still
+// installs the binary by reading a real deflated ZIP with node's zlib. The
+// payload on stdin checks that node leaves it for the hooks binary.
+func TestHooksBootstrapFallsBackToNodeWithoutBsdtar(t *testing.T) {
+	t.Parallel()
+	path := hooksBootstrapToolPath(t)
+	require.NoError(t, os.Symlink(workingTool(t, "node", "-p", "process.execPath"), filepath.Join(path, "node")))
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nIFS= read -r input\nprintf 'args:%s stdin:%s\\n' \"$*\" \"$input\"\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + path,
+	}, "payload\n", "--first")
+	require.NoError(t, err, string(out))
+	require.Equal(t, "args:--first stdin:payload\n", string(out))
+}
+
+// workingTool returns the real executable behind the first name on PATH whose
+// probe arguments make it print its own path. Version-manager shims such as
+// mise's resolve their version from the environment, which the bootstrap's
+// restricted PATH lacks, so tests link the real executable rather than the shim.
+func workingTool(t *testing.T, name string, probe ...string) string {
 	t.Helper()
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
-		out, err := exec.Command(filepath.Join(dir, "python3"), "-c", "import sys, zipfile; print(sys.executable)").Output()
+		out, err := exec.Command(filepath.Join(dir, name), probe...).Output()
 		if exe := strings.TrimSpace(string(out)); err == nil && exe != "" {
 			return exe
 		}
 	}
-	require.FailNow(t, "no working python3 on PATH; it is needed to test the zipfile fallback")
+	require.FailNow(t, "no working "+name+" on PATH; it is needed to test the unpack fallbacks")
 	return ""
 }
 
 // hooksBootstrapToolPath returns a PATH directory holding only the tools the
 // bootstrap needs to download and verify an archive, so a test can simulate a
-// machine without unzip or busybox.
+// machine without any unpack tool.
 func hooksBootstrapToolPath(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

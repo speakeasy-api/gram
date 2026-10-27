@@ -123,7 +123,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|get-my-connections|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
-		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
+		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -199,7 +199,7 @@ func UsageCommands() []string {
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
@@ -600,6 +600,10 @@ func ParseEndpoint(
 		agentsListPolicyGrantsFlags            = flag.NewFlagSet("list-policy-grants", flag.ExitOnError)
 		agentsListPolicyGrantsAgentIDFlag      = agentsListPolicyGrantsFlags.String("agent-id", "REQUIRED", "")
 		agentsListPolicyGrantsSessionTokenFlag = agentsListPolicyGrantsFlags.String("session-token", "", "")
+
+		agentsCheckPolicyGrantsFlags            = flag.NewFlagSet("check-policy-grants", flag.ExitOnError)
+		agentsCheckPolicyGrantsBodyFlag         = agentsCheckPolicyGrantsFlags.String("body", "REQUIRED", "")
+		agentsCheckPolicyGrantsSessionTokenFlag = agentsCheckPolicyGrantsFlags.String("session-token", "", "")
 
 		agentsCreatePolicyGrantFlags            = flag.NewFlagSet("create-policy-grant", flag.ExitOnError)
 		agentsCreatePolicyGrantBodyFlag         = agentsCreatePolicyGrantFlags.String("body", "REQUIRED", "")
@@ -4258,12 +4262,6 @@ func ParseEndpoint(
 		toolsetsListToolSchemaStaticValuesApikeyTokenFlag      = toolsetsListToolSchemaStaticValuesFlags.String("apikey-token", "", "")
 		toolsetsListToolSchemaStaticValuesProjectSlugInputFlag = toolsetsListToolSchemaStaticValuesFlags.String("project-slug-input", "", "")
 
-		toolsetsCheckMCPSlugAvailabilityFlags                = flag.NewFlagSet("check-mcp-slug-availability", flag.ExitOnError)
-		toolsetsCheckMCPSlugAvailabilitySlugFlag             = toolsetsCheckMCPSlugAvailabilityFlags.String("slug", "REQUIRED", "")
-		toolsetsCheckMCPSlugAvailabilitySessionTokenFlag     = toolsetsCheckMCPSlugAvailabilityFlags.String("session-token", "", "")
-		toolsetsCheckMCPSlugAvailabilityApikeyTokenFlag      = toolsetsCheckMCPSlugAvailabilityFlags.String("apikey-token", "", "")
-		toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag = toolsetsCheckMCPSlugAvailabilityFlags.String("project-slug-input", "", "")
-
 		toolsetsCloneToolsetFlags                = flag.NewFlagSet("clone-toolset", flag.ExitOnError)
 		toolsetsCloneToolsetSlugFlag             = toolsetsCloneToolsetFlags.String("slug", "REQUIRED", "")
 		toolsetsCloneToolsetSessionTokenFlag     = toolsetsCloneToolsetFlags.String("session-token", "", "")
@@ -5380,6 +5378,7 @@ func ParseEndpoint(
 	agentsRenameFlags.Usage = agentsRenameUsage
 	agentsListDelegableGrantsFlags.Usage = agentsListDelegableGrantsUsage
 	agentsListPolicyGrantsFlags.Usage = agentsListPolicyGrantsUsage
+	agentsCheckPolicyGrantsFlags.Usage = agentsCheckPolicyGrantsUsage
 	agentsCreatePolicyGrantFlags.Usage = agentsCreatePolicyGrantUsage
 	agentsUpdatePolicyGrantFlags.Usage = agentsUpdatePolicyGrantUsage
 	agentsDeletePolicyGrantFlags.Usage = agentsDeletePolicyGrantUsage
@@ -6182,7 +6181,6 @@ func ParseEndpoint(
 	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
 	toolsetsListToolFiltersFlags.Usage = toolsetsListToolFiltersUsage
 	toolsetsListToolSchemaStaticValuesFlags.Usage = toolsetsListToolSchemaStaticValuesUsage
-	toolsetsCheckMCPSlugAvailabilityFlags.Usage = toolsetsCheckMCPSlugAvailabilityUsage
 	toolsetsCloneToolsetFlags.Usage = toolsetsCloneToolsetUsage
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
 	toolsetsUpdateExternalOAuthServerFlags.Usage = toolsetsUpdateExternalOAuthServerUsage
@@ -6877,6 +6875,9 @@ func ParseEndpoint(
 
 			case "list-policy-grants":
 				epf = agentsListPolicyGrantsFlags
+
+			case "check-policy-grants":
+				epf = agentsCheckPolicyGrantsFlags
 
 			case "create-policy-grant":
 				epf = agentsCreatePolicyGrantFlags
@@ -9132,9 +9133,6 @@ func ParseEndpoint(
 			case "list-tool-schema-static-values":
 				epf = toolsetsListToolSchemaStaticValuesFlags
 
-			case "check-mcp-slug-availability":
-				epf = toolsetsCheckMCPSlugAvailabilityFlags
-
 			case "clone-toolset":
 				epf = toolsetsCloneToolsetFlags
 
@@ -10078,6 +10076,9 @@ func ParseEndpoint(
 			case "list-policy-grants":
 				endpoint = c.ListPolicyGrants()
 				data, err = agentsc.BuildListPolicyGrantsPayload(*agentsListPolicyGrantsAgentIDFlag, *agentsListPolicyGrantsSessionTokenFlag)
+			case "check-policy-grants":
+				endpoint = c.CheckPolicyGrants()
+				data, err = agentsc.BuildCheckPolicyGrantsPayload(*agentsCheckPolicyGrantsBodyFlag, *agentsCheckPolicyGrantsSessionTokenFlag)
 			case "create-policy-grant":
 				endpoint = c.CreatePolicyGrant()
 				data, err = agentsc.BuildCreatePolicyGrantPayload(*agentsCreatePolicyGrantBodyFlag, *agentsCreatePolicyGrantSessionTokenFlag)
@@ -12359,9 +12360,6 @@ func ParseEndpoint(
 			case "list-tool-schema-static-values":
 				endpoint = c.ListToolSchemaStaticValues()
 				data, err = toolsetsc.BuildListToolSchemaStaticValuesPayload(*toolsetsListToolSchemaStaticValuesSlugFlag, *toolsetsListToolSchemaStaticValuesSessionTokenFlag, *toolsetsListToolSchemaStaticValuesApikeyTokenFlag, *toolsetsListToolSchemaStaticValuesProjectSlugInputFlag)
-			case "check-mcp-slug-availability":
-				endpoint = c.CheckMCPSlugAvailability()
-				data, err = toolsetsc.BuildCheckMCPSlugAvailabilityPayload(*toolsetsCheckMCPSlugAvailabilitySlugFlag, *toolsetsCheckMCPSlugAvailabilitySessionTokenFlag, *toolsetsCheckMCPSlugAvailabilityApikeyTokenFlag, *toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag)
 			case "clone-toolset":
 				endpoint = c.CloneToolset()
 				data, err = toolsetsc.BuildCloneToolsetPayload(*toolsetsCloneToolsetSlugFlag, *toolsetsCloneToolsetSessionTokenFlag, *toolsetsCloneToolsetProjectSlugInputFlag, *toolsetsCloneToolsetApikeyTokenFlag)
@@ -14553,6 +14551,7 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    rename: Rename implements rename.`)
 	fmt.Fprintln(os.Stderr, `    list-delegable-grants: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.`)
 	fmt.Fprintln(os.Stderr, `    list-policy-grants: ListPolicyGrants implements listPolicyGrants.`)
+	fmt.Fprintln(os.Stderr, `    check-policy-grants: Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.`)
 	fmt.Fprintln(os.Stderr, `    create-policy-grant: CreatePolicyGrant implements createPolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    update-policy-grant: UpdatePolicyGrant implements updatePolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    delete-policy-grant: DeletePolicyGrant implements deletePolicyGrant.`)
@@ -14749,6 +14748,26 @@ func agentsListPolicyGrantsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-policy-grants --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func agentsCheckPolicyGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents check-policy-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents check-policy-grants --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func agentsCreatePolicyGrantUsage() {
@@ -17073,7 +17092,7 @@ func cliAuthUsage() {
 	fmt.Fprintln(os.Stderr, `Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] cli-auth COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    authorize: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
+	fmt.Fprintln(os.Stderr, `    authorize: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
 	fmt.Fprintln(os.Stderr, `    redeem: Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -17088,7 +17107,7 @@ func cliAuthAuthorizeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
+	fmt.Fprintln(os.Stderr, `Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -19489,7 +19508,7 @@ func hooksIngestUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks ingest --body '{\n      \"data\": {\n         \"mcp\": {\n            \"command\": \"abc123\",\n            \"result_json\": \"abc123\",\n            \"server_identity\": \"abc123\",\n            \"server_name\": \"abc123\",\n            \"url\": \"abc123\"\n         },\n         \"mcp_attribution\": [\n            {\n               \"mcp_server\": \"abc123\",\n               \"mcp_tool\": \"abc123\",\n               \"request_id\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory\": [\n            {\n               \"command\": \"abc123\",\n               \"result_json\": \"abc123\",\n               \"server_identity\": \"abc123\",\n               \"server_name\": \"abc123\",\n               \"url\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory_collected\": false,\n         \"message\": {\n            \"duration_ms\": 1,\n            \"role\": \"abc123\",\n            \"text\": \"abc123\"\n         },\n         \"notification\": {\n            \"message\": \"abc123\",\n            \"title\": \"abc123\",\n            \"type\": \"abc123\"\n         },\n         \"prompt\": {\n            \"text\": \"abc123\"\n         },\n         \"prompt_attachments\": [\n            {\n               \"attachment_kind\": \"abc123\",\n               \"content\": \"abc123\",\n               \"display_path\": \"abc123\",\n               \"entry_uuid\": \"abc123\",\n               \"file_path\": \"abc123\",\n               \"num_lines\": 1,\n               \"prompt_id\": \"abc123\",\n               \"prompt_sha256\": \"abc123\",\n               \"start_line\": 1,\n               \"timestamp\": \"abc123\",\n               \"total_lines\": 1\n            }\n         ],\n         \"skill\": {\n            \"name\": \"aaa\",\n            \"raw_sha256\": \"aaa\",\n            \"source\": \"aaa\",\n            \"source_level\": \"aaa\",\n            \"source_path\": \"aaa\"\n         },\n         \"tool_call\": {\n            \"duration_ms\": 1,\n            \"error\": \"abc123\",\n            \"id\": \"abc123\",\n            \"input\": \"abc123\",\n            \"is_interrupt\": false,\n            \"name\": \"abc123\",\n            \"output\": \"abc123\",\n            \"permission_type\": \"abc123\",\n            \"status\": \"abc123\"\n         },\n         \"usage\": {\n            \"cache_read_tokens\": 1,\n            \"cache_write_tokens\": 1,\n            \"cost\": 1,\n            \"input_tokens\": 1,\n            \"loop_count\": 1,\n            \"output_tokens\": 1,\n            \"status\": \"abc123\"\n         }\n      },\n      \"event\": {\n         \"occurred_at\": \"1970-01-01T00:00:01Z\",\n         \"type\": \"session.updated\"\n      },\n      \"raw\": \"abc123\",\n      \"schema_version\": \"abc123\",\n      \"session\": {\n         \"cwd\": \"abc123\",\n         \"id\": \"abc123\",\n         \"model\": \"abc123\",\n         \"turn_id\": \"abc123\"\n      },\n      \"source\": {\n         \"adapter\": \"abc123\",\n         \"adapter_version\": \"abc123\",\n         \"hostname\": \"abc123\",\n         \"raw_event_name\": \"abc123\",\n         \"user_email\": \"abc123\"\n      }\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"abc123\" --replayed false")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks ingest --body '{\n      \"data\": {\n         \"delivery_failure\": {\n            \"arch\": \"aaa\",\n            \"attempted_at\": \"1970-01-01T00:00:01Z\",\n            \"attempts\": 1,\n            \"binary_version\": \"aaa\",\n            \"cause\": \"tls\",\n            \"delivery_phase\": \"drain\",\n            \"elapsed_ms\": 1,\n            \"failed_event_type\": \"session.updated\",\n            \"failed_idempotency_key\": \"aaa\",\n            \"gating\": false,\n            \"harness\": \"aaa\",\n            \"harness_variant\": \"aaa\",\n            \"harness_version\": \"aaa\",\n            \"os\": \"aaa\",\n            \"session_id\": \"aaa\",\n            \"spool_depth\": 1,\n            \"status_code\": 1\n         },\n         \"mcp\": {\n            \"command\": \"abc123\",\n            \"result_json\": \"abc123\",\n            \"server_identity\": \"abc123\",\n            \"server_name\": \"abc123\",\n            \"url\": \"abc123\"\n         },\n         \"mcp_attribution\": [\n            {\n               \"mcp_server\": \"abc123\",\n               \"mcp_tool\": \"abc123\",\n               \"request_id\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory\": [\n            {\n               \"command\": \"abc123\",\n               \"result_json\": \"abc123\",\n               \"server_identity\": \"abc123\",\n               \"server_name\": \"abc123\",\n               \"url\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory_collected\": false,\n         \"message\": {\n            \"duration_ms\": 1,\n            \"role\": \"abc123\",\n            \"text\": \"abc123\"\n         },\n         \"notification\": {\n            \"message\": \"abc123\",\n            \"title\": \"abc123\",\n            \"type\": \"abc123\"\n         },\n         \"prompt\": {\n            \"text\": \"abc123\"\n         },\n         \"prompt_attachments\": [\n            {\n               \"attachment_kind\": \"abc123\",\n               \"content\": \"abc123\",\n               \"display_path\": \"abc123\",\n               \"entry_uuid\": \"abc123\",\n               \"file_path\": \"abc123\",\n               \"num_lines\": 1,\n               \"prompt_id\": \"abc123\",\n               \"prompt_sha256\": \"abc123\",\n               \"start_line\": 1,\n               \"timestamp\": \"abc123\",\n               \"total_lines\": 1\n            }\n         ],\n         \"skill\": {\n            \"name\": \"aaa\",\n            \"raw_sha256\": \"aaa\",\n            \"source\": \"aaa\",\n            \"source_level\": \"aaa\",\n            \"source_path\": \"aaa\"\n         },\n         \"tool_call\": {\n            \"duration_ms\": 1,\n            \"error\": \"abc123\",\n            \"id\": \"abc123\",\n            \"input\": \"abc123\",\n            \"is_interrupt\": false,\n            \"name\": \"abc123\",\n            \"output\": \"abc123\",\n            \"permission_type\": \"abc123\",\n            \"status\": \"abc123\"\n         },\n         \"usage\": {\n            \"cache_read_tokens\": 1,\n            \"cache_write_tokens\": 1,\n            \"cost\": 1,\n            \"input_tokens\": 1,\n            \"loop_count\": 1,\n            \"output_tokens\": 1,\n            \"status\": \"abc123\"\n         }\n      },\n      \"event\": {\n         \"occurred_at\": \"1970-01-01T00:00:01Z\",\n         \"type\": \"session.updated\"\n      },\n      \"raw\": \"abc123\",\n      \"schema_version\": \"abc123\",\n      \"session\": {\n         \"cwd\": \"abc123\",\n         \"id\": \"abc123\",\n         \"model\": \"abc123\",\n         \"turn_id\": \"abc123\"\n      },\n      \"source\": {\n         \"adapter\": \"abc123\",\n         \"adapter_version\": \"abc123\",\n         \"hostname\": \"abc123\",\n         \"raw_event_name\": \"abc123\",\n         \"user_email\": \"abc123\"\n      }\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"abc123\" --replayed false")
 }
 
 func hooksUploadSkillContentUsage() {
@@ -21292,7 +21311,7 @@ func mcpServersUpdateMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"network_access_mode\": \"dual\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"clear_user_session_issuer\": false,\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"network_access_mode\": \"dual\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersListToolFiltersUsage() {
@@ -24874,7 +24893,7 @@ func organizationRemoteSessionClientsUpdateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"aa\",\n      \"client_secret\": \"abc123\",\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsAttachClientKeySetUsage() {
@@ -25174,7 +25193,7 @@ func remoteSessionClientsUpdateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"aa\",\n      \"client_secret\": \"abc123\",\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsAttachUserSessionIssuerUsage() {
@@ -30458,7 +30477,7 @@ func telemetryGetToolUsageFilterOptionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-filter-options --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"option_types\": [\n         \"shadow_servers\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-filter-options --body '{\n      \"account_type\": \"abc123\",\n      \"agent_ids\": [\n         \"abc123\"\n      ],\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"mcp_server_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"option_types\": [\n         \"shadow_servers\"\n      ],\n      \"query\": \"abc123\",\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"statuses\": [\n         \"success\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetMcpServerActivityUsage() {
@@ -30782,16 +30801,13 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
 	fmt.Fprintln(os.Stderr, `    list-tool-filters: List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
 	fmt.Fprintln(os.Stderr, `    list-tool-schema-static-values: List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.`)
-	fmt.Fprintln(os.Stderr, `    check-mcp-slug-availability: Check if a MCP slug is taken in any scope (true means taken).
-	
-	Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.`)
 	fmt.Fprintln(os.Stderr, `    clone-toolset: Clone an existing toolset with a new name`)
 	fmt.Fprintln(os.Stderr, `    add-externaloauth-server: Associate an external OAuth server with a toolset`)
 	fmt.Fprintln(os.Stderr, `    update-externaloauth-server: Change an attached external OAuth server between provider-hosted and Speakeasy-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association`)
 	fmt.Fprintln(os.Stderr, `    removeoauth-server: Remove OAuth server association from a toolset`)
 	fmt.Fprintln(os.Stderr, `    set-user-session-issuer: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
 	
-	Deprecated: use mcpServers.update instead.`)
+	Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.`)
 	fmt.Fprintln(os.Stderr, `    set-tool-variations-group: Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -30985,32 +31001,6 @@ func toolsetsListToolSchemaStaticValuesUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-tool-schema-static-values --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func toolsetsCheckMCPSlugAvailabilityUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] toolsets check-mcp-slug-availability", os.Args[0])
-	fmt.Fprint(os.Stderr, " -slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Check if a MCP slug is taken in any scope (true means taken).
-	
-	Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets check-mcp-slug-availability --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
 func toolsetsCloneToolsetUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] toolsets clone-toolset", os.Args[0])
@@ -31125,7 +31115,7 @@ func toolsetsSetUserSessionIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, `Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
 	
-	Deprecated: use mcpServers.update instead.`)
+	Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -32158,7 +32148,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-external-mcp-migration-candidates: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.`)
 	fmt.Fprintln(os.Stderr, `    preview-external-mcp-migration: Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.`)
 	fmt.Fprintln(os.Stderr, `    migrate-external-mcp-servers: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
-	fmt.Fprintln(os.Stderr, `    list-registry-promotion-candidates: List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.`)
+	fmt.Fprintln(os.Stderr, `    list-registry-promotion-candidates: List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.`)
 	fmt.Fprintln(os.Stderr, `    get-registry-promotion-candidate: Refresh health evidence for one exact remote MCP deployment before staff review.`)
 	fmt.Fprintln(os.Stderr, `    promote-registry-candidate: Publish an explicitly reviewed public catalogue entry and queue setup documentation. Customer credentials are never copied.`)
 	fmt.Fprintln(os.Stderr, `    curate-registry-promotion-candidate: Reject, archive, or restore one exact unpublished catalogue candidate. Hidden candidates cannot be promoted until restored and refreshed.`)
@@ -33567,7 +33557,7 @@ func adminListRegistryPromotionCandidatesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.`)
+	fmt.Fprintln(os.Stderr, `List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -33617,7 +33607,7 @@ func adminPromoteRegistryCandidateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin promote-registry-candidate --body '{\n      \"auth_mode\": \"oauth\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin promote-registry-candidate --body '{\n      \"auth_mode\": \"oauth\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"override_eligibility\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminCurateRegistryPromotionCandidateUsage() {
@@ -35466,7 +35456,7 @@ func workloadIdentitiesUsage() {
 	fmt.Fprintln(os.Stderr, `    get-custom-flows: Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    list-token-endpoints: List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    register-issuer: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
-	fmt.Fprintln(os.Stderr, `    update-issuer: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
+	fmt.Fprintln(os.Stderr, `    update-issuer: Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 	fmt.Fprintln(os.Stderr, `    withdraw-issuer: Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.`)
 	fmt.Fprintln(os.Stderr, `    admit-subject: Admit a subject one of the trusted issuers asserts, and assign the agent it inherits its policy from. Both happen in one transaction: a subject admitted without an agent is refused at the token endpoint, so that half-configured state is not reachable. Requires workload:write.`)
 	fmt.Fprintln(os.Stderr, `    update-subject: Edit an admitted subject's label, tags, or assigned agent. Omitted fields are left unchanged. The subject, match kind, issuer, and tier are fixed at admission. The agent assignment is shared by every admission of the same subject under the same issuer, at either tier, so reassigning it through one admission reassigns it for both. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
@@ -35586,7 +35576,7 @@ func workloadIdentitiesRegisterIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities register-issuer --body '{\n      \"allow_wildcard_admission\": false,\n      \"description\": \"abc123\",\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities register-issuer --body '{\n      \"allow_assertion_reuse\": false,\n      \"allow_wildcard_admission\": false,\n      \"description\": \"abc123\",\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesUpdateIssuerUsage() {
@@ -35600,7 +35590,7 @@ func workloadIdentitiesUpdateIssuerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
+	fmt.Fprintln(os.Stderr, `Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -35610,7 +35600,7 @@ func workloadIdentitiesUpdateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities update-issuer --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities update-issuer --body '{\n      \"allow_assertion_reuse\": false,\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesWithdrawIssuerUsage() {

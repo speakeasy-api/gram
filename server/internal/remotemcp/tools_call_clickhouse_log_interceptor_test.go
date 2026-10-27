@@ -38,7 +38,7 @@ func TestToolsCallClickHouseLogInterceptor_Name(t *testing.T) {
 
 func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 	t.Parallel()
-	for _, caller := range []string{"legacy", "managed agent", "anonymous", "other organization"} {
+	for _, caller := range []string{"legacy", "managed agent", "workload", "anonymous", "other organization"} {
 		t.Run(caller, func(t *testing.T) { t.Parallel(); testToolsCallClickHouseEmission(t, caller) })
 	}
 }
@@ -80,6 +80,14 @@ func testToolsCallClickHouseEmission(t *testing.T, caller string) {
 			urn.NewPrincipal(urn.PrincipalTypeAgent, agentID),
 			contextvalues.PrincipalCredential{AuthorizerUserID: "approver-id"})
 		ctx = contextvalues.WithPrincipalCredentialOwner(ctx, "owner-id")
+	}
+	workloadIssuerID := uuid.New()
+	const workloadSubject = "system:serviceaccount:billing:invoice-worker"
+	if caller == "workload" {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		ctx = contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewWorkloadPrincipal(workloadIssuerID, workloadSubject))
+		ctx = contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID))
 	}
 
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{
@@ -191,6 +199,29 @@ func testToolsCallClickHouseEmission(t *testing.T, caller string) {
 				"SELECT max(agent_id) FROM trace_summaries WHERE gram_project_id = ?", projectID.String()).Scan(&summarizedAgentID)
 			return err == nil && summarizedAgentID == agentID
 		}, 5*time.Second, 50*time.Millisecond, "trusted agent attribution did not reach trace_summaries")
+	}
+	if caller == "workload" {
+		var actorType, actorID, issuerID, subject string
+		err := chConn.QueryRow(t.Context(), `SELECT
+    toString(attributes.gram.authorization.actor.type),
+    toString(attributes.gram.authorization.actor.id),
+    toString(attributes.gram.workload_issuer.id),
+    toString(attributes.gram.workload.subject)
+   FROM telemetry_logs WHERE gram_project_id = ? AND gram_urn = ? LIMIT 1`,
+			projectID.String(), expectedURN).Scan(&actorType, &actorID, &issuerID, &subject)
+		require.NoError(t, err)
+		require.Equal(t, "agent", actorType)
+		require.Equal(t, agentID, actorID)
+		require.Equal(t, workloadIssuerID.String(), issuerID)
+		require.Equal(t, workloadSubject, subject)
+		// The agent's tool usage reads trace_summaries, which counts the call
+		// for the agent with no change to its query.
+		require.Eventually(t, func() bool {
+			var summarizedAgentID string
+			err := chConn.QueryRow(t.Context(),
+				"SELECT max(agent_id) FROM trace_summaries WHERE gram_project_id = ?", projectID.String()).Scan(&summarizedAgentID)
+			return err == nil && summarizedAgentID == agentID
+		}, 5*time.Second, 50*time.Millisecond, "workload attribution did not reach trace_summaries")
 	}
 
 }

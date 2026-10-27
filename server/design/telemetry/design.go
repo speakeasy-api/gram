@@ -2761,6 +2761,24 @@ var GetToolUsageFilterOptionsPayload = Type("GetToolUsageFilterOptionsPayload", 
 		Example("2025-12-19T11:00:00Z")
 	})
 	Attribute("option_types", ArrayOf(ToolUsageFilterOptionType), "Filter option types to include. Empty means all option types.")
+	// The filters the listing applies. Each option group is counted under every
+	// filter except its own, so picking an agent narrows the users and servers
+	// on offer while the other agents stay selectable alongside it.
+	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
+	Attribute("hosted_toolset_slugs", ArrayOf(String), "Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not applied to the server options.")
+	Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP server ids to narrow by. Not applied to the server options.", func() {
+		MaxLength(100)
+	})
+	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to narrow by. Not applied to the server options.")
+	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to narrow by. Not applied to the server options.")
+	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to narrow by. Not applied to the email user options.")
+	Attribute("agent_ids", ArrayOf(String), "Agent identities to narrow by. Not applied to the agent user options.")
+	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to narrow by.")
+	Attribute("client_keys", ArrayOf(String), "MCP client keys to narrow by. Not applied to the client options.")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
+	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to narrow by. Empty means all.")
+	Attribute("query", String, "Free-text attribute search string from the q URL param.")
+	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 
 	Required("from", "to")
 })

@@ -2484,7 +2484,7 @@ func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody stri
 	{
 		err = json.Unmarshal([]byte(adminPromoteRegistryCandidateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_mode\": \"oauth\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_mode\": \"oauth\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"override_eligibility\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
@@ -2517,6 +2517,13 @@ func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody stri
 		AuthMode:                body.AuthMode,
 		RetryKey:                body.RetryKey,
 		PublicMetadataConfirmed: body.PublicMetadataConfirmed,
+		OverrideEligibility:     body.OverrideEligibility,
+	}
+	{
+		var zero bool
+		if v.OverrideEligibility == zero {
+			v.OverrideEligibility = false
+		}
 	}
 	v.AdminSessionToken = adminSessionToken
 
