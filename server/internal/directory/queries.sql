@@ -331,6 +331,15 @@ WHERE du.organization_id = @organization_id
 ORDER BY candidate.id
 LIMIT 2;
 
+-- name: CountActiveDirectoryUsers :one
+-- Active synced directory users in an organization. ID-JAG exchanges resolve
+-- users only through these rows, so zero means every exchange is refused.
+SELECT count(*)
+FROM directory_users
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE;
+
 -- name: DirectoryAttributeValueExists :one
 SELECT EXISTS(
   SELECT 1

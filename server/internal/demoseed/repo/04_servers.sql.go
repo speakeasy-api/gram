@@ -429,9 +429,9 @@ type ServersInsertEMAIdentityProviderClientParams struct {
 	RemoteSessionIssuerID uuid.UUID
 }
 
-// The workforce sign-in is left as it is: pointing it at this fictional
-// provider would send interactive sign-in for every server on it to a
-// provider that doesn't exist. The Services pages still show these vendors.
+// The workforce sign-in client is left unset: pointing interactive sign-in at
+// this fictional provider would send every server on it to a provider that
+// doesn't exist. The Services pages still show these vendors.
 func (q *Queries) ServersInsertEMAIdentityProviderClient(ctx context.Context, arg ServersInsertEMAIdentityProviderClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertEMAIdentityProviderClient, arg.ID, arg.OrgID, arg.RemoteSessionIssuerID)
 	return err
@@ -1961,6 +1961,32 @@ type ServersStampLinearRemoteSessionIssuerParams struct {
 func (q *Queries) ServersStampLinearRemoteSessionIssuer(ctx context.Context, arg ServersStampLinearRemoteSessionIssuerParams) error {
 	_, err := q.db.Exec(ctx, serversStampLinearRemoteSessionIssuer, arg.RemoteSessionIssuerID, arg.McpServerID, arg.ProjectID)
 	return err
+}
+
+const serversTrustEMAIdentityProviderForInboundEMA = `-- name: ServersTrustEMAIdentityProviderForInboundEMA :execrows
+UPDATE user_session_issuers
+SET trusted_remote_session_issuer_id = $1::uuid
+WHERE id = $2::uuid
+  AND organization_id = $3::text
+  AND project_id IS NULL
+  AND deleted IS FALSE
+`
+
+type ServersTrustEMAIdentityProviderForInboundEMAParams struct {
+	EmaProvider     uuid.UUID
+	WorkforceIssuer uuid.UUID
+	OrgID           string
+}
+
+// Inbound EMA: the workforce issuer accepts ID-JAGs from Acme Identity. Only
+// the issuer is linked, never the sign-in client, so interactive sign-in stays
+// on the organization's own login.
+func (q *Queries) ServersTrustEMAIdentityProviderForInboundEMA(ctx context.Context, arg ServersTrustEMAIdentityProviderForInboundEMAParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversTrustEMAIdentityProviderForInboundEMA, arg.EmaProvider, arg.WorkforceIssuer, arg.OrgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const serversUpsertLinearProtectedResource = `-- name: ServersUpsertLinearProtectedResource :exec

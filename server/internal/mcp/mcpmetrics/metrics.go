@@ -18,6 +18,10 @@ import (
 // or by request validation.
 const InstrumentMCPRequestRejected = "mcp.request.rejected"
 
+// InstrumentOAuthIDJAGExchange is the OTel instrument name for the counter of
+// ID-JAG token exchanges by outcome and rejection reason.
+const InstrumentOAuthIDJAGExchange = "oauth.id_jag.exchange"
+
 // RequestRejectionReason is the closed set of reasons [Metrics] records on
 // mcp.request.rejected under gram.mcp.rejection_reason. It stays coarse so
 // the counter's per-server URL dimension does not multiply into many series.
@@ -158,6 +162,10 @@ type Metrics struct {
 	// shared authorization server refused, by issuer, reason, and stage.
 	oauthResourceRejectedCounter metric.Int64Counter
 
+	// oauthIDJAGExchangeCounter counts ID-JAG token exchanges by issuer,
+	// outcome, and rejection reason.
+	oauthIDJAGExchangeCounter metric.Int64Counter
+
 	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
 	// admission gate rejected with 429 before they reached the tunnel gateway.
 	tunnelPublicRejectedCounter metric.Int64Counter
@@ -268,6 +276,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth resource rejected counter", attr.SlogError(err))
 	}
 
+	oauthIDJAGExchangeCounter, err := meter.Int64Counter(
+		InstrumentOAuthIDJAGExchange,
+		metric.WithDescription("ID-JAG token exchanges at Speakeasy's authorization server, by user session issuer, outcome, and rejection reason"),
+		metric.WithUnit("{exchange}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentOAuthIDJAGExchange), attr.SlogError(err))
+	}
+
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
 		metric.WithDescription("MCP requests rejected before dispatch by the Session OAuth authentication gate or by request validation, by rejection reason, OAuth failure reason, server URL, serving surface, and public/private network surface"),
@@ -332,6 +349,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
 		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
+		oauthIDJAGExchangeCounter:            oauthIDJAGExchangeCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
 }
@@ -672,6 +690,34 @@ func (m *Metrics) RecordOAuthResourceRejected(ctx context.Context, issuerID, rea
 		attr.OAuthFailureReason(reason),
 		attr.OAuthFlowStage(string(stage)),
 	))
+}
+
+// IDJAGExchangeOutcome is the closed set of ID-JAG token exchange outcomes.
+type IDJAGExchangeOutcome string
+
+const (
+	// IDJAGExchangeAccepted: the exchange minted a session.
+	IDJAGExchangeAccepted IDJAGExchangeOutcome = "accepted"
+	// IDJAGExchangeRejected: the exchange was refused with invalid_request or invalid_grant.
+	IDJAGExchangeRejected IDJAGExchangeOutcome = "rejected"
+)
+
+// RecordIDJAGExchange records one ID-JAG token exchange. reason is empty for
+// an accepted exchange and otherwise one of a closed set of rejection
+// reasons. The client ID is deliberately not a dimension: it may be a client
+// metadata document URL chosen by the caller.
+func (m *Metrics) RecordIDJAGExchange(ctx context.Context, issuerID string, outcome IDJAGExchangeOutcome, reason string) {
+	if m == nil || m.oauthIDJAGExchangeCounter == nil {
+		return
+	}
+	kv := []attribute.KeyValue{
+		attr.UserSessionIssuerID(issuerID),
+		attr.OAuthIDJAGOutcome(string(outcome)),
+	}
+	if reason != "" {
+		kv = append(kv, attr.OAuthIDJAGRejectionReason(reason))
+	}
+	m.oauthIDJAGExchangeCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
 
 // RecordOAuthRefreshTokenReplayServed records a successful response from the

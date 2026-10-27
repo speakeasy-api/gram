@@ -585,10 +585,15 @@ open their effective assignments; the dropdown always offers compact member sear
     - Open Acme Wiki's page. It shows Acme Identity's issuer URL
       `https://login.acme-identity.example` to copy, and the saved order with
       **Use default**.
-    - **MCP → Acme Tracker → Settings** has no Enterprise Managed
-      Authorization section: `acme-workforce` does not trust Acme Identity,
-      on purpose, so interactive sign-in through it (GitHub, the organization
-      gateway) keeps working.
+    - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
+      Its sign-in client is unset on purpose, so interactive sign-in through
+      it (GitHub, the organization gateway) keeps working. **MCP → Acme
+      Tracker → Settings** shows the Enterprise Managed Authorization section
+      with Acme Identity as the provider.
+    - The Platform MCP `get_inbound_ema_trust` tool reports `acme-workforce`
+      trusting Acme Identity (`https://login.acme-identity.example`, key set
+      `/oauth2/v1/keys`) with the workforce shared authorization server as the
+      audience.
     - Both servers are seeded disabled. Connect through the organization
       gateway: its consent page must not list Acme Tracker or Acme Wiki.
 

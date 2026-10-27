@@ -128,6 +128,23 @@ func (q *Queries) CloseDirectoryUserGroupMembershipsForGroup(ctx context.Context
 	return result.RowsAffected(), nil
 }
 
+const countActiveDirectoryUsers = `-- name: CountActiveDirectoryUsers :one
+SELECT count(*)
+FROM directory_users
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+`
+
+// Active synced directory users in an organization. ID-JAG exchanges resolve
+// users only through these rows, so zero means every exchange is refused.
+func (q *Queries) CountActiveDirectoryUsers(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveDirectoryUsers, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countDirectoryUserGroupMembershipsByWorkOSIDs = `-- name: CountDirectoryUserGroupMembershipsByWorkOSIDs :one
 SELECT COUNT(*)
 FROM directory_user_group_memberships

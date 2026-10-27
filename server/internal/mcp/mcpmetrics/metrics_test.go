@@ -466,3 +466,48 @@ func collectMetric(t *testing.T, reader *sdkmetric.ManualReader, name string) me
 	t.Fatalf("metric %q not found", name)
 	return metricdata.Metrics{}
 }
+
+func TestRecordIDJAGExchange_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	issuerID := uuid.NewString()
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeRejected, "subject_not_provisioned")
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeAccepted, "")
+
+	got := collectMetric(t, reader, InstrumentOAuthIDJAGExchange)
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "exchange instrument must be an int64 counter")
+	require.Len(t, sum.DataPoints, 2)
+	for _, point := range sum.DataPoints {
+		require.Equal(t, int64(1), point.Value)
+		issuer, _ := point.Attributes.Value(attr.UserSessionIssuerIDKey)
+		require.Equal(t, issuerID, issuer.AsString())
+		_, hasClient := point.Attributes.Value(attr.OAuthClientIDKey)
+		require.False(t, hasClient, "client ids are unbounded and never a dimension")
+		outcome, _ := point.Attributes.Value(attr.OAuthIDJAGOutcomeKey)
+		reason, hasReason := point.Attributes.Value(attr.OAuthIDJAGRejectionReasonKey)
+		switch IDJAGExchangeOutcome(outcome.AsString()) {
+		case IDJAGExchangeRejected:
+			require.True(t, hasReason)
+			require.Equal(t, "subject_not_provisioned", reason.AsString())
+		case IDJAGExchangeAccepted:
+			require.False(t, hasReason, "accepted exchanges carry no rejection reason")
+		default:
+			t.Fatalf("unexpected outcome %q", outcome.AsString())
+		}
+	}
+}
+
+func TestRecordIDJAGExchange_NilSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeRejected, "assertion_expired")
+
+	empty := &Metrics{}
+	empty.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeAccepted, "")
+}

@@ -1917,6 +1917,8 @@ func newStartCommand() *cli.Command {
 				DeploymentRedeploy:        deploymentsService,
 				AssistantIdentity:         assistantsSvc,
 				WorkloadAssertionReuse:    workloadPolicySvc,
+				InboundEMAUserIssuers:     userSessionsService,
+				InboundEMARemoteIssuers:   remoteSessionsService,
 				Workspaces:                platformMCPWorkspaces{auth: authService, organizations: organizationsService},
 				SignalAuthoring:           sigintSvc,
 				Logger:                    logger,

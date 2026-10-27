@@ -152,12 +152,14 @@ SELECT count(*) FROM user_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- EMA: two ready bindings, no cached credentials, and one saved provider
--- order. The workforce sign-in must not trust the fictional provider.
--- name: PostflightIDWorkforceTrustsEMAProvider :one
+-- order. The workforce issuer accepts ID-JAGs from the fictional provider
+-- without federating interactive sign-in through it.
+-- name: PostflightIDWorkforceInboundEMATrust :one
 SELECT count(*) FROM user_session_issuers
 WHERE id = @workforce_issuer::uuid
   AND organization_id = @org_id::text
-  AND trusted_remote_session_issuer_id = @ema_provider::uuid;
+  AND trusted_remote_session_issuer_id = @ema_provider::uuid
+  AND trusted_remote_session_client_id IS NULL;
 
 -- name: PostflightIDReadyEMABindings :one
 SELECT count(*) FROM remote_session_ema_bindings

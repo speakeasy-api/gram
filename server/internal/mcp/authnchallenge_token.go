@@ -558,6 +558,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_request")
+		s.recordIDJAGRejection(ctx, logger, endpoint, idJAGRejectionInvalidRequest, nil)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -567,6 +568,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	}
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch")
+		s.recordIDJAGRejection(ctx, logger, endpoint, idJAGRejectionResourceMismatch, nil)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 	// The assertion is addressed to the issuer the authorization server
@@ -584,7 +586,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		ClientID:            clientRow.ClientID,
 	})
 	if err != nil {
-		logger.InfoContext(ctx, "oauth ID-JAG token request rejected", attr.SlogError(err))
+		s.recordIDJAGRejection(ctx, logger, endpoint, idJAGRejectionReason(err), err)
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
 	}
@@ -610,6 +612,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "subject_not_authorized")
+			s.recordIDJAGRejection(ctx, logger, endpoint, idJAGRejectionSubjectNotAuthorized, nil)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
 		}
 		return oops.E(oops.CodeUnexpected, err, "authorize ID-JAG subject").LogError(ctx, logger)
@@ -649,6 +652,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		return err
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "")
+	s.recordIDJAGAccepted(ctx, endpoint)
 	return nil
 }
 

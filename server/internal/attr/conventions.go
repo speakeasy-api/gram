@@ -545,6 +545,12 @@ const (
 	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
 
+	// OAuthIDJAGOutcomeKey is whether an ID-JAG token exchange was accepted or rejected.
+	OAuthIDJAGOutcomeKey = attribute.Key("gram.oauth.id_jag.outcome")
+
+	// OAuthIDJAGRejectionReasonKey is the bounded reason an ID-JAG token exchange was rejected.
+	OAuthIDJAGRejectionReasonKey = attribute.Key("gram.oauth.id_jag.rejection_reason")
+
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
 
@@ -2373,6 +2379,19 @@ func SlogOAuthErrorDescription(v string) slog.Attr {
 func OAuthFailureReason(v string) attribute.KeyValue { return OAuthFailureReasonKey.String(v) }
 func SlogOAuthFailureReason(v string) slog.Attr {
 	return slog.String(string(OAuthFailureReasonKey), v)
+}
+
+func OAuthIDJAGOutcome(v string) attribute.KeyValue { return OAuthIDJAGOutcomeKey.String(v) }
+func SlogOAuthIDJAGOutcome(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGOutcomeKey), v)
+}
+
+func OAuthIDJAGRejectionReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIDJAGRejectionReasonKey.String(string(v))
+}
+
+func SlogOAuthIDJAGRejectionReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIDJAGRejectionReasonKey), string(v))
 }
 
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }

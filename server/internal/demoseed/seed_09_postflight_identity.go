@@ -162,15 +162,15 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected the workforce user session issuer in shared mode, found %d"},
 		{byProj(s.q.PostflightIDUserSessionClients), 8, "demo seed postflight: expected 8 registered agents, found %d"},
 		// EMA: two ready bindings, no cached credentials, and one saved
-		// provider order. The workforce sign-in must not trust the fictional
-		// provider.
+		// provider order. The workforce issuer accepts ID-JAGs from the
+		// fictional provider, but interactive sign-in does not go through it.
 		{func(ctx context.Context) (int64, error) {
-			return s.q.PostflightIDWorkforceTrustsEMAProvider(ctx, repo.PostflightIDWorkforceTrustsEMAProviderParams{
+			return s.q.PostflightIDWorkforceInboundEMATrust(ctx, repo.PostflightIDWorkforceInboundEMATrustParams{
 				WorkforceIssuer: s.det("issuer-workforce"),
 				OrgID:           org,
 				EmaProvider:     s.det("ema-idp"),
 			})
-		}, 0, "demo seed postflight: the workforce issuer must not trust Acme Identity, found %d"},
+		}, 1, "demo seed postflight: expected the workforce issuer to trust Acme Identity for inbound EMA only, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDReadyEMABindings(ctx, repo.PostflightIDReadyEMABindingsParams{OrgID: org, ProjectID: proj})
 		}, 2, "demo seed postflight: expected 2 ready EMA bindings, found %d"},
