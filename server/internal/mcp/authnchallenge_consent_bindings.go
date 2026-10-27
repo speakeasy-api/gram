@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
@@ -73,10 +72,7 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "load consent organization")
 	}
-	ctx = contextvalues.WithConsentBindingAuthorization(ctx, human.userID, endpoint.OrganizationID, endpoint.ProjectID, selected.AgentID, endpoint.UserSessionIssuerID)
-	// Preserve authoritative feature-flag groups for the shared binding authorizer.
-	auth, _ := contextvalues.GetAuthContext(ctx)
-	auth.OrganizationSlug = organization.Slug
+	ctx = consentBindingContext(ctx, endpoint, human.userID, selected.AgentID, organization.Slug)
 	principal, issuer := selected.AgentID.String(), endpoint.UserSessionIssuerID.String()
 	switch action {
 	case "agent_connections":

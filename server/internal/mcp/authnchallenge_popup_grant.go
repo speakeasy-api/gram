@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // The IDP callback rotates challenge IDs. Resolve the committed grant's actual
@@ -35,6 +36,17 @@ func (s *Service) recordConnectionPopupGrant(ctx context.Context, grant remotese
 		if parent.BindingRefreshAttemptID != "" && s.bindingRefresh != nil {
 			if err := s.bindingRefresh.Record(ctx, parent.BindingRefreshAttemptID, grant); err != nil {
 				return fmt.Errorf("record attachment popup grant: %w", err)
+			}
+		}
+		if parent.BindingRefreshAttemptID == "" && parent.ReauthenticateClientID == uuid.Nil && parent.WorkloadReconnect == nil && parent.Subject.Kind == urn.SessionSubjectKindUser && parent.AuthorizerUserID == parent.Subject.ID && parent.AuthorizerImpersonated != nil && !*parent.AuthorizerImpersonated {
+			completed := parent
+			completed.PendingDelegation = &grant
+			swapped, err := s.authnChallengeCache.CompareAndSwap(ctx, parent, completed)
+			if err != nil {
+				return fmt.Errorf("offer connection delegation: %w", err)
+			}
+			if !swapped {
+				continue
 			}
 		}
 		if parent.ReauthenticateClientID == grant.RemoteSessionClientID {

@@ -20,6 +20,79 @@
 (function () {
   "use strict";
 
+  var delegationForm = document.querySelector("[data-delegation-form]");
+  if (delegationForm) {
+    var grantButton = delegationForm.querySelector("[data-grant-agents]");
+    var skipButton = delegationForm.querySelector("[data-skip-delegation]");
+    var delegationError = delegationForm.querySelector(
+      "[data-delegation-error]",
+    );
+    var delegationBusy = false;
+    function updateDelegationSelection() {
+      grantButton.disabled =
+        delegationBusy ||
+        !delegationForm.querySelector(
+          'input[name="agent_id"]:checked:not(:disabled)',
+        );
+      skipButton.disabled = delegationBusy;
+    }
+    async function delegationRequest(action, agent) {
+      var body = new URLSearchParams(new FormData(delegationForm));
+      body.delete("agent_id");
+      body.set("action", action);
+      if (agent) {
+        body.set("agent_id", agent.value);
+        body.set("binding_id", agent.dataset.bindingId);
+      }
+      var response = await fetch(delegationForm.action, {
+        method: "POST",
+        body: body,
+        credentials: "same-origin",
+      });
+      if (!response.ok)
+        throw new Error(
+          "The connection or your permissions changed. Reload to review current assignments. Successfully granted agents keep their connection.",
+        );
+    }
+    async function finishDelegation(grant) {
+      if (delegationBusy) return;
+      delegationBusy = true;
+      updateDelegationSelection();
+      delegationError.hidden = true;
+      try {
+        if (grant) {
+          var selected = Array.from(
+            delegationForm.querySelectorAll(
+              'input[name="agent_id"]:checked:not(:disabled)',
+            ),
+          );
+          for (var agent of selected) {
+            await delegationRequest("delegate_grant", agent);
+            agent.checked = false;
+            agent.disabled = true;
+          }
+        }
+        await delegationRequest("finish_delegation");
+        window.location.assign(delegationForm.dataset.continueUrl);
+      } catch (error) {
+        delegationError.textContent = error.message;
+        delegationError.hidden = false;
+      } finally {
+        delegationBusy = false;
+        updateDelegationSelection();
+      }
+    }
+    delegationForm.addEventListener("change", updateDelegationSelection);
+    delegationForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      finishDelegation(true);
+    });
+    skipButton.addEventListener("click", function () {
+      finishDelegation(false);
+    });
+    return;
+  }
+
   // A connected first-party flow has no remaining consent step. Briefly show
   // confirmation, then close the tab opened by the dashboard. If the browser
   // declines window.close(), the completion message remains as a fallback.

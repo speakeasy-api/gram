@@ -201,6 +201,8 @@ type AuthnChallengeState struct {
 	// upstream providers, but there is no client to approve or redirect back to
 	// — completing the connections is terminal.
 	FirstParty bool `json:"first_party,omitempty"`
+	// PendingDelegation is the exact committed grant offered after dashboard sign-in.
+	PendingDelegation *remotesessions.RemoteGrant `json:"pending_delegation,omitempty"`
 	// BindingRefreshAttemptID survives challenge ID rotation and links the exact dashboard attachment decision.
 	BindingRefreshAttemptID string `json:"binding_refresh_attempt_id,omitempty"`
 	// ReauthenticateClientID keeps an explicitly requested fresh login pending until its matching OAuth callback.

@@ -300,21 +300,25 @@ type ChallengeManager struct {
 // RemoteGrant is a grant the remote login callback committed, keyed to the
 // consent challenge it belongs to.
 type RemoteGrant struct {
+	// UpstreamDisplayName is the identity reported by the provider for this exact grant.
+	UpstreamDisplayName string `json:"upstream_display_name"`
+	// UpstreamEmail is the email reported by the provider, never inferred from the local user.
+	UpstreamEmail string `json:"upstream_email"`
 	// ConnectionPopup opts the callback into exact dashboard reconnect handling.
-	ConnectionPopup bool
+	ConnectionPopup bool `json:"connection_popup"`
 	// ParentChallengeID is the consent challenge the login was started from.
-	ParentChallengeID string
+	ParentChallengeID string `json:"parent_challenge_id"`
 	// UserSessionIssuerID is the issuer that challenge was minted for.
-	UserSessionIssuerID uuid.UUID
+	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
 	// RemoteSessionClientID is the client the grant was stored against.
-	RemoteSessionClientID uuid.UUID
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
 	// Subject is who holds the grant.
-	Subject urn.SessionSubject
+	Subject urn.SessionSubject `json:"subject"`
 	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact stored credential committed by the callback.
-	RemoteSessionID        uuid.UUID
-	RemoteSessionUpdatedAt time.Time
+	RemoteSessionID        uuid.UUID `json:"remote_session_id"`
+	RemoteSessionUpdatedAt time.Time `json:"remote_session_updated_at"`
 	// GrantGeneration pins the authorization decision even if the same row is reauthorized later.
-	GrantGeneration int64
+	GrantGeneration int64 `json:"grant_generation"`
 }
 
 // RemoteLoginResult is where the callback sends the browser next.
@@ -1868,6 +1872,8 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	return RemoteLoginResult{
 		RedirectURL: redirect,
 		Grant: &RemoteGrant{
+			UpstreamDisplayName:    storedSession.UpstreamDisplayName.String,
+			UpstreamEmail:          storedSession.UpstreamEmail.String,
 			ConnectionPopup:        state.ConnectionPopup,
 			GrantGeneration:        storedSession.GrantGeneration,
 			ParentChallengeID:      state.ParentChallengeID,

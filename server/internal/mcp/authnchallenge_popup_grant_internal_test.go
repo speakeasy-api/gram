@@ -68,3 +68,32 @@ func TestConnectionPopupGrantRetriesChallengeCAS(t *testing.T) {
 		})
 	}
 }
+
+func TestConnectionPopupGrantOffersAdditionalDelegation(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"dashboard", "agent refresh", "explicit reconnect", "third party"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			s := &Service{authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](testenv.NewLogger(t), &popupGrantCASCache{Cache: testenv.NewMemoryCache(), attempts: 1}, cache.SuffixNone)}
+			subject := urn.NewUserSubject("example-user")
+			parent := AuthnChallengeState{ID: uuid.NewString(), FirstParty: scenario != "third party", AuthorizerUserID: subject.ID, AuthorizerImpersonated: new(false), Subject: &subject, UserSessionIssuerID: uuid.New(), CreatedAt: time.Now()}
+			client := uuid.New()
+			if scenario == "agent refresh" {
+				parent.BindingRefreshAttemptID = uuid.NewString()
+			}
+			if scenario == "explicit reconnect" {
+				parent.ReauthenticateClientID = client
+			}
+			require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))
+			grant := remotesessions.RemoteGrant{ConnectionPopup: scenario != "third party", ParentChallengeID: parent.ID, Subject: subject, UserSessionIssuerID: parent.UserSessionIssuerID, RemoteSessionClientID: client, RemoteSessionID: uuid.New(), GrantGeneration: 7}
+			require.NoError(t, s.recordConnectionPopupGrant(t.Context(), grant))
+			current, err := s.authnChallengeCache.Get(t.Context(), parent.CacheKey())
+			require.NoError(t, err)
+			if scenario == "dashboard" {
+				require.Equal(t, &grant, current.PendingDelegation)
+			} else {
+				require.Nil(t, current.PendingDelegation)
+			}
+		})
+	}
+}

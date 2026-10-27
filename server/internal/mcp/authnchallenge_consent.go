@@ -589,6 +589,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
+	if shown, err := s.servePostLoginDelegation(w, r, endpoint, challengeState); shown || err != nil {
+		return err
+	}
+
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
 	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
