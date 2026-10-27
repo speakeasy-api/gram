@@ -37,8 +37,14 @@ const (
 	StreamEndRequestCanceled StreamEndReason = "request_canceled"
 
 	// StreamEndShutdown means the proxy closed the stream because the
-	// server started shutting down.
+	// server started shutting down: a listen stream, or a POST stream whose
+	// response had already been relayed.
 	StreamEndShutdown StreamEndReason = "shutdown"
+
+	// StreamEndShutdownInterrupted means the server's shutdown interrupted a
+	// POST stream still waiting on its response, and the proxy answered the
+	// request with a JSON-RPC error instead.
+	StreamEndShutdownInterrupted StreamEndReason = "shutdown_interrupted"
 
 	// StreamEndError means relaying failed for any other reason, such as a
 	// write to the client failing or an oversized event.
