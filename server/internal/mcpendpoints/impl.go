@@ -575,10 +575,8 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp servers").LogError(ctx, logger)
 		}
-		for _, server := range lockedServers {
-			if isCanonicalHosted(server) {
-				return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's endpoints cannot move to or from another backend; create or delete endpoints instead").LogWarn(ctx, logger)
-			}
+		if slices.ContainsFunc(lockedServers, isCanonicalHosted) {
+			return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's endpoints cannot move to or from another backend; create or delete endpoints instead").LogWarn(ctx, logger)
 		}
 	}
 	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(existing.MetaMcpServerID, metaMcpServerID), metaMcpServerID); err != nil {

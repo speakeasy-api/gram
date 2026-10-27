@@ -1218,15 +1218,31 @@ ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: UpdateRemoteSessionClient :one
--- A rotated secret also clears the upstream rejection marker: the rejection
--- may have been the old secret, and a client whose refreshes succeed again
--- should not stay flagged for re-registration.
+-- A rotated secret or corrected client_id also clears the upstream rejection
+-- marker: the rejection may have been the old value, and a client whose
+-- refreshes succeed again should not stay flagged for re-registration. A
+-- corrected client_id is a new registration as far as the issuer is
+-- concerned, so it drops the old one's grant evidence and issue time.
 UPDATE remote_session_clients
 SET
+    client_id = COALESCE(sqlc.narg('client_id'), client_id),
+    client_id_issued_at = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN clock_timestamp()
+        ELSE client_id_issued_at
+    END,
+    grant_types = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE grant_types
+    END,
+    display_name = CASE
+        WHEN sqlc.narg('display_name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('display_name'), display_name)
+    END,
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN upstream_rejected_at
-        ELSE NULL
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NOT NULL THEN NULL
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE upstream_rejected_at
     END,
     -- A replaced secret takes the expiry supplied with it, or none: keeping
     -- the old secret's deadline would flag the new secret as expired.
@@ -3247,13 +3263,28 @@ RETURNING *;
 -- passing it as client_secret_encrypted; an omitted narg keeps the existing
 -- secret. See the ORG REACHABILITY note on
 -- ListOrganizationRemoteSessionClientsByIssuerID. Note this mutates the CLIENT,
--- which the tenant owns, never the platform issuer it points at.
+-- which the tenant owns, never the platform issuer it points at. A corrected
+-- client_id resets the registration state as UpdateRemoteSessionClient does.
 UPDATE remote_session_clients AS c
 SET
+    client_id = COALESCE(sqlc.narg('client_id'), c.client_id),
+    client_id_issued_at = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN clock_timestamp()
+        ELSE c.client_id_issued_at
+    END,
+    grant_types = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE c.grant_types
+    END,
+    display_name = CASE
+        WHEN sqlc.narg('display_name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('display_name'), c.display_name)
+    END,
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), c.client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN c.upstream_rejected_at
-        ELSE NULL
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NOT NULL THEN NULL
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE c.upstream_rejected_at
     END,
     -- A pasted-in replacement secret carries no issuer-reported expiry, and
     -- keeping the old secret's deadline would flag the new one as expired.
@@ -3651,13 +3682,26 @@ FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+LEFT JOIN agents a ON s.subject_urn = 'agent:' || a.id::text AND a.organization_id = @organization_id AND a.deleted IS FALSE
 WHERE s.remote_session_client_id = @remote_session_client_id
   AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
-ORDER BY s.id DESC
+
+  AND (@search::text = '' OR strpos(lower(s.subject_urn::text || ' ' || COALESCE(u.display_name, '') || ' ' || COALESCE(u.email, '') || ' ' || COALESCE(a.name, '')), lower(@search)) > 0)
+  AND CASE @status::text WHEN 'active' THEN (LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) IS NULL OR LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) > now()) WHEN 'expired' THEN LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) <= now() ELSE TRUE END
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR s.created_at >= sqlc.narg('created_after'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR s.created_at < sqlc.narg('created_before'))
+  AND (sqlc.narg('cursor_id')::uuid IS NULL OR CASE WHEN @sort::text IN ('oldest','expiry') THEN
+  (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) > (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid)
+  ELSE (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) < (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid) END)
+ORDER BY
+ CASE WHEN @sort::text IN ('oldest','expiry') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END ASC,
+ CASE WHEN @sort::text NOT IN ('oldest','expiry','id') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END DESC,
+ CASE WHEN @sort::text IN ('oldest','expiry') THEN s.id END ASC,
+ CASE WHEN @sort::text NOT IN ('oldest','expiry') THEN s.id END DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: RevokeOrganizationRemoteSession :one

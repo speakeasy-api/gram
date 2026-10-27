@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -522,7 +523,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	stateID := r.URL.Query().Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
@@ -530,7 +531,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -910,7 +911,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	stateID := r.PostForm.Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
 	// Preflight on a plain Get: everything that can fail for retryable
@@ -923,7 +924,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	issuerID := endpoint.UserSessionIssuerID.String()
@@ -1228,7 +1229,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return err.LogError(ctx, logger)
 	}
 	if reuse && !consentBrowserMatches(r, challengeState, time.Now()) {
-		return oops.E(oops.CodeBadRequest, nil, "invalid consent browser binding").LogWarn(ctx, logger)
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "invalid consent browser binding").LogWarn(ctx, logger), oauthui.ReasonSessionChanged))
 	}
 	subject := *challengeState.Subject
 
@@ -1539,10 +1540,11 @@ func formatDurationHours(hours int) string {
 // presets at or below the issuer's maximum, with the maximum itself
 // guaranteed present and preselected.
 func buildSessionDurationOptions(issuer usersessions_repo.UserSessionIssuer) []sessionDurationOption {
-	if !issuer.SessionDuration.Valid || issuer.SessionDuration.Microseconds <= 0 {
+	maxLifetime, ok := conv.PGIntervalToDuration(issuer.SessionDuration)
+	if !ok || maxLifetime <= 0 {
 		return nil
 	}
-	maxHours := int(time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond / time.Hour)
+	maxHours := int(maxLifetime / time.Hour)
 	if maxHours < 1 {
 		return nil
 	}

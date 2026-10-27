@@ -22,6 +22,26 @@ func (q *Queries) AdminAcquireStripeSubscriptionLock(ctx context.Context, stripe
 	return err
 }
 
+const adminAuditProjectBelongsToOrganization = `-- name: AdminAuditProjectBelongsToOrganization :one
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = $1 AND organization_id = $2
+)
+`
+
+type AdminAuditProjectBelongsToOrganizationParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Audit history remains readable after a project is soft-deleted.
+func (q *Queries) AdminAuditProjectBelongsToOrganization(ctx context.Context, arg AdminAuditProjectBelongsToOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, adminAuditProjectBelongsToOrganization, arg.ProjectID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
 UPDATE organization_metadata
 SET

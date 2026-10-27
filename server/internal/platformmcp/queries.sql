@@ -879,11 +879,28 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = @organization_id
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || @query_text::text || '%'
+      )
   )
 ORDER BY
     CASE
         WHEN @query_text::text <> ''
-         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = @organization_id
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER(@query_text::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -970,6 +987,15 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = @organization_id
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || @query_text::text || '%'
+      )
   )
   AND (
       sqlc.narg(readiness_state)::text IS NULL
@@ -984,7 +1010,15 @@ WHERE m.deleted IS FALSE
 ORDER BY
     CASE
         WHEN @query_text::text <> ''
-         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = @organization_id
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER(@query_text::text)
+         ))
         THEN 0
         ELSE 1
     END,

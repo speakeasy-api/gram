@@ -2298,3 +2298,20 @@ WHERE s.id = @id AND s.toolset_id = @id AND s.project_id = @project_id AND s.del
 UPDATE toolsets
 SET mcp_slug = sqlc.narg('mcp_slug')::text, custom_domain_id = sqlc.narg('custom_domain_id')::uuid, updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id;
+
+-- name: SetRemoteSessionListFixture :exec
+-- Test fixture for effective expiry and timestamp pagination.
+UPDATE remote_sessions s
+SET created_at = @created_at, last_used_at = sqlc.narg('last_used_at'),
+    access_expires_at = sqlc.narg('access_expires_at'), refresh_expires_at = sqlc.narg('refresh_expires_at'),
+    authorization_expires_at = sqlc.narg('authorization_expires_at'), refresh_token_encrypted = sqlc.narg('refresh_token_encrypted')
+FROM remote_session_clients c
+WHERE s.id = @id AND c.id = s.remote_session_client_id AND c.organization_id = @organization_id;
+
+-- name: SetGatewaySessionListFixture :exec
+-- Test fixture for endpoint, ordering, and expiry boundaries.
+UPDATE user_sessions
+SET resource = sqlc.narg('resource'), created_at = @created_at,
+    last_used_at = sqlc.narg('last_used_at'), refresh_expires_at = @refresh_expires_at,
+    deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id AND organization_id = @organization_id;
