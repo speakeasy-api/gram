@@ -3928,13 +3928,12 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   organization_id TEXT NOT NULL,
   attachment_scope TEXT GENERATED ALWAYS AS ('organization:' || organization_id) STORED,
   org_url TEXT NOT NULL,
-  -- Normalized issuer URL from discovery; unique only after credential proof.
-  -- Pinned to the authoritative remote_session_issuers.issuer by the scope FK.
+  -- Normalized issuer URL from discovery. Several organizations may connect
+  -- the same Okta org. Pinned to the authoritative remote_session_issuers.issuer by the scope FK.
   issuer_url TEXT NOT NULL,
-  -- Set only by a platform admin to allow one Okta tenant on more than one
-  -- Speakeasy org.
+  -- Unused; dropped once no deployed build reads it.
   issuer_url_override_reason TEXT,
-  -- Set only by successful credential proof; pending rows never reserve an issuer.
+  -- Set only by successful credential proof.
   ownership_claimed boolean NOT NULL DEFAULT FALSE,
   remote_session_issuer_id uuid NOT NULL,
   remote_session_client_id uuid NOT NULL,
@@ -3989,12 +3988,6 @@ COMMENT ON COLUMN okta_identity_provider_connections.created_at IS '@access: con
 COMMENT ON COLUMN okta_identity_provider_connections.updated_at IS '@access: confidential';
 COMMENT ON COLUMN okta_identity_provider_connections.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN okta_identity_provider_connections.deleted IS '@access: confidential';
-
--- Pending connections do not reserve an issuer. Proven claims are exclusive
--- unless a platform admin records an override reason.
-CREATE UNIQUE INDEX IF NOT EXISTS okta_identity_provider_connections_issuer_url_key
-ON okta_identity_provider_connections (issuer_url)
-WHERE deleted IS FALSE AND ownership_claimed IS TRUE AND issuer_url_override_reason IS NULL;
 
 CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_remote_session_issuer_idx
 ON okta_identity_provider_connections (organization_id, remote_session_issuer_id);

@@ -926,6 +926,11 @@ export function CredentialsWizard({
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
     agentName: name.trim(),
+    servers: connectionReach().flatMap((server) =>
+      server.mcpUrl
+        ? [{ id: server.id, name: server.name, mcpUrl: server.mcpUrl }]
+        : [],
+    ),
     ensureAgent: async () => {
       const targetId = await ensureAgent();
       await attachSelectedConnections(targetId, connectionReach());
