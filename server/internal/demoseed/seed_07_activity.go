@@ -96,7 +96,10 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	amara := demoUsers[0]
 	jonas := demoUsers[1]
 
-	insertChat := func(id uuid.UUID, owner demoUser, title string, surface pgtype.Text, created, updated pgtype.Interval) error {
+	// activityNoAgent marks a session a human drove, which carries no agent.
+	var activityNoAgent uuid.NullUUID
+
+	insertChat := func(id uuid.UUID, owner demoUser, title string, surface pgtype.Text, agent uuid.NullUUID, created, updated pgtype.Interval) error {
 		if err := s.q.ActivityInsertChat(ctx, repo.ActivityInsertChatParams{
 			ID:             id,
 			ProjectID:      proj,
@@ -105,6 +108,7 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 			ExternalUserID: s.email(owner.handle),
 			Title:          title,
 			SessionSurface: surface,
+			AgentID:        agent,
 			CreatedAge:     created,
 			UpdatedAge:     updated,
 		}); err != nil {
@@ -144,7 +148,7 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 
 	// A signed inference hook archives the conversation before the next model call.
 	chatID := s.det("anthropic-inference-chat")
-	if err := insertChat(chatID, amara, "Claude inference conversation", activityNull, activityMinutes(20), activityMinutes(18)); err != nil {
+	if err := insertChat(chatID, amara, "Claude inference conversation", activityNull, activityNoAgent, activityMinutes(20), activityMinutes(18)); err != nil {
 		return err
 	}
 	chatSrc, model := activityText("claude-chat"), activityText(activityModel)
@@ -160,8 +164,12 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	}
 
 	// Claude Tag preserves the wake/tool transcript for the Raw view toggle.
+	// The channel session and its helper have no assistant record, so the
+	// acting agent is what the session list names for them — the same agent
+	// hook capture would stamp from the authenticated actor.
+	releaseAgent := uuid.NullUUID{UUID: s.det("managed-agent-1"), Valid: true}
 	chatID = s.det("claude-tag-chat")
-	if err := insertChat(chatID, amara, "Claude Tag in #demo-releases", activityNull, activityMinutes(10), activityMinutes(9)); err != nil {
+	if err := insertChat(chatID, amara, "Claude Tag in #demo-releases", activityNull, releaseAgent, activityMinutes(10), activityMinutes(9)); err != nil {
 		return err
 	}
 	tagSrc := activityText("claude-tag")
@@ -195,7 +203,7 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	}
 
 	helperID := s.det("claude-tag-helper")
-	if err := insertChat(helperID, amara, "Release checklist helper", tagSrc, activityMinutes(6), activityMinutes(5)); err != nil {
+	if err := insertChat(helperID, amara, "Release checklist helper", tagSrc, releaseAgent, activityMinutes(6), activityMinutes(5)); err != nil {
 		return err
 	}
 	if err := insertMessages(helperID, []activityMessage{
@@ -219,7 +227,7 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		{"legacy", "Open risk findings recap"},
 	}
 	for _, sess := range sessions {
-		if err := insertChat(s.det("assistant-session-"+sess.fixture), jonas, sess.title, activityNull, activityMinutes(40), activityMinutes(38)); err != nil {
+		if err := insertChat(s.det("assistant-session-"+sess.fixture), jonas, sess.title, activityNull, activityNoAgent, activityMinutes(40), activityMinutes(38)); err != nil {
 			return err
 		}
 	}

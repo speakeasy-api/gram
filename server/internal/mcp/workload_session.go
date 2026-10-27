@@ -77,6 +77,7 @@ func encodeIssuerWorkloadSessionPolicy(issuerProjectID uuid.UUID, version runtim
 		PrincipalUrn: "",
 		Scope:        authz.ScopeMCPConnect,
 		Selector:     selector,
+		Inferred:     false,
 	}})
 	if err != nil {
 		return nil, fmt.Errorf("construct issuer workload session policy: %w", err)

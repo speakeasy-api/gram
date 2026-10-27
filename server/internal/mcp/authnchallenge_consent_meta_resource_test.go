@@ -19,6 +19,7 @@ import (
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -230,6 +231,9 @@ func seedMetaConsentEndpoint(t *testing.T, slug string) (context.Context, consen
 	metaServerID := createMetaServer(t, ctx, ti.conn, projectID, orgID, slug, shared)
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug)
 	endpoint.MetaMcpServerID = conv.ToNullUUID(metaServerID)
+	_, err := organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: conv.ToPGText(subject.ID)})
+	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, orgID, subject.ID, metaServerID.String())
 
 	return ctx, consentActionFixture{
 		ti:        ti,

@@ -2,6 +2,7 @@
 package platformmcp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -76,9 +77,9 @@ type DirectRemoteInspector interface {
 }
 
 // GuardianDirectRemoteInspector canonicalizes, validates, and probes one
-// direct remote MCP using Guardian before every network hop. It supports only
-// Streamable HTTP's JSON response form; standalone SSE is intentionally not a
-// D1 admission path.
+// direct remote MCP using Guardian before every network hop. It supports both
+// JSON and SSE responses to Streamable HTTP POST requests; standalone SSE is
+// intentionally not an admission path.
 type GuardianDirectRemoteInspector struct {
 	policy *guardian.Policy
 }
@@ -196,8 +197,9 @@ func (b *directRemoteResponseBudget) consumeRequest() error {
 }
 
 // directRemoteRoundTripper serializes accounting across SDK requests, redirects,
-// OAuth discovery and session cleanup. Bodies are buffered within the aggregate
-// cap so redirects and SDK-discarded error bodies also consume the same budget.
+// OAuth discovery and session cleanup. Finite bodies are buffered within the
+// aggregate cap. SSE bodies are metered as the SDK reads through the first
+// complete JSON-RPC response, so an open stream cannot hold inspection forever.
 type directRemoteRoundTripper struct {
 	base   http.RoundTripper
 	policy *guardian.Policy
@@ -320,9 +322,13 @@ func (rt *directRemoteRoundTripper) roundTrip(req *http.Request) (*http.Response
 	}
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
 	successfulMCP := purpose == directRemoteMCPRequest && resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices
-	// Reject SSE before buffering: a stream would otherwise hold the body open.
 	if successfulMCP && mediaType == "text/event-stream" {
-		return nil, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
+		payload, err := rt.bufferSSEThroughResponse(body)
+		if err != nil {
+			return nil, err
+		}
+		resp.Body = io.NopCloser(bytes.NewReader(payload))
+		return resp, nil
 	}
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, int64(rt.budget.remaining)+1))
 	exceeded := len(payload) > rt.budget.remaining
@@ -339,6 +345,77 @@ func (rt *directRemoteRoundTripper) roundTrip(req *http.Request) (*http.Response
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(payload))
 	return resp, nil
+}
+
+type directRemoteCountingReader struct {
+	reader io.Reader
+	read   int
+}
+
+func (r *directRemoteCountingReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.read += n
+	return n, err
+}
+
+func (rt *directRemoteRoundTripper) bufferSSEThroughResponse(body io.Reader) ([]byte, error) {
+	available := rt.budget.remaining
+	counted := &directRemoteCountingReader{reader: io.LimitReader(body, int64(available)+1), read: 0}
+	reader := bufio.NewReader(counted)
+	payload := make([]byte, 0, min(4096, available))
+	eventName := ""
+	data := make([]string, 0, 1)
+
+	for {
+		line, readErr := reader.ReadString('\n')
+		payload = append(payload, line...)
+		if counted.read > available {
+			rt.budget.remaining = 0
+			return nil, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
+		}
+		text := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		switch {
+		case text == "":
+			if directRemoteSSEEventIsResponse(eventName, data) {
+				rt.budget.remaining -= counted.read
+				return payload, nil
+			}
+			eventName = ""
+			data = data[:0]
+		case strings.HasPrefix(text, ":"):
+		case text == "data":
+			data = append(data, "")
+		case strings.HasPrefix(text, "data:"):
+			data = append(data, strings.TrimPrefix(strings.TrimPrefix(text, "data:"), " "))
+		case text == "event":
+			eventName = ""
+		case strings.HasPrefix(text, "event:"):
+			eventName = strings.TrimPrefix(strings.TrimPrefix(text, "event:"), " ")
+		}
+		if readErr != nil {
+			rt.budget.remaining -= counted.read
+			if errors.Is(readErr, io.EOF) {
+				return payload, nil
+			}
+			return nil, directRemoteTransportError(rt.ctx, readErr)
+		}
+	}
+}
+
+func directRemoteSSEEventIsResponse(eventName string, data []string) bool {
+	if (eventName != "" && eventName != "message") || len(data) == 0 {
+		return false
+	}
+	var message struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(strings.Join(data, "\n")), &message); err != nil {
+		return false
+	}
+	return len(message.ID) > 0 && message.Method == "" && (message.Result != nil || message.Error != nil)
 }
 
 func directRemoteValidationError(ctx context.Context, err error) error {

@@ -18,8 +18,17 @@ import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
-import { AgentIdentityProfile } from "./AgentIdentityProfile";
+import {
+  AgentHeaderActions,
+  AgentIdentityProfile,
+} from "./AgentIdentityProfile";
 import { useIdentitySubject } from "./useIdentitySubject";
+import {
+  useCallback,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
 import { useCanReadRisk, useIdentityIsKnown } from "./useIdentityQueries";
@@ -91,6 +100,21 @@ function IdentityDetailContent(): JSX.Element {
   const location = useLocation();
 
   const identityQuery = useIdentitySubject(urn);
+  // How far down the rail has to stick to clear the header above it. The
+  // header's height is not a constant — a long name wraps, and so does a row
+  // of directory groups — so a fixed offset parks the rail under the header's
+  // own surface, which wins on z-index, as soon as the header outgrows it.
+  // Measured through a ref callback rather than an effect: the header is not
+  // mounted on the loading and not-found branches above.
+  const [headerHeight, setHeaderHeight] = useState<number | null>(null);
+  const measureHeader = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const observer = new ResizeObserver(() => {
+      setHeaderHeight(node.getBoundingClientRect().height);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   // Without this the recents entry is the sub-page segment ("overview"), since
   // the URN is neither an id nor long enough for the label heuristic to reject.
   useRecentLabelOverride(location.pathname, identityQuery.data?.displayName);
@@ -178,11 +202,38 @@ function IdentityDetailContent(): JSX.Element {
           }}
         />
       </Page.Header>
-      <Page.Body fullWidth fullHeight noPadding className="gap-0">
+      {/* `h-auto min-h-full` rather than the `h-full` fullHeight applies:
+          that pins the content box to the viewport, so a page taller than it
+          overflows a box that has already stopped — the recessed ground ends
+          mid-scroll with white under it, and the last panel cannot be
+          reached. Growing with the content keeps the scroll container and
+          the painted ground the same height. */}
+      <Page.Body
+        fullWidth
+        fullHeight
+        noPadding
+        className="h-auto min-h-full gap-0"
+      >
         {/* The person runs the full width of the body: they are the subject of
             the page, not a column in it. */}
-        <div className="bg-card border-border border-b px-8 py-6">
-          <IdentityHeader identity={identity} />
+        {/* Sticky: the rail beside the content already is, and the subject
+            of the page is worth as much as its navigation — scrolling a long
+            activity list otherwise leaves no sign of whose it is. */}
+        <div
+          ref={measureHeader}
+          className="bg-card border-border sticky top-0 z-20 border-b px-8 py-6"
+        >
+          <IdentityHeader
+            identity={identity}
+            actions={
+              identity.agent && (
+                <AgentHeaderActions
+                  agent={identity.agent}
+                  refresh={() => void identityQuery.refetch()}
+                />
+              )
+            }
+          />
         </div>
         {/* Rail beside the content, not in the app sidebar: the reader keeps
             the project nav they arrived with. The recessed ground separates
@@ -190,7 +241,18 @@ function IdentityDetailContent(): JSX.Element {
         {/* pb-16, not py-8: the body is the scroll container, so a symmetric
             inset leaves the last panel sitting flush against the bottom edge
             of the viewport with nothing under it. */}
-        <div className="bg-background flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-16 lg:flex-row lg:gap-8">
+        {/* No `min-h-0`: that lets this shrink below its content, which is
+            what cut the ground short of the panels standing on it. */}
+        <div
+          className="bg-background flex flex-1 flex-col gap-6 px-8 pt-8 pb-16 lg:flex-row lg:gap-8"
+          style={
+            headerHeight === null
+              ? undefined
+              : ({
+                  "--identity-rail-top": `${headerHeight + 16}px`,
+                } as CSSProperties)
+          }
+        >
           <IdentityRail
             items={identityRailItems(
               routes,
@@ -204,7 +266,12 @@ function IdentityDetailContent(): JSX.Element {
             )}
             // Narrow, the rail is a scrollable row above the content: hiding
             // it left the other sub-pages reachable only by editing the URL.
-            className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-8 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
+            // Sticks clear of the header above it rather than under it: both
+            // are pinned to the same scroll container, and the header wins
+            // on z-index, so a smaller offset parks the rail out of sight.
+            // The offset is the measured header height, set on the parent;
+            // the 12rem fallback holds for the frame before it is measured.
+            className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-[var(--identity-rail-top,12rem)] lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
           />
           {/* Room under the last section: without it the danger zone and
               the federated access panel sit flush against the viewport. */}
@@ -231,8 +298,11 @@ function IdentityDetailContent(): JSX.Element {
 
 function IdentityHeader({
   identity,
+  actions,
 }: {
   identity: IdentityModel;
+  /** Controls on the subject itself, under its badges. */
+  actions?: ReactNode;
 }): JSX.Element {
   const {
     dateRange,
@@ -290,6 +360,7 @@ function IdentityHeader({
                 <Badge variant="neutral">No linked account</Badge>
               )}
             </div>
+            {actions}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">

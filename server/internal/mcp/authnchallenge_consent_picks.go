@@ -21,12 +21,23 @@ func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *Reso
 	if err != nil {
 		return nil, fmt.Errorf("build remote session cards: %w", err)
 	}
+	var members []metaMember
+	if endpoint.MetaMcpServerID.Valid {
+		members, err = s.consentSubjectMembers(ctx, endpoint, challengeState)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return chooseConsentUpstreamClientPicks(endpoint, members, cards), nil
+}
+
+func chooseConsentUpstreamClientPicks(endpoint *ResolvedMcpEndpoint, members []metaMember, cards []remoteSessionCard) map[uuid.UUID]uuid.UUID {
 	var usable []remoteSessionCard
 	for _, card := range cards {
 		switch cardStatus(card) {
 		case gatewayServerConnected, gatewayServerChained, gatewayServerChainPending:
 			usable = append(usable, card)
-		case gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerNotConnected, gatewayServerReconnect:
+		case gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerNotConnected, gatewayServerReconnect, gatewayServerUnavailable, gatewayServerNoAccess:
 		}
 	}
 	picks := map[uuid.UUID]uuid.UUID{}
@@ -40,10 +51,6 @@ func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *Reso
 	}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
-		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
-		if err != nil {
-			return nil, err
-		}
 		for _, member := range members {
 			var candidates []remoteSessionCard
 			for _, card := range usable {
@@ -56,5 +63,5 @@ func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *Reso
 	case endpoint.McpServerID.Valid:
 		pick(endpoint.McpServerID.UUID, usable)
 	}
-	return picks, nil
+	return picks
 }

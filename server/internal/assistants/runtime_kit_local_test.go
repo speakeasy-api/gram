@@ -1,0 +1,681 @@
+package assistants
+
+import (
+	"archive/tar"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"maps"
+	"net"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
+	"github.com/stretchr/testify/require"
+)
+
+type fakeKitLocalEngine struct {
+	info       kitLocalContainerInfo
+	volume     map[string]string
+	calls      []string
+	spec       kitLocalContainerSpec
+	bootstrap  KitLocalBootstrap
+	failCopy   bool
+	stoppedIDs []string
+	nextPort   int
+}
+
+func (f *fakeKitLocalEngine) ImageID(context.Context, string) (string, error) {
+	return "sha256:test-image", nil
+}
+func (f *fakeKitLocalEngine) InspectKit(context.Context, string) (kitLocalContainerInfo, error) {
+	if f.info.ID == "" {
+		return kitLocalContainerInfo{}, errLocalContainerNotFound
+	}
+	return f.info, nil
+}
+func (f *fakeKitLocalEngine) InspectKitVolume(context.Context, string) (map[string]string, error) {
+	if f.volume == nil {
+		return nil, errLocalContainerNotFound
+	}
+	return f.volume, nil
+}
+func (f *fakeKitLocalEngine) CreateKitVolume(_ context.Context, _ string, labels map[string]string) error {
+	f.calls = append(f.calls, "volume")
+	f.volume = maps.Clone(labels)
+	return nil
+}
+func (f *fakeKitLocalEngine) CreateKit(_ context.Context, spec kitLocalContainerSpec) (string, error) {
+	f.calls = append(f.calls, "create")
+	f.spec = spec
+	f.info = kitLocalContainerInfo{ID: "container-id", ImageID: "sha256:test-image", User: "1000:1000", HomeVolume: spec.VolumeName, AssertionDirectory: filepath.Dir(spec.WorkloadAssertionFile), AssertionReadOnly: true, Labels: maps.Clone(spec.Labels)}
+	return f.info.ID, nil
+}
+func (f *fakeKitLocalEngine) CopyKitBootstrap(_ context.Context, _ string, b KitLocalBootstrap) error {
+	f.calls = append(f.calls, "copy")
+	if f.failCopy {
+		return errors.New("injection failed")
+	}
+	f.bootstrap = b
+	return nil
+}
+func (f *fakeKitLocalEngine) Start(context.Context, string) error {
+	f.calls = append(f.calls, "start")
+	f.info.Running = true
+	f.info.HostPort = f.nextPort
+	return nil
+}
+func (f *fakeKitLocalEngine) Stop(_ context.Context, id string) error {
+	f.stoppedIDs = append(f.stoppedIDs, id)
+	f.calls = append(f.calls, "stop")
+	f.info.Running = false
+	f.info.HostPort = 0
+	return nil
+}
+func (f *fakeKitLocalEngine) Remove(context.Context, string) error {
+	f.calls = append(f.calls, "remove")
+	f.info = kitLocalContainerInfo{}
+	return nil
+}
+func (f *fakeKitLocalEngine) RemoveVolume(context.Context, string) error {
+	f.calls = append(f.calls, "remove-volume")
+	f.volume = nil
+	return nil
+}
+
+type fakeKitLocalProtocol struct{ turns, interrupts, statuses int }
+
+func (p *fakeKitLocalProtocol) RunTurn(context.Context, assistantRuntimeRecord, runTurnRequest) error {
+	p.turns++
+	return nil
+}
+func (p *fakeKitLocalProtocol) InterruptTurn(context.Context, assistantRuntimeRecord, uuid.UUID) (bool, error) {
+	p.interrupts++
+	return true, nil
+}
+func (p *fakeKitLocalProtocol) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	p.statuses++
+	return RuntimeBackendStatus{Configured: true}, nil
+}
+
+func kitLocalFixture(t *testing.T) (*KitLocalRuntimeBackend, *fakeKitLocalEngine, assistantRuntimeRecord, *fakeKitLocalProtocol) {
+	t.Helper()
+	engine := &fakeKitLocalEngine{nextPort: 32100}
+	protocol := &fakeKitLocalProtocol{}
+	config := KitLocalRuntimeConfig{Fence: func(context.Context, assistantRuntimeRecord) error { return nil }, WorkloadAssertionFile: "/operator/workload/assertion", Environment: "local", Image: "example.invalid/kit:local", Command: []string{"/usr/local/bin/kit"}, Args: func() []string { _, args := KitGatewayCommand(8080); return args }(), GuestPort: 8080, ServerURL: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, CompatibilityGeneration: "local-generation-one", HomeOwnedByRuntimeUser: true,
+		Bootstrap: func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
+			return kitTestWorkloadBootstrap(), nil
+		},
+		Protocol: func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) { return protocol, nil },
+		Ready: func(context.Context, assistantRuntimeRecord, *url.URL) error {
+			engine.calls = append(engine.calls, "ready")
+			return nil
+		},
+	}
+	backend, err := newKitLocalRuntimeBackend(config, engine)
+	require.NoError(t, err)
+	// Lifecycle-only tests use a synthetic listening socket; readiness tests
+	// restore the real TCP dialer and exercise authenticated ACP initialization.
+	backend.listenerDial = func(context.Context, string, string) (net.Conn, error) {
+		client, server := net.Pipe()
+		_ = server.Close()
+		return client, nil
+	}
+	r := assistantRuntimeRecord{ID: uuid.New(), AssistantID: uuid.New(), ProjectID: uuid.New(), RuntimeVersion: 3, Backend: "local"}
+	return backend, engine, r, protocol
+}
+func TestKitLocalLifecycleAndEndpointRediscovery(t *testing.T) {
+	t.Parallel()
+	k, engine, r, protocol := kitLocalFixture(t)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	require.True(t, result.ColdStart)
+	require.Equal(t, []string{"volume", "create", "copy", "start", "ready"}, engine.calls)
+	require.Equal(t, "private-test-token", string(engine.bootstrap.GatewayToken))
+	require.True(t, strings.HasPrefix(engine.spec.Name, "gram-kit-"))
+	require.NotContains(t, engine.spec.VolumeName, "gram-asst")
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	var endpoint string
+	k.config.Protocol = func(_ context.Context, _ assistantRuntimeRecord, u *url.URL) (runtimeProtocol, error) {
+		endpoint = u.String()
+		return protocol, nil
+	}
+	require.NoError(t, k.RunTurn(t.Context(), r, runTurnRequest{}))
+	require.Equal(t, "http://127.0.0.1:32100/acp/v2", endpoint)
+	require.NoError(t, k.Stop(t.Context(), r))
+	require.NotNil(t, engine.volume)
+	engine.nextPort = 32200
+	result, err = k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	require.False(t, result.ColdStart)
+	require.Contains(t, string(result.BackendMetadataJSON), "32200")
+	// Protocol resolves the current port even when persisted metadata is stale.
+	require.NoError(t, k.RunTurn(t.Context(), r, runTurnRequest{}))
+	require.Equal(t, "http://127.0.0.1:32200/acp/v2", endpoint)
+	interrupted, err := k.InterruptTurn(t.Context(), r, uuid.New())
+	require.NoError(t, err)
+	require.True(t, interrupted)
+	status, err := k.Status(t.Context(), r)
+	require.NoError(t, err)
+	require.True(t, status.Configured)
+	require.Equal(t, 2, protocol.turns)
+	require.Equal(t, 1, protocol.interrupts)
+	require.Equal(t, 1, protocol.statuses)
+	require.Error(t, k.ReapStoppedMachine(t.Context(), r))
+	require.NoError(t, k.Stop(t.Context(), r))
+	require.NoError(t, k.ReapStoppedMachine(t.Context(), r))
+	require.Nil(t, engine.volume)
+	require.Empty(t, engine.info.ID)
+	require.NoError(t, k.Reap(t.Context(), r))
+}
+func TestKitLocalReadinessAndInjectionAreRequired(t *testing.T) {
+	t.Parallel()
+	t.Run("injection", func(t *testing.T) {
+		t.Parallel()
+		k, engine, r, _ := kitLocalFixture(t)
+		engine.failCopy = true
+		_, err := k.Ensure(t.Context(), r)
+		require.Error(t, err)
+		require.NotContains(t, engine.calls, "start")
+		require.NotContains(t, engine.calls, "ready")
+	})
+	t.Run("authenticated readiness", func(t *testing.T) {
+		t.Parallel()
+		k, _, r, _ := kitLocalFixture(t)
+		k.config.Ready = func(context.Context, assistantRuntimeRecord, *url.URL) error { return errors.New("unauthorized") }
+		result, err := k.Ensure(t.Context(), r)
+		require.Error(t, err)
+		require.Empty(t, result.BackendMetadataJSON)
+	})
+}
+func TestKitLocalRejectsForeignAuthority(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"version", "assistant-label", "generation-label", "runtime-label", "volume-label", "saved-version", "saved-generation", "saved-project", "user", "mount", "assertion-source", "assertion-writable", "container-id"} {
+		t.Run(field, func(t *testing.T) {
+			t.Parallel()
+			k, engine, r, _ := kitLocalFixture(t)
+			result, err := k.Ensure(t.Context(), r)
+			require.NoError(t, err)
+			r.BackendMetadataJSON = result.BackendMetadataJSON
+			engine.calls = nil
+			switch field {
+			case "version":
+				r.RuntimeVersion = 2
+			case "assistant-label":
+				engine.info.Labels["gram.ai/assistant-id"] = uuid.NewString()
+			case "generation-label":
+				engine.info.Labels["gram.ai/compatibility-generation"] = "other"
+			case "runtime-label":
+				engine.info.Labels["gram.ai/runtime-lineage"] = uuid.NewString()
+			case "volume-label":
+				engine.volume["gram.ai/assistant-id"] = uuid.NewString()
+			case "saved-version":
+				r.BackendMetadataJSON = bytes.ReplaceAll(r.BackendMetadataJSON, []byte(`"runtime_version":3`), []byte(`"runtime_version":2`))
+			case "saved-project":
+				var metadata kitLocalRuntimeMetadata
+				require.NoError(t, json.Unmarshal(r.BackendMetadataJSON, &metadata))
+				metadata.ProjectID = uuid.New()
+				r.BackendMetadataJSON, err = json.Marshal(metadata)
+				require.NoError(t, err)
+			case "assertion-source":
+				engine.info.AssertionDirectory = "/other/projection"
+			case "assertion-writable":
+				engine.info.AssertionReadOnly = false
+			case "saved-generation":
+				r.BackendMetadataJSON = bytes.ReplaceAll(r.BackendMetadataJSON, []byte("local-generation-one"), []byte("other"))
+			case "user":
+				engine.info.User = "0"
+			case "mount":
+				engine.info.HomeVolume = "foreign-home"
+			case "container-id":
+				engine.info.ID = "replacement-container"
+			}
+			_, err = k.Ensure(t.Context(), r)
+			require.Error(t, err)
+			require.Error(t, k.RunTurn(t.Context(), r, runTurnRequest{}))
+			require.Error(t, k.Reap(t.Context(), r))
+			require.Empty(t, engine.calls)
+		})
+	}
+}
+func TestKitLocalDoesNotAdoptLegacyOrCrossAssistantVolume(t *testing.T) {
+	t.Parallel()
+	k, engine, r, _ := kitLocalFixture(t)
+	engine.volume = map[string]string{"gram.ai/runtime-version": "2"}
+	_, err := k.Ensure(t.Context(), r)
+	require.Error(t, err)
+	require.Empty(t, engine.calls)
+	first, volume := kitLocalNames(r)
+	r.ID = uuid.New()
+	other, otherVolume := kitLocalNames(r)
+	require.NotEqual(t, first, other)
+	require.NotEqual(t, volume, otherVolume)
+}
+func TestKitLocalConstructorRequiresExplicitContracts(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"environment", "bootstrap", "protocol", "ready", "ownership", "command", "args", "generation", "home"} {
+		t.Run(field, func(t *testing.T) {
+			t.Parallel()
+			k, engine, _, _ := kitLocalFixture(t)
+			config := k.config
+			switch field {
+			case "environment":
+				config.Environment = "production"
+			case "bootstrap":
+				config.Bootstrap = nil
+			case "protocol":
+				config.Protocol = nil
+			case "ready":
+				config.Ready = nil
+			case "ownership":
+				config.HomeOwnedByRuntimeUser = false
+			case "command":
+				config.Command = nil
+			case "args":
+				config.Args = nil
+			case "generation":
+				config.CompatibilityGeneration = ""
+			case "home":
+				config.Env = map[string]string{"HOME": "/root"}
+			}
+			_, err := newKitLocalRuntimeBackend(config, engine)
+			require.Error(t, err)
+		})
+	}
+}
+func TestKitLocalBootstrapTarPermissionsAndExactBytes(t *testing.T) {
+	t.Parallel()
+	k, _, r, _ := kitLocalFixture(t)
+	b, err := k.config.Bootstrap(t.Context(), r)
+	require.NoError(t, err)
+	b.Model = "openai/gpt-4.1-mini"
+	archive, err := kitLocalBootstrapArchive(b)
+	require.NoError(t, err)
+	reader := tar.NewReader(bytes.NewReader(archive))
+	files := map[string][]byte{}
+	for {
+		header, err := reader.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		require.Equal(t, 1000, header.Uid)
+		require.Equal(t, 1000, header.Gid)
+		if header.Typeflag == tar.TypeDir {
+			require.Equal(t, int64(0700), header.Mode)
+			continue
+		}
+		require.Equal(t, int64(0600), header.Mode)
+		data, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		files[header.Name] = data
+	}
+	require.Equal(t, map[string][]byte{".kit/AGENTS.md": b.AgentsMD, ".kit/config.toml": []byte(kitBootstrapConfig(b)), ".kit/credentials/mcp.json": b.MCPJSON, ".kit/credentials/gateway-token": b.GatewayToken}, files)
+}
+func TestKitLocalDockerCreateUsesOnlyInjectedImageContract(t *testing.T) {
+	t.Parallel()
+	k, engine, r, _ := kitLocalFixture(t)
+	_, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	spec := engine.spec
+	spec.ExtraCACertFile = "/public-ca.pem"
+	args := kitLocalCreateArgs(8080, spec)
+	joined := strings.Join(args, " ")
+	require.Equal(t, "create", args[0])
+	require.Contains(t, joined, "--user 1000:1000")
+	require.Contains(t, joined, "127.0.0.1::8080")
+	require.Contains(t, joined, "host.docker.internal:host-gateway")
+	require.Contains(t, joined, ":/home/kit")
+	require.Contains(t, joined, "--entrypoint /bin/sh example.invalid/kit:local -c")
+	require.Contains(t, args, kitLocalCABundleScript)
+	require.Contains(t, args, "/etc/ssl/certs/ca-certificates.crt")
+	require.NotContains(t, args, "SSL_CERT_FILE="+localRuntimeCACertMountPath)
+	require.Equal(t, append(append([]string{}, spec.Command...), spec.Args...), args[len(args)-len(spec.Command)-len(spec.Args):])
+	spec.ExtraCACertFile = ""
+	require.Contains(t, strings.Join(kitLocalCreateArgs(8080, spec), " "), "--entrypoint /usr/local/bin/kit example.invalid/kit:local gateway")
+	require.Contains(t, joined, "NODE_EXTRA_CA_CERTS="+localRuntimeCACertMountPath)
+	require.NotContains(t, joined, "private-test-token")
+	require.NotContains(t, joined, "/healthz")
+	require.NotContains(t, joined, "/state")
+}
+func TestKitLocalDockerInspectRejectsPublicPort(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`{"Id":"id","Image":"image","Config":{"User":"1000:1000","Labels":{}},"State":{"Running":true},"Mounts":[{"Type":"volume","Name":"home","Destination":"/home/kit"}],"NetworkSettings":{"Ports":{"8080/tcp":[{"HostIp":"127.0.0.1","HostPort":"33000"}]}}}`)
+	info, err := decodeKitLocalInspect(raw, 8080)
+	require.NoError(t, err)
+	require.Equal(t, 33000, info.HostPort)
+	require.Equal(t, "home", info.HomeVolume)
+	_, err = decodeKitLocalInspect(bytes.ReplaceAll(raw, []byte("127.0.0.1"), []byte("0.0.0.0")), 8080)
+	require.Error(t, err)
+}
+
+func TestKitLocalReservationMetadataSentinel(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{"", "{}", "{ \n\t }"} {
+		t.Run(fmt.Sprintf("empty-%q", raw), func(t *testing.T) {
+			t.Parallel()
+			backend, engine, r, _ := kitLocalFixture(t)
+			r.BackendMetadataJSON = []byte(raw)
+			result, err := backend.Ensure(t.Context(), r)
+			require.NoError(t, err)
+			require.True(t, result.ColdStart)
+			require.NotEmpty(t, result.BackendMetadataJSON)
+			// Only persisted workload authority permits adopting a running guest.
+			r.BackendMetadataJSON = result.BackendMetadataJSON
+			_, err = backend.Ensure(t.Context(), r)
+			require.NoError(t, err)
+			require.Equal(t, 1, strings.Count(strings.Join(engine.calls, ","), "create"))
+		})
+	}
+	for _, raw := range []string{"null", "[]", "[{}]", `{"runtime_version":3}`, `{"unknown":true}`, "{"} {
+		t.Run("reject-"+raw, func(t *testing.T) {
+			t.Parallel()
+			backend, engine, r, _ := kitLocalFixture(t)
+			r.BackendMetadataJSON = []byte(raw)
+			_, err := backend.Ensure(t.Context(), r)
+			require.Error(t, err)
+			require.Empty(t, engine.calls, "invalid persisted authority must fail before infrastructure creation")
+		})
+	}
+}
+
+func TestKitLocalEnsureAcceptsDatabaseReservation(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "kit_reservation_metadata")
+	require.NoError(t, err)
+	assistant, project := seedAssistant(t, db, "kit-reservation-metadata", 1)
+	thread := seedThreadWithEvent(t, db, assistant, "kit-reservation-metadata", "kit-reservation-metadata", eventStatusPending)
+	err = assistantrepo.New(db).SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: project, AssistantID: assistant, RuntimeVersion: 3})
+	require.NoError(t, err)
+	queries := assistantrepo.New(db)
+	require.NoError(t, queries.ReserveAssistantRuntimeV2(t.Context(), assistantrepo.ReserveAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant, AssistantThreadID: thread, Backend: runtimeBackendLocal, State: runtimeStateStarting}))
+	row, err := queries.GetAssistantRuntimeV2(t.Context(), assistantrepo.GetAssistantRuntimeV2Params{ProjectID: project, AssistantID: assistant})
+	require.NoError(t, err)
+	require.JSONEq(t, "{}", string(row.BackendMetadataJson))
+	backend, _, _, _ := kitLocalFixture(t)
+	record := assistantRuntimeRecord{ID: row.ID, ProjectID: row.ProjectID, AssistantID: row.AssistantID, AssistantThreadID: row.AssistantThreadID, Backend: row.Backend, RuntimeVersion: row.RuntimeVersion, BackendMetadataJSON: row.BackendMetadataJson}
+	result, err := backend.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	require.True(t, result.ColdStart)
+	record.BackendMetadataJSON = result.BackendMetadataJSON
+	require.NoError(t, backend.validate(record))
+	record.ID = uuid.New()
+	require.Error(t, backend.validate(record), "a different runtime generation cannot inherit saved authority")
+}
+
+func TestKitLocalCABundlePreservesTrustAndArgv(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	public := filepath.Join(dir, "public roots.pem")
+	extra := filepath.Join(dir, "relay $(false).pem")
+	require.NoError(t, os.WriteFile(public, []byte("public roots"), 0600))
+	require.NoError(t, os.WriteFile(extra, []byte("relay root\n"), 0600))
+	// The child reports the bundle path and argv verbatim. Shell metacharacters
+	// must not be interpreted by the startup shell.
+	child := `printf '%s\n%s' "$SSL_CERT_FILE" "$1"`
+	arg := "spaces ; $(false) '"
+	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCABundleScript, "kit-ca-bundle", public, extra, "/bin/sh", "-c", child, "child", arg)
+	cmd.Env = append(os.Environ(), "TMPDIR="+dir)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+	path, gotArg, ok := strings.Cut(string(out), "\n")
+	require.True(t, ok)
+	t.Cleanup(func() { _ = os.Remove(path) })
+	require.Equal(t, arg, gotArg)
+	bundle, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "public roots\nrelay root\n", string(bundle))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	// A second gateway exec replaces one bounded bundle instead of leaking
+	// another mktemp file into the persistent container layer.
+	require.NoError(t, os.WriteFile(extra, []byte("replacement root\n"), 0600))
+	again := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCABundleScript, "kit-ca-bundle", public, extra, "/bin/sh", "-c", child, "child", arg)
+	again.Env = cmd.Env
+	out, err = again.CombinedOutput()
+	require.NoError(t, err, string(out))
+	require.Equal(t, path+"\n"+arg, string(out))
+	bundle, err = os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "public roots\nreplacement root\n", string(bundle))
+}
+
+func TestKitLocalCABundleFailsClosed(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []int{0, 1} {
+		t.Run(fmt.Sprint(missing), func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			roots := filepath.Join(dir, "roots.pem")
+			require.NoError(t, os.WriteFile(roots, []byte("root"), 0600))
+			paths := []string{roots, roots}
+			paths[missing] = filepath.Join(dir, "missing.pem")
+			marker := filepath.Join(dir, "started")
+			cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCABundleScript, "kit-ca-bundle", paths[0], paths[1], "touch", marker)
+			cmd.Env = append(os.Environ(), "TMPDIR="+dir)
+			require.Error(t, cmd.Run())
+			_, err := os.Stat(marker)
+			require.True(t, os.IsNotExist(err))
+		})
+	}
+}
+
+func TestKitLocalCredentialReplacementRemovesOmittedFiles(t *testing.T) {
+	t.Parallel()
+	info := kitLocalContainerInfo{ID: "exact-container", ImageID: "sha256:exact-image", HomeVolume: "exact-home"}
+	args, err := kitLocalCredentialResetArgs(info)
+	require.NoError(t, err)
+	require.Contains(t, args, "type=volume,src=exact-home,dst=/kit-home")
+	require.Contains(t, args, "sha256:exact-image")
+	require.Contains(t, args, "none")
+	info.Running = true
+	_, err = kitLocalCredentialResetArgs(info)
+	require.Error(t, err)
+	for _, symlink := range []bool{false, true} {
+		t.Run(fmt.Sprint(symlink), func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			outside := t.TempDir()
+			require.NoError(t, os.Mkdir(filepath.Join(home, ".kit"), 0700))
+			credentials := filepath.Join(home, ".kit", "credentials")
+			if symlink {
+				require.NoError(t, os.Symlink(outside, credentials))
+			} else {
+				require.NoError(t, os.Mkdir(credentials, 0700))
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(credentials, "revoked-key"), []byte("old-fixture-secret"), 0600))
+			require.NoError(t, os.WriteFile(filepath.Join(home, "keep-history"), []byte("history"), 0600))
+			cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCredentialResetScript, "reset", home)
+			require.NoError(t, cmd.Run())
+			entries, err := os.ReadDir(credentials)
+			require.NoError(t, err)
+			require.Empty(t, entries)
+			stat, err := os.Lstat(credentials)
+			require.NoError(t, err)
+			require.True(t, stat.IsDir())
+			require.Equal(t, os.FileMode(0700), stat.Mode().Perm())
+			require.FileExists(t, filepath.Join(home, "keep-history"))
+			if symlink {
+				require.FileExists(t, filepath.Join(outside, "revoked-key"))
+			}
+		})
+	}
+}
+
+func TestKitLocalMetadataPersistsProjectAndWorkload(t *testing.T) {
+	t.Parallel()
+	k, engine, r, _ := kitLocalFixture(t)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	var metadata kitLocalRuntimeMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &metadata))
+	require.Equal(t, r.ProjectID, metadata.ProjectID)
+	require.Equal(t, r.ID, metadata.RuntimeID)
+	require.Equal(t, r.AssistantID, metadata.AssistantID)
+	require.Equal(t, engine.bootstrap.Workload, metadata.Workload)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	require.NoError(t, k.validate(r))
+	metadata.ProjectID = uuid.Nil
+	r.BackendMetadataJSON, err = json.Marshal(metadata)
+	require.NoError(t, err)
+	require.Error(t, k.validate(r))
+}
+
+func TestKitLocalRecoveryFencesExactWorkloadBeforeBootstrap(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("missing-%t", missing), func(t *testing.T) {
+			t.Parallel()
+			core, db, runtime, identity, composition, _ := kitWorkloadDBFixture(t)
+			runtime.Backend = runtimeBackendLocal
+			composition.Environment, composition.WorkloadSubject = "local", "local-first-generation"
+			backend, engine, _, _ := kitLocalFixture(t)
+			gateway := "generation-one"
+			var withdrawn *KitWorkloadBinding
+			backend.config.Fence = func(ctx context.Context, r assistantRuntimeRecord) error {
+				if len(r.BackendMetadataJSON) != 0 {
+					var metadata kitLocalRuntimeMetadata
+					if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil {
+						return fmt.Errorf("decode recovered kit workload binding: %w", err)
+					}
+					withdrawn = metadata.Workload
+				}
+				return core.revokeKitWorkload(ctx, db, r)
+			}
+			backend.config.Bootstrap = func(ctx context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
+				binding, err := core.provisionKitWorkload(ctx, r, composition, identity, gateway)
+				if err != nil {
+					return KitLocalBootstrap{}, err
+				}
+				b := kitTestWorkloadBootstrap()
+				b.Workload, b.GatewayToken = binding, []byte(gateway)
+				return b, nil
+			}
+			first, err := backend.Ensure(t.Context(), runtime)
+			require.NoError(t, err)
+			runtime.BackendMetadataJSON = first.BackendMetadataJSON
+			old := *engine.bootstrap.Workload
+			if missing {
+				engine.info = kitLocalContainerInfo{}
+			} else {
+				engine.info.Running = false
+			}
+			gateway, composition.WorkloadSubject = "generation-two", "local-second-generation"
+			_, err = backend.Ensure(t.Context(), runtime)
+			require.NoError(t, err)
+			require.Equal(t, &old, withdrawn, "recovery must fence the saved exact generation before clearing metadata")
+			require.NotEqual(t, old.Subject, engine.bootstrap.Workload.Subject)
+			assignments, err := workloadrepo.New(db).GetWorkloadAgentAssignmentForSubject(t.Context(), workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: old.IssuerID, Subject: old.Subject, MatchKind: "exact"})
+			require.NoError(t, err)
+			require.Empty(t, assignments, "old assertion must lose its exact assignment after recovery")
+			assignments, err = workloadrepo.New(db).GetWorkloadAgentAssignmentForSubject(t.Context(), workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: engine.bootstrap.Workload.IssuerID, Subject: engine.bootstrap.Workload.Subject, MatchKind: "exact"})
+			require.NoError(t, err)
+			require.Len(t, assignments, 1)
+		})
+	}
+}
+
+func TestKitLocalRecoveryAbortsOnWithdrawalFailure(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("missing-%t", missing), func(t *testing.T) {
+			t.Parallel()
+			backend, engine, runtime, _ := kitLocalFixture(t)
+			first, err := backend.Ensure(t.Context(), runtime)
+			require.NoError(t, err)
+			runtime.BackendMetadataJSON = first.BackendMetadataJSON
+			if missing {
+				engine.info = kitLocalContainerInfo{}
+			} else {
+				engine.info.Running = false
+			}
+			engine.calls = nil
+			backend.config.Fence = func(_ context.Context, r assistantRuntimeRecord) error {
+				require.Equal(t, first.BackendMetadataJSON, r.BackendMetadataJSON)
+				return errors.New("withdrawal unavailable")
+			}
+			backend.config.Bootstrap = func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
+				t.Fatal("failed withdrawal must prevent new workload authority")
+				return KitLocalBootstrap{}, nil
+			}
+			_, err = backend.Ensure(t.Context(), runtime)
+			require.ErrorContains(t, err, "withdrawal unavailable")
+			require.NotContains(t, engine.calls, "create")
+			require.NotContains(t, engine.calls, "copy")
+			require.NotContains(t, engine.calls, "start")
+		})
+	}
+}
+
+func TestKitLocalImageMismatchFencesRecordedAuthority(t *testing.T) {
+	t.Parallel()
+	for _, fenceFails := range []bool{false, true} {
+		t.Run(fmt.Sprintf("fence-failure-%t", fenceFails), func(t *testing.T) {
+			t.Parallel()
+			backend, engine, r, _ := kitLocalFixture(t)
+			admitted, err := backend.Ensure(t.Context(), r)
+			require.NoError(t, err)
+			r.BackendMetadataJSON = admitted.BackendMetadataJSON
+			engine.info.ImageID = "sha256:changed-image"
+			fenced := false
+			backend.config.Fence = func(_ context.Context, observed assistantRuntimeRecord) error {
+				require.Equal(t, r.BackendMetadataJSON, observed.BackendMetadataJSON)
+				fenced = true
+				if fenceFails {
+					return errors.New("withdrawal failed")
+				}
+				return nil
+			}
+			result, err := backend.Ensure(t.Context(), r)
+			require.ErrorContains(t, err, "image changed")
+			if fenceFails {
+				require.ErrorContains(t, err, "withdrawal failed")
+			}
+			require.True(t, fenced)
+			require.False(t, engine.info.Running)
+			require.Empty(t, result.BackendMetadataJSON)
+		})
+	}
+}
+
+func TestKitLocalRejectsRunningGuestWithoutRecordedWorkload(t *testing.T) {
+	t.Parallel()
+	for _, sentinel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("reservation-%t", sentinel), func(t *testing.T) {
+			t.Parallel()
+			backend, engine, r, _ := kitLocalFixture(t)
+			admitted, err := backend.Ensure(t.Context(), r)
+			require.NoError(t, err)
+			if sentinel {
+				r.BackendMetadataJSON = []byte(`{}`)
+			} else {
+				var metadata kitLocalRuntimeMetadata
+				require.NoError(t, json.Unmarshal(admitted.BackendMetadataJSON, &metadata))
+				metadata.Workload = nil
+				r.BackendMetadataJSON, err = json.Marshal(metadata)
+				require.NoError(t, err)
+			}
+			fenced := false
+			backend.config.Fence = func(_ context.Context, observed assistantRuntimeRecord) error {
+				require.Equal(t, r.BackendMetadataJSON, observed.BackendMetadataJSON)
+				fenced = true
+				return nil
+			}
+			result, err := backend.Ensure(t.Context(), r)
+			require.ErrorContains(t, err, "no recorded workload authority")
+			require.True(t, fenced)
+			require.False(t, engine.info.Running)
+			require.Empty(t, result.BackendMetadataJSON)
+		})
+	}
+}

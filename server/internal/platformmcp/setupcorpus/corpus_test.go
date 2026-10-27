@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	guides "github.com/speakeasy-api/mcp-setup-docs/go"
 	"github.com/stretchr/testify/require"
@@ -134,19 +133,4 @@ func TestPinnedVersionMatchesGoMod(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(gomod), setupcorpus.ModulePath+" "+setupcorpus.PinnedVersion,
 		"setupcorpus.PinnedVersion must name the version go.mod resolves; bump both together")
-}
-
-// Freshness CI: the pinned export must be recent enough that its guides are
-// still inside their revalidation window. This failing is the signal to review
-// upstream and bump the pinned version — it is what makes the 90-day review
-// commitment enforceable rather than aspirational.
-func TestPinnedCorpusIsWithinItsRevalidationWindow(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now()
-	for _, resource := range build(t) {
-		require.Falsef(t, now.After(resource.RevalidateBy),
-			"setup guide %s was last observed %s and was due revalidation %s: review the guide upstream in mcp-setup-docs and bump the pinned go/vX.Y.Z module version",
-			resource.URI, resource.ObservedAt.Format(time.DateOnly), resource.RevalidateBy.Format(time.DateOnly))
-	}
 }

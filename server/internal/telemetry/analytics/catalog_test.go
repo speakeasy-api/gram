@@ -17,7 +17,7 @@ func TestDefaultCatalog(t *testing.T) {
 	for _, ds := range Default.Datasets() {
 		names = append(names, ds.Name)
 	}
-	require.Equal(t, []string{"tool_calls", "skills"}, names)
+	require.Equal(t, []string{"tool_calls", "skills", "risk_findings"}, names)
 
 	toolCalls, ok := Default.Dataset("tool_calls")
 	require.True(t, ok)
@@ -76,6 +76,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 			Grain:       "one row per thing",
 			Description: "things",
 			TimeExpr:    "started_at",
+			Access:      AccessProject,
 			Fields: []Field{
 				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: ""},
 			},
@@ -108,6 +109,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects a dataset with no grain", mutate: func(d *Dataset) { d.Grain = "" }, want: "no grain"},
 		{name: "it rejects an empty dataset name", mutate: func(d *Dataset) { d.Name = "" }, want: "empty name"},
 		{name: "it rejects a dataset with no time expression", mutate: func(d *Dataset) { d.TimeExpr = "" }, want: "no time expression"},
+		{name: "it rejects a dataset that does not say who may read it", mutate: func(d *Dataset) { d.Access = "" }, want: "unknown access"},
 		{name: "it rejects a dataset with no fields", mutate: func(d *Dataset) { d.Fields = nil }, want: "declares no fields"},
 		{name: "it rejects a field with an empty name", mutate: func(d *Dataset) { d.Fields[0].Name = "" }, want: "empty name or expression"},
 		{name: "it rejects a field with an empty expression", mutate: func(d *Dataset) { d.Fields[0].Expr = "" }, want: "empty name or expression"},
@@ -186,25 +188,26 @@ func TestSourceQueriesNeverSortTheWindow(t *testing.T) {
 		require.NoError(t, err, ds.Name)
 		require.NotContains(t, query, "LIMIT 1 BY", ds.Name)
 		require.Contains(t, query, "FROM tool_calls WHERE", ds.Name)
-		require.Contains(t, query, "GROUP BY organization_id, project_id, event_id HAVING started_at >= ? AND started_at < ?", ds.Name)
+		require.Contains(t, query, "GROUP BY organization_id, project_id, event_id HAVING min(started_at_unix_nano) >= ? AND min(started_at_unix_nano) < ?", ds.Name)
 		require.Contains(t, query, "event_id IN (SELECT event_id FROM tool_calls WHERE organization_id = ? AND project_id = ? AND started_at_unix_nano >= ? AND started_at_unix_nano < ?)", ds.Name)
 		require.Equal(t, []any{"org", "proj", "org", "proj", int64(1), int64(2), int64(1), int64(2)}, args, ds.Name)
 	}
 }
 
-// TestDatasetWindowIsBoundedByItsTableRetention: an event dataset reads
-// agent_events and a metric dataset agent_metrics, and each may ask for no
-// more than its table keeps.
+// TestDatasetWindowIsBoundedByItsTableRetention: a dataset may ask for no
+// more than the table its source reads keeps, whatever its kind.
 func TestDatasetWindowIsBoundedByItsTableRetention(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, MaxEventTimeRangeDays, ToolCalls.MaxTimeRangeDays())
 	require.Equal(t, MaxEventTimeRangeDays, Skills.MaxTimeRangeDays())
 	require.Equal(t, int64(MaxEventTimeRangeDays)*nanosPerDay, ToolCalls.MaxTimeRangeNanos())
+	require.Equal(t, MaxEventTimeRangeDays, RiskFindings.MaxTimeRangeDays(), "a metric over a 90-day table keeps to 90 days")
 
-	metric := &Dataset{Name: "spend", Kind: KindMetric, Grain: "measurement", Description: "", TimeExpr: "t", Fields: nil, Source: Source{}}
-	require.Equal(t, MaxMetricTimeRangeDays, metric.MaxTimeRangeDays())
-	require.Equal(t, MaxTimeRangeDays, metric.MaxTimeRangeDays(), "the metric limit is the ceiling")
+	metrics := mergeTree{table: "agent_metrics", time: "t", plan: "agent_metrics", retention: MaxMetricTimeRangeDays}
+	spend := &Dataset{Name: "spend", Kind: KindMetric, Grain: "measurement", Description: "", TimeExpr: "t", Fields: nil, Source: Source{Table: metrics}}
+	require.Equal(t, MaxMetricTimeRangeDays, spend.MaxTimeRangeDays())
+	require.Equal(t, MaxTimeRangeDays, spend.MaxTimeRangeDays(), "the metric table's limit is the ceiling")
 }
 
 // TestRetentionLimitsMatchTheSchema: the limits restate the tables' TTLs, and
@@ -230,6 +233,18 @@ func TestRetentionLimitsMatchTheSchema(t *testing.T) {
 
 	require.Equal(t, MaxEventTimeRangeDays, ttl("agent_events"), "agent_events TTL drifted from the catalog's event limit")
 	require.Equal(t, MaxMetricTimeRangeDays, ttl("agent_metrics"), "agent_metrics TTL drifted from the catalog's metric limit")
+	for _, ds := range Default.Datasets() {
+		var table string
+		switch source := ds.Source.Table.(type) {
+		case mergeTree:
+			table = source.table
+		case aggregatingMergeTree:
+			table = source.table
+		default:
+			t.Fatalf("%s reads an engine this test does not know", ds.Name)
+		}
+		require.Equal(t, ds.MaxTimeRangeDays(), ttl(table), "%s TTL drifted from the %s dataset's limit", table, ds.Name)
+	}
 }
 
 // TestDimensionValuesSkipTheCollapse: a filter bar lists every dimension's
@@ -239,14 +254,23 @@ func TestDimensionValuesSkipTheCollapse(t *testing.T) {
 
 	tenant := Tenant{OrganizationID: "org", ProjectID: "proj"}
 	for _, ds := range Default.Datasets() {
+		// Only agent_events keeps raw observations to list from. A finding's
+		// later copies can withdraw it, so its values come from the folded,
+		// live rows, which need no sort to read.
+		folded := ds.Source.Table == riskFindingStates
 		for _, field := range ds.Fields {
 			if field.Role != RoleDimension {
 				continue
 			}
-			require.NotEmpty(t, field.Typeahead, "%s.%s falls back to the collapsed rows", ds.Name, field.Name)
 			plan, err := CompileValues(Default, tenant, nil, ValuesRequest{Dataset: ds.Name, Dimension: field.Name, FromUnixNano: 1, ToUnixNano: 2, Limit: 0})
 			require.NoError(t, err)
 			require.NotContains(t, plan.SQL, "LIMIT 1 BY", "%s.%s", ds.Name, field.Name)
+			if folded {
+				require.Contains(t, plan.SQL, "FROM risk_finding_states", "%s.%s lists values from the folded rows", ds.Name, field.Name)
+				require.Contains(t, plan.SQL, "argMaxMerge(live) = 1", "%s.%s lists values of live findings only", ds.Name, field.Name)
+				continue
+			}
+			require.NotEmpty(t, field.Typeahead, "%s.%s falls back to the collapsed rows", ds.Name, field.Name)
 		}
 	}
 }

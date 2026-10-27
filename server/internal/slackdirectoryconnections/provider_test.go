@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -106,6 +107,24 @@ func TestProviderUserToken(t *testing.T) {
 	_, err := p.Exchange(t.Context(), "synthetic-code")
 	require.ErrorContains(t, err, "workspace_required")
 	require.NotContains(t, err.Error(), "synthetic-bot-token")
+}
+
+func TestProviderRequestsChatWrite(t *testing.T) {
+	t.Parallel()
+	p := protocolProvider(t, nil, "TEXAMPLE01")
+	authorizeURL, err := url.Parse(p.AuthorizationURL("synthetic-state", ""))
+	require.NoError(t, err)
+	require.Equal(t, "users:read,users:read.email,chat:write", authorizeURL.Query().Get("scope"))
+}
+
+func TestProviderConnectsWithoutChatWrite(t *testing.T) {
+	t.Parallel()
+	// Installs from before approvals granted only the directory scopes. They
+	// still connect, and the workspace reports chat:write as missing.
+	p := protocolProvider(t, func(b map[string]any) { b["scope"] = "users:read,users:read.email" }, "TEXAMPLE01")
+	result, err := p.Exchange(t.Context(), "synthetic-code")
+	require.NoError(t, err)
+	require.Equal(t, []string{"users:read", "users:read.email"}, result.Scopes)
 }
 
 func TestProviderMissingScope(t *testing.T) {

@@ -127,7 +127,9 @@ export function HeadersSection({
               {siblingMcpServers.map((server) => (
                 <Link
                   key={server.id}
-                  to={routes.mcp.x.settings.href(mcpServerRouteParam(server))}
+                  to={routes.mcp.details.settings.href(
+                    mcpServerRouteParam(server),
+                  )}
                   className="no-underline"
                 >
                   <Badge variant="neutral" className="hover:bg-muted">

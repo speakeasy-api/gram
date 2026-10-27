@@ -22,7 +22,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
-import type { QueryParamStatus as ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
+import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 import { RemoteSessionRefreshPolicySetting } from "./RemoteSessionRefreshPolicySetting";
 
 const USER_SESSION_FILTERS = defineFilters([
@@ -43,6 +43,8 @@ const USER_SESSION_FILTERS = defineFilters([
   // Unpinned to keep the bar on one line. Project and MCP server are the two
   // axes this page is read along; narrowing to one person is a follow-up
   // question, and the chip appears the moment it is answered.
+  // "User", not "Identity": the facets endpoint lists only `user:` subjects,
+  // so the wider label offered agents and keys the filter cannot select.
   { id: "subjectUrn", label: "User", kind: "select" },
 ]);
 

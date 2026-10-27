@@ -76,6 +76,20 @@ type Service interface {
 	// registered at the registration_endpoint the client's issuer publishes, so
 	// the issuer must publish one. Requires org:admin.
 	RotateClient(context.Context, *RotateClientPayload) (res *types.RemoteSessionClient, err error)
+	// Create a new standalone remote_session_client with a copy of an existing
+	// client's configuration in the caller's organization. The copy keeps the
+	// source's issuer, project, credential owner, authentication settings, key
+	// set, scopes, audience, and callback, and by default reuses its client_id and
+	// stored secret, so no secret is re-entered. A client metadata document (CIMD)
+	// client gets a new hosted document and client_id. To give the copy its own
+	// upstream registration instead, register one through /oauth/proxy-register
+	// and pass the returned credentials; this is refused for credential_owner self
+	// clients. A private_key_jwt client that is not a CIMD client cannot be
+	// duplicated, because the provider knows only the source's key set URL. The
+	// source is unchanged and the copy has no user_session_issuer attachments.
+	// Clients managed by an identity provider connection cannot be duplicated.
+	// Requires org:admin.
+	DuplicateClient(context.Context, *DuplicateClientPayload) (res *types.RemoteSessionClient, err error)
 	// Soft-delete a remote_session_client in the caller's organization. Cascades
 	// to the remote_sessions minted against it. Requires org:admin.
 	DeleteClient(context.Context, *DeleteClientPayload) (err error)
@@ -104,7 +118,7 @@ const ServiceName = "organizationRemoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"listClients", "getClient", "getClientDelegationStatus", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "rotateClient", "deleteClient", "removeClientFromMcpServer"}
+var MethodNames = [14]string{"listClients", "getClient", "getClientDelegationStatus", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "rotateClient", "duplicateClient", "deleteClient", "removeClientFromMcpServer"}
 
 // AttachClientKeySetPayload is the payload type of the
 // organizationRemoteSessionClients service attachClientKeySet method.
@@ -226,6 +240,30 @@ type DetachClientKeySetPayload struct {
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// DuplicateClientPayload is the payload type of the
+// organizationRemoteSessionClients service duplicateClient method.
+type DuplicateClientPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The remote_session_client id to duplicate.
+	ID string
+	// client_id of a fresh upstream registration, e.g. from /oauth/proxy-register.
+	// Omit to copy the source's client_id and secret.
+	ClientID *string
+	// client_secret of the fresh registration. Only with client_id. Speakeasy
+	// encrypts before persisting; the plaintext is never returned.
+	ClientSecret *string
+	// How the fresh registration authenticates at the issuer's token endpoint.
+	// Only with client_id; omit to keep the source's method.
+	TokenEndpointAuthMethod *string
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string
 }
 
 // GetClientDelegationStatusPayload is the payload type of the
@@ -387,6 +425,14 @@ type UpdateClientPayload struct {
 	ApikeyToken  *string
 	// The remote_session_client id.
 	ID string
+	// Correct the client_id registered with the issuer. Refused for Client ID
+	// Metadata Document (CIMD) clients and clients managed by an identity provider
+	// connection. A changed value revokes every remote session obtained through
+	// the client, so each user must reconnect. Omit to leave unchanged.
+	ClientID *string
+	// Replace the client's display name. Pass an empty string to clear it so the
+	// client shows its client_id. Omit to leave unchanged.
+	DisplayName *string
 	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.

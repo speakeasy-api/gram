@@ -6,10 +6,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type RegisterCatalogMCPToolInput struct {
-	ProjectSlug     string                     `json:"project_slug" jsonschema:"explicit project slug that will own the reviewed MCP"`
+	ProjectSlug     string                     `json:"project_slug,omitempty" jsonschema:"optional project slug that will own the reviewed MCP; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	ProviderKey     string                     `json:"provider_key" jsonschema:"server-issued catalogue source identity returned by search_mcp_catalog"`
 	CatalogRef      string                     `json:"catalog_ref" jsonschema:"exact catalogue reference returned by search_mcp_catalog"`
 	NonSecretConfig CatalogConfigurationValues `json:"non_secret_config,omitempty" jsonschema:"only declared non-secret configuration values keyed by inspect_mcp_catalog_candidate configuration field key; do not include API keys, tokens, passwords, OAuth codes, client secrets, or secret headers"`
@@ -30,7 +32,7 @@ type RegisterCatalogMCPToolOutput struct {
 }
 
 type RegisterRemoteMCPToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that will own the user-supplied MCP"`
+	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that will own the user-supplied MCP; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	RemoteURL      string `json:"remote_url" jsonschema:"HTTPS Streamable HTTP MCP URL; safe endpoint query parameters are supported, but fragments, userinfo, headers, credentials, and credential-like query parameters are not accepted"`
 	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional project-local display name for the MCP; maximum 256 bytes"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project and canonical remote URL"`
@@ -54,11 +56,18 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Add a Reviewed MCP Server to a Project",
-		Description: "Add one reviewed catalogue MCP server to a named project. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin.",
+		Description: "Add one reviewed catalogue MCP server to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin.",
 		Annotations: registrationAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
+			return nil, RegisterCatalogMCPToolOutput{}, err
+		}
+		input.ProjectSlug, err = projectSlugOrDefault(ctx, registrations.store, principal.OrganizationID, input.ProjectSlug)
+		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, RegisterCatalogMCPToolOutput{}, nil
+			}
 			return nil, RegisterCatalogMCPToolOutput{}, err
 		}
 		result, err := registrations.RegisterCatalogMCP(ctx, principal, RegisterCatalogMCPInput(input))
@@ -95,7 +104,14 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				CatalogRef:     result.CatalogRef,
 			})
 			if err != nil {
-				return nil, RegisterCatalogMCPToolOutput{}, err
+				// The registration has already committed. A failed setup link must
+				// not report the add as failed and prompt a duplicate retry; the
+				// caller can still continue setup from the dashboard.
+				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+				if reg.logger != nil {
+					reg.logger.ErrorContext(ctx, "platform mcp catalog registration setup link failed after commit", attr.SlogError(err))
+				}
+				dashboardSetupURL = ""
 			}
 		}
 		return nil, RegisterCatalogMCPToolOutput{
@@ -121,11 +137,18 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 	addTool(reg, &mcp.Tool{
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
-		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin, and a project Shadow MCP policy is applied at that later step, where the administrator's distribution counts as the review.",
+		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin, and a project Shadow MCP policy is applied at that later step, where the administrator's distribution counts as the review.",
 		Annotations: registrationAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterRemoteMCPToolInput) (*mcp.CallToolResult, RegisterRemoteMCPToolOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterRemoteMCPToolInput) (*mcp.CallToolResult, RegisterRemoteMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
+			return nil, RegisterRemoteMCPToolOutput{}, err
+		}
+		input.ProjectSlug, err = projectSlugOrDefault(ctx, registrations.store, principal.OrganizationID, input.ProjectSlug)
+		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, RegisterRemoteMCPToolOutput{}, nil
+			}
 			return nil, RegisterRemoteMCPToolOutput{}, err
 		}
 		result, err := registrations.RegisterRemoteMCP(ctx, principal, RegisterRemoteMCPInput(input))
