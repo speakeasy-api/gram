@@ -375,15 +375,22 @@ type GetToolUsageSummaryRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -411,15 +418,22 @@ type GetToolUsageTotalsRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -447,15 +461,22 @@ type GetToolUsageTargetsRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -483,15 +504,22 @@ type GetToolUsageUsersRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -519,15 +547,22 @@ type GetToolUsageClientsRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -555,15 +590,22 @@ type GetToolUsageClientToolBreakdownRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -591,15 +633,22 @@ type GetToolUsageTargetTimeSeriesRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -627,15 +676,22 @@ type GetToolUsageUserTimeSeriesRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -663,15 +719,22 @@ type GetToolUsageUsersByTargetRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -699,15 +762,22 @@ type GetToolUsageTargetToolBreakdownRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -735,15 +805,22 @@ type ListToolUsageTracesRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
@@ -779,6 +856,34 @@ type GetToolUsageFilterOptionsRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Filter option types to include. Empty means all option types.
 	OptionTypes []string `form:"option_types,omitempty" json:"option_types,omitempty" xml:"option_types,omitempty"`
+	// Target types to include. Empty means all target types.
+	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not
+	// applied to the server options.
+	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to narrow by. Not applied to the server options.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
+	// Shadow MCP server names to narrow by. Not applied to the server options.
+	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
+	// Gateway (meta MCP server) ids to narrow by. Not applied to the server
+	// options.
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to narrow by. Not applied to the email user options.
+	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to narrow by. Not applied to the agent user options.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	// Hook plugin sources to narrow by.
+	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys to narrow by. Not applied to the client options.
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to narrow by. Empty means all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetMcpServerActivityRequestBody is the type of the "telemetry" service
@@ -8712,6 +8817,8 @@ type ToolUsageTargetSummaryResponseBody struct {
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
 	// User-facing label for the target
 	TargetLabel string `form:"target_label" json:"target_label" xml:"target_label"`
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Total number of tool usage events for the target
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 	// Number of distinct tools observed for the target
@@ -8899,12 +9006,19 @@ type ToolUsageTraceSummaryResponseBody struct {
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
 	// User-facing target label
 	TargetLabel string `form:"target_label" json:"target_label" xml:"target_label"`
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Stable user identity value
 	UserKey string `form:"user_key" json:"user_key" xml:"user_key"`
 	// User-facing user identity label
 	UserLabel string `form:"user_label" json:"user_label" xml:"user_label"`
 	// Type of user identity represented by the row
 	UserKind string `form:"user_kind" json:"user_kind" xml:"user_kind"`
+	// Person an agent call acted on behalf of; absent for direct calls and for
+	// agents that sign in as themselves
+	AuthorizerUserID *string `form:"authorizer_user_id,omitempty" json:"authorizer_user_id,omitempty" xml:"authorizer_user_id,omitempty"`
+	// Email of the authorizer when they resolve to a known user
+	AuthorizerLabel *string `form:"authorizer_label,omitempty" json:"authorizer_label,omitempty" xml:"authorizer_label,omitempty"`
 	// Hook plugin source when the row came from hook telemetry
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// Telemetry event source
@@ -8949,6 +9063,8 @@ type ToolUsageHostedServerFilterOptionResponseBody struct {
 	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
 	// Hosted MCP toolset display name
 	ToolsetName string `form:"toolset_name" json:"toolset_name" xml:"toolset_name"`
+	// MCP server id to filter by; absent when the server has no mcp_servers row
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 }
@@ -15970,6 +16086,12 @@ func NewGetToolUsageSummaryPayload(body *GetToolUsageSummaryRequestBody, apikeyT
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -15990,6 +16112,12 @@ func NewGetToolUsageSummaryPayload(body *GetToolUsageSummaryRequestBody, apikeyT
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16048,6 +16176,12 @@ func NewGetToolUsageTotalsPayload(body *GetToolUsageTotalsRequestBody, apikeyTok
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16068,6 +16202,12 @@ func NewGetToolUsageTotalsPayload(body *GetToolUsageTotalsRequestBody, apikeyTok
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16126,6 +16266,12 @@ func NewGetToolUsageTargetsPayload(body *GetToolUsageTargetsRequestBody, apikeyT
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16146,6 +16292,12 @@ func NewGetToolUsageTargetsPayload(body *GetToolUsageTargetsRequestBody, apikeyT
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16204,6 +16356,12 @@ func NewGetToolUsageUsersPayload(body *GetToolUsageUsersRequestBody, apikeyToken
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16224,6 +16382,12 @@ func NewGetToolUsageUsersPayload(body *GetToolUsageUsersRequestBody, apikeyToken
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16282,6 +16446,12 @@ func NewGetToolUsageClientsPayload(body *GetToolUsageClientsRequestBody, apikeyT
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16302,6 +16472,12 @@ func NewGetToolUsageClientsPayload(body *GetToolUsageClientsRequestBody, apikeyT
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16360,6 +16536,12 @@ func NewGetToolUsageClientToolBreakdownPayload(body *GetToolUsageClientToolBreak
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16380,6 +16562,12 @@ func NewGetToolUsageClientToolBreakdownPayload(body *GetToolUsageClientToolBreak
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16438,6 +16626,12 @@ func NewGetToolUsageTargetTimeSeriesPayload(body *GetToolUsageTargetTimeSeriesRe
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16458,6 +16652,12 @@ func NewGetToolUsageTargetTimeSeriesPayload(body *GetToolUsageTargetTimeSeriesRe
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16516,6 +16716,12 @@ func NewGetToolUsageUserTimeSeriesPayload(body *GetToolUsageUserTimeSeriesReques
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16536,6 +16742,12 @@ func NewGetToolUsageUserTimeSeriesPayload(body *GetToolUsageUserTimeSeriesReques
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16594,6 +16806,12 @@ func NewGetToolUsageUsersByTargetPayload(body *GetToolUsageUsersByTargetRequestB
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16614,6 +16832,12 @@ func NewGetToolUsageUsersByTargetPayload(body *GetToolUsageUsersByTargetRequestB
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16672,6 +16896,12 @@ func NewGetToolUsageTargetToolBreakdownPayload(body *GetToolUsageTargetToolBreak
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16692,6 +16922,12 @@ func NewGetToolUsageTargetToolBreakdownPayload(body *GetToolUsageTargetToolBreak
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16757,6 +16993,12 @@ func NewListToolUsageTracesPayload(body *ListToolUsageTracesRequestBody, apikeyT
 			v.HostedToolsetSlugs[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	if body.ShadowServerNames != nil {
 		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
 		for i, val := range body.ShadowServerNames {
@@ -16777,6 +17019,12 @@ func NewListToolUsageTracesPayload(body *ListToolUsageTracesRequestBody, apikeyT
 				continue
 			}
 			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	if body.HookSources != nil {
@@ -16824,13 +17072,89 @@ func NewListToolUsageTracesPayload(body *ListToolUsageTracesRequestBody, apikeyT
 // getToolUsageFilterOptions endpoint payload.
 func NewGetToolUsageFilterOptionsPayload(body *GetToolUsageFilterOptionsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetToolUsageFilterOptionsPayload {
 	v := &telemetry.GetToolUsageFilterOptionsPayload{
-		From: *body.From,
-		To:   *body.To,
+		From:        *body.From,
+		To:          *body.To,
+		AccountType: body.AccountType,
+		Query:       body.Query,
 	}
 	if body.OptionTypes != nil {
 		v.OptionTypes = make([]telemetry.ToolUsageFilterOptionType, len(body.OptionTypes))
 		for i, val := range body.OptionTypes {
 			v.OptionTypes[i] = telemetry.ToolUsageFilterOptionType(val)
+		}
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	if body.Statuses != nil {
+		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
+		for i, val := range body.Statuses {
+			v.Statuses[i] = telemetry.ToolUsageStatus(val)
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -17525,6 +17849,12 @@ func ValidateGetToolUsageSummaryRequestBody(body *GetToolUsageSummaryRequestBody
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
@@ -17566,6 +17896,12 @@ func ValidateGetToolUsageTotalsRequestBody(body *GetToolUsageTotalsRequestBody) 
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
@@ -17609,6 +17945,12 @@ func ValidateGetToolUsageTargetsRequestBody(body *GetToolUsageTargetsRequestBody
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
@@ -17650,6 +17992,12 @@ func ValidateGetToolUsageUsersRequestBody(body *GetToolUsageUsersRequestBody) (e
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
@@ -17693,6 +18041,12 @@ func ValidateGetToolUsageClientsRequestBody(body *GetToolUsageClientsRequestBody
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
@@ -17734,6 +18088,12 @@ func ValidateGetToolUsageClientToolBreakdownRequestBody(body *GetToolUsageClient
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
@@ -17777,6 +18137,12 @@ func ValidateGetToolUsageTargetTimeSeriesRequestBody(body *GetToolUsageTargetTim
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
@@ -17818,6 +18184,12 @@ func ValidateGetToolUsageUserTimeSeriesRequestBody(body *GetToolUsageUserTimeSer
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
@@ -17861,6 +18233,12 @@ func ValidateGetToolUsageUsersByTargetRequestBody(body *GetToolUsageUsersByTarge
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
@@ -17903,6 +18281,12 @@ func ValidateGetToolUsageTargetToolBreakdownRequestBody(body *GetToolUsageTarget
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
 	for _, e := range body.UserFilters {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
@@ -17944,6 +18328,12 @@ func ValidateListToolUsageTracesRequestBody(body *ListToolUsageTracesRequestBody
 		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.UserFilters {
 		if e != nil {
@@ -18000,6 +18390,36 @@ func ValidateGetToolUsageFilterOptionsRequestBody(body *GetToolUsageFilterOption
 	for _, e := range body.OptionTypes {
 		if !(e == "hosted_servers" || e == "shadow_servers" || e == "gateways" || e == "users" || e == "clients") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "gateways", "users", "clients"}))
+		}
+	}
+	for _, e := range body.TargetTypes {
+		if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		}
+	}
+	if len(body.McpServerIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_server_ids", body.McpServerIds, len(body.McpServerIds), 100, false))
+	}
+	for _, e := range body.McpServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.UserFilters {
+		if e != nil {
+			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Statuses {
+		if !(e == "error" || e == "success" || e == "blocked" || e == "pending") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.statuses[*]", e, []any{"error", "success", "blocked", "pending"}))
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return

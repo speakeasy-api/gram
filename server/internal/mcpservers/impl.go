@@ -59,6 +59,7 @@ import (
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -359,7 +360,7 @@ func (s *Service) setDefaultServerIcon(ctx context.Context, logger *slog.Logger,
 	// the row already had a logo (or a user edit raced ahead) -- not a
 	// failure.
 	if _, err := mcpmetadatarepo.New(s.db).SetDefaultLogoIfUnset(ctx, mcpmetadatarepo.SetDefaultLogoIfUnsetParams{
-		McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		McpServerID: mcpServerID,
 		ProjectID:   projectID,
 		LogoID:      uuid.NullUUID{UUID: assetID, Valid: true},
 	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -692,6 +693,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
+	clearIssuer := payload.ClearUserSessionIssuer != nil && *payload.ClearUserSessionIssuer
+	if clearIssuer && payload.UserSessionIssuerID != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "user_session_issuer_id and clear_user_session_issuer cannot be set together").LogWarn(ctx, logger)
+	}
 
 	ids, err := parseServerIDs(serverIDStrings{
 		EnvironmentID:         payload.EnvironmentID,
@@ -717,7 +722,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return s.updateHostedServer(ctx, logger, authCtx.ActiveOrganizationID, unlocked, payload, ids)
 	}
 	if ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID {
-		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+		return nil, oops.E(oops.CodeInvalid, nil, "an MCP server cannot take over its toolset's hosted MCP identity").LogWarn(ctx, logger)
 	}
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
 	if err != nil {
@@ -762,7 +767,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	if isCanonicalHostedWrapper(existing) {
-		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+		return nil, oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the update").LogWarn(ctx, logger)
 	}
 	// Authorization keys on the row as it exists, not the backing the payload
 	// may switch it to.
@@ -844,38 +849,47 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	// NULL leaves the stored issuer untouched (the update query COALESCEs).
 	// A backend switch onto remote/tunneled from a backend that never carried
-	// one (toolset, unproxied) needs a fresh mint here.
+	// one (toolset, unproxied) needs a fresh mint here; a server whose issuer
+	// was detached keeps none.
 	issuerID := ids.UserSessionIssuerID
-	if issuerID.Valid {
+	if clearIssuer && existing.UserSessionIssuerID.Valid {
+		if err := lifecycle.GuardServerIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.UserSessionIssuerID.UUID); err != nil {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
+	}
+	switch {
+	case clearIssuer:
+	case issuerID.Valid:
 		if _, err := usersessionbindings.ValidateAndLock(ctx, dbtx, issuerID.UUID, *authCtx.ProjectID, authCtx.ActiveOrganizationID); err != nil {
 			if errors.Is(err, usersessionbindings.ErrNotFound) {
 				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, logger)
 		}
-	} else if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !existing.UserSessionIssuerID.Valid {
-		issuerID, err = MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
+	case ((ids.RemoteMcpServerID.Valid && ids.RemoteMcpServerID != existing.RemoteMcpServerID) || (ids.TunneledMcpServerID.Valid && ids.TunneledMcpServerID != existing.TunneledMcpServerID)) && !existing.UserSessionIssuerID.Valid:
+		issuerID, err = serverissuer.Mint(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
 		}
 	}
 
 	lifecycleInput := LifecycleUpdateInput{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ProjectID:             *authCtx.ProjectID,
-		ActorUserID:           authCtx.UserID,
-		ActorEmail:            authCtx.Email,
-		ServerID:              serverID,
-		Name:                  payload.Name,
-		Visibility:            string(payload.Visibility),
-		NetworkAccessMode:     networkAccessModeUpdate(payload.NetworkAccessMode, mode),
-		EnvironmentID:         ids.EnvironmentID,
-		UserSessionIssuerID:   issuerID,
-		RemoteMcpServerID:     ids.RemoteMcpServerID,
-		TunneledMcpServerID:   ids.TunneledMcpServerID,
-		ToolsetID:             ids.ToolsetID,
-		UnproxiedMcpServerID:  ids.UnproxiedMcpServerID,
-		ToolVariationsGroupID: ids.ToolVariationsGroupID,
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		ActorUserID:            authCtx.UserID,
+		ActorEmail:             authCtx.Email,
+		ServerID:               serverID,
+		Name:                   payload.Name,
+		Visibility:             string(payload.Visibility),
+		NetworkAccessMode:      networkAccessModeUpdate(payload.NetworkAccessMode, mode),
+		EnvironmentID:          ids.EnvironmentID,
+		UserSessionIssuerID:    issuerID,
+		ClearUserSessionIssuer: clearIssuer,
+		RemoteMcpServerID:      ids.RemoteMcpServerID,
+		TunneledMcpServerID:    ids.TunneledMcpServerID,
+		ToolsetID:              ids.ToolsetID,
+		UnproxiedMcpServerID:   ids.UnproxiedMcpServerID,
+		ToolVariationsGroupID:  ids.ToolVariationsGroupID,
 	}
 	var clearedRootDomainIDs []uuid.UUID
 	var updated repo.McpServer
@@ -936,8 +950,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			updated = refreshed
 		}
 	} else {
-		// Without an issuer the server keeps no upstream client associations.
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, nil)
+		// Without an issuer the server keeps no upstream client associations; a detached issuer's other servers are recomputed.
+		var detached []uuid.UUID
+		if clearIssuer && existing.UserSessionIssuerID.Valid {
+			detached = []uuid.UUID{existing.UserSessionIssuerID.UUID}
+		}
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, detached)
 	}
 	afterView, _ := s.buildMcpServerView(ctx, authCtx.ActiveOrganizationID, updated)
 
@@ -1103,7 +1121,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 	if isCanonicalHostedWrapper(lockedServer.Server) {
-		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
+		return oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the deletion").LogWarn(ctx, logger)
 	}
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(lockedServer.Server.ID, lockedServer.Server.ToolsetID), authCtx.ProjectID.String())); err != nil {
 		return err
@@ -1114,6 +1132,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		ProjectID:      *authCtx.ProjectID,
 		ActorUserID:    authCtx.UserID,
 		ActorEmail:     authCtx.Email,
+		ActorSystem:    "",
 		TracerProvider: s.tracerProvider,
 	})
 	if err != nil {

@@ -5,6 +5,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
@@ -178,6 +179,23 @@ export function GrantDrawer({
     challenge.userEmail,
     challenge.principalUrn,
   );
+  // An agent gets the shared renderer in place of its raw urn. Unlinked: the
+  // drawer is a flow the reader is in the middle of, and a link out of it
+  // abandons the grant they came here to make.
+  const agentId =
+    challenge.principalType === "agent"
+      ? challenge.principalUrn.replace(/^agent:/, "")
+      : null;
+  const principalSubject =
+    agentId === null ? (
+      <strong>{principalDisplay}</strong>
+    ) : (
+      <ActingPrincipal
+        agent={{ id: agentId }}
+        linked={false}
+        className="inline-flex align-middle font-semibold"
+      />
+    );
 
   const stepTitle = {
     choose: "Grant Access",
@@ -206,13 +224,17 @@ export function GrantDrawer({
                 <code className="bg-muted px-1 font-mono text-xs">
                   {challenge.scope}
                 </code>{" "}
-                access to <strong>{principalDisplay}</strong>
+                access to {principalSubject}
               </>
             )}
-            {step === "select-role" && "Choose a role to assign this user to."}
+            {/* "this identity", not "this user": the subject can be an agent,
+                and a role assigned to one is not a person being added to a
+                group. */}
+            {step === "select-role" &&
+              "Choose a role to assign to this identity."}
             {step === "confirm" && selectedRole && (
               <>
-                Assign <strong>{principalDisplay}</strong> to the{" "}
+                Assign {principalSubject} to the{" "}
                 <strong>{selectedRole.name}</strong> role.
               </>
             )}

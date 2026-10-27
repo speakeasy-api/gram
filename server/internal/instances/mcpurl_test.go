@@ -16,6 +16,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -109,7 +110,7 @@ func TestGetInstance_LegacyToolsetURLSkipsUnservedCustomDomain(t *testing.T) {
 
 			toolset := seedInstanceToolset(t, ctx, conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 			domain := seedInstanceDomain(t, ctx, conn, authCtx.ActiveOrganizationID, tt.state)
-			require.NoError(t, toolsetsrepo.New(conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
+			require.NoError(t, testrepo.New(conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
 				CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 				Slug:           toolset.Slug,
 				ProjectID:      toolset.ProjectID,

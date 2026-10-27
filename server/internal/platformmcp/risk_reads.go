@@ -490,6 +490,9 @@ func (s *RiskReadService) policyUnsupported(policy policycore.Policy) []string {
 	if policy.ModelConfig != nil {
 		unsupported = append(unsupported, "model_config")
 	}
+	if policy.ApprovalConfig != nil {
+		unsupported = append(unsupported, "approval_config")
+	}
 	if policy.ShadowMCPDisposition != nil {
 		unsupported = append(unsupported, "shadow_mcp_url_decisions")
 	}

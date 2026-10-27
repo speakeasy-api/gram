@@ -147,7 +147,7 @@ export default function CreateFromSource(): JSX.Element {
         const serverId = await ensureToolsetWrapper(client, toolset, reconcile);
         await flow.complete(serverId);
       } else {
-        routes.mcp.details.tools.goTo(toolset.slug);
+        routes.toolset.tools.goTo(toolset.slug);
       }
     } catch (err) {
       setError(

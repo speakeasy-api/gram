@@ -69,6 +69,11 @@ func Reconcile(ctx context.Context, dbtx repo.DBTX, organizationID string, proje
 // COALESCE(credential_id, id).
 const CredentialKindUserSession = "user_session"
 
+// CredentialKindExecutionProfileVersion identifies one version of an
+// assistant's execution-selection profile, which the turn credentials it binds
+// read their choices through.
+const CredentialKindExecutionProfileVersion = "execution_profile_version"
+
 // How an upstream client selection was made.
 const (
 	// SelectionSourceIssuance is a choice recorded when the credential was

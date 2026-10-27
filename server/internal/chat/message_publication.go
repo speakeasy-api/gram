@@ -10,6 +10,7 @@ import (
 
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 )
@@ -22,15 +23,39 @@ func (w *ChatMessageWriter) enqueueMessageEvents(ctx context.Context, tx repo.DB
 		return nil
 	}
 	ids := make([]uuid.UUID, len(writes))
+	emails := make([]string, len(writes))
 	metadata := make(map[uuid.UUID]MessageWrite, len(writes))
+	lineage := repo.SetMessageCaptureLineageParams{ProjectID: projectID, OrganizationID: organizationID, Ids: nil, Kinds: nil, OriginalIds: nil}
 	for i, write := range writes {
 		if write.Params.ProjectID != projectID {
 			return fmt.Errorf("publication project does not match message")
 		}
 		ids[i] = write.Params.ID
+		emails[i] = conv.NormalizeEmail(write.UserEmail)
 		metadata[write.Params.ID] = write
+		if write.Lineage != nil || write.Params.Generation != 0 {
+			kind, original := CaptureOriginal, uuid.Nil
+			if write.Lineage != nil {
+				kind, original = write.Lineage.Kind, write.Lineage.OriginalMessageID
+			}
+			switch kind {
+			case CaptureOriginal, CaptureReobserved, CaptureSynthetic, CaptureUnknown:
+			default:
+				return fmt.Errorf("invalid message capture kind")
+			}
+			lineage.Ids = append(lineage.Ids, write.Params.ID)
+			lineage.Kinds = append(lineage.Kinds, kind)
+			lineage.OriginalIds = append(lineage.OriginalIds, original)
+		}
 	}
-	rows, err := repo.New(tx).GetMessagesForPublication(ctx, repo.GetMessagesForPublicationParams{ProjectID: projectID, Ids: ids})
+	if len(lineage.Ids) > 0 {
+		if err := repo.New(tx).SetMessageCaptureLineage(ctx, lineage); err != nil {
+			return fmt.Errorf("persist capture lineage: %w", err)
+		}
+	}
+	rows, err := repo.New(tx).GetMessagesForPublication(ctx, repo.GetMessagesForPublicationParams{
+		ProjectID: projectID, OrganizationID: organizationID, Ids: ids, ObservedUserEmails: emails,
+	})
 	if err != nil {
 		return fmt.Errorf("load persisted messages for publication: %w", err)
 	}
@@ -57,6 +82,12 @@ func (w *ChatMessageWriter) enqueueMessageEvents(ctx context.Context, tx repo.DB
 		event.SetRole(conversationv1.MessageEvent_Role(role))
 		event.SetOccurredAt(occurredAt.UTC().Format(time.RFC3339Nano))
 		event.SetMessageCreatedAt(row.CreatedAt.Time.UTC().Format(time.RFC3339Nano))
+		event.SetGeneration(row.Generation)
+		event.SetSequence(row.Seq)
+		event.SetCaptureKind(row.CaptureKind)
+		if row.OriginalMessageID.Valid {
+			event.SetOriginalMessageId(row.OriginalMessageID.UUID.String())
+		}
 		ingestion := &conversationv1.MessageEvent_IngestionContext{}
 		if row.Source.Valid {
 			ingestion.SetSource(CanonicalSource(row.Source.String))
@@ -86,6 +117,7 @@ func (w *ChatMessageWriter) enqueueMessageEvents(ctx context.Context, tx repo.DB
 			ingestion.SetBillingMode(write.BillingMode)
 		}
 		ingestion.SetReplayed(row.Replayed)
+		ingestion.SetAttributes(messageAttributes(conv.FromPGTextOrEmpty[string](row.Model), write.InferenceProvider, row.Department))
 		event.SetIngestion(ingestion)
 		publications = append(publications, outbox.Message{Proto: event, PublicID: id, Attributes: map[string]string{
 			"type": event.GetType().String(), "role": row.Role, "source": ingestion.GetSource(),
@@ -103,5 +135,5 @@ func externalPublication(write ExternalMessageWrite) MessageWrite {
 	var params repo.CreateChatMessageParams
 	params.ID = write.Params.ID
 	params.ProjectID = write.Params.ProjectID
-	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode}
+	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, InferenceProvider: write.InferenceProvider, Lineage: nil, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode}
 }

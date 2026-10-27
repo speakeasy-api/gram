@@ -40,6 +40,12 @@ vi.mock("./useChallengeRowColumns", () => ({
   useChallengeRowColumns: () => [],
 }));
 
+// The agent roster names the agent rows. Stubbed because the real hook takes
+// a query client, and these cases are about the table's loading states.
+vi.mock("@/hooks/useReadableAgents", () => ({
+  useReadableAgents: () => ({ data: [], isError: false }),
+}));
+
 vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div data-testid="skeleton-table" />,
 }));

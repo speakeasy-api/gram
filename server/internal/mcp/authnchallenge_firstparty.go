@@ -75,7 +75,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	challengeID := uuid.NewString()
 	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
 	}
 	challengeState := AuthnChallengeState{ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:    nil,

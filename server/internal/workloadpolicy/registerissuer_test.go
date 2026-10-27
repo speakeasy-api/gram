@@ -50,6 +50,7 @@ func TestRegisterIssuer_Success(t *testing.T) {
 	require.Equal(t, anthropicIssuer, issuer.Issuer)
 	require.Equal(t, anthropicJWKS, issuer.JwksURI)
 	require.True(t, issuer.AllowWildcardAdmission)
+	require.False(t, issuer.AllowAssertionReuse)
 	// Organization tier by default: a federated platform's issuer is trusted by
 	// the whole organization, and a caller that has not asked for a project-tier
 	// row should not silently get one.
@@ -174,6 +175,7 @@ func TestRegisterIssuer_RequiresWorkloadWrite(t *testing.T) {
 		JwksURI:                anthropicJWKS,
 		Description:            nil,
 		AllowWildcardAdmission: new(false),
+		AllowAssertionReuse:    new(true),
 		Tags:                   nil,
 		ProjectScoped:          false,
 	})
@@ -442,4 +444,23 @@ func TestRegisterIssuer_RefusesAnOverlongDescription(t *testing.T) {
 
 	_, err := registerWithDescription(ctx, ti, strings.Repeat("a", 501))
 	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestRegisterIssuer_AssertionReuseOptIn(t *testing.T) {
+	t.Parallel()
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			policy, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+				Name: "Projected token platform", Issuer: anthropicIssuer, JwksURI: anthropicJWKS,
+				AllowAssertionReuse: new(enabled),
+			})
+			require.NoError(t, err)
+			require.Equal(t, enabled, onlyIssuer(t, policy).AllowAssertionReuse)
+			listed, err := ti.service.List(ctx, &gen.ListPayload{})
+			require.NoError(t, err)
+			require.Equal(t, enabled, onlyIssuer(t, listed).AllowAssertionReuse)
+		})
+	}
 }

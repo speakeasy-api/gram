@@ -142,14 +142,16 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 				ContentHash:      nil,
 				Generation:       0,
 			},
-			BillingUserID:  conv.FromPGTextOrEmpty[string](chatRow.UserID),
-			AssistantID:    principalAssistantID,
-			WorkloadSource: metering.WorkloadSourceAssistant,
-			UserEmail:      "",
-			Provider:       "",
-			HookHostname:   "",
-			AccountType:    chatRow.AccountType,
-			BillingMode:    "",
+			BillingUserID:     conv.FromPGTextOrEmpty[string](chatRow.UserID),
+			AssistantID:       principalAssistantID,
+			WorkloadSource:    metering.WorkloadSourceAssistant,
+			UserEmail:         "",
+			Provider:          "",
+			InferenceProvider: "",
+			Lineage:           nil,
+			HookHostname:      "",
+			AccountType:       chatRow.AccountType,
+			BillingMode:       "",
 		})
 	}
 
@@ -167,6 +169,9 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 	}
 	for i := range writes {
 		writes[i].Params.Generation = currentGen + 1
+	}
+	if err := chat.MarkCompactedLineage(ctx, tx, projectID, threadRow.ChatID, currentGen, writes); err != nil {
+		return fmt.Errorf("capture compacted lineage: %w", err)
 	}
 	n, err := s.chatWriter.WriteInTx(ctx, tx, writes)
 	if err != nil {

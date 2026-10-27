@@ -1093,3 +1093,18 @@ describe("generated inference key reads", () => {
     },
   );
 });
+
+it("shares candidate query cache for implicit and explicit active status", () => {
+  expect(
+    boundary.registryPromotionCandidatesQuery({ limit: 25 }).queryKey,
+  ).toEqual(
+    boundary.registryPromotionCandidatesQuery({ limit: 25, status: "active" })
+      .queryKey,
+  );
+  expect(
+    boundary.registryPromotionCandidatesQuery({ limit: 25, status: "archived" })
+      .queryKey,
+  ).not.toEqual(
+    boundary.registryPromotionCandidatesQuery({ limit: 25 }).queryKey,
+  );
+});

@@ -1,3 +1,4 @@
+import { InlineEditableText } from "@/components/inline-editable-text";
 import { isKnownEnumValue } from "@/lib/enum";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
@@ -22,6 +23,8 @@ import {
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { invalidateAllOrganizationRemoteSessionClientSessions } from "@gram/client/react-query/organizationRemoteSessionClientSessions.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -35,6 +38,8 @@ import {
   isPrivateKeyJwtAuthMethod,
   narrowTokenEndpointAuthMethod,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import { ChangeClientIdDialog } from "../../clientDialogs";
+import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { InfoField, InfoText } from "../../detailFields";
 import { formatTimestamp } from "./formatTimestamp";
 import { KeySetField } from "./KeySetField";
@@ -43,10 +48,14 @@ export function ClientCard({
   client,
   issuer,
   issuerId,
+  onDirtyChange,
 }: {
   client: RemoteSessionClient;
   issuer: RemoteSessionIssuer | undefined;
   issuerId: string;
+  // Called with whether the card holds edits that Save has not stored, so a
+  // container can warn before discarding them.
+  onDirtyChange?: (dirty: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   // The organization update endpoint requires org:admin; readers get the same
@@ -81,6 +90,8 @@ export function ClientCard({
       ? client.tokenEndpointAuthAudienceFormat
       : undefined,
   );
+  const [clientIdDraft, setClientIdDraft] = useState(client.clientId);
+  const [confirmClientIdChange, setConfirmClientIdChange] = useState(false);
   const [scope, setScope] = useState<string[]>(client.scope ?? []);
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
@@ -102,6 +113,13 @@ export function ClientCard({
   const shownAuthAudienceFormat = canEdit
     ? authAudienceFormat
     : client.tokenEndpointAuthAudienceFormat;
+  const shownClientId = canEdit ? clientIdDraft : client.clientId;
+  // A CIMD client's ID is the metadata document URL Speakeasy generated, so
+  // only manually entered and dynamically registered IDs can be corrected.
+  const clientIdEditable = !client.clientIdMetadataUri;
+  const trimmedClientId = clientIdDraft.trim();
+  const clientIdChanged =
+    clientIdEditable && trimmedClientId !== client.clientId;
   const shownScope = canEdit ? scope : (client.scope ?? []);
   const shownAudience = canEdit ? audience : (client.audience ?? "");
   const privateKeyJwtSelected = isPrivateKeyJwtAuthMethod(shownAuthMethod);
@@ -147,13 +165,28 @@ export function ClientCard({
     if (isPrivateKeyJwtAuthMethod(method)) setClientSecret("");
   };
 
+  const invalidateClient = () =>
+    Promise.all([
+      invalidateAllOrganizationRemoteSessionClient(queryClient, {
+        refetchType: "all",
+      }),
+      // Lists and breadcrumbs show the name, and a changed client ID
+      // revokes the client's sessions.
+      invalidateAllOrganizationRemoteSessionClients(queryClient, {
+        refetchType: "all",
+      }),
+      invalidateAllOrganizationRemoteSessionClientSessions(queryClient, {
+        refetchType: "all",
+      }),
+    ]);
+
   const update = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async (saved) => {
-      await invalidateAllOrganizationRemoteSessionClient(queryClient, {
-        refetchType: "all",
-      });
+      await invalidateClient();
       // An emptied audience is omitted, so show what was actually kept.
       setAudience(saved.audience ?? "");
+      setClientIdDraft(saved.clientId);
+      setConfirmClientIdChange(false);
       setClientSecret("");
       setLegacyCallbackMode(undefined);
       toast.success("Client updated");
@@ -165,18 +198,62 @@ export function ClientCard({
     },
   });
 
+  // The name saves on its own from the card header, so renaming never submits
+  // or resets the other fields' unsaved edits.
+  const rename = useUpdateOrganizationRemoteSessionClientMutation({
+    onSuccess: async () => {
+      await invalidateClient();
+      toast.success("Client renamed");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to rename client",
+      );
+    },
+  });
+
+  const submitDisplayName = async (next: string) => {
+    try {
+      await rename.mutateAsync({
+        request: {
+          // An empty string clears the name.
+          updateRemoteSessionClientForm: { id: client.id, displayName: next },
+        },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // Unchanged scopes are omitted, so a save never turns an unset scope into [].
   const savedScope = client.scope ?? [];
   const scopeChanged =
     scope.length !== savedScope.length ||
     scope.some((s, i) => s !== savedScope[i]);
 
-  const handleSave = () => {
+  const dirty =
+    canEdit &&
+    (clientIdChanged ||
+      authMethod !== persistedAuthMethod ||
+      scopeChanged ||
+      audience !== (client.audience ?? "") ||
+      clientSecret !== "" ||
+      (privateKeyJwtSelected &&
+        authAudienceFormat !== client.tokenEndpointAuthAudienceFormat) ||
+      (legacyCallbackMode !== undefined &&
+        legacyCallbackMode !== client.legacyCallbackUrl));
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  const submit = () => {
     if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
     update.mutate({
       request: {
         updateRemoteSessionClientForm: {
           id: client.id,
+          clientId: clientIdChanged ? trimmedClientId : undefined,
           tokenEndpointAuthMethod: authMethod || undefined,
           tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
             ? authAudienceFormat
@@ -195,9 +272,34 @@ export function ClientCard({
     });
   };
 
+  const handleSave = () => {
+    if (clientIdChanged) {
+      setConfirmClientIdChange(true);
+      return;
+    }
+    submit();
+  };
+
   return (
     <Card>
-      <Card.Header>Client</Card.Header>
+      <Card.Header>
+        {canEdit ? (
+          <InlineEditableText
+            value={client.displayName ?? ""}
+            onSubmit={submitDisplayName}
+            inputLabel="Name"
+            editTitle="Rename client"
+            maxLength={200}
+            buttonClassName="[&>svg]:opacity-100"
+          >
+            <span className="truncate py-0.5">
+              {remoteSessionClientDisplayName(client)}
+            </span>
+          </InlineEditableText>
+        ) : (
+          remoteSessionClientDisplayName(client)
+        )}
+      </Card.Header>
       <Card.Content>
         {!supportsEditing && (
           <Text small muted>
@@ -207,9 +309,11 @@ export function ClientCard({
         )}
         <div className="flex flex-col gap-4">
           <div className="grid items-start gap-x-8 gap-y-4 sm:grid-cols-2">
-            <InfoField label="Client ID">
-              <InfoText mono>{client.clientId}</InfoText>
-            </InfoField>
+            {!clientIdEditable && (
+              <InfoField label="Client ID">
+                <InfoText mono>{client.clientId}</InfoText>
+              </InfoField>
+            )}
             <InfoField label="Client issued at">
               <InfoText>{formatTimestamp(client.clientIdIssuedAt)}</InfoText>
             </InfoField>
@@ -229,6 +333,22 @@ export function ClientCard({
             disabled={!canEdit}
             className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0"
           >
+            {clientIdEditable && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="client-id">Client ID</Label>
+                <Input
+                  id="client-id"
+                  className="font-mono"
+                  value={shownClientId}
+                  onChange={setClientIdDraft}
+                  disabled={!canEdit}
+                />
+                <Text small muted>
+                  The ID the authorization server issued for this client.
+                  Changing it signs out everyone connected through the client.
+                </Text>
+              </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label id="client-scopes-label" htmlFor="client-scopes">
                 Scopes
@@ -350,7 +470,8 @@ export function ClientCard({
                 disabled={
                   update.isPending ||
                   keySetPending ||
-                  privateKeyJwtMissingKeySet
+                  privateKeyJwtMissingKeySet ||
+                  (clientIdEditable && trimmedClientId === "")
                 }
               >
                 <Button.Text>
@@ -361,6 +482,15 @@ export function ClientCard({
           )}
         </div>
       </Card.Content>
+      {confirmClientIdChange && (
+        <ChangeClientIdDialog
+          clientId={client.id}
+          newClientId={trimmedClientId}
+          isPending={update.isPending}
+          onConfirm={submit}
+          onClose={() => setConfirmClientIdChange(false)}
+        />
+      )}
     </Card>
   );
 }

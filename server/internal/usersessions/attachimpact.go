@@ -14,8 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -105,13 +107,18 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: server.ID})
-		if err != nil {
-			return none, oops.E(oops.CodeUnexpected, err, "list MCP server endpoints").LogError(ctx, logger)
+		if hostedmcp.IsCanonical(&server, server.ID) {
+			toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: projectID})
+			switch {
+			case err == nil:
+				return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, &server, toolset)
+			case !errors.Is(err, pgx.ErrNoRows):
+				return none, oops.E(oops.CodeUnexpected, err, "get toolset").LogError(ctx, logger)
+			}
 		}
-		customDomainIDs := make([]uuid.NullUUID, 0, len(endpoints))
-		for _, endpoint := range endpoints {
-			customDomainIDs = append(customDomainIDs, endpoint.McpEndpoint.CustomDomainID)
+		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, server.ID)
+		if err != nil {
+			return none, err
 		}
 		return attachTarget{issuerID: server.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 	case payload.ToolsetID != nil:
@@ -126,7 +133,14 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+		toolset, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "load toolset MCP server").LogError(ctx, logger)
+		}
+		if wrapper == nil {
+			return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+		}
+		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset)
 	default:
 		id, err := uuid.Parse(*payload.MetaMcpServerID)
 		if err != nil {
@@ -149,6 +163,36 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		}
 		return attachTarget{issuerID: server.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 	}
+}
+
+// canonicalAttachTarget previews a toolset's canonical wrapper, which owns the issuer: its live endpoints and,
+// while the server is enabled, the toolset's mirrored address, which still serves on its own host.
+func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, wrapper *mcpserversrepo.McpServer, toolset toolsetsrepo.Toolset) (attachTarget, error) {
+	customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
+	if err != nil {
+		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, err
+	}
+	// The toolset's mirrored address still serves on its own host while the server is enabled.
+	if toolset.McpSlug.Valid && toolset.McpSlug.String != "" && (wrapper.Visibility == visibility.Public || wrapper.Visibility == visibility.Private) {
+		customDomainIDs = append(customDomainIDs, toolset.CustomDomainID)
+	}
+	if len(customDomainIDs) == 0 {
+		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+	}
+	return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
+}
+
+// liveEndpointDomains lists the custom domain of each endpoint the server serves on.
+func (s *Service) liveEndpointDomains(ctx context.Context, logger *slog.Logger, organizationID string, projectID, serverID uuid.UUID) ([]uuid.NullUUID, error) {
+	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: serverID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list MCP server endpoints").LogError(ctx, logger)
+	}
+	customDomainIDs := make([]uuid.NullUUID, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		customDomainIDs = append(customDomainIDs, endpoint.McpEndpoint.CustomDomainID)
+	}
+	return customDomainIDs, nil
 }
 
 // anyOnPlatformHost reports whether any of a server's endpoints, by their

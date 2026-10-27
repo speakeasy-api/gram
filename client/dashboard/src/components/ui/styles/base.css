@@ -294,6 +294,10 @@
   --text-default-information: var(--color-feedback-blue-700);
   --text-link-information: var(--color-feedback-blue-900);
 
+  /* Feature: what is new, rather than what went wrong. Violet so it is not
+     read as another severity beside the blue, green, orange and red. */
+  --text-default-feature: var(--color-feedback-violet-600);
+
   --text-default-success: var(--color-feedback-green-700);
   --text-link-success: var(--color-feedback-green-900);
 
@@ -342,6 +346,9 @@
   --border-information-default: var(--color-feedback-blue-500);
   --border-information-muted: var(--color-feedback-blue-500-56);
   --border-information-softest: var(--color-feedback-blue-300);
+
+  /* Border Feature utilities */
+  --border-feature-default: var(--color-feedback-violet-600);
 
   /* Border Success utilities */
   --border-success-highlight: var(--color-feedback-green-600);
@@ -684,6 +691,8 @@
   --text-default-information: var(--color-feedback-blue-300);
   --text-link-information: var(--color-feedback-blue-100);
 
+  --text-default-feature: var(--color-feedback-violet-300);
+
   --text-default-success: var(--color-feedback-green-300);
   --text-link-success: var(--color-feedback-green-100);
 
@@ -732,6 +741,9 @@
   --border-information-default: var(--color-feedback-blue-500);
   --border-information-muted: var(--color-feedback-blue-500-56);
   --border-information-softest: var(--color-feedback-blue-700);
+
+  /* Border Feature utilities */
+  --border-feature-default: var(--color-feedback-violet-300);
 
   /* Border Success utilities */
   --border-success-highlight: var(--color-feedback-green-400);

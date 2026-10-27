@@ -90,11 +90,14 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 		}
 		seen := make(map[string]struct{})
 		for _, constraint := range constraints {
-			grants, err := runtimepolicy.DelegableGrants(agentPolicy, ownerPolicy, human.grants, constraint)
+			grants, err := runtimepolicy.DelegableGrantsFor(human.Auth.UserID, agentPolicy, ownerPolicy, human.grants, constraint)
 			if err != nil {
 				return fmt.Errorf("derive delegable grants: %w", err)
 			}
 			for _, grant := range grants {
+				if !runtimepolicy.IsIssuableScope(grant.Scope) {
+					continue
+				}
 				encoded, err := json.Marshal(grant.Selector)
 				if err != nil {
 					return fmt.Errorf("encode delegable selector: %w", err)
