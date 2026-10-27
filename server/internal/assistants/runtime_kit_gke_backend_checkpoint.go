@@ -476,7 +476,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 		}
 		return empty, fmt.Errorf("kit GKE restore requires source claim deletion")
 	}
-	_, err = k.get(ctx, r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)
+	_, err = k.get(ctx, r, kitTemplateGVR, state.Metadata.templateName(r), state.Metadata.TemplateUID)
 	if err != nil {
 		return empty, err
 	}
@@ -602,7 +602,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	}
 	// SandboxTemplate's spec is immutable. Replace it only after its exact UID
 	// has been deleted; the restoring fence prevents concurrent admission.
-	if err = k.deleteOwned(ctx, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID); err != nil {
+	if err = k.deleteOwned(ctx, kitTemplateGVR, state.Metadata.templateName(r), state.Metadata.TemplateUID); err != nil {
 		return empty, err
 	}
 	template := objects.Template

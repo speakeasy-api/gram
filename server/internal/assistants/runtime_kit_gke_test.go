@@ -515,3 +515,14 @@ func TestKitGKEBootstrapRestoreMarkerGate(t *testing.T) {
 		})
 	}
 }
+
+func TestKitGKETemplateAndClaimHaveDistinctPolicyNames(t *testing.T) {
+	t.Parallel()
+	objects, err := RenderKitGKEProvision(kitGKEInput())
+	require.NoError(t, err)
+	require.NotEqual(t, objects.Template.GetName()+"-network-policy", objects.Claim.GetName()+"-network-policy")
+	ref, found, err := unstructured.NestedString(objects.Claim.Object, "spec", "sandboxTemplateRef", "name")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, objects.Template.GetName(), ref)
+}
