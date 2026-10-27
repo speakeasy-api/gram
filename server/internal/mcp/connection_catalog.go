@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -104,10 +105,10 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 	if err != nil {
 		return nil, fmt.Errorf("load catalog authorization lifetime: %w", err)
 	}
-	if !issuer.SessionDuration.Valid || issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 || issuer.SessionDuration.Microseconds <= 0 {
+	lifetime, ok := conv.PGIntervalToDuration(issuer.SessionDuration)
+	if !ok || lifetime <= 0 {
 		return nil, fmt.Errorf("invalid catalog authorization lifetime")
 	}
-	lifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
 	if durationHours > 0 {
 		lifetime = min(lifetime, time.Duration(durationHours)*time.Hour)
 	}
