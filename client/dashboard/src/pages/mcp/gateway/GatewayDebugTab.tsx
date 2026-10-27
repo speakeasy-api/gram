@@ -544,8 +544,8 @@ export function GatewayDebugTab({
         to={debugWindow.to}
         phrase={WINDOW_PHRASE[span]}
       />
-      <div className="grid items-start gap-4 min-[1728px]:grid-cols-4">
-        <div className="min-w-0 min-[1728px]:col-span-3">
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="min-w-0 flex-[3_1_1000px]">
           <GatewayConnectionHealth
             gatewayId={gatewayId}
             span={span}
@@ -554,7 +554,9 @@ export function GatewayDebugTab({
             onShowConnections={showMatching}
           />
         </div>
-        <GatewayClientAdmission gatewayId={gatewayId} issuerId={issuerId} />
+        <div className="min-w-0 flex-[1_1_240px]">
+          <GatewayClientAdmission gatewayId={gatewayId} issuerId={issuerId} />
+        </div>
       </div>
       <Text small muted>
         Sessions issued for this gateway, identified by their recorded origin or
