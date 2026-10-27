@@ -105767,11 +105767,51 @@ components:
         GetToolUsageFilterOptionsPayload:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: Optional account type filter ('team' or 'personal').
+                agent_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Agent identities to narrow by. Not applied to the agent user options.
+                client_keys:
+                    type: array
+                    items:
+                        type: string
+                    description: MCP client keys to narrow by. Not applied to the client options.
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LogFilter'
+                    description: Arbitrary attribute filter conditions from the af URL param
                 from:
                     type: string
                     description: Start time in ISO 8601 format
                     example: "2025-12-19T10:00:00Z"
                     format: date-time
+                hook_sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Hook plugin sources to narrow by.
+                hosted_toolset_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not applied to the server options.'
+                mcp_server_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: MCP server ids to narrow by. Not applied to the server options.
+                    maxItems: 100
+                meta_mcp_server_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Gateway (meta MCP server) ids to narrow by. Not applied to the server options.
                 option_types:
                     type: array
                     items:
@@ -105784,11 +105824,48 @@ components:
                             - users
                             - clients
                     description: Filter option types to include. Empty means all option types.
+                query:
+                    type: string
+                    description: Free-text attribute search string from the q URL param.
+                shadow_server_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Shadow MCP server names to narrow by. Not applied to the server options.
+                statuses:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage trace outcome
+                        enum:
+                            - error
+                            - success
+                            - blocked
+                            - pending
+                    description: Trace outcomes to narrow by. Empty means all.
+                target_types:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage target type
+                        enum:
+                            - hosted_mcp_server
+                            - tunneled_mcp_server
+                            - meta_mcp_server
+                            - shadow_mcp_server
+                            - local_tool
+                            - skill
+                    description: Target types to include. Empty means all target types.
                 to:
                     type: string
                     description: End time in ISO 8601 format
                     example: "2025-12-19T11:00:00Z"
                     format: date-time
+                user_filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserFilter'
+                    description: Typed user identities to narrow by. Not applied to the email user options.
             description: Payload for target-aware MCP and tool usage filter options
             required:
                 - from
