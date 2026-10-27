@@ -15,12 +15,7 @@ import {
 import { Info } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { defineFilters, useFilterState } from "@/components/filters";
-import {
-  useOrganization,
-  useSession,
-  useIsPlatformAdmin,
-} from "@/contexts/Auth";
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useSdkClient, useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
@@ -29,6 +24,7 @@ import { AgentOwner } from "@/pages/agents/agent-admin";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useRBACScopeOverride } from "@/hooks/useRBACScopeOverride";
 import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
@@ -559,7 +555,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const client = useGramContext();
   const sdk = useSdkClient();
   const session = useSession();
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const scopeOverride = useRBACScopeOverride();
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   const canAdminOrganization = hasScope("org:admin", organization.id);
@@ -567,8 +563,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const agentsEnabled =
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
-    !session.impersonatorEmail &&
-    getRBACScopeOverrideHeader(import.meta.env.DEV || isPlatformAdmin) === null;
+    !session.impersonatorEmail;
   const [search, setSearch] = useState("");
   // Honours `?sort=<column>:<asc|desc>` so a handoff can open the list on the
   // order it was talking about — the dashboard's Top Users "View all" means
@@ -616,6 +611,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       lifecycleKey,
       ownerKey,
       registered,
+      scopeOverride,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(

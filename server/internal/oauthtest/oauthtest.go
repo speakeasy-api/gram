@@ -13,8 +13,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -134,9 +134,9 @@ func createLegacyHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.
 	require.NoError(t, err)
 	testenv.SetLegacyAlias(t, ctx, conn, toolset.ProjectID, toolset.ID, input.slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
-	vis := mcpservers.VisibilityPrivate
+	vis := visibility.Private
 	if input.public {
-		vis = mcpservers.VisibilityPublic
+		vis = visibility.Public
 	}
 	_, err = mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
 		ID:                    toolset.ID,

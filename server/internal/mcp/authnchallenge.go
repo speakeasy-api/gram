@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -1412,9 +1413,9 @@ func generateOpaqueToken() (string, error) {
 
 // consentChallengeCacheError distinguishes expired consent state from a
 // dependency outage and logs each with its corresponding severity.
-func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err error) *oops.ShareableError {
+func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err error) error {
 	if errors.Is(err, redisCache.ErrCacheMiss) {
-		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return fmt.Errorf("load consent challenge: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 	return oops.E(oops.CodeUnavailable, err, "authn challenge state is temporarily unavailable").LogError(ctx, logger)
 }

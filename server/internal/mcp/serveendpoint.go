@@ -819,6 +819,18 @@ func (s *Service) remoteBackendProxyBuilder(
 	}, nil
 }
 
+// StartDrain starts the shutdown drain for relayed remote and tunneled MCP
+// traffic: streams that only carry server-initiated messages end now, so
+// their clients reconnect to a replica that is still serving, and requests
+// still waiting on a remote MCP server after interruptAfter are answered with
+// a JSON-RPC error. Call it when the server starts shutting down, before
+// waiting for in-flight requests.
+func (s *Service) StartDrain(interruptAfter time.Duration) {
+	if s.remoteProxyManager != nil {
+		s.remoteProxyManager.StartDrain(interruptAfter)
+	}
+}
+
 func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) error {
 	switch r.Method {
 	case http.MethodDelete:
@@ -1043,7 +1055,7 @@ func (s *Service) authorizeProxyBackendAccess(
 	if authorized != nil {
 		shadowCtx = authorized
 	}
-	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequire(shadowCtx, surface, err, connect)
+	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequireServer(shadowCtx, surface, err, mandatoryVisibility(mcpServer.Visibility == mcpservers.VisibilityPublic), connect)
 	if err != nil {
 		return nil, err
 	}

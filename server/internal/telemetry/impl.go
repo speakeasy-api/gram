@@ -3988,50 +3988,34 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
 func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_gen.GetToolUsageFilterOptionsPayload) (res *telem_gen.GetToolUsageFilterOptionsResult, err error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
-	}
-
-	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
-	}
-
-	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerIDs:       payload.McpServerIds,
+		ShadowServerNames:  payload.ShadowServerNames,
+		MetaMcpServerIDs:   payload.MetaMcpServerIds,
+		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
+		HookSources:        payload.HookSources,
+		ClientKeys:         payload.ClientKeys,
+		AccountType:        payload.AccountType,
+		Statuses:           toolUsageStatusStrings(payload.Statuses),
+		Query:              payload.Query,
+		Filters:            payload.Filters,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
-	}
-	metaMCPMatchers, err := LoadMetaMCPMatchers(ctx, s.db, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateway endpoints")
-	}
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	gatewayNames, err := LoadMetaMCPNames(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways")
 	}
 
-	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
-		GramProjectID:     authCtx.ProjectID.String(),
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		HostedMCPMatchers: hostedMCPMatchers,
-		MCPServerMatchers: mcpServerMatchers,
-		MetaMCPMatchers:   metaMCPMatchers,
-	})
+	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
 	}
@@ -4039,7 +4023,7 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		options.Users = s.authorizerUserOptions(ctx, authCtx.ActiveOrganizationID, options.Users, options.Authorizers)
 	}
 
-	return toToolUsageFilterOptionsResult(options, hostedMCPMatchers, gatewayNames, payload.OptionTypes), nil
+	return toToolUsageFilterOptionsResult(options, params.HostedMCPMatchers, gatewayNames, payload.OptionTypes), nil
 }
 
 // mcpServerActivityLookbackDays bounds the "ever active" window. Telemetry logs

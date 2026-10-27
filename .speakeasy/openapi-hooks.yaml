@@ -327,9 +327,110 @@ components:
         - timeout
         - fault
       x-speakeasy-name-override: ServiceError
+    HookDeliveryFailureData:
+      type: object
+      properties:
+        arch:
+          type: string
+          description: CPU architecture of the device.
+          maxLength: 32
+        attempted_at:
+          type: string
+          description: RFC3339 time the failed send started, on the device clock.
+          format: date-time
+        attempts:
+          type: integer
+          description: Number of send attempts the client made.
+          format: int64
+        binary_version:
+          type: string
+          description: speakeasy-hooks binary version that made the attempt.
+          maxLength: 64
+        cause:
+          type: string
+          description: Failure class the hook sender observed. http means the control plane answered with a retryable status.
+          enum:
+            - dns
+            - tls
+            - timeout
+            - canceled
+            - connection
+            - unreadable-response
+            - unknown
+            - http
+        delivery_phase:
+          type: string
+          description: Whether a failed send was a live hook or a spool-drain replay.
+          enum:
+            - live
+            - drain
+        elapsed_ms:
+          type: integer
+          description: Wall time the client spent on the send across its attempts, in milliseconds.
+          format: int64
+        failed_event_type:
+          type: string
+          description: Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
+          enum:
+            - session.started
+            - session.updated
+            - session.ended
+            - mcp.inventory
+            - prompt.submitted
+            - tool.requested
+            - tool.completed
+            - tool.failed
+            - assistant.responded
+            - assistant.thought
+            - usage.reported
+            - skill.activated
+            - notification.reported
+        failed_idempotency_key:
+          type: string
+          description: Idempotency key of the event that failed, so the report joins to the row its eventual replay produces.
+          maxLength: 256
+        gating:
+          type: boolean
+          description: Whether the send gated an agent action (a verdict was awaited) rather than observing one.
+        harness:
+          type: string
+          description: Coding agent harness the hook ran under.
+          maxLength: 64
+        harness_variant:
+          type: string
+          description: Harness variant, when the harness distinguishes one.
+          maxLength: 64
+        harness_version:
+          type: string
+          description: Harness version, when known.
+          maxLength: 64
+        os:
+          type: string
+          description: Operating system of the device.
+          maxLength: 32
+        session_id:
+          type: string
+          description: Session id of the event that failed.
+          maxLength: 256
+        spool_depth:
+          type: integer
+          description: Events waiting in the device's offline spool when the report was written.
+          format: int64
+        status_code:
+          type: integer
+          description: HTTP status of the final attempt, 0 when no response arrived.
+          format: int64
+      description: Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
+      required:
+        - failed_event_type
+        - delivery_phase
+        - cause
+        - attempted_at
     HookIngestData:
       type: object
       properties:
+        delivery_failure:
+          $ref: '#/components/schemas/HookDeliveryFailureData'
         mcp:
           $ref: '#/components/schemas/HookMCPData'
         mcp_attribution:
@@ -387,6 +488,7 @@ components:
             - usage.reported
             - skill.activated
             - notification.reported
+            - client.delivery_failed
       description: Canonical Speakeasy feature event.
       required:
         - type
@@ -933,6 +1035,8 @@ tags:
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+  - name: gatewaySessions
+    description: Sessions authorized for a project gateway or the Organization Gateway. Issuer-scoped sessions may authorize several endpoints; resource-bound sessions are restricted to the selected endpoint. Server filters describe configured upstream associations, not historical usage.
   - name: widgets
     description: 'Widgets: Explore''s saved questions, each kept with the chart that draws it.'
   - name: workloadIdentities

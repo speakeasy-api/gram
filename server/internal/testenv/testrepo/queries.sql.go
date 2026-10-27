@@ -5931,6 +5931,38 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
+const setGatewaySessionListFixture = `-- name: SetGatewaySessionListFixture :exec
+UPDATE user_sessions
+SET resource = $1, created_at = $2,
+    last_used_at = $3, refresh_expires_at = $4,
+    deleted_at = $5
+WHERE id = $6 AND organization_id = $7
+`
+
+type SetGatewaySessionListFixtureParams struct {
+	Resource         pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	LastUsedAt       pgtype.Timestamptz
+	RefreshExpiresAt pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	ID               uuid.UUID
+	OrganizationID   pgtype.Text
+}
+
+// Test fixture for endpoint, ordering, and expiry boundaries.
+func (q *Queries) SetGatewaySessionListFixture(ctx context.Context, arg SetGatewaySessionListFixtureParams) error {
+	_, err := q.db.Exec(ctx, setGatewaySessionListFixture,
+		arg.Resource,
+		arg.CreatedAt,
+		arg.LastUsedAt,
+		arg.RefreshExpiresAt,
+		arg.DeletedAt,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
 const setGcpIamCredentialServiceAccountFixture = `-- name: SetGcpIamCredentialServiceAccountFixture :exec
 UPDATE gcp_iam_credentials AS gic SET impersonate_service_account = $1::text
 FROM external_credentials AS ec
@@ -6563,6 +6595,41 @@ func (q *Queries) SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx context.Con
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setRemoteSessionListFixture = `-- name: SetRemoteSessionListFixture :exec
+UPDATE remote_sessions s
+SET created_at = $1, last_used_at = $2,
+    access_expires_at = $3, refresh_expires_at = $4,
+    authorization_expires_at = $5, refresh_token_encrypted = $6
+FROM remote_session_clients c
+WHERE s.id = $7 AND c.id = s.remote_session_client_id AND c.organization_id = $8
+`
+
+type SetRemoteSessionListFixtureParams struct {
+	CreatedAt              pgtype.Timestamptz
+	LastUsedAt             pgtype.Timestamptz
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	ID                     uuid.UUID
+	OrganizationID         pgtype.Text
+}
+
+// Test fixture for effective expiry and timestamp pagination.
+func (q *Queries) SetRemoteSessionListFixture(ctx context.Context, arg SetRemoteSessionListFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionListFixture,
+		arg.CreatedAt,
+		arg.LastUsedAt,
+		arg.AccessExpiresAt,
+		arg.RefreshExpiresAt,
+		arg.AuthorizationExpiresAt,
+		arg.RefreshTokenEncrypted,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	return err
 }
 
 const setRemoteSessionResourceFixture = `-- name: SetRemoteSessionResourceFixture :exec

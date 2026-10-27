@@ -1,10 +1,11 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import IdentitiesIndex from "./IdentitiesIndex";
+import { saveState } from "@/pages/platform-admin/rbac-override-state";
 
 const mocks = vi.hoisted(() => ({
   orgRead: true,
@@ -18,9 +19,9 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 vi.mock("@/contexts/Auth", () => ({
+  useIsPlatformAdmin: () => true,
   useOrganization: () => ({ id: "org_example", slug: "example" }),
   useSession: () => mocks.session,
-  useIsPlatformAdmin: () => false,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
@@ -28,9 +29,6 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.orgRead }),
-}));
-vi.mock("@/components/dev-toolbar-utils", () => ({
-  getRBACScopeOverrideHeader: () => null,
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
@@ -130,6 +128,7 @@ vi.mock("@/components/ui/Table", () => ({
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   mocks.orgRead = true;
   mocks.session = {
     user: { id: "user_example" },
@@ -228,6 +227,22 @@ it.each(["unknown", "unknown,agent"])(
     await waitFor(() => expect(rowsText()).toContain("human@example.com"));
   },
 );
+
+it("keeps agents visible and refetches their permissions when the RBAC override changes", async () => {
+  setup("", "agent");
+  await screen.findByText("Registered agent");
+  expect(mocks.agents).toHaveBeenCalledTimes(1);
+  act(() => {
+    saveState({
+      enabled: true,
+      scopes: { "agent:read": { enabled: false, resources: null } },
+    });
+    window.dispatchEvent(new Event("rbac-override-change"));
+  });
+  await waitFor(() => expect(mocks.agents).toHaveBeenCalledTimes(2));
+  expect(await screen.findByText("Registered agent")).toBeTruthy();
+  expect(screen.getByText("New agent identity")).toBeTruthy();
+});
 
 // Ported from the agent-management page's tests when that page was retired.
 // A support session is reading on someone else's behalf, and an agent's

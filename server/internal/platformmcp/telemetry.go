@@ -104,7 +104,7 @@ func validLifecyclePhase(operation, phase string) bool {
 	case "provider_setup":
 		return phase == "handoff"
 	case "readiness":
-		return phase == "forced_probe"
+		return phase == "forced_probe" || phase == "first_probe"
 	default:
 		return false
 	}
