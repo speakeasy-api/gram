@@ -338,6 +338,19 @@ func (q *Queries) PostflightIDExternalOAuthMetadata(ctx context.Context, project
 	return count, err
 }
 
+const postflightIDGatewayIssuers = `-- name: PostflightIDGatewayIssuers :one
+SELECT count(DISTINCT user_session_issuer_id)::bigint
+FROM meta_mcp_servers
+WHERE project_id = $1::uuid AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightIDGatewayIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDGatewayIssuers, projectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const postflightIDGitHubCheckAccessGrants = `-- name: PostflightIDGitHubCheckAccessGrants :one
 SELECT count(*) FROM principal_grants
 WHERE organization_id = $1::text
@@ -374,6 +387,68 @@ WHERE remote_session_client_id = $1::uuid
 
 func (q *Queries) PostflightIDInertUpstreamSessions(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDInertUpstreamSessions, remoteSessionClientID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDInferenceGrants = `-- name: PostflightIDInferenceGrants :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = $1::text AND scope = 'inference:execute'
+`
+
+// Only the dedicated workload and its owner may receive inference grants.
+func (q *Queries) PostflightIDInferenceGrants(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDInferenceGrants, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDInferenceWorkload = `-- name: PostflightIDInferenceWorkload :one
+SELECT count(*)
+FROM workload_issuers i
+JOIN workload_identity_admissions a
+  ON a.organization_id = i.organization_id AND a.workload_issuer_id = i.id
+JOIN workload_agent_assignments w
+  ON w.organization_id = a.organization_id AND w.workload_issuer_id = a.workload_issuer_id
+  AND w.subject = a.subject AND w.match_kind = a.match_kind
+JOIN agents ag ON ag.organization_id = w.organization_id AND ag.id = w.agent_id
+JOIN principal_grants agent_grant
+  ON agent_grant.organization_id = ag.organization_id AND agent_grant.principal_urn = 'agent:' || ag.id::text
+JOIN principal_grants owner_grant
+  ON owner_grant.organization_id = ag.organization_id AND owner_grant.principal_urn = 'user:' || ag.owner_user_id
+WHERE i.organization_id = $1::text AND i.id = $2::uuid
+  AND i.deleted IS FALSE AND i.project_id IS NULL
+  AND i.issuer = 'https://inference.example.com'
+  AND i.jwks_uri = 'https://inference.example.com/.well-known/jwks.json'
+  AND i.allow_wildcard_admission IS FALSE
+  AND a.deleted IS FALSE AND a.project_id = $3::uuid
+  AND a.subject = 'service:acme:summary-worker' AND a.match_kind = 'exact'
+  AND w.deleted IS FALSE AND ag.id = $4::uuid
+  AND ag.project_id = $3::uuid AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
+  AND agent_grant.scope = 'inference:execute' AND owner_grant.scope = agent_grant.scope
+  AND agent_grant.selectors = jsonb_build_object(
+    'resource_kind', 'inference', 'resource_id', '*', 'project_id', ag.project_id::text)
+  AND owner_grant.selectors = agent_grant.selectors
+`
+
+type PostflightIDInferenceWorkloadParams struct {
+	OrgID     string
+	IssuerID  uuid.UUID
+	ProjectID uuid.UUID
+	AgentID   uuid.UUID
+}
+
+// Verify admission, assignment, active agent and both explicit grant ceilings
+// together, rather than accepting unrelated rows that happen to meet counts.
+func (q *Queries) PostflightIDInferenceWorkload(ctx context.Context, arg PostflightIDInferenceWorkloadParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDInferenceWorkload,
+		arg.OrgID,
+		arg.IssuerID,
+		arg.ProjectID,
+		arg.AgentID,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -704,9 +779,9 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // credential kind, plus the pre-column row. A rerun that dropped or
 // duplicated any of them would leave the badges telling a different story
 // than the one they were seeded to tell.
-// One issuer per Connections credential story (acme-partner-gateway), three
-// project MCP issuers, and the organization-wide workforce issuer used by
-// GitHub.
+// Two upstream MCP issuers, two independent gateway issuers, one
+// Connections issuer, and the approvals server's issuer; GitHub uses the
+// organization workforce issuer.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
 	var count int64

@@ -2054,6 +2054,10 @@ func unmarshalSlackDirectoryConnectionResponseBodyToSlackdirectoryconnectionsSla
 	for i, val := range v.GrantedScopes {
 		res.GrantedScopes[i] = val
 	}
+	res.MissingScopes = make([]string, len(v.MissingScopes))
+	for i, val := range v.MissingScopes {
+		res.MissingScopes[i] = val
+	}
 
 	return res
 }

@@ -3,13 +3,13 @@ import { buildCreateRemoteSessionClientMutation } from "@gram/client/react-query
 import { buildCreateRemoteSessionIssuerMutation } from "@gram/client/react-query/createRemoteSessionIssuer.js";
 import { buildCreateUserSessionIssuerMutation } from "@gram/client/react-query/createUserSessionIssuer.js";
 import { buildFetchRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/fetchRemoteSessionIssuerMetadata.js";
-import { buildSetToolsetUserSessionIssuerMutation } from "@gram/client/react-query/setToolsetUserSessionIssuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { Gram } from "@gram/client";
 import { fromPromise } from "xstate";
 
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
+import { linkToolsetUserSessionIssuer } from "@/lib/linkUserSessionIssuer";
 import {
   proxyRegisterUpstreamClient,
   registrationProvenance,
@@ -60,6 +60,7 @@ export type DiscoverExternalOAuthOutput = RemoteSessionIssuerDraft;
 // credentials, then links the toolset — the user-session-backed replacement
 // for the removed oauth_proxy_server creation.
 export type ProvisionUserSessionInput = {
+  toolsetId: string;
   toolsetSlug: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
@@ -249,13 +250,12 @@ export function createWizardServices(
         ...opts,
       });
 
-      await buildSetToolsetUserSessionIssuerMutation(client).mutationFn({
-        request: {
-          slug: input.toolsetSlug,
-          setUserSessionIssuerRequestBody: { userSessionIssuerId: issuer.id },
-        },
-        ...opts,
-      });
+      await linkToolsetUserSessionIssuer(
+        client,
+        { id: input.toolsetId },
+        issuer.id,
+        opts.options,
+      );
     },
   );
 

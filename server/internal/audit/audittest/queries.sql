@@ -21,6 +21,29 @@ WHERE action = @action
 ORDER BY seq DESC
 LIMIT 1;
 
+-- name: GetLatestAuditLogByActionAndSubject :one
+SELECT
+  action,
+  organization_id,
+  project_id,
+  actor_id,
+  actor_type,
+  actor_display_name,
+  actor_slug,
+  subject_id,
+  subject_type,
+  subject_display_name,
+  subject_slug,
+  metadata,
+  before_snapshot,
+  after_snapshot,
+  acting_surface,
+  acting_client_id
+FROM audit_logs
+WHERE action = @action AND subject_id = @subject_id
+ORDER BY seq DESC
+LIMIT 1;
+
 -- name: CountAuditLogs :one
 SELECT COUNT(*)
 FROM audit_logs;

@@ -69,8 +69,9 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		if len(servers) != 1 {
 			return nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project")
 		}
+		// TODO(AIM-707): let the Platform MCP address tools manage hosted endpoints.
 		if servers[0].ToolsetID.Valid && servers[0].ToolsetID.UUID == servers[0].ID {
-			return nil, oops.E(oops.CodeInvalid, nil, "hosted MCP endpoints are managed through the toolset")
+			return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's address is managed in the dashboard")
 		}
 	}
 	if err := s.lockMetaMcpServers(ctx, tx, authCtx, uniqueIDs(input.MetaMcpServerID), input.MetaMcpServerID); err != nil {
@@ -194,8 +195,9 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 			return nil, nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project")
 		}
 		targetServer = &servers[0]
+		// TODO(AIM-707): let the Platform MCP address tools manage hosted endpoints.
 		if targetServer.ToolsetID.Valid && targetServer.ToolsetID.UUID == targetServer.ID {
-			return nil, nil, oops.E(oops.CodeInvalid, nil, "hosted MCP endpoints are managed through the toolset")
+			return nil, nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's address is managed in the dashboard")
 		}
 	}
 	if err := s.lockMetaMcpServers(ctx, tx, authCtx, uniqueIDs(existing.MetaMcpServerID), existing.MetaMcpServerID); err != nil {

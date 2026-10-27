@@ -2368,6 +2368,7 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 const getPlatformMCPConnectionSettings = `-- name: GetPlatformMCPConnectionSettings :one
 SELECT
     CASE WHEN $1::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
+    ($1::text = 'gateway' AND gateway.user_session_issuer_id IS NOT NULL)::boolean AS gateway_requires_sign_in,
     CASE WHEN $1::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN $1::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(
@@ -2438,8 +2439,7 @@ LEFT JOIN LATERAL (
      AND plugin.organization_id = $3
      AND plugin.deleted IS FALSE
     WHERE membership.deleted IS FALSE
-      AND (($1::text = 'mcp_server' AND (membership.mcp_server_id = server.id
-          OR (membership.toolset_id = server.id AND server.toolset_id = membership.toolset_id)))
+      AND (($1::text = 'mcp_server' AND membership.mcp_server_id = server.id)
         OR ($1::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
 ) memberships ON TRUE
 WHERE project.id = $4
@@ -2457,13 +2457,14 @@ type GetPlatformMCPConnectionSettingsParams struct {
 }
 
 type GetPlatformMCPConnectionSettingsRow struct {
-	DiscoveryMode     string
-	Name              string
-	Visibility        string
-	NetworkMode       string
-	Endpoints         []byte
-	Ingress           []byte
-	PluginMemberships []byte
+	DiscoveryMode         string
+	GatewayRequiresSignIn bool
+	Name                  string
+	Visibility            string
+	NetworkMode           string
+	Endpoints             []byte
+	Ingress               []byte
+	PluginMemberships     []byte
 }
 
 // One exact organization/project-scoped target and its connection dependencies.
@@ -2478,6 +2479,7 @@ func (q *Queries) GetPlatformMCPConnectionSettings(ctx context.Context, arg GetP
 	var i GetPlatformMCPConnectionSettingsRow
 	err := row.Scan(
 		&i.DiscoveryMode,
+		&i.GatewayRequiresSignIn,
 		&i.Name,
 		&i.Visibility,
 		&i.NetworkMode,
@@ -2628,7 +2630,7 @@ func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatfo
 }
 
 const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
-SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
 FROM (
     SELECT
         m.id AS mcp_server_id,
@@ -2642,6 +2644,7 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
+        m.builtin_backend,
         COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
@@ -2721,6 +2724,7 @@ type GetPlatformMCPInventoryItemRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	BuiltinBackend                  pgtype.Text
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -2759,6 +2763,7 @@ func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatfo
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.UpstreamUrl,
 		&i.RegistrationID,
 		&i.SourceKind,
@@ -3146,7 +3151,8 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 
 const getPlatformMCPPluginMembershipVersion = `-- name: GetPlatformMCPPluginMembershipVersion :one
 SELECT md5(COALESCE(jsonb_agg(
-  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+  -- NULL holds the retired toolset_id slot so versions stay stable.
+  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
   ORDER BY ps.sort_order, ps.display_name, ps.id
 )::text, '[]'))::text AS membership_version
 FROM plugin_servers ps
@@ -5244,6 +5250,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
+    m.builtin_backend,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -5353,6 +5360,7 @@ type ListPlatformMCPInventoryRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	BuiltinBackend                  pgtype.Text
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -5408,6 +5416,7 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.UpstreamUrl,
 			&i.RegistrationID,
 			&i.SourceKind,
@@ -5796,6 +5805,57 @@ func (q *Queries) ListPlatformMCPPluginAssignments(ctx context.Context, arg List
 	return items, nil
 }
 
+const listPlatformMCPPluginAssignmentsWithModes = `-- name: ListPlatformMCPPluginAssignmentsWithModes :many
+SELECT pa.principal_urn, pa.install_mode
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
+ORDER BY pa.principal_urn
+`
+
+type ListPlatformMCPPluginAssignmentsWithModesParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListPlatformMCPPluginAssignmentsWithModesRow struct {
+	PrincipalUrn string
+	InstallMode  string
+}
+
+// The same exact-plugin assignment set as ListPlatformMCPPluginAssignments,
+// with each assignment's install mode, which the optimistic-concurrency version
+// also covers.
+func (q *Queries) ListPlatformMCPPluginAssignmentsWithModes(ctx context.Context, arg ListPlatformMCPPluginAssignmentsWithModesParams) ([]ListPlatformMCPPluginAssignmentsWithModesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginAssignmentsWithModes, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPPluginAssignmentsWithModesRow
+	for rows.Next() {
+		var i ListPlatformMCPPluginAssignmentsWithModesRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.InstallMode); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPPluginInventory = `-- name: ListPlatformMCPPluginInventory :many
 
 SELECT
@@ -5932,7 +5992,8 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 const listPlatformMCPPluginMemberships = `-- name: ListPlatformMCPPluginMemberships :many
 WITH membership_version AS (
   SELECT md5(COALESCE(jsonb_agg(
-    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+    -- NULL holds the retired toolset_id slot so versions stay stable.
+    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
     ORDER BY ps.sort_order, ps.display_name, ps.id
   )::text, '[]'))::text AS value
   FROM plugin_servers ps
@@ -5944,12 +6005,8 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    CASE
-      WHEN ps.mcp_server_id IS NOT NULL OR s.id IS NOT NULL THEN 'mcp_server'
-      WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
-      WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
-    END::text AS target_kind,
-    COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
+    CASE WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server' ELSE 'gateway' END::text AS target_kind,
+    COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
@@ -5960,12 +6017,11 @@ JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
+  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
@@ -6073,7 +6129,6 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    (ps.toolset_id IS NOT NULL AND s.id IS NULL)::boolean AS toolset_backed,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
@@ -6082,12 +6137,11 @@ JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
+  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
@@ -6128,7 +6182,6 @@ type ListPlatformMCPPluginServersRow struct {
 	DisplayName   string
 	Policy        string
 	SortOrder     int32
-	ToolsetBacked bool
 	GatewayBacked bool
 	McpSlug       string
 	Enabled       bool
@@ -6136,8 +6189,7 @@ type ListPlatformMCPPluginServersRow struct {
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
-// A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists;
-// a server-keyed canonical wrapper still falls back to its toolset's MCP slug.
+// A canonical wrapper with no endpoint falls back to its toolset's MCP slug.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6157,7 +6209,6 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
-			&i.ToolsetBacked,
 			&i.GatewayBacked,
 			&i.McpSlug,
 			&i.Enabled,
@@ -6798,7 +6849,6 @@ membership AS (
     SELECT
         plugin_server.id AS membership_id,
         plugin_server.mcp_server_id,
-        plugin_server.toolset_id,
         plugin.slug AS plugin_slug,
         plugin_server.display_name
     FROM plugins AS plugin
@@ -6816,16 +6866,6 @@ server_membership AS (
         membership.display_name
     FROM membership
     WHERE membership.mcp_server_id IS NOT NULL
-    UNION ALL
-    SELECT
-        server.id AS server_id,
-        membership.membership_id,
-        membership.plugin_slug,
-        membership.display_name
-    FROM server
-    JOIN membership
-      ON membership.toolset_id = server.toolset_id
-    WHERE server.hosts_toolset
 )
 SELECT
     server.id AS mcp_server_id,
@@ -6861,13 +6901,9 @@ type ListPlatformMCPServerIdentitiesRow struct {
 // slug, name, hosted toolset slug, and each plugin membership's plugin slug and
 // display name (the key the plugin's mcp.json ships it under). One row per
 // (server, membership); a server with no membership yields one row with empty
-// plugin columns. Hosted servers are also reached through memberships attached
-// by toolset, so those memberships, and the toolset slug, belong to the
-// toolset's hosting server: its canonical row (id = toolset id), or every
-// server fronting it when it has none. Memberships are gathered from the
-// project's live plugins through the (plugin_id, backend) indexes, one arm per
-// backend kind: a live membership has exactly one backend, so the arms never
-// repeat a row. toolset_shared marks a hosting server whose toolset other live
+// plugin columns. The toolset slug belongs to the toolset's hosting server: its
+// canonical row (id = toolset id), or every server fronting it when it has
+// none. toolset_shared marks a hosting server whose toolset other live
 // servers also front, since their calls carry the same toolset slug.
 func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListPlatformMCPServerIdentitiesParams) ([]ListPlatformMCPServerIdentitiesRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPServerIdentities, arg.OrganizationID, arg.ProjectID)
@@ -7019,85 +7055,6 @@ func (q *Queries) ListPlatformMCPSubjectConnections(ctx context.Context, arg Lis
 			&i.AuthorizedAt,
 			&i.ReauthorizedAt,
 			&i.Ready,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRiskFindingSpansForRecall = `-- name: ListRiskFindingSpansForRecall :many
-SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN chats c ON c.id = cm.chat_id
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE cm.chat_id = $1
-  AND rr.project_id = $2
-  AND c.organization_id = $3
-  AND c.user_id = $4::text
-  AND c.deleted IS FALSE
-  AND (ua.id IS NULL OR ua.account_type <> 'personal')
-  AND cm.generation = (
-    SELECT COALESCE(MAX(generation), 0)
-    FROM chat_messages
-    WHERE chat_id = $1
-      AND project_id = $2
-  )
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC
-`
-
-type ListRiskFindingSpansForRecallParams struct {
-	ChatID         uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	UserID         string
-}
-
-type ListRiskFindingSpansForRecallRow struct {
-	ChatMessageID uuid.NullUUID
-	Source        string
-	RuleID        pgtype.Text
-	Match         pgtype.Text
-	Spans         []byte
-	StartPos      pgtype.Int4
-	EndPos        pgtype.Int4
-}
-
-// Findings that drive inline masking of the recall digest. Message-anchored
-// rows only (the digest does not render content parts): found, not excluded,
-// not swept as false positive, policy still enabled and not deleted.
-// Latest generation only, matching the transcript read: findings on
-// superseded generations mask nothing the digest renders, so loading them
-// would only let long, repeatedly compacted sessions inflate the scan.
-func (q *Queries) ListRiskFindingSpansForRecall(ctx context.Context, arg ListRiskFindingSpansForRecallParams) ([]ListRiskFindingSpansForRecallRow, error) {
-	rows, err := q.db.Query(ctx, listRiskFindingSpansForRecall,
-		arg.ChatID,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.UserID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRiskFindingSpansForRecallRow
-	for rows.Next() {
-		var i ListRiskFindingSpansForRecallRow
-		if err := rows.Scan(
-			&i.ChatMessageID,
-			&i.Source,
-			&i.RuleID,
-			&i.Match,
-			&i.Spans,
-			&i.StartPos,
-			&i.EndPos,
 		); err != nil {
 			return nil, err
 		}
@@ -7547,14 +7504,14 @@ WITH anchor AS (
       AND cm.chat_id = $4 AND cm.project_id = $1
     ORDER BY cm.seq DESC LIMIT 1
 ), preceding AS (
-    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
      WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq < a.seq
      ORDER BY cm.seq DESC LIMIT $5::integer
 ), following AS (
-    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
      WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq >= a.seq
      ORDER BY cm.seq ASC LIMIT $6::integer
-), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM following)
+), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at FROM following)
 SELECT n.id, n.seq, n.created_at, n.role, n.generation,
        COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
@@ -8357,6 +8314,30 @@ func (q *Queries) ResolvePlatformMCPProjectBySlug(ctx context.Context, arg Resol
 	var i ResolvePlatformMCPProjectBySlugRow
 	err := row.Scan(&i.ID, &i.Name, &i.Slug)
 	return i, err
+}
+
+const retirePlatformMCPCatalogRegistration = `-- name: RetirePlatformMCPCatalogRegistration :exec
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type RetirePlatformMCPCatalogRegistrationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Retires a registration whose MCP server was deleted outside Platform MCP, so
+// adding the same catalogue server again creates a fresh registration instead
+// of reusing one that points at a deleted server.
+func (q *Queries) RetirePlatformMCPCatalogRegistration(ctx context.Context, arg RetirePlatformMCPCatalogRegistrationParams) error {
+	_, err := q.db.Exec(ctx, retirePlatformMCPCatalogRegistration, arg.ID, arg.OrganizationID, arg.ProjectID)
+	return err
 }
 
 const revokePlatformMCPConnection = `-- name: RevokePlatformMCPConnection :one

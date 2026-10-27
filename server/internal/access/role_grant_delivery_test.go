@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestService_UpdateRole_DeliversServerToExistingAudiencePlugin(t *testing.T) {
@@ -240,6 +239,7 @@ type roleDeliveryFixture struct {
 	roleID        string
 	toolsetID     uuid.UUID
 	serverID      uuid.UUID
+	signals       *recordingPublishSignaler
 }
 
 func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture) {
@@ -252,7 +252,7 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	toolsetID := uuid.New()
 	_, err := testrepo.New(ti.conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{ID: toolsetID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Delivery server", Slug: "delivery-server"})
 	require.NoError(t, err)
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{ID: toolsetID, ProjectID: *ac.ProjectID, McpEnabled: true}))
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{ID: toolsetID, ProjectID: *ac.ProjectID, McpEnabled: true}))
 	serverID, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: uuid.New(), ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private"})
 	require.NoError(t, err)
 	_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: "delivery-endpoint"})
@@ -267,13 +267,14 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	t.Cleanup(func() { github.AssertExpectations(t) })
 	githubConfig := &plugins.GitHubConfig{Client: github, Org: "test-org", InstallationID: 12345}
 	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil)
-	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil)
+	signals := &recordingPublishSignaler{}
+	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil).WithPluginPublisher(signals)
 	plugin, err := pluginService.CreatePlugin(ctx, &plugingen.CreatePluginPayload{Name: "Delivery audience"})
 	require.NoError(t, err)
 	_, err = pluginService.SetPluginAssignments(ctx, &plugingen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{"role:organization:" + roleID}})
 	require.NoError(t, err)
 
-	return ctx, &roleDeliveryFixture{ti: ti, ac: ac, pluginService: pluginService, plugin: plugin, github: github, githubConfig: githubConfig, roleID: roleID, toolsetID: toolsetID, serverID: serverID}
+	return ctx, &roleDeliveryFixture{ti: ti, ac: ac, pluginService: pluginService, plugin: plugin, github: github, githubConfig: githubConfig, roleID: roleID, toolsetID: toolsetID, serverID: serverID, signals: signals}
 }
 
 func (f *roleDeliveryFixture) patch(t *testing.T, ctx context.Context, id string, add bool) {

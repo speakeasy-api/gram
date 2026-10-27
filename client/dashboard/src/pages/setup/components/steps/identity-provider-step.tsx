@@ -87,7 +87,7 @@ function StatusUnavailableAlert({
   onRetry: () => void;
 }): JSX.Element {
   return (
-    <Alert variant="warning" alignTop>
+    <Alert variant="warning">
       <div className="text-sm">
         <p className="font-medium">Setup status unavailable</p>
         <p className="mt-1">

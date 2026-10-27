@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
@@ -171,7 +170,7 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 	RecordAuthenticationHost(host, service)
 
 	handle := func(method, pattern string, handler func(http.ResponseWriter, *http.Request) error) {
-		host.Handle(method, pattern, oops.ErrHandle(service.logger, handler).ServeHTTP)
+		host.Handle(method, pattern, oauthRouteHandler(service.logger, method, pattern, handler).ServeHTTP)
 	}
 	handle(http.MethodGet, wellknown.OAuthAuthorizationServerPath+PublicServerRoute, service.HandleGetAuthorizationServer)
 	handle(http.MethodPost, PublicServerRoute+"/register", service.HandleRegister)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -27,6 +29,22 @@ import (
 // carries a handful of short fields; 16 KiB leaves room without letting one
 // request hold a large buffer.
 const consentActionFormMaxBytes = 16 << 10 // 16 KiB
+
+// consentActionFormErrorKey retains the first parse failure when the route
+// wrapper reads the action to choose a response format. ParseForm caches values
+// but does not repeat its error on subsequent calls.
+type consentActionFormErrorKey struct{}
+
+func parseConsentActionForm(w http.ResponseWriter, r *http.Request) error {
+	if err, ok := r.Context().Value(consentActionFormErrorKey{}).(error); ok {
+		return err
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, consentActionFormMaxBytes)
+	if err := r.ParseForm(); err != nil {
+		return fmt.Errorf("parse consent action form: %w", err)
+	}
+	return nil
+}
 
 // HandleConsentAction serves `POST /mcp/{mcpSlug}/connect/remote-session`.
 func (s *Service) HandleConsentAction(w http.ResponseWriter, r *http.Request) error {
@@ -51,24 +69,23 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	if r.Method != http.MethodPost {
 		return oops.E(oops.CodeBadRequest, nil, "method not allowed").LogError(ctx, logger)
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, consentActionFormMaxBytes)
-	if err := r.ParseForm(); err != nil {
+	if err := parseConsentActionForm(w, r); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, logger)
 	}
 
 	stateID := r.PostForm.Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
 	// Plain Get: card actions are idempotent within the challenge TTL and
 	// must not consume the state the approve POST needs.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
+		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -78,10 +95,10 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "invalid consent csrf token").LogWarn(ctx, logger)
 	}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "authn challenge subject is not resolved").LogWarn(ctx, logger)
 	}
 	// Revalidate private authority before retry consumes state or card actions
 	// read or mutate credentials; the resolved endpoint can already be stale.
@@ -90,6 +107,16 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
+	}
+	action := r.PostForm.Get("action")
+	if endpoint.MetaMcpServerID.Valid && (action == "identity_chaining_check" || action == "validate") {
+		lockedDown, err := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
+		if err != nil {
+			return err
+		}
+		if lockedDown {
+			return oops.E(oops.CodeForbidden, nil, "Start authorization from this gateway's custom domain to approve access.").LogWarn(ctx, logger)
+		}
 	}
 	subject := *challengeState.Subject
 

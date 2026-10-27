@@ -5,6 +5,8 @@ description: Add a reviewed MCP Catalogue server to an explicit AICP project thr
 
 # Add an MCP from the catalog
 
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. Whether a tool exists for you is decided by `describe_platform_tool` with its exact name, not by `tools/list` or one page of search results: a name returned in `not_found` is unavailable to you, so say so rather than guess. The call itself still checks your access. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
+
 Use this workflow only through the authenticated Speakeasy AI Control Plane (AICP) Platform MCP. It follows the same guarded outcome a user would complete manually in the AICP dashboard: select a reviewed MCP, configure it for an explicit project, finish secure setup, and verify readiness. The package itself grants no organization access.
 
 If the user instead supplies a remote MCP URL outside the reviewed catalogue, use the `add-mcp-from-remote-url` workflow.

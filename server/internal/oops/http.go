@@ -10,6 +10,7 @@ import (
 	goa "goa.design/goa/v3/pkg"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 )
 
 // ErrHandle returns a middleware that wraps an http handler. It calls the
@@ -19,8 +20,23 @@ import (
 // errors and a generic message is returned to the client. All errors are logged
 // with the provided logger.
 func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
+	return errHandle(logger, handler, false)
+}
+
+// BrowserErrHandle opts a navigation route into HTML failures. Machine endpoints
+// keep ErrHandle or OAuthErrHandle; request headers never choose the format.
+func BrowserErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
+	return errHandle(logger, handler, true)
+}
+
+func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error, browser bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := handler(w, r)
+		recorded := &oauthResponseWriter{ResponseWriter: w, committed: false}
+		writer := w
+		if browser {
+			writer = recorded
+		}
+		err := handler(writer, r)
 		if err == nil {
 			return
 		}
@@ -44,6 +60,32 @@ func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogErrorID(payload.ID), attr.SlogError(err), attr.SlogErrorStack(stack))
 		}
 
+		if recorded.committed {
+			return
+		}
+		if browser {
+			reason := oauthui.ReasonDefault
+			if presentation, ok := errors.AsType[*browserError](err); ok {
+				reason = presentation.reason
+			}
+			page := oauthui.AuthorizationError{
+				Status:         code,
+				Reason:         reason,
+				Approval:       false,
+				ErrorID:        payload.ID,
+				Code:           payload.Name,
+				Description:    payload.Message,
+				CallbackURL:    "",
+				ClientName:     "",
+				ClientID:       "",
+				ClientIDOrigin: "",
+				ServerName:     "",
+			}
+			if err := oauthui.WriteAuthorizationError(r.Context(), w, page); err != nil {
+				logger.ErrorContext(r.Context(), "write browser error response", attr.SlogError(err))
+			}
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
 		err = json.NewEncoder(w).Encode(payload)
@@ -51,4 +93,26 @@ func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 			logger.ErrorContext(r.Context(), "failed to encode response", attr.SlogError(err))
 		}
 	})
+}
+
+// browserError carries presentation metadata without changing the underlying
+// error's public code, status, identifier, or machine serialization.
+type browserError struct {
+	// cause is the error whose transport semantics remain authoritative.
+	cause error
+
+	// reason selects actionable browser copy.
+	reason oauthui.Reason
+}
+
+func (e *browserError) Error() string { return e.cause.Error() }
+func (e *browserError) Unwrap() error { return e.cause }
+
+// WithBrowserReason annotates an error for browser routes. JSON wrappers still
+// find the underlying ShareableError through errors.As.
+func WithBrowserReason(err error, reason oauthui.Reason) error {
+	if err == nil {
+		return nil
+	}
+	return &browserError{cause: err, reason: reason}
 }

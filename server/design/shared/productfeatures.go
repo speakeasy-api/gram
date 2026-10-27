@@ -12,7 +12,7 @@ var ProductFeatureName = Type("ProductFeatureName", String, func() {
 		"customer_managed_encryption_keys", "remote_session_auto_refresh",
 		"remote_session_auto_refresh_enforced",
 		"session_portability", "network_ingress", "signals_intelligence",
-		"organization_gateway_disabled",
+		"organization_gateway_disabled", "code_mode",
 	)
 })
 
@@ -37,6 +37,7 @@ var ProductFeatures = ResultType("application/vnd.product-features", func() {
 	Attribute("network_ingress_enabled", Boolean, "Whether the organization has the staff-managed private network ingress entitlement")
 	Attribute("signals_intelligence_enabled", Boolean, "Whether the organization can configure signals intelligence")
 	Attribute("organization_gateway_disabled", Boolean, "Whether an organization admin turned the organization gateway off, so its routes answer 404")
+	Attribute("code_mode_enabled", Boolean, "Whether the organization has the staff-managed gateway Code Mode entitlement")
 	Attribute("device_agent", Boolean, "Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.")
-	Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "skill_capture_metadata_only", "ai_platform_push_integrations_enabled", "platform_mcp_enabled", "customer_managed_encryption_keys_enabled", "remote_session_auto_refresh_enabled", "remote_session_auto_refresh_enforced_enabled", "session_portability_enabled", "network_ingress_enabled", "signals_intelligence_enabled", "organization_gateway_disabled", "device_agent")
+	Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "skill_capture_metadata_only", "ai_platform_push_integrations_enabled", "platform_mcp_enabled", "customer_managed_encryption_keys_enabled", "remote_session_auto_refresh_enabled", "remote_session_auto_refresh_enforced_enabled", "session_portability_enabled", "network_ingress_enabled", "signals_intelligence_enabled", "organization_gateway_disabled", "code_mode_enabled", "device_agent")
 })

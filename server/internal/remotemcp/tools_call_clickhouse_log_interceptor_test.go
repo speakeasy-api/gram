@@ -1,8 +1,11 @@
 package remotemcp_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -12,6 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -32,7 +38,7 @@ func TestToolsCallClickHouseLogInterceptor_Name(t *testing.T) {
 
 func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 	t.Parallel()
-	for _, caller := range []string{"legacy", "managed agent", "anonymous", "other organization"} {
+	for _, caller := range []string{"legacy", "managed agent", "workload", "anonymous", "other organization"} {
 		t.Run(caller, func(t *testing.T) { t.Parallel(); testToolsCallClickHouseEmission(t, caller) })
 	}
 }
@@ -74,6 +80,14 @@ func testToolsCallClickHouseEmission(t *testing.T, caller string) {
 			urn.NewPrincipal(urn.PrincipalTypeAgent, agentID),
 			contextvalues.PrincipalCredential{AuthorizerUserID: "approver-id"})
 		ctx = contextvalues.WithPrincipalCredentialOwner(ctx, "owner-id")
+	}
+	workloadIssuerID := uuid.New()
+	const workloadSubject = "system:serviceaccount:billing:invoice-worker"
+	if caller == "workload" {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		ctx = contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewWorkloadPrincipal(workloadIssuerID, workloadSubject))
+		ctx = contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID))
 	}
 
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{
@@ -185,6 +199,29 @@ func testToolsCallClickHouseEmission(t *testing.T, caller string) {
 				"SELECT max(agent_id) FROM trace_summaries WHERE gram_project_id = ?", projectID.String()).Scan(&summarizedAgentID)
 			return err == nil && summarizedAgentID == agentID
 		}, 5*time.Second, 50*time.Millisecond, "trusted agent attribution did not reach trace_summaries")
+	}
+	if caller == "workload" {
+		var actorType, actorID, issuerID, subject string
+		err := chConn.QueryRow(t.Context(), `SELECT
+    toString(attributes.gram.authorization.actor.type),
+    toString(attributes.gram.authorization.actor.id),
+    toString(attributes.gram.workload_issuer.id),
+    toString(attributes.gram.workload.subject)
+   FROM telemetry_logs WHERE gram_project_id = ? AND gram_urn = ? LIMIT 1`,
+			projectID.String(), expectedURN).Scan(&actorType, &actorID, &issuerID, &subject)
+		require.NoError(t, err)
+		require.Equal(t, "agent", actorType)
+		require.Equal(t, agentID, actorID)
+		require.Equal(t, workloadIssuerID.String(), issuerID)
+		require.Equal(t, workloadSubject, subject)
+		// The agent's tool usage reads trace_summaries, which counts the call
+		// for the agent with no change to its query.
+		require.Eventually(t, func() bool {
+			var summarizedAgentID string
+			err := chConn.QueryRow(t.Context(),
+				"SELECT max(agent_id) FROM trace_summaries WHERE gram_project_id = ?", projectID.String()).Scan(&summarizedAgentID)
+			return err == nil && summarizedAgentID == agentID
+		}, 5*time.Second, 50*time.Millisecond, "workload attribution did not reach trace_summaries")
 	}
 
 }
@@ -326,7 +363,7 @@ func TestToolsCallClickHouseLogInterceptor_NoAuthContextSkips(t *testing.T) {
 func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWith2xxMapsTo500(t *testing.T) {
 	t.Parallel()
 
-	statusCode := runStatusCodeMappingCase(t, statusCodeCase{
+	recorded := runStatusCodeMappingCase(t, statusCodeCase{
 		toolName: "rpc_err_2xx",
 		response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
 			return &proxy.ToolsCallResponse{
@@ -342,13 +379,14 @@ func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWith2xxMapsTo500(t *testi
 			}
 		},
 	})
-	require.Equal(t, int32(500), statusCode, "JSON-RPC Error with upstream 2xx should map to 500")
+	require.Equal(t, int32(500), recorded.statusCode, "JSON-RPC Error with upstream 2xx should map to 500")
+	require.Equal(t, "error", recorded.outcome)
 }
 
 func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWithoutHTTPResponseMapsTo500(t *testing.T) {
 	t.Parallel()
 
-	statusCode := runStatusCodeMappingCase(t, statusCodeCase{
+	recorded := runStatusCodeMappingCase(t, statusCodeCase{
 		toolName: "rpc_err_no_http",
 		response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
 			return &proxy.ToolsCallResponse{
@@ -364,13 +402,14 @@ func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWithoutHTTPResponseMapsTo
 			}
 		},
 	})
-	require.Equal(t, int32(500), statusCode, "JSON-RPC Error with no upstream HTTP response should map to 500")
+	require.Equal(t, int32(500), recorded.statusCode, "JSON-RPC Error with no upstream HTTP response should map to 500")
+	require.Equal(t, "error", recorded.outcome)
 }
 
 func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWith4xxPreservesCode(t *testing.T) {
 	t.Parallel()
 
-	statusCode := runStatusCodeMappingCase(t, statusCodeCase{
+	recorded := runStatusCodeMappingCase(t, statusCodeCase{
 		toolName: "rpc_err_401",
 		response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
 			return &proxy.ToolsCallResponse{
@@ -386,19 +425,214 @@ func TestToolsCallClickHouseLogInterceptor_JSONRPCErrorWith4xxPreservesCode(t *t
 			}
 		},
 	})
-	require.Equal(t, int32(401), statusCode, "JSON-RPC Error with upstream 4xx should preserve the upstream code")
+	require.Equal(t, int32(401), recorded.statusCode, "JSON-RPC Error with upstream 4xx should preserve the upstream code")
+	require.Equal(t, "error", recorded.outcome)
+}
+
+func TestToolsCallClickHouseLogInterceptor_IsErrorResultRecordsErrorOutcome(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		isError bool
+		outcome string
+	}{
+		{name: "tool_error_200", isError: true, outcome: "error"},
+		{name: "tool_ok_200", isError: false, outcome: "ok"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorded := runStatusCodeMappingCase(t, statusCodeCase{
+				toolName: tc.name,
+				response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
+					return &proxy.ToolsCallResponse{
+						Error: nil,
+						RemoteMessage: &proxy.RemoteMessage{
+							UserHTTPRequest:    nil,
+							RemoteHTTPRequest:  nil,
+							RemoteHTTPResponse: &http.Response{StatusCode: http.StatusOK},
+							Message:            nil,
+						},
+						Request: req,
+						Result: &mcp.CallToolResult{
+							Content:           nil,
+							IsError:           tc.isError,
+							Meta:              nil,
+							StructuredContent: nil,
+							InputRequests:     nil,
+							RequestState:      "",
+						},
+					}
+				},
+			})
+			require.Equal(t, int32(200), recorded.statusCode, "an isError result keeps the upstream HTTP status")
+			require.Equal(t, tc.outcome, recorded.outcome)
+		})
+	}
+}
+
+func TestToolsCallClickHouseLogInterceptor_IsErrorLogsWarnWithoutBody(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	const secret = "upstream-secret-detail"
+
+	runStatusCodeMappingCase(t, statusCodeCase{
+		toolName: "tool_error_log",
+		logger:   logger,
+		response: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
+			return &proxy.ToolsCallResponse{
+				Error: nil,
+				RemoteMessage: &proxy.RemoteMessage{
+					UserHTTPRequest:    nil,
+					RemoteHTTPRequest:  nil,
+					RemoteHTTPResponse: &http.Response{StatusCode: http.StatusOK},
+					Message:            nil,
+				},
+				Request: req,
+				Result: &mcp.CallToolResult{
+					Content:           []mcp.Content{&mcp.TextContent{Text: secret}},
+					IsError:           true,
+					Meta:              nil,
+					StructuredContent: nil,
+					InputRequests:     nil,
+					RequestState:      "",
+				},
+			}
+		},
+	})
+
+	out := logs.String()
+	require.Contains(t, out, `"msg":"remote MCP tool returned an error result"`)
+	require.Contains(t, out, `"level":"WARN"`)
+	require.Contains(t, out, `"gram.tool.name":"tool_error_log"`)
+	require.NotContains(t, out, secret, "the upstream result body stays out of the log")
+}
+
+type recordedCall struct {
+	statusCode int32
+	outcome    string
+}
+
+func TestToolsCallClickHouseLogInterceptor_ToolErrorResultIsFailed(t *testing.T) {
+	t.Parallel()
+
+	toolError := func(httpStatus int) func(*proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
+		return func(req *proxy.ToolsCallRequest) *proxy.ToolsCallResponse {
+			return &proxy.ToolsCallResponse{
+				Error: nil,
+				RemoteMessage: &proxy.RemoteMessage{
+					UserHTTPRequest:    nil,
+					RemoteHTTPRequest:  nil,
+					RemoteHTTPResponse: &http.Response{StatusCode: httpStatus},
+					Message:            nil,
+				},
+				Request: req,
+				Result:  &mcp.CallToolResult{Content: nil, IsError: true, Meta: nil, StructuredContent: nil},
+			}
+		}
+	}
+
+	tests := []struct {
+		name       string
+		httpStatus int
+		want       int32
+	}{
+		// In-band failures preserve HTTP status and record an error outcome.
+		{name: "2xx is kept", httpStatus: http.StatusOK, want: 200},
+		{name: "4xx is kept", httpStatus: http.StatusNotFound, want: 404},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorded := runStatusCodeMappingCase(t, statusCodeCase{
+				toolName: "tool_err_" + strconv.Itoa(tc.httpStatus),
+				response: toolError(tc.httpStatus),
+				failure:  nil,
+			})
+			require.Equal(t, tc.want, recorded.statusCode)
+			require.Equal(t, "error", recorded.outcome)
+		})
+	}
+}
+
+// The failure chain must reuse the request chain's instance: the row's
+// duration comes from the start time the request side stashed.
+func TestProxyManager_LogsToolCallsWithoutReply(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	manager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		mcpriskscan.NewNoop(tracerProvider, meterProvider, logger), nil)
+	p := manager.BuildTarget(logger,
+		proxy.ServerIdentity{TunneledMCPServerID: uuid.NewString(), McpServerID: uuid.NewString()},
+		"https://tunnel.example.com/mcp", nil, mcpservers.VisibilityPublic, "org-test", uuid.NewString(), "", "", nil)
+
+	require.Len(t, p.ToolsCallFailureInterceptors, 1, "only the log row is written for a call without a reply")
+	failureLog, ok := p.ToolsCallFailureInterceptors[0].(*remotemcp.ToolsCallClickHouseLogInterceptor)
+	require.True(t, ok)
+	var requestLog proxy.ToolsCallRequestInterceptor
+	for _, interceptor := range p.ToolsCallRequestInterceptors {
+		if interceptor.Name() == failureLog.Name() {
+			requestLog = interceptor
+		}
+	}
+	require.Same(t, failureLog, requestLog)
+}
+
+// A forwarded call whose reply never arrived still writes a failed row.
+func TestToolsCallClickHouseLogInterceptor_FailedCallWithoutReply(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		upstream   int
+		proxyError error
+		want       int32
+	}{
+		{name: "upstream error status is kept", upstream: http.StatusBadGateway, proxyError: nil, want: 502},
+		{name: "unreachable upstream", upstream: 0, proxyError: oops.E(oops.CodeGatewayError, nil, "remote mcp server unreachable"), want: 502},
+		{name: "proxy error status", upstream: 0, proxyError: oops.E(oops.CodeUnauthorized, nil, "could not establish tunnel caller identity"), want: 401},
+		{name: "2xx without a tools/call reply", upstream: http.StatusOK, proxyError: nil, want: 502},
+	}
+	for i, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorded := runStatusCodeMappingCase(t, statusCodeCase{
+				toolName: "no_reply_" + strconv.Itoa(i),
+				response: nil,
+				failure: func(req *proxy.ToolsCallRequest) *proxy.ToolsCallFailure {
+					return &proxy.ToolsCallFailure{Request: req, StatusCode: tc.upstream, Err: tc.proxyError}
+				},
+			})
+			require.Equal(t, tc.want, recorded.statusCode)
+			require.Equal(t, "error", recorded.outcome)
+		})
+	}
 }
 
 type statusCodeCase struct {
 	toolName string
 	response func(*proxy.ToolsCallRequest) *proxy.ToolsCallResponse
+	// logger receives the interceptor's own logs; nil uses the test logger.
+	logger *slog.Logger
+	// failure, when set, reports the call to the failure interceptor
+	// instead of passing a response.
+	failure func(*proxy.ToolsCallRequest) *proxy.ToolsCallFailure
 }
 
 // runStatusCodeMappingCase drives one tools/call through a fresh interceptor
-// and returns the materialized http.response.status_code recorded for the row,
+// and returns the http.response.status_code and gram.outcome recorded for the row,
 // so each upstreamStatusCode branch can be asserted against a real telemetry
 // row.
-func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
+func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) recordedCall {
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
@@ -408,6 +642,9 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	if tc.logger != nil {
+		logger = tc.logger
+	}
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
@@ -433,25 +670,34 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 	}
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, req))
-	require.NoError(t, interceptor.InterceptToolsCallResponse(ctx, tc.response(req)))
+	if tc.failure != nil {
+		interceptor.InterceptToolsCallFailure(ctx, tc.failure(req))
+	} else {
+		require.NoError(t, interceptor.InterceptToolsCallResponse(ctx, tc.response(req)))
+	}
 
 	expectedURN := "tools:externalmcp:" + serverID + ":" + tc.toolName
-	var statusCode int32
+	var recorded recordedCall
+	var result string
 	require.Eventually(t, func() bool {
 		row := conn.QueryRow(t.Context(),
-			`SELECT toInt32OrZero(toString(attributes.http.response.status_code)) FROM telemetry_logs
+			`SELECT toInt32OrZero(toString(attributes.http.response.status_code)), toString(attributes.gram.outcome),
+			       toString(attributes.gen_ai.tool.call.result) FROM telemetry_logs
 			 WHERE gram_project_id = ? AND gram_urn = ?`,
 			projectID.String(), expectedURN)
-		var got int32
-		if err := row.Scan(&got); err != nil {
+		var got recordedCall
+		if err := row.Scan(&got.statusCode, &got.outcome, &result); err != nil {
 			return false
 		}
-		if got == 0 {
+		if got.statusCode == 0 {
 			return false
 		}
-		statusCode = got
+		recorded = got
 		return true
 	}, 5*time.Second, 50*time.Millisecond, "telemetry_logs row did not appear")
+	if tc.failure != nil {
+		require.Empty(t, result, "a call without a reply records no output")
+	}
 
-	return statusCode
+	return recorded
 }

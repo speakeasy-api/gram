@@ -32,17 +32,21 @@ describe("Okta connection list links", () => {
 });
 
 describe("Okta Applications links", () => {
-  it.each(["okta.com", "oktapreview.com", "okta-emea.com", "okta.mil"])(
-    "opens the admin Applications list for %s",
-    (suffix) => {
-      expect(oktaApplicationsUrl(`https://tenant.${suffix}`)).toBe(
-        `https://tenant-admin.${suffix}/admin/apps/active`,
-      );
-      expect(oktaApplicationsUrl(`https://tenant-admin.${suffix}/`)).toBe(
-        `https://tenant-admin.${suffix}/admin/apps/active`,
-      );
-    },
-  );
+  it.each([
+    "okta.com",
+    "oktapreview.com",
+    "okta-emea.com",
+    "okta-gov.com",
+    "okta.mil",
+    "trexcloud.com",
+  ])("opens the admin Applications list for %s", (suffix) => {
+    expect(oktaApplicationsUrl(`https://tenant.${suffix}`)).toBe(
+      `https://tenant-admin.${suffix}/admin/apps/active`,
+    );
+    expect(oktaApplicationsUrl(`https://tenant-admin.${suffix}/`)).toBe(
+      `https://tenant-admin.${suffix}/admin/apps/active`,
+    );
+  });
   it.each([
     undefined,
     "not a URL",
@@ -54,16 +58,20 @@ describe("Okta Applications links", () => {
 });
 
 describe("Okta console URL validation", () => {
-  it.each(["okta.com", "oktapreview.com", "okta-emea.com", "okta.mil"])(
-    "allows create links on %s",
-    (suffix) => {
-      const url = `https://tenant-admin.${suffix}/resource-connections/create`;
-      expect(oktaConsoleUrl(url)).toBe(url);
-      expect(oktaConnectionsUrl(url)).toBe(
-        `https://tenant-admin.${suffix}/resource-connections`,
-      );
-    },
-  );
+  it.each([
+    "okta.com",
+    "oktapreview.com",
+    "okta-emea.com",
+    "okta-gov.com",
+    "okta.mil",
+    "trexcloud.com",
+  ])("allows create links on %s", (suffix) => {
+    const url = `https://tenant-admin.${suffix}/resource-connections/create`;
+    expect(oktaConsoleUrl(url)).toBe(url);
+    expect(oktaConnectionsUrl(url)).toBe(
+      `https://tenant-admin.${suffix}/resource-connections`,
+    );
+  });
   it.each([
     "javascript:alert(1)",
     "data:text/html,unsafe",
@@ -83,20 +91,24 @@ describe("Okta console URL validation", () => {
 });
 
 describe("oktaAdminConsoleUrl", () => {
-  it.each(["okta.com", "oktapreview.com", "okta-emea.com", "okta.mil"])(
-    "derives single- and multi-label console hosts for %s",
-    (suffix) => {
-      expect(oktaAdminConsoleUrl(`https://tenant.${suffix}`)).toBe(
-        `https://tenant-admin.${suffix}`,
-      );
-      expect(oktaAdminConsoleUrl(`https://a.b.${suffix}`)).toBe(
-        `https://a.b-admin.${suffix}`,
-      );
-      expect(oktaAdminConsoleUrl(`https://Tenant-Admin.${suffix}/`)).toBe(
-        `https://tenant-admin.${suffix}`,
-      );
-    },
-  );
+  it.each([
+    "okta.com",
+    "oktapreview.com",
+    "okta-emea.com",
+    "okta-gov.com",
+    "okta.mil",
+    "trexcloud.com",
+  ])("derives single- and multi-label console hosts for %s", (suffix) => {
+    expect(oktaAdminConsoleUrl(`https://tenant.${suffix}`)).toBe(
+      `https://tenant-admin.${suffix}`,
+    );
+    expect(oktaAdminConsoleUrl(`https://a.b.${suffix}`)).toBe(
+      `https://a.b-admin.${suffix}`,
+    );
+    expect(oktaAdminConsoleUrl(`https://Tenant-Admin.${suffix}/`)).toBe(
+      `https://tenant-admin.${suffix}`,
+    );
+  });
 
   it("derives the admin console host", () => {
     expect(oktaAdminConsoleUrl("https://acme.okta.com")).toBe(
@@ -121,19 +133,21 @@ describe("normalizeOktaOrgUrl", () => {
     );
   });
 
-  it.each(["okta.com", "oktapreview.com", "okta-emea.com", "okta.mil"])(
-    "resolves an admin console URL on %s to its org",
-    (suffix) => {
-      const org = `https://acme.${suffix}`;
-      expect(normalizeOktaOrgUrl(`https://acme-admin.${suffix}`)).toBe(org);
-      expect(normalizeOktaOrgUrl(`https://Acme-Admin.${suffix}/admin`)).toBe(
-        org,
-      );
-      expect(
-        normalizeOktaOrgUrl(`https://acme-admin.${suffix}/admin/apps/active`),
-      ).toBe(org);
-    },
-  );
+  it.each([
+    "okta.com",
+    "oktapreview.com",
+    "okta-emea.com",
+    "okta-gov.com",
+    "okta.mil",
+    "trexcloud.com",
+  ])("resolves an admin console URL on %s to its org", (suffix) => {
+    const org = `https://acme.${suffix}`;
+    expect(normalizeOktaOrgUrl(`https://acme-admin.${suffix}`)).toBe(org);
+    expect(normalizeOktaOrgUrl(`https://Acme-Admin.${suffix}/admin`)).toBe(org);
+    expect(
+      normalizeOktaOrgUrl(`https://acme-admin.${suffix}/admin/apps/active`),
+    ).toBe(org);
+  });
 
   it("leaves orgs that merely contain admin untouched", () => {
     expect(normalizeOktaOrgUrl("https://myadmin-co.okta.com")).toBe(

@@ -240,6 +240,12 @@ type UpdateAssistantPayload struct {
 	WarmTTLSeconds *int
 	// Maximum active warm runtimes.
 	MaxConcurrency *int
+	// Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching
+	// requires the assistant and all background work to be settled.
+	RuntimeVersion *int
+	// The runtime version read before requesting a switch. Required with
+	// runtime_version; conflicts require a fresh read.
+	ExpectedRuntimeVersion *int
 	// The assistant status.
 	Status *string
 }

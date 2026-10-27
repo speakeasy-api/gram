@@ -44,6 +44,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 			userID            *string
 			source            *string
 			assistantID       *string
+			agentID           *string
 			sourceKind        *string
 			excludeSourceKind *string
 			hasRisk           *string
@@ -84,6 +85,13 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		}
 		if assistantID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
+		}
+		agentIDRaw := qp.Get("agent_id")
+		if agentIDRaw != "" {
+			agentID = &agentIDRaw
+		}
+		if agentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
 		}
 		sourceKindRaw := qp.Get("source_kind")
 		if sourceKindRaw != "" {
@@ -214,7 +222,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChatsPayload(search, externalUserID, userID, source, assistantID, sourceKind, excludeSourceKind, hasRisk, accountType, pinned, minRiskScore, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewListChatsPayload(search, externalUserID, userID, source, assistantID, agentID, sourceKind, excludeSourceKind, hasRisk, accountType, pinned, minRiskScore, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3449,6 +3457,8 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 		AssistantID:          v.AssistantID,
 		AssistantName:        v.AssistantName,
 		AssistantAgentID:     v.AssistantAgentID,
+		AgentID:              v.AgentID,
+		AgentName:            v.AgentName,
 		NumMessages:          v.NumMessages,
 		Source:               v.Source,
 		OriginatingClient:    v.OriginatingClient,
