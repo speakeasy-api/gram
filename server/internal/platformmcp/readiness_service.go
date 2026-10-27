@@ -59,15 +59,32 @@ func (s *ReadinessService) WithTelemetry(telemetry LifecycleTelemetry) *Readines
 // provider or consuming a repair budget. It is safe for the dashboard's
 // authoritative projection to call while resuming after a reload.
 func (s *ReadinessService) CurrentReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, Readiness, bool, error) {
-	return s.getReadiness(ctx, principal, projectSlug, registrationID, false, false)
+	return s.getReadiness(ctx, principal, projectSlug, registrationID, readStored, false)
 }
 
 func (s *ReadinessService) GetReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string, force bool) (ResolvedProject, Readiness, bool, error) {
-	return s.getReadiness(ctx, principal, projectSlug, registrationID, force, true)
+	mode := readOrFirstProbe
+	if force {
+		mode = readForced
+	}
+	return s.getReadiness(ctx, principal, projectSlug, registrationID, mode, true)
 }
 
-func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string, force, consumeBudget bool) (ResolvedProject, Readiness, bool, error) {
-	if s == nil || s.store == nil || s.gate == nil || (force && s.adapters == nil) || (consumeBudget && !s.repairBudget.valid()) || projectSlug == "" || registrationID == "" {
+// readinessProbeMode says how much provider probing a readiness read may do.
+type readinessProbeMode int
+
+const (
+	// readStored reports the stored result and never probes.
+	readStored readinessProbeMode = iota
+	// readOrFirstProbe reports the stored result, or runs one check when no
+	// current result is stored.
+	readOrFirstProbe
+	// readForced always runs a fresh check under the probe limit.
+	readForced
+)
+
+func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string, mode readinessProbeMode, consumeBudget bool) (ResolvedProject, Readiness, bool, error) {
+	if s == nil || s.store == nil || s.gate == nil || (mode == readForced && !s.canProbe()) || (consumeBudget && !s.repairBudget.valid()) || projectSlug == "" || registrationID == "" {
 		return ResolvedProject{}, Readiness{}, false, ErrUnavailable
 	}
 	if consumeBudget {
@@ -97,33 +114,60 @@ func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal
 		return ResolvedProject{}, Readiness{}, false, fmt.Errorf("resolve platform mcp readiness registration: %w", err)
 	}
 
-	if !force {
+	if mode != readForced {
 		readiness, found, err := s.store.GetProviderReadiness(ctx, principal, project.ID, parsedRegistrationID)
-		return project, readiness, found, err
+		if err != nil || found || mode != readOrFirstProbe || !s.canProbe() {
+			return project, readiness, found, err
+		}
+		// No current check is stored: typically right after the server was
+		// added, or once the last check has expired. Run the first check now rather than report the server as
+		// degraded. A refused or failed check keeps the unchecked result.
+		probed, err := s.probe(ctx, principal, project.ID, parsedRegistrationID, "first_probe")
+		if err != nil {
+			return project, readiness, false, nil
+		}
+		return project, probed, true, nil
 	}
 
-	if s.forceLimiter == nil {
-		return ResolvedProject{}, Readiness{}, false, ErrUnavailable
-	}
-	limitKey := principal.OrganizationID + ":" + parsedRegistrationID.String()
-	decision, err := s.forceLimiter.Allow(ctx, limitKey)
+	readiness, err := s.probe(ctx, principal, project.ID, parsedRegistrationID, "forced_probe")
 	if err != nil {
-		return ResolvedProject{}, Readiness{}, false, fmt.Errorf("limit platform mcp forced readiness probe: %w", ErrOperationBudgetUnavailable)
-	}
-	if !decision.Allowed {
-		return ResolvedProject{}, Readiness{}, false, ErrReadinessRateLimited
-	}
-	readiness, err := s.store.ProbeProviderReadiness(ctx, principal, project.ID, parsedRegistrationID, s.adapters, s.generic)
-	if err != nil {
-		s.telemetry.Record(ctx, LifecycleEvent{Operation: "readiness", Phase: "forced_probe", Outcome: lifecycleOutcome(err), State: ""})
 		return ResolvedProject{}, Readiness{}, false, err
 	}
-	s.telemetry.Record(ctx, LifecycleEvent{Operation: "readiness", Phase: "forced_probe", Outcome: "succeeded", State: readiness.State})
 	return project, readiness, true, nil
 }
 
+// canProbe reports whether any prober is wired: reviewed provider adapters,
+// or the generic prober used for browser catalogue and direct remote servers.
+func (s *ReadinessService) canProbe() bool {
+	return s.adapters != nil || s.generic != nil
+}
+
+// probe runs one authenticated provider check under the per-registration
+// probe limit.
+func (s *ReadinessService) probe(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID, phase string) (Readiness, error) {
+	if s.forceLimiter == nil {
+		return Readiness{}, ErrUnavailable
+	}
+	limitKey := principal.OrganizationID + ":" + registrationID.String()
+	decision, err := s.forceLimiter.Allow(ctx, limitKey)
+	if err != nil {
+		return Readiness{}, fmt.Errorf("limit platform mcp forced readiness probe: %w", ErrOperationBudgetUnavailable)
+	}
+	if !decision.Allowed {
+		return Readiness{}, ErrReadinessRateLimited
+	}
+	readiness, err := s.store.ProbeProviderReadiness(ctx, principal, projectID, registrationID, s.adapters, s.generic)
+	if err != nil {
+		s.telemetry.Record(ctx, LifecycleEvent{Operation: "readiness", Phase: phase, Outcome: lifecycleOutcome(err), State: ""})
+		return Readiness{}, err
+	}
+	s.telemetry.Record(ctx, LifecycleEvent{Operation: "readiness", Phase: phase, Outcome: "succeeded", State: readiness.State})
+	return readiness, nil
+}
+
 func (s *ReadinessService) GetRepairPlan(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, Readiness, bool, error) {
-	project, readiness, found, err := s.GetReadiness(ctx, principal, projectSlug, registrationID, false)
+	// The repair plan reads the last stored check and never probes.
+	project, readiness, found, err := s.getReadiness(ctx, principal, projectSlug, registrationID, readStored, true)
 	if err != nil || found {
 		return project, readiness, found, err
 	}

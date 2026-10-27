@@ -126,12 +126,16 @@ func (s *ChatMetadataService) valid() bool {
 // ListChatsInput narrows one project's chats. Every filter is optional; an
 // empty listing returns the chats active in the last week.
 type ListChatsInput struct {
-	ProjectID     string `json:"project_id,omitempty"`
-	ProjectSlug   string `json:"project_slug,omitempty"`
-	Window        string `json:"window,omitempty"`
-	Risk          string `json:"risk,omitempty"`
-	Source        string `json:"source,omitempty"`
-	AssistantID   string `json:"assistant_id,omitempty"`
+	ProjectID   string `json:"project_id,omitempty"`
+	ProjectSlug string `json:"project_slug,omitempty"`
+	Window      string `json:"window,omitempty"`
+	Risk        string `json:"risk,omitempty"`
+	Source      string `json:"source,omitempty"`
+	AssistantID string `json:"assistant_id,omitempty"`
+
+	// AgentID keeps only sessions attributed to this exact agent.
+	AgentID string `json:"agent_id,omitempty"`
+
 	UserReference string `json:"user_reference,omitempty"`
 	Limit         int    `json:"limit,omitempty"`
 	Cursor        string `json:"cursor,omitempty"`
@@ -191,7 +195,11 @@ type chatList struct {
 	risk        string
 	source      string
 	assistantID string
-	limit       int
+
+	// agentID is the validated agent filter, or an invalid UUID when omitted.
+	agentID uuid.NullUUID
+
+	limit int
 	// identity is the decoded user filter, "kind:identifier", or empty.
 	identity string
 }
@@ -263,6 +271,8 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		RiskChatIds:    riskChatIDs,
 		ExternalUserID: externalUserID,
 		UserID:         userID,
+		OwnedAgentIds:  nil,
+		AgentID:        list.agentID,
 		Pinned:         "",
 		// The search parameter also matches titles and emails, which would turn
 		// the listing into a content oracle; it is never populated here.
@@ -313,6 +323,8 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 			ProjectID:         list.projectID,
 			ExternalUserID:    externalUserID,
 			UserID:            userID,
+			OwnedAgentIds:     nil,
+			AgentID:           list.agentID,
 			Pinned:            "",
 			Search:            "",
 			AssistantID:       list.assistantID,
@@ -406,6 +418,14 @@ func normalizeChatList(input ListChatsInput) (chatList, error) {
 		}
 		list.assistantID = id.String()
 	}
+	if input.AgentID != "" {
+		id, err := uuid.Parse(input.AgentID)
+		if err != nil {
+			return chatList{}, ErrChatListInvalid
+		}
+		list.agentID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+
 	switch {
 	case list.limit < 0:
 		return chatList{}, ErrChatListInvalid
@@ -434,7 +454,7 @@ func chatListHasRiskFilter(risk string) string {
 // it travels inside the sealed cursor and is restored from it — because the
 // scope has to be computable before the cursor is opened.
 func (l chatList) cursorScope() string {
-	return queryScope("list_chats", l.projectID.String(), string(l.window.Window), l.risk, l.source, l.assistantID, l.identity)
+	return queryScope("list_chats", l.projectID.String(), string(l.window.Window), l.risk, l.source, l.assistantID, l.identity, l.agentID.UUID.String(), strconv.FormatBool(l.agentID.Valid))
 }
 
 // chatListUserScope binds the person references a listing mints to the project

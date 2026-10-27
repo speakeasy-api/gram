@@ -356,7 +356,7 @@ func TestAdmitSubject_OrganizationAdmissionCannotReuseProjectIssuer(t *testing.T
 func TestSubjectAssignment_OwnerAuthorization(t *testing.T) {
 	t.Parallel()
 	for _, operation := range []string{"admit", "update"} {
-		for _, scenario := range []string{"owner", "workload-denied", "scope-override", "owner-latched", "other-owner", "other-owner-authorized", "other-owner-wrong-grant"} {
+		for _, scenario := range []string{"owner", "workload-denied", "scope-override", "owner-latched", "other-owner", "other-owner-authorized", "other-owner-wrong-grant", "other-owner-authorized-scope-override"} {
 			t.Run(operation+"/"+scenario, func(t *testing.T) {
 				t.Parallel()
 				ctx, ti := newTestService(t)
@@ -382,7 +382,7 @@ func TestSubjectAssignment_OwnerAuthorization(t *testing.T) {
 					writer = contextvalues.SetRBACScopeOverride(writer, "[]")
 				case "owner-latched":
 					require.NoError(t, testrepo.New(ti.conn).SetAgentOwnerLatchFixture(ctx, target))
-				case "other-owner", "other-owner-authorized", "other-owner-wrong-grant":
+				case "other-owner", "other-owner-authorized", "other-owner-wrong-grant", "other-owner-authorized-scope-override":
 					otherUser := "user_" + uuid.NewString()
 					_, err = usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{ID: otherUser, Email: otherUser + "@example.com", DisplayName: "Other owner"})
 					require.NoError(t, err)
@@ -394,8 +394,16 @@ func TestSubjectAssignment_OwnerAuthorization(t *testing.T) {
 				if scenario == "other-owner-wrong-grant" {
 					seedSubjectAssignmentGrant(t, ctx, ti, authz.ScopeAgentAuthorize, initial.String())
 				}
-				if scenario == "other-owner-authorized" {
+				if scenario == "other-owner-authorized" || scenario == "other-owner-authorized-scope-override" {
 					seedSubjectAssignmentGrant(t, ctx, ti, authz.ScopeAgentAuthorize, target.String())
+				}
+				if scenario == "other-owner-authorized-scope-override" {
+					// A platform admin's override narrows away the live agent grant.
+					authCtx, ok := contextvalues.GetAuthContext(writer)
+					require.True(t, ok)
+					platformAdmin := *authCtx
+					platformAdmin.IsAdmin = true
+					writer = contextvalues.SetRBACScopeOverride(contextvalues.SetAuthContext(writer, &platformAdmin), "workload:read,workload:write")
 				}
 				if operation == "admit" {
 					_, err = admit(t, writer, ti, channelOne, string(workloadidentity.MatchKindExact), target)
@@ -404,7 +412,7 @@ func TestSubjectAssignment_OwnerAuthorization(t *testing.T) {
 					payload.AgentID = new(target.String())
 					_, err = ti.service.UpdateSubject(writer, payload)
 				}
-				if scenario == "owner" || scenario == "other-owner-authorized" {
+				if scenario == "owner" || scenario == "scope-override" || scenario == "other-owner-authorized" {
 					require.NoError(t, err)
 				} else {
 					requireOopsCode(t, err, oops.CodeForbidden)

@@ -9,6 +9,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -34,12 +35,41 @@ var Script string
 
 var authorizationErrorTemplate = template.Must(template.Must(template.New("authorization-error").Parse(authorizationErrorHTML)).Parse(consentpage.LogoTemplate))
 
-// AuthorizationError describes an authorization request that stopped before
-// the person signed in. The page explains it in their terms; the OAuth wire
-// values only appear under Technical details.
+//go:embed authorization_error_fallback.html
+var authorizationErrorFallbackHTML string
+
+// Pre-render the static shell so the fallback needs no template execution,
+// script nonce, or request context when the normal renderer fails.
+var authorizationErrorFallbackStart, authorizationErrorFallbackEnd = func() (string, string) {
+	tmpl := template.Must(template.Must(template.New("authorization-error-fallback").Parse(authorizationErrorFallbackHTML)).Parse(consentpage.LogoTemplate))
+	var start, end bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&start, "start", consentpage.Styles); err != nil {
+		panic(fmt.Sprintf("render authorization error fallback start: %v", err))
+	}
+	if err := tmpl.ExecuteTemplate(&end, "end", nil); err != nil {
+		panic(fmt.Sprintf("render authorization error fallback end: %v", err))
+	}
+	return start.String(), end.String()
+}()
+
+// AuthorizationError describes a refused browser authorization or approval
+// request. Protocol values only appear under Technical details.
 type AuthorizationError struct {
+	// Status is the original HTTP failure status. Zero defaults to 400.
+	Status int
+
+	// Reason selects an explanation independently of the public error code.
+	Reason Reason
+
+	// Approval identifies a staff change approval rather than a connection.
+	Approval bool
+
+	// ErrorID is the public service error identifier, when available.
+	ErrorID string
+
 	// CallbackURL is the client's registered redirect URI with the error
 	// parameters already applied, the same URL an automatic redirect would use.
+	// Empty when no validated callback is available.
 	CallbackURL string
 
 	// Code is the OAuth error code. It selects the page's explanation.
@@ -65,6 +95,26 @@ type AuthorizationError struct {
 	ServerName string
 }
 
+// Reason describes what the person can do about a browser failure.
+type Reason string
+
+const (
+	// ReasonDefault derives the explanation from the error code and status.
+	ReasonDefault Reason = ""
+	// ReasonOrganizationBlocked identifies an explicit organization policy refusal.
+	ReasonOrganizationBlocked Reason = "organization-blocked"
+	// ReasonExpired identifies a link that expired or was already used.
+	ReasonExpired Reason = "expired"
+	// ReasonSessionChanged identifies an invalid browser or changed sign-in session.
+	ReasonSessionChanged Reason = "session-changed"
+	// ReasonInvalidClient identifies an unknown or invalid client registration.
+	ReasonInvalidClient Reason = "invalid-client"
+	// ReasonInvalidLink identifies invalid authorization parameters.
+	ReasonInvalidLink Reason = "invalid-link"
+	// ReasonUnavailable identifies a dependency failure independently of HTTP status.
+	ReasonUnavailable Reason = "unavailable"
+)
+
 // errorKind groups OAuth error codes by who can act on them, which is what
 // the person reading the page needs to know.
 type errorKind string
@@ -85,7 +135,17 @@ const (
 	errorKindOther errorKind = "other"
 )
 
-func classifyErrorCode(code string) errorKind {
+func classifyError(page AuthorizationError) errorKind {
+	if page.Reason != ReasonDefault {
+		return errorKind(page.Reason)
+	}
+	if page.Status >= http.StatusInternalServerError {
+		return errorKindUnavailable
+	}
+	if page.Status == http.StatusForbidden || page.Status == http.StatusUnauthorized {
+		return errorKindNotAllowed
+	}
+	code := page.Code
 	switch code {
 	case oautherr.CodeInvalidRequest, oautherr.CodeUnsupportedResponseType, oautherr.CodeInvalidScope:
 		return errorKindIncompatible
@@ -101,6 +161,12 @@ func classifyErrorCode(code string) errorKind {
 }
 
 type authorizationErrorView struct {
+	// Approval selects staff change approval wording.
+	Approval bool
+
+	// ErrorID preserves the public service error identifier.
+	ErrorID string
+
 	// Styles is the shared authorization page stylesheet.
 	Styles template.CSS
 
@@ -148,6 +214,7 @@ func technicalDetailsText(view authorizationErrorView) string {
 	text.WriteString("Speakeasy authorization error")
 	for _, field := range []struct{ label, value string }{
 		{"Reference", view.Reference},
+		{"Error ID", view.ErrorID},
 		{"Time", view.Time},
 		{"Error", view.Code},
 		{"Error description", view.Description},
@@ -164,26 +231,47 @@ func technicalDetailsText(view authorizationErrorView) string {
 	return text.String()
 }
 
-// WriteAuthorizationError renders a terminal 400 page with an explicit callback
-// link. Callers must build CallbackURL only after matching the client's registered
+// WriteAuthorizationError renders a terminal error page with an optional callback
+// link. Rendering failures produce a static branded page before returning the error.
+// Callers must build CallbackURL only after matching the client's registered
 // redirect URI. Scheme validation here protects the HTML link even for stored
 // registrations created before the current redirect validation rules.
-func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page AuthorizationError) error {
+func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page AuthorizationError) (err error) {
+	status := page.Status
+	if status == 0 {
+		status = http.StatusBadRequest
+	}
+	committed := false
+	defer func() {
+		if err != nil && !committed {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Referrer-Policy", "no-referrer")
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.WriteHeader(status)
+			_, _ = fmt.Fprintf(w, "%s<p class=\"font-mono text-sm break-all\">%s</p><p class=\"text-sm text-muted-foreground break-words\">%s</p>%s", authorizationErrorFallbackStart, html.EscapeString(page.Code), html.EscapeString(page.Description), authorizationErrorFallbackEnd)
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("render authorization error: %w", err)
 	}
-	if err := oauthwire.ValidateRedirectURI(page.CallbackURL); err != nil {
-		return fmt.Errorf("validate authorization error callback: %w", err)
-	}
-	uri, err := url.Parse(page.CallbackURL)
-	if err != nil {
-		return fmt.Errorf("parse authorization error callback: %w", err)
-	}
-	destination := uri.Host
-	if uri.Scheme != "http" && uri.Scheme != "https" {
-		destination = uri.Scheme + ":"
-		if uri.Host != "" {
-			destination += "//" + uri.Host
+	destination := ""
+	if page.CallbackURL != "" {
+		if err := oauthwire.ValidateRedirectURI(page.CallbackURL); err != nil {
+			return fmt.Errorf("validate authorization error callback: %w", err)
+		}
+		uri, err := url.Parse(page.CallbackURL)
+		if err != nil {
+			return fmt.Errorf("parse authorization error callback: %w", err)
+		}
+		destination = uri.Host
+		if uri.Scheme != "http" && uri.Scheme != "https" {
+			destination = uri.Scheme + ":"
+			if uri.Host != "" {
+				destination += "//" + uri.Host
+			}
 		}
 	}
 	reference := ""
@@ -196,7 +284,9 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 	}
 	view := authorizationErrorView{
 		Styles:         consentpage.Styles,
-		Kind:           classifyErrorCode(page.Code),
+		Approval:       page.Approval,
+		ErrorID:        page.ErrorID,
+		Kind:           classifyError(page),
 		ClientName:     page.ClientName,
 		ServerName:     page.ServerName,
 		ClientID:       page.ClientID,
@@ -227,7 +317,8 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 	// navigates on its own.
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; script-src 'nonce-"+view.ScriptNonce+"'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(http.StatusBadRequest)
+	committed = true
+	w.WriteHeader(status)
 	if _, err := w.Write(body.Bytes()); err != nil {
 		return fmt.Errorf("write authorization error: %w", err)
 	}

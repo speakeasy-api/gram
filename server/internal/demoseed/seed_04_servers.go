@@ -91,7 +91,18 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo mcp servers: %w", err)
 	}
 
-	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, proj); err != nil {
+	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, repo.ServersInsertHostedToolsetMCPServersParams{
+		Toolset1:         s.toolset1(),
+		SupportMcpSlug:   s.spec.OrgSlug + "-support",
+		Toolset2:         s.toolset2(),
+		OpsMcpSlug:       s.spec.OrgSlug + "-ops",
+		Toolset3:         s.toolset3(),
+		PartnerMcpSlug:   s.spec.OrgSlug + "-partner",
+		PartnerIssuerID:  s.usIssuer(),
+		Toolset4:         s.toolset4(),
+		DiscoveryMcpSlug: s.spec.OrgSlug + "-oauth-discovery",
+		ProjectID:        proj,
+	}); err != nil {
 		return fmt.Errorf("insert demo hosted toolset mcp servers: %w", err)
 	}
 	for _, candidate := range []struct {
@@ -116,6 +127,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		ProjectID:          proj,
 	}); err != nil {
 		return fmt.Errorf("insert demo hosted toolset endpoints: %w", err)
+	}
+	if err := s.q.ServersMirrorHostedToolsets(ctx, proj); err != nil {
+		return fmt.Errorf("mirror demo hosted toolsets: %w", err)
 	}
 
 	if err := s.q.ServersInsertGitHubContractorsBlock(ctx, repo.ServersInsertGitHubContractorsBlockParams{

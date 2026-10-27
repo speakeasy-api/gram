@@ -17061,6 +17061,14 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Filter to chats produced by this agent (the agent principal recorded on the session at capture)
+          in: query
+          name: agent_id
+          schema:
+            description: Filter to chats produced by this agent (the agent principal recorded on the session at capture)
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: When set with assistant_id, list only that assistant's threads whose source_kind matches this value (e.g. 'setup' for onboarding threads). Empty for no filter.
           in: query
           name: source_kind
@@ -73107,119 +73115,6 @@ paths:
       x-speakeasy-name-override: addExternalOAuthServer
       x-speakeasy-react-hook:
         name: AddExternalOAuthServer
-  /rpc/toolsets.checkMCPSlugAvailability:
-    get:
-      deprecated: true
-      description: |-
-        Check if a MCP slug is taken in any scope (true means taken).
-
-        Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
-      operationId: checkMCPSlugAvailability
-      parameters:
-        - allowEmptyValue: true
-          description: The slug to check
-          in: query
-          name: slug
-          required: true
-          schema:
-            description: A short url-friendly label that uniquely identifies a resource.
-            maxLength: 40
-            pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                type: boolean
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: checkMCPSlugAvailability toolsets
-      tags:
-        - toolsets
-      x-speakeasy-name-override: checkMCPSlugAvailability
-      x-speakeasy-react-hook:
-        name: CheckMCPSlugAvailability
   /rpc/toolsets.clone:
     post:
       description: Clone an existing toolset with a new name
@@ -74278,7 +74173,7 @@ paths:
       description: |-
         Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
 
-        Deprecated: use mcpServers.update instead.
+        Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.
       operationId: setToolsetUserSessionIssuer
       parameters:
         - allowEmptyValue: true
@@ -94572,11 +94467,51 @@ components:
     GetToolUsageFilterOptionsPayload:
       type: object
       properties:
+        account_type:
+          type: string
+          description: Optional account type filter ('team' or 'personal').
+        agent_ids:
+          type: array
+          items:
+            type: string
+          description: Agent identities to narrow by. Not applied to the agent user options.
+        client_keys:
+          type: array
+          items:
+            type: string
+          description: MCP client keys to narrow by. Not applied to the client options.
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogFilter'
+          description: Arbitrary attribute filter conditions from the af URL param
         from:
           type: string
           description: Start time in ISO 8601 format
           example: "2025-12-19T10:00:00Z"
           format: date-time
+        hook_sources:
+          type: array
+          items:
+            type: string
+          description: Hook plugin sources to narrow by.
+        hosted_toolset_slugs:
+          type: array
+          items:
+            type: string
+          description: 'Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not applied to the server options.'
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: MCP server ids to narrow by. Not applied to the server options.
+          maxItems: 100
+        meta_mcp_server_ids:
+          type: array
+          items:
+            type: string
+          description: Gateway (meta MCP server) ids to narrow by. Not applied to the server options.
         option_types:
           type: array
           items:
@@ -94589,11 +94524,48 @@ components:
               - users
               - clients
           description: Filter option types to include. Empty means all option types.
+        query:
+          type: string
+          description: Free-text attribute search string from the q URL param.
+        shadow_server_names:
+          type: array
+          items:
+            type: string
+          description: Shadow MCP server names to narrow by. Not applied to the server options.
+        statuses:
+          type: array
+          items:
+            type: string
+            description: Tool usage trace outcome
+            enum:
+              - error
+              - success
+              - blocked
+              - pending
+          description: Trace outcomes to narrow by. Empty means all.
+        target_types:
+          type: array
+          items:
+            type: string
+            description: Tool usage target type
+            enum:
+              - hosted_mcp_server
+              - tunneled_mcp_server
+              - meta_mcp_server
+              - shadow_mcp_server
+              - local_tool
+              - skill
+          description: Target types to include. Empty means all target types.
         to:
           type: string
           description: End time in ISO 8601 format
           example: "2025-12-19T11:00:00Z"
           format: date-time
+        user_filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageUserFilter'
+          description: Typed user identities to narrow by. Not applied to the email user options.
       description: Payload for target-aware MCP and tool usage filter options
       required:
         - from
@@ -95099,9 +95071,110 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    HookDeliveryFailureData:
+      type: object
+      properties:
+        arch:
+          type: string
+          description: CPU architecture of the device.
+          maxLength: 32
+        attempted_at:
+          type: string
+          description: RFC3339 time the failed send started, on the device clock.
+          format: date-time
+        attempts:
+          type: integer
+          description: Number of send attempts the client made.
+          format: int64
+        binary_version:
+          type: string
+          description: speakeasy-hooks binary version that made the attempt.
+          maxLength: 64
+        cause:
+          type: string
+          description: Failure class the hook sender observed. http means the control plane answered with a retryable status.
+          enum:
+            - dns
+            - tls
+            - timeout
+            - canceled
+            - connection
+            - unreadable-response
+            - unknown
+            - http
+        delivery_phase:
+          type: string
+          description: Whether a failed send was a live hook or a spool-drain replay.
+          enum:
+            - live
+            - drain
+        elapsed_ms:
+          type: integer
+          description: Wall time the client spent on the send across its attempts, in milliseconds.
+          format: int64
+        failed_event_type:
+          type: string
+          description: Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.
+          enum:
+            - session.started
+            - session.updated
+            - session.ended
+            - mcp.inventory
+            - prompt.submitted
+            - tool.requested
+            - tool.completed
+            - tool.failed
+            - assistant.responded
+            - assistant.thought
+            - usage.reported
+            - skill.activated
+            - notification.reported
+        failed_idempotency_key:
+          type: string
+          description: Idempotency key of the event that failed, so the report joins to the row its eventual replay produces.
+          maxLength: 256
+        gating:
+          type: boolean
+          description: Whether the send gated an agent action (a verdict was awaited) rather than observing one.
+        harness:
+          type: string
+          description: Coding agent harness the hook ran under.
+          maxLength: 64
+        harness_variant:
+          type: string
+          description: Harness variant, when the harness distinguishes one.
+          maxLength: 64
+        harness_version:
+          type: string
+          description: Harness version, when known.
+          maxLength: 64
+        os:
+          type: string
+          description: Operating system of the device.
+          maxLength: 32
+        session_id:
+          type: string
+          description: Session id of the event that failed.
+          maxLength: 256
+        spool_depth:
+          type: integer
+          description: Events waiting in the device's offline spool when the report was written.
+          format: int64
+        status_code:
+          type: integer
+          description: HTTP status of the final attempt, 0 when no response arrived.
+          format: int64
+      description: Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
+      required:
+        - failed_event_type
+        - delivery_phase
+        - cause
+        - attempted_at
     HookIngestData:
       type: object
       properties:
+        delivery_failure:
+          $ref: '#/components/schemas/HookDeliveryFailureData'
         mcp:
           $ref: '#/components/schemas/HookMCPData'
         mcp_attribution:
@@ -95159,6 +95232,7 @@ components:
             - usage.reported
             - skill.activated
             - notification.reported
+            - client.delivery_failed
       description: Canonical Speakeasy feature event.
       required:
         - type
@@ -104863,6 +104937,9 @@ components:
           enum:
             - subject
             - self
+        display_name:
+          type: string
+          description: Administrator-chosen name for the client. Null when unset, in which case the client is shown by its client_id.
         federated_callback_url:
           type: string
           description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
@@ -113967,7 +114044,7 @@ components:
           format: date-time
         user_session_issuer_id:
           type: string
-          description: The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.
+          description: The id of the user_session_issuer wired to this toolset's hosted MCP server. Set via mcpServers.update; null when no USI is linked.
         user_session_issuer_slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -115682,6 +115759,9 @@ components:
     UpdateMcpServerForm:
       type: object
       properties:
+        clear_user_session_issuer:
+          type: boolean
+          description: Detach the current user session issuer, so the server no longer requires user sessions. Must not be true when user_session_issuer_id is set.
         environment_id:
           type: string
           description: The ID of the environment to associate with the server
@@ -115731,7 +115811,7 @@ components:
             - disabled
             - private
             - public
-      description: 'Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.'
+      description: 'Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value, and set clear_user_session_issuer to detach the issuer; the slug is recomputed server-side from the resulting name.'
       required:
         - id
         - visibility
@@ -116032,9 +116112,17 @@ components:
           description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
           pattern: ^[!-~]+$
           maxLength: 512
+        client_id:
+          type: string
+          description: Correct the client_id registered with the issuer. Refused for Client ID Metadata Document (CIMD) clients and clients managed by an identity provider connection. A changed value revokes every remote session obtained through the client, so each user must reconnect. Omit to leave unchanged.
+          minLength: 1
         client_secret:
           type: string
           description: Rotate the client secret. Speakeasy re-encrypts before persisting.
+        display_name:
+          type: string
+          description: Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
+          maxLength: 200
         id:
           type: string
           description: The remote_session_client id.
@@ -116650,7 +116738,7 @@ components:
       type: object
       properties:
         custom_domain_id:
-          description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
+          description: 'Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
           type: string
           x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
           deprecated: true
@@ -116663,17 +116751,17 @@ components:
           type: string
           description: The new description of the toolset
         mcp_enabled:
-          description: 'Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP'
+          description: 'Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled for MCP'
           type: boolean
           x-speakeasy-deprecation-message: Use mcpServers.update instead
           deprecated: true
         mcp_is_public:
-          description: 'Deprecated: use mcpServers.update. Whether the toolset is public in MCP'
+          description: 'Deprecated: rejected; use mcpServers.update. Whether the toolset is public in MCP'
           type: boolean
           x-speakeasy-deprecation-message: Use mcpServers.update instead
           deprecated: true
         mcp_slug:
-          description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset'
+          description: 'Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset'
           maxLength: 40
           pattern: ^[a-z0-9_-]{1,128}$
           type: string
@@ -116683,7 +116771,7 @@ components:
           type: string
           description: The new name of the toolset
         network_access_mode:
-          description: 'Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only'
+          description: 'Deprecated: rejected; use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only'
           enum:
             - public_only
             - dual

@@ -39,6 +39,11 @@ func TestAuthorizationErrorPagePreview(t *testing.T) {
 		name, redirectURI string
 		page              oauthui.AuthorizationError
 	}{
+		{"blocked-no-callback", "", oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: oauthui.ReasonOrganizationBlocked, Description: "This client is blocked by organization policy", ClientName: "Example Client", ServerName: "example-observability"}},
+		{"expired-no-callback", "", oauthui.AuthorizationError{Code: "bad_request", Reason: oauthui.ReasonExpired, Description: "authorization state not found or expired"}},
+		{"approval-expired", "", oauthui.AuthorizationError{Status: 403, Code: "Forbidden", Reason: oauthui.ReasonExpired, Approval: true, Description: "approval expired or changed"}},
+		{"unknown-client", "", oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: oauthui.ReasonInvalidClient, Description: "unknown client_id", ClientID: "unknown-client"}},
+		{"unavailable-no-callback", "", oauthui.AuthorizationError{Status: 503, Code: oautherr.CodeTemporarilyUnavailable, Description: "client metadata is temporarily unavailable"}},
 		{"incompatible", "https://cursor.example/oauth/callback", oauthui.AuthorizationError{Code: oautherr.CodeInvalidRequest, Description: "code_challenge is required (PKCE mandatory)", ClientName: "Cursor", ClientID: "8f14e45f-ceea-467f-a8c1-9f3e3b1c2d4a", ServerName: "acme-datadog"}},
 		{"wrong-server", "https://cursor.example/oauth/callback", oauthui.AuthorizationError{Code: oautherr.CodeInvalidTarget, Description: `resource does not identify this MCP server (expected "https://mcp.example.com/mcp/acme-datadog")`, ClientName: "Cursor", ClientID: "8f14e45f-ceea-467f-a8c1-9f3e3b1c2d4a", ServerName: "acme-datadog"}},
 		{"not-allowed", "https://chat.example/oauth/callback", oauthui.AuthorizationError{Code: oautherr.CodeAccessDenied, Description: "client is not permitted", ClientName: "Example Chat", ClientID: "https://chat.example/oauth/client.json", ClientIDOrigin: "chat.example", ServerName: "acme-datadog"}},
@@ -73,11 +78,13 @@ func TestAuthorizationErrorPagePreview(t *testing.T) {
 	var index strings.Builder
 	index.WriteString("<!doctype html><title>Authorization error page states</title><ul>")
 	for _, page := range pages {
-		page.page.CallbackURL = page.redirectURI + "?" + url.Values{
-			oauthwire.ParamError:            {page.page.Code},
-			oauthwire.ParamErrorDescription: {page.page.Description},
-			oauthwire.ParamState:            {"preview-state"},
-		}.Encode()
+		if page.redirectURI != "" {
+			page.page.CallbackURL = page.redirectURI + "?" + url.Values{
+				oauthwire.ParamError:            {page.page.Code},
+				oauthwire.ParamErrorDescription: {page.page.Description},
+				oauthwire.ParamState:            {"preview-state"},
+			}.Encode()
+		}
 		response := httptest.NewRecorder()
 		require.NoError(t, oauthui.WriteAuthorizationError(ctx, response, page.page), page.name)
 		require.NoError(t, os.WriteFile(filepath.Join(outDir, page.name+".html"), response.Body.Bytes(), 0o600))
