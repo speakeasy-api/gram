@@ -83,12 +83,14 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server transaction input")
 	}
 
-	// Before the server row exists, so this path takes the source lock the
+	// Before the server row exists, so every caller takes the source lock the
 	// auth client sync below needs ahead of any server lock, as every other
-	// writer of a remote source does.
+	// writer of a remote source does. The lock also settles the source's
+	// liveness: a caller that checked it unlocked would otherwise commit a
+	// server onto a source a concurrent deletion had just tombstoned.
 	if input.RemoteMCPServerID.Valid {
-		if err := authclientbackfill.LockRemoteSource(ctx, tx, input.OrganizationID, input.RemoteMCPServerID.UUID); err != nil {
-			return repo.McpServer{}, fmt.Errorf("lock remote source for auth clients: %w", err)
+		if err := VerifyLiveRemoteMCPSourceInTransaction(ctx, tx, input.ProjectID, input.RemoteMCPServerID.UUID); err != nil {
+			return repo.McpServer{}, err
 		}
 	}
 

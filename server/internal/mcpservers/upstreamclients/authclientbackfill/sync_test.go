@@ -57,7 +57,10 @@ func TestSyncRemoteSource_RetiresAClientWhoseLastServerLeft(t *testing.T) {
 	server := f.serverOn(source)
 	f.staticHeader(source, "X-API-Key")
 	f.run(true)
-	require.Len(t, f.live(TypeStaticCredential), 1)
+
+	clients := f.live(TypeStaticCredential)
+	require.Len(t, clients, 1)
+	require.Equal(t, []uuid.UUID{clients[0].ID}, f.links(server))
 
 	require.NoError(t, f.q.MoveServerSourceFixture(t.Context(), MoveServerSourceFixtureParams{
 		ID:                server,
