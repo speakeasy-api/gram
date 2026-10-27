@@ -2151,6 +2151,12 @@ func unmarshalProjectResponseBodyToProjectsProject(v *ProjectResponseBody) *proj
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}
+	if v.RequireMcpGateway != nil {
+		res.RequireMcpGateway = *v.RequireMcpGateway
+	}
+	if v.RequireMcpGateway == nil {
+		res.RequireMcpGateway = false
+	}
 
 	return res
 }

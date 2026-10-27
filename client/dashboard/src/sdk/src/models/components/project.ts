@@ -30,6 +30,10 @@ export type Project = {
    */
   organizationId: string;
   /**
+   * Whether direct MCP connections are blocked in favor of a gateway
+   */
+  requireMcpGateway: boolean;
+  /**
    * A short url-friendly label that uniquely identifies a resource.
    */
   slug: string;
@@ -50,6 +54,7 @@ export const Project$inboundSchema: z.ZodMiniType<Project, unknown> = z.pipe(
     logo_asset_id: z.optional(z.string()),
     name: z.string(),
     organization_id: z.string(),
+    require_mcp_gateway: z._default(z.boolean(), false),
     slug: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -61,6 +66,7 @@ export const Project$inboundSchema: z.ZodMiniType<Project, unknown> = z.pipe(
       "created_at": "createdAt",
       "logo_asset_id": "logoAssetId",
       "organization_id": "organizationId",
+      "require_mcp_gateway": "requireMcpGateway",
       "updated_at": "updatedAt",
     });
   }),

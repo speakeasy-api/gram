@@ -409,3 +409,5 @@ Browser verification: [~] — follow check 33 in `seed/demo/verify.md`.
 - This is display-only trust configuration: no working platform key, token, API key, or inference session is seeded. Runtime exchange uses the shared issuer token endpoint with `resource=urn:speakeasy:inference` and `project_id`; returned access tokens are for `/chat/completions`, not MCP.
 - Reseeding removes workload trust and agent rows through the existing organization-scoped cleanup, and explicitly removes the owner's deterministic direct grant before recreating it. Postflight checks verify the exact trust chain and both project-scoped grants, and reject additional inference grants.
 - Browser verification and live reseeding have not been run for this addition.
+
+Project settings: **Require an MCP gateway** starts unchecked so the demo MCP servers remain directly accessible. Enable it in a writable local project to compare direct-connection refusal with gateway access.

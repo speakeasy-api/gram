@@ -1213,6 +1213,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	if err := s.enforceMCPGateway(ctx, toolset.ProjectID); err != nil {
+		return err
+	}
+
 	// Legacy toolset-by-slug path: hosting configuration comes from the
 	// toolset columns; the canonical wrapper, when present, keys kill switches
 	// and attribution.

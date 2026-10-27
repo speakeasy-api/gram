@@ -13,6 +13,7 @@ RETURNING *;
 -- name: UpdateProject :one
 UPDATE projects
 SET name = @name,
+    require_mcp_gateway = COALESCE(sqlc.narg(require_mcp_gateway)::boolean, require_mcp_gateway),
     updated_at = clock_timestamp()
 WHERE id = @project_id
   AND deleted IS FALSE

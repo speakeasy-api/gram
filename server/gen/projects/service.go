@@ -21,7 +21,7 @@ type Service interface {
 	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)
 	// Create a new project.
 	CreateProject(context.Context, *CreateProjectPayload) (res *CreateProjectResult, err error)
-	// Update the display name of the current project.
+	// Update the display name and connection settings of the current project.
 	UpdateProject(context.Context, *UpdateProjectPayload) (res *UpdateProjectResult, err error)
 	// List all projects for an organization.
 	ListProjects(context.Context, *ListProjectsPayload) (res *ListProjectsResult, err error)
@@ -159,6 +159,8 @@ type Project struct {
 	OrganizationID string
 	// The ID of the logo asset for the project
 	LogoAssetID *string
+	// Whether direct MCP connections are blocked in favor of a gateway
+	RequireMcpGateway bool
 	// The creation date of the project.
 	CreatedAt string
 	// The last update date of the project.
@@ -207,6 +209,9 @@ type UpdateProjectPayload struct {
 	SessionToken     *string
 	// The display name of the project
 	Name string
+	// Require MCP connections through a gateway. Omit to preserve the current
+	// setting.
+	RequireMcpGateway *bool
 }
 
 // UpdateProjectResult is the result type of the projects service updateProject

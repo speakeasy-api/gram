@@ -840,8 +840,8 @@ func (q *Queries) OrgInsertOnboardingVendors(ctx context.Context, orgID string) 
 }
 
 const orgInsertProject = `-- name: OrgInsertProject :exec
-INSERT INTO projects (id, name, slug, organization_id) VALUES
-  ($1::uuid, 'Default', 'default', $2::text)
+INSERT INTO projects (id, name, slug, organization_id, require_mcp_gateway) VALUES
+  ($1::uuid, 'Default', 'default', $2::text, false)
 `
 
 type OrgInsertProjectParams struct {

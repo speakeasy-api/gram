@@ -267,8 +267,8 @@ DELETE FROM projects WHERE organization_id = @org_id::text;
 -- name: OrgInsertProject :exec
 -- Single project: the demo org intentionally has exactly one project so new
 -- users land somewhere obvious.
-INSERT INTO projects (id, name, slug, organization_id) VALUES
-  (@project_id::uuid, 'Default', 'default', @org_id::text);
+INSERT INTO projects (id, name, slug, organization_id, require_mcp_gateway) VALUES
+  (@project_id::uuid, 'Default', 'default', @org_id::text, false);
 
 -- name: OrgInsertSigintCustomSignal :exec
 INSERT INTO sigint_custom_signals

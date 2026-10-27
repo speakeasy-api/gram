@@ -5413,7 +5413,7 @@ examples:
         application/json: {"name": "<value>", "organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"project": {"created_at": "2026-09-16T05:40:38.689Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2024-11-20T01:08:19.051Z"}}
+          application/json: {"project": {"created_at": "2026-09-16T05:40:38.689Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "require_mcp_gateway": false, "slug": "<value>", "updated_at": "2024-11-20T01:08:19.051Z"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8025,7 +8025,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"project": {"created_at": "2026-11-01T11:16:07.849Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2025-04-24T21:52:55.674Z"}}
+          application/json: {"project": {"created_at": "2026-11-01T11:16:07.849Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "require_mcp_gateway": false, "slug": "<value>", "updated_at": "2025-04-24T21:52:55.674Z"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -12738,7 +12738,7 @@ examples:
         application/json: {"asset_id": "<id>"}
       responses:
         "200":
-          application/json: {"project": {"created_at": "2025-08-05T17:33:48.749Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2025-06-08T05:10:03.506Z"}}
+          application/json: {"project": {"created_at": "2025-08-05T17:33:48.749Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "require_mcp_gateway": false, "slug": "<value>", "updated_at": "2025-06-08T05:10:03.506Z"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -13651,7 +13651,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"project": {"created_at": "2024-03-31T16:30:34.626Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2026-08-10T16:42:18.645Z"}}
+          application/json: {"project": {"created_at": "2024-03-31T16:30:34.626Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "require_mcp_gateway": false, "slug": "<value>", "updated_at": "2026-08-10T16:42:18.645Z"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

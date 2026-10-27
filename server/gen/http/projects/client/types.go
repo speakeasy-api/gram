@@ -28,6 +28,9 @@ type CreateProjectRequestBody struct {
 type UpdateProjectRequestBody struct {
 	// The display name of the project
 	Name string `form:"name" json:"name" xml:"name"`
+	// Require MCP connections through a gateway. Omit to preserve the current
+	// setting.
+	RequireMcpGateway *bool `form:"require_mcp_gateway,omitempty" json:"require_mcp_gateway,omitempty" xml:"require_mcp_gateway,omitempty"`
 }
 
 // SetLogoRequestBody is the type of the "projects" service "setLogo" endpoint
@@ -1770,6 +1773,8 @@ type ProjectResponseBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The ID of the logo asset for the project
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// Whether direct MCP connections are blocked in favor of a gateway
+	RequireMcpGateway *bool `form:"require_mcp_gateway,omitempty" json:"require_mcp_gateway,omitempty" xml:"require_mcp_gateway,omitempty"`
 	// The creation date of the project.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the project.
@@ -1815,7 +1820,8 @@ func NewCreateProjectRequestBody(p *projects.CreateProjectPayload) *CreateProjec
 // the "updateProject" endpoint of the "projects" service.
 func NewUpdateProjectRequestBody(p *projects.UpdateProjectPayload) *UpdateProjectRequestBody {
 	body := &UpdateProjectRequestBody{
-		Name: p.Name,
+		Name:              p.Name,
+		RequireMcpGateway: p.RequireMcpGateway,
 	}
 	return body
 }

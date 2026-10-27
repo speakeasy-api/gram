@@ -61,6 +61,11 @@ vi.mock("@gram/client/react-query/listProjects", () => ({
 
 vi.mock("@gram/client/react-query/project", () => ({
   invalidateAllProject,
+  useProject: () => ({
+    isPending: false,
+    isError: false,
+    data: { project: { ...testState.project, requireMcpGateway: false } },
+  }),
 }));
 
 vi.mock("@gram/client/react-query/updateProject", () => ({
@@ -123,7 +128,9 @@ describe("ProjectNameSection", () => {
     await waitFor(() =>
       expect(testState.mutate).toHaveBeenCalledWith({
         request: {
-          updateProjectForm: { name: "Renamed project" },
+          updateProjectForm: {
+            name: "Renamed project",
+          },
         },
         security: {
           projectSlugHeaderGramProject: "current-project",
@@ -226,7 +233,9 @@ describe("ProjectNameSection", () => {
 
     render(<ProjectNameSection />);
 
-    expect(screen.getAllByText("Project name already exists")).toHaveLength(1);
+    expect(
+      screen.getAllByText("Could not save project settings. Try again."),
+    ).toHaveLength(1);
     expect(
       screen.getByLabelText("Display Name").getAttribute("aria-invalid"),
     ).toBe("false");
@@ -318,4 +327,21 @@ describe("ProjectNameSection", () => {
     );
     expect(testState.mutate).not.toHaveBeenCalled();
   });
+});
+
+it("saves the gateway requirement only after Save", async () => {
+  const user = userEvent.setup();
+  render(<ProjectNameSection />);
+  await user.click(
+    screen.getByRole("checkbox", { name: "Require an MCP gateway" }),
+  );
+  expect(testState.mutate).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(testState.mutate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        updateProjectForm: { name: "Current project", requireMcpGateway: true },
+      },
+    }),
+  );
 });

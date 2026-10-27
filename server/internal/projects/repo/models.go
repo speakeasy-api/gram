@@ -22,6 +22,9 @@ type Project struct {
 	LogoAssetID uuid.NullUUID
 	// @access: confidential
 	FunctionsRunnerVersion pgtype.Text
+	// Require MCP connections through a gateway. NULL and false allow direct connections.
+	// @access: confidential
+	RequireMcpGateway pgtype.Bool
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

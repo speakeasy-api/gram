@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -84,10 +85,8 @@ type CreateProjectMutation struct {
 	Actor ProjectActor
 }
 
-// RenameProjectMutation names one project and its new display name. A rename
-// changes the name only; the slug stays stable because dashboard routes and
-// the Gram-Project header address a project by it.
-type RenameProjectMutation struct {
+// UpdateProjectMutation changes a project without changing its stable slug.
+type UpdateProjectMutation struct {
 	// OrganizationID must own the project; a project in another organization
 	// is reported as not found.
 	OrganizationID string
@@ -98,12 +97,15 @@ type RenameProjectMutation struct {
 	// Name is the new display name. Surrounding whitespace is trimmed.
 	Name string
 
-	// Actor is the caller the rename is attributed to.
+	// RequireMCPGateway changes the connection requirement when non-nil.
+	RequireMCPGateway *bool
+
+	// Actor is the caller the update is attributed to.
 	Actor ProjectActor
 }
 
-// RenamedProject is the project row before and after a rename.
-type RenamedProject struct {
+// UpdatedProject is the project row before and after an update.
+type UpdatedProject struct {
 	// Before is the row as it was locked, ahead of the update.
 	Before repo.Project
 
@@ -111,7 +113,7 @@ type RenamedProject struct {
 	After repo.Project
 }
 
-// Core creates and renames projects inside a caller-owned transaction, so the
+// Core creates and updates projects inside a caller-owned transaction, so the
 // projects management API and the Platform MCP produce identical projects:
 // the same slug rule, the same Default environment and Default plugin, and the
 // same audit entries. A caller that adds its own writes (an idempotency
@@ -257,34 +259,35 @@ func (c *Core) AfterCreateCommitted(ctx context.Context, projectID uuid.UUID, ac
 	}
 }
 
-// RenameInTransaction changes a project's display name and records the
+// UpdateInTransaction changes a project's display name and connection settings and records the
 // update with before and after snapshots. The slug is never changed.
-func (c *Core) RenameInTransaction(ctx context.Context, dbtx pgx.Tx, mutation RenameProjectMutation) (RenamedProject, error) {
+func (c *Core) UpdateInTransaction(ctx context.Context, dbtx pgx.Tx, mutation UpdateProjectMutation) (UpdatedProject, error) {
 	name, err := ProjectRenameName(mutation.Name)
 	if err != nil {
-		return RenamedProject{}, err
+		return UpdatedProject{}, err
 	}
 
 	pr := repo.New(dbtx)
 	existing, err := pr.GetProjectByIDForUpdate(ctx, mutation.ProjectID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return RenamedProject{}, ErrProjectNotFound
+		return UpdatedProject{}, ErrProjectNotFound
 	case err != nil:
-		return RenamedProject{}, fmt.Errorf("lock project: %w", err)
+		return UpdatedProject{}, fmt.Errorf("lock project: %w", err)
 	case existing.OrganizationID != mutation.OrganizationID:
-		return RenamedProject{}, ErrProjectNotFound
+		return UpdatedProject{}, ErrProjectNotFound
 	}
 
 	updated, err := pr.UpdateProject(ctx, repo.UpdateProjectParams{
-		ProjectID: mutation.ProjectID,
-		Name:      name,
+		ProjectID:         mutation.ProjectID,
+		Name:              name,
+		RequireMcpGateway: pgtype.Bool{Bool: conv.PtrValOr(mutation.RequireMCPGateway, false), Valid: mutation.RequireMCPGateway != nil},
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return RenamedProject{}, ErrProjectNotFound
+		return UpdatedProject{}, ErrProjectNotFound
 	case err != nil:
-		return RenamedProject{}, fmt.Errorf("update project: %w", err)
+		return UpdatedProject{}, fmt.Errorf("update project: %w", err)
 	}
 
 	if err := c.audit.LogProjectUpdate(ctx, dbtx, audit.LogProjectUpdateEvent{
@@ -298,8 +301,8 @@ func (c *Core) RenameInTransaction(ctx context.Context, dbtx pgx.Tx, mutation Re
 		ProjectSnapshotBefore: toProject(existing),
 		ProjectSnapshotAfter:  toProject(updated),
 	}); err != nil {
-		return RenamedProject{}, fmt.Errorf("log project update: %w", err)
+		return UpdatedProject{}, fmt.Errorf("log project update: %w", err)
 	}
 
-	return RenamedProject{Before: existing, After: updated}, nil
+	return UpdatedProject{Before: existing, After: updated}, nil
 }
