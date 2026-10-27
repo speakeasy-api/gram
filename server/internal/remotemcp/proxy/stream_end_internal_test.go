@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -54,4 +55,35 @@ func TestStreamEndReasonPrefersCleanEOFOverDrain(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/mcp/id", http.NoBody)
 	require.Equal(t, StreamEndUpstreamClosed, streamEndReason(req, sr, nil))
 	require.Equal(t, StreamEndShutdown, streamEndReason(req, sr, errors.New("read canceled")))
+}
+
+func TestUpstreamCancelTarget(t *testing.T) {
+	t.Parallel()
+
+	p := &Proxy{RemoteURL: "https://mcp.example.com/mcp"}
+
+	tests := []struct {
+		name       string
+		answeredBy string
+		want       string
+	}{
+		{name: "no response", answeredBy: "", want: "https://mcp.example.com/mcp"},
+		{name: "no redirect", answeredBy: "https://mcp.example.com/mcp", want: "https://mcp.example.com/mcp"},
+		{name: "same-origin redirect", answeredBy: "https://mcp.example.com/v2/mcp", want: "https://mcp.example.com/v2/mcp"},
+		{name: "cross-origin redirect", answeredBy: "https://other.example.com/mcp", want: "https://mcp.example.com/mcp"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var answered *url.URL
+			if tc.answeredBy != "" {
+				var err error
+				answered, err = url.Parse(tc.answeredBy)
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.want, p.upstreamCancelTarget(answered))
+		})
+	}
 }

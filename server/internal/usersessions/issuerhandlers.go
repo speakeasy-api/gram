@@ -486,7 +486,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 // served depends on the deployment's hosts too, so issuerView adds it to
 // responses and audit snapshots leave it out.
 func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
-	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
+	dur, _ := conv.PGIntervalToDuration(row.SessionDuration)
 	// The EFFECTIVE mode, never the raw column: an issuer that has never had
 	// one set stores NULL and reports the resolved default. Clients of this
 	// API — including the audit snapshots built from this view — should never

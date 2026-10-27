@@ -5311,6 +5311,15 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || $10::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || $10::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || $10::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = $1
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || $10::text || '%'
+      )
   )
   AND (
       $11::text IS NULL
@@ -5325,7 +5334,15 @@ WHERE m.deleted IS FALSE
 ORDER BY
     CASE
         WHEN $10::text <> ''
-         AND (m.id::text = $10::text OR LOWER(COALESCE(m.name, '')) = LOWER($10::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($10::text))
+         AND (m.id::text = $10::text OR LOWER(COALESCE(m.name, '')) = LOWER($10::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($10::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = $1
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER($10::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -5456,11 +5473,28 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || $4::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || $4::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || $4::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = $1
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || $4::text || '%'
+      )
   )
 ORDER BY
     CASE
         WHEN $4::text <> ''
-         AND (m.id::text = $4::text OR LOWER(COALESCE(m.name, '')) = LOWER($4::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($4::text))
+         AND (m.id::text = $4::text OR LOWER(COALESCE(m.name, '')) = LOWER($4::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($4::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = $1
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER($4::text)
+         ))
         THEN 0
         ELSE 1
     END,
