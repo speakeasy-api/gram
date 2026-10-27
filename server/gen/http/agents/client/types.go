@@ -191,8 +191,8 @@ type CreateResponseBody struct {
 	// organization-wide agent
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
 	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -216,8 +216,8 @@ type GetResponseBody struct {
 	// organization-wide agent
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
 	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -241,8 +241,8 @@ type RenameResponseBody struct {
 	// organization-wide agent
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
 	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -316,8 +316,8 @@ type TransferResponseBody struct {
 	// organization-wide agent
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
 	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -341,8 +341,8 @@ type ReassignResponseBody struct {
 	// organization-wide agent
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
 	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -366,8 +366,8 @@ type SuspendResponseBody struct {
 	// organization-wide agent
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
 	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -391,8 +391,8 @@ type ResumeResponseBody struct {
 	// organization-wide agent
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
 	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -416,8 +416,8 @@ type RevokeResponseBody struct {
 	// organization-wide agent
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
 	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -4287,8 +4287,8 @@ type ManagedAgentResponseBody struct {
 	// organization-wide agent
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle *string `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool                         `form:"connection_needs_refresh,omitempty" json:"connection_needs_refresh,omitempty" xml:"connection_needs_refresh,omitempty"`
 	Permissions            *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	CreatedAt              *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`

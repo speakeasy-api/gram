@@ -12,7 +12,7 @@ import type { InventoryServer } from "./useServerInventory";
 export interface OwnerConnections {
   /** Per server id, for the servers that authorize each person separately. */
   byServer: Map<string, ServerConnection>;
-  /** Re-read the owner's connections, after they sign in elsewhere. */
+  /** Re-read assignments and the caller's connections, after they sign in elsewhere. */
   refetch: () => void;
 }
 
@@ -28,6 +28,7 @@ export interface OwnerConnections {
 export function useOwnerConnections(
   servers: InventoryServer[],
   enabled: boolean,
+  agentId?: string,
 ): OwnerConnections {
   const sdk = useSdkClient();
   const organization = useOrganization();
@@ -75,6 +76,20 @@ export function useOwnerConnections(
     })),
   });
 
+  const bindings = useQueries({
+    queries: issuers.map((request) => ({
+      queryKey: ["owner-connections", "bindings", ownerScope, agentId, request],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        sdk.remoteSessions.listBindings(
+          { ...request, principalId: agentId! },
+          undefined,
+          { signal },
+        ),
+      enabled: enabled && !!agentId,
+      retry: false,
+      throwOnError: false,
+    })),
+  });
   const byServer = new Map<string, ServerConnection>();
   for (const server of personal) {
     const sessionRead = sessions[projects.indexOf(server.projectSlug)];
@@ -86,23 +101,52 @@ export function useOwnerConnections(
             issuer.userSessionIssuerId === server.issuerId,
         )
       ];
-    if (sessionRead?.isError || clientRead?.isError) {
+    const bindingRead =
+      bindings[
+        issuers.findIndex(
+          (issuer) =>
+            issuer.gramProject === server.projectSlug &&
+            issuer.userSessionIssuerId === server.issuerId,
+        )
+      ];
+    if (
+      sessionRead?.isError ||
+      clientRead?.isError ||
+      (agentId && bindingRead?.isError)
+    ) {
       byServer.set(server.id, { status: "error" });
       continue;
     }
-    if (!sessionRead?.data || !clientRead?.data) {
+    if (
+      !sessionRead?.data ||
+      !clientRead?.data ||
+      (agentId && !bindingRead?.data)
+    ) {
       byServer.set(server.id, { status: "checking" });
       continue;
     }
     byServer.set(
       server.id,
-      serverConnection(server.issuerId!, clientRead.data, sessionRead.data),
+      serverConnection(server.issuerId!, clientRead.data, [
+        ...(bindingRead?.data?.items ?? []).flatMap((binding) =>
+          binding.remoteSession
+            ? [
+                {
+                  ...binding.remoteSession,
+                  userSessionIssuerId: server.issuerId!,
+                },
+              ]
+            : [],
+        ),
+        ...sessionRead.data,
+      ]),
     );
   }
   return {
     byServer,
     refetch: () => {
-      for (const read of [...sessions, ...clients]) void read.refetch();
+      for (const read of [...sessions, ...clients, ...bindings])
+        void read.refetch();
     },
   };
 }

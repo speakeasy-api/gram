@@ -22,17 +22,20 @@ import (
 // hosts composite dashboard operations that configure a single MCP server's
 // identity in one atomic call.
 type Service interface {
-	// Manage exact remote session attachments for an agent. Requires an ordinary
-	// human session, agent authorization authority and ownership of the upstream
-	// session. Never returns credentials.
+	// Manage exact remote session attachments for an agent. Reads require agent
+	// authorization or write permission. Changes require an ordinary human session
+	// and agent write permission. Attachment requires ownership of the upstream
+	// session; editors can remove any assignment. Never returns credentials.
 	ListBindings(context.Context, *ListBindingsPayload) (res *ListBindingsResult, err error)
-	// Manage exact remote session attachments for an agent. Requires an ordinary
-	// human session, agent authorization authority and ownership of the upstream
-	// session. Never returns credentials.
+	// Manage exact remote session attachments for an agent. Reads require agent
+	// authorization or write permission. Changes require an ordinary human session
+	// and agent write permission. Attachment requires ownership of the upstream
+	// session; editors can remove any assignment. Never returns credentials.
 	AttachBinding(context.Context, *AttachBindingPayload) (res *PrincipalRemoteSessionBinding, err error)
-	// Manage exact remote session attachments for an agent. Requires an ordinary
-	// human session, agent authorization authority and ownership of the upstream
-	// session. Never returns credentials.
+	// Manage exact remote session attachments for an agent. Reads require agent
+	// authorization or write permission. Changes require an ordinary human session
+	// and agent write permission. Attachment requires ownership of the upstream
+	// session; editors can remove any assignment. Never returns credentials.
 	DetachBinding(context.Context, *DetachBindingPayload) (err error)
 	// Atomically configure identity for a Remote MCP-backed MCP server. The
 	// complete plan selects or creates a project Remote Identity Provider and

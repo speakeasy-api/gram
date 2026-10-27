@@ -459,7 +459,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
-	// Show both a working connection and an expired owner connection.
+	// Show both a working connection and an expired delegated connection.
 	for _, agent := range []int{1, 4} {
 		num := strconv.Itoa(agent)
 		person, session := 1, "attachment-session"

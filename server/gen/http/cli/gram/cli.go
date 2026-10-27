@@ -26461,9 +26461,9 @@ func remoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `Operator visibility into remote_sessions Speakeasy is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-sessions COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-bindings: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
-	fmt.Fprintln(os.Stderr, `    attach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
-	fmt.Fprintln(os.Stderr, `    detach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    list-bindings: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    attach-binding: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    detach-binding: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
 	fmt.Fprintln(os.Stderr, `    commit-server-identity-configuration: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.`)
 	fmt.Fprintln(os.Stderr, `    get-server-identity-impact: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.`)
 	fmt.Fprintln(os.Stderr, `    list-server-client-associations: List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer's bindings. Requires mcp:read on the server.`)
@@ -26486,7 +26486,7 @@ func remoteSessionsListBindingsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -principal-id STRING: `)
@@ -26509,7 +26509,7 @@ func remoteSessionsAttachBindingUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -26531,7 +26531,7 @@ func remoteSessionsDetachBindingUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

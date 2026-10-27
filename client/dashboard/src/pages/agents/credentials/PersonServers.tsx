@@ -67,7 +67,7 @@ export function PersonServers({
   }, [watching]);
   if (servers.length === 0) return null;
   const chosen = (id: string) =>
-    selected.some((entry) => entry.server.id === id);
+    allServers || selected.some((entry) => entry.server.id === id);
   const toggle = (server: InventoryServer) =>
     onChange(
       chosen(server.id)
@@ -84,7 +84,7 @@ export function PersonServers({
           {(connections || agent) && (
             <Checkbox
               aria-label={server.name}
-              checked={!allServers && chosen(server.id)}
+              checked={chosen(server.id)}
               disabled={
                 allServers ||
                 (!chosen(server.id) &&
@@ -112,7 +112,7 @@ export function PersonServers({
                 {refusedServers.get(server.id)}
               </span>
             )}
-            {connections && (
+            {connections && !agent && (
               <ConnectionLine
                 server={server}
                 connection={connections.byServer.get(server.id)}
@@ -120,17 +120,18 @@ export function PersonServers({
               />
             )}
           </span>
-          {connections?.byServer.get(server.id)?.status === "ready" && (
-            <Avatar title={`Signed in as ${user.displayName || user.email}`}>
-              <AvatarImage
-                src={user.photoUrl}
-                alt={user.displayName || user.email}
-              />
-              <AvatarFallback>
-                {(user.displayName || user.email).slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          )}{" "}
+          {!agent &&
+            connections?.byServer.get(server.id)?.status === "ready" && (
+              <Avatar title={`Signed in as ${user.displayName || user.email}`}>
+                <AvatarImage
+                  src={user.photoUrl}
+                  alt={user.displayName || user.email}
+                />
+                <AvatarFallback>
+                  {(user.displayName || user.email).slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            )}{" "}
           {agent && chosen(server.id) && (
             <div className="w-full">
               <ServerAccounts

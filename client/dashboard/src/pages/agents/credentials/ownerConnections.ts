@@ -8,7 +8,7 @@ import type { InventoryServer } from "./useServerInventory";
 
 /**
  * How an agent would reach one server that authorizes each person
- * separately, using its owner's own connection to it.
+ * separately, using an explicitly assigned personal connection.
  *
  * Creation attaches the signed-in creator's connections. Authorized editors
  * can explicitly replace these assignments with their own connections later.
@@ -18,7 +18,7 @@ export type ServerConnection =
   | { status: "error" }
   /** The server asks for no personal upstream sign-in, so a key alone works. */
   | { status: "not-required" }
-  /** At least one upstream sign-in has no connection of the owner's. */
+  /** At least one upstream sign-in has no usable assigned or personal connection. */
   | { status: "missing" }
   /** Every sign-in is connected, but one of them no longer works. */
   | { status: "ended"; sessions: RemoteSession[] }
@@ -30,8 +30,8 @@ export function userSubject(userId: string): string {
 }
 
 /**
- * The owner's connection to a server, decided from the upstream sign-ins its
- * issuer asks for and the owner's own sessions in the server's project.
+ * A server's readiness, using existing assignments and the caller's own
+ * sessions for the upstream sign-ins its issuer requests.
  *
  * A session counts only when it was made through this server's issuer, which
  * is what the attachment endpoint will accept. A client whose credential is
@@ -88,24 +88,17 @@ export interface ConnectionApi {
 }
 
 /**
- * Let a freshly provisioned agent use its owner's connections to the chosen
- * servers that authorize each person separately: one attachment per upstream
- * sign-in, made by the owner and naming the owner's own session.
- *
- * Reads the authoritative candidates for the agent rather than trusting the
- * listing the picker showed, so a connection that changed in between is
- * reported instead of attached. An attachment already serving the agent is
- * kept; one whose connection was replaced, revoked or has ended is the
- * owner's own, so it is detached and the current connection attached in its
- * place. Any failure throws, naming the server, and nothing after it is
- * attempted.
+ * Attach the caller's own connections, preserving every valid assignment.
+ * Editors may replace stale assignments with their own usable session.
+ * Bulk selection reports missing servers and continues with the rest.
  */
 export async function attachOwnerConnections(
   api: ConnectionApi,
   agentId: string,
   servers: InventoryServer[],
   signal?: AbortSignal,
-): Promise<void> {
+  skipMissing = false,
+): Promise<string[]> {
   const issuers = [
     ...new Map(
       servers
@@ -113,6 +106,7 @@ export async function attachOwnerConnections(
         .map((server) => [`${server.projectId}:${server.issuerId}`, server]),
     ).values(),
   ];
+  const missing = new Set<string>();
   for (const server of issuers) {
     const gramProject = server.projectSlug;
     const userSessionIssuerId = server.issuerId!;
@@ -148,6 +142,10 @@ export async function attachOwnerConnections(
           candidate.remoteSessionClientId === client.id &&
           connectionLifetime(candidate).kind !== "ended",
       );
+      if (!session && skipMissing) {
+        missing.add(server.name);
+        continue;
+      }
       if (!session)
         throw new Error(
           `Your connection to ${server.name} is no longer available. Sign in to it again, then retry.`,
@@ -179,4 +177,5 @@ export async function attachOwnerConnections(
       );
     }
   }
+  return [...missing];
 }

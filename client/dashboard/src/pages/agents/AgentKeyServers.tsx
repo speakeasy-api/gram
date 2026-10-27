@@ -393,7 +393,7 @@ export function ServerAccounts({
   const attachBinding = useRemoteSessionsAttachBindingMutation();
   const detachBinding = useRemoteSessionsDetachBindingMutation();
   const ownerScope = { organizationId: organization.id, userId: user.id };
-  const isOwner = agent.ownerUserId === user.id;
+  const canManage = agent.permissions.write;
   const requests = required.map((server) => ({
     gramProject: server.projectSlug,
     principalId: agent.id,
@@ -487,7 +487,7 @@ export function ServerAccounts({
   useEffect(() => {
     if (
       !refreshing ||
-      !isOwner ||
+      !canManage ||
       refreshInFlight.current ||
       pending ||
       error ||
@@ -540,7 +540,7 @@ export function ServerAccounts({
     })();
   }, [
     refreshing,
-    isOwner,
+    canManage,
     pending,
     error,
     query.isSuccess,
@@ -631,12 +631,12 @@ export function ServerAccounts({
               <h3 className="text-sm font-medium">{row.server.name}</h3>
             </div>
           )}
-          {!isOwner && row.clients.length > 0 && (
+          {!canManage && row.clients.length > 0 && (
             <Text small muted>
-              Only the agent’s owner can assign or refresh a connection.
+              You need permission to edit this agent to change its connections.
             </Text>
           )}
-          {isOwner &&
+          {canManage &&
             row.server.connectUrl &&
             (!compact ||
               row.bindings.length === 0 ||
@@ -680,7 +680,7 @@ export function ServerAccounts({
             .map((binding) => {
               const session = binding.remoteSession!;
               const mine = session.subjectUrn === `user:${user.id}`;
-              const locked = !isOwner;
+              const locked = !mine;
               const label =
                 session.subjectDisplayName ||
                 session.subjectEmail ||
@@ -717,10 +717,10 @@ export function ServerAccounts({
                       {connectionLifetimeLabel(connectionLifetime(session))}
                     </Text>
                   </div>
-                  {locked ? (
+                  {!canManage ? (
                     <LockKeyhole
                       className="size-4"
-                      aria-label="Owner-managed connection"
+                      aria-label="Read-only connection"
                     />
                   ) : (
                     <Button
@@ -749,7 +749,7 @@ export function ServerAccounts({
                 <Button
                   variant="secondary"
                   disabled={
-                    !isOwner ||
+                    !canManage ||
                     pending ||
                     error ||
                     query.isFetching ||
@@ -761,7 +761,7 @@ export function ServerAccounts({
                 </Button>
               </div>
             ))}
-          {(isOwner ? row.clients : []).map((client, clientIndex) => (
+          {(canManage ? row.clients : []).map((client, clientIndex) => (
             <div key={client.id} className="space-y-2">
               {row.clients.length > 1 && (
                 <Text small muted>
@@ -867,7 +867,8 @@ export function ServerAccounts({
             </div>
           )}
           <Text small muted>
-            Only the agent’s owner can assign their own connection.
+            You can assign only your own connections. Removing an assignment
+            does not disconnect that person’s account.
           </Text>
         </>
       )}

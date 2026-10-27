@@ -389,8 +389,8 @@ type ManagedAgent struct {
 	// organization-wide agent
 	ProjectID *string
 	Lifecycle AgentLifecycle
-	// An assigned owner connection has expired or is no longer available; the
-	// owner must reconnect and assign it again
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
 	ConnectionNeedsRefresh *bool
 	Permissions            *AgentPermissions
 	CreatedAt              string

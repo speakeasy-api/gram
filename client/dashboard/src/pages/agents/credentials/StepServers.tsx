@@ -107,8 +107,7 @@ export function StepServers({
 
   const query = search.trim().toLowerCase();
   const isSelected = (id: string) =>
-    (allServers && !servers.find((server) => server.id === id)?.issuerId) ||
-    selected.some((entry) => entry.server.id === id);
+    allServers || selected.some((entry) => entry.server.id === id);
   const isRefused = (id: string) => refusedServers?.has(id) ?? false;
   // A server that authorizes each person separately needs an account attached
   // to the agent before a key can call it. It is chosen
@@ -263,7 +262,7 @@ export function StepServers({
               <span className="text-muted-foreground block text-xs">
                 Every server in {scopeLabel}, including ones added later.
                 {perUserCount > 0 &&
-                  ` Servers that use your connection must be selected individually.`}
+                  ` Valid assigned connections are kept. Your connections fill any remaining gaps when you save.`}
               </span>
               {allServersRefusal && (
                 <span
@@ -276,6 +275,27 @@ export function StepServers({
               )}
             </span>
           </label>
+          {allServers &&
+            connections &&
+            (() => {
+              const missing = servers.filter(
+                (server) =>
+                  server.issuerId &&
+                  ["missing", "ended", "error"].includes(
+                    connections.byServer.get(server.id)?.status ?? "checking",
+                  ),
+              );
+              return missing.length > 0 ? (
+                <div role="alert" className="border-b px-4 py-3 text-sm">
+                  No usable connection available for:{" "}
+                  <strong>
+                    {missing.map((server) => server.name).join(", ")}
+                  </strong>
+                  . These servers will need a connection before the agent can
+                  use them. Existing valid assignments will be kept.
+                </div>
+              ) : null;
+            })()}
           {matches.length === 0 ? (
             <Text muted small className="block px-4 py-10 text-center">
               {servers.length === 0

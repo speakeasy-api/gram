@@ -87,6 +87,7 @@ vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
 const agent = {
   id: "agent_example",
   ownerUserId: "user_example",
+  permissions: { write: true },
 } as ManagedAgent;
 const server: KeyServer = {
   id: "remote",
@@ -487,19 +488,13 @@ describe("Agent key MCP servers", () => {
       ),
     ).toBeTruthy();
   });
-  it("does not offer an authorized manager their own connection", async () => {
+  it("allows an authorized editor to assign their own connection", async () => {
     mocks.userId = "user_manager";
     setup(1, [server]);
-    await screen.findByText(
-      "Only the agent’s owner can assign or refresh a connection.",
-    );
-    expect(screen.queryByRole("button", { name: "Use account" })).toBeNull();
-    expect(
-      screen.queryByRole("link", { name: "Connect an account" }),
-    ).toBeNull();
-    expect(mocks.attach).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Use account" }));
+    await waitFor(() => expect(mocks.attach).toHaveBeenCalled());
   });
-  it("shows the owner’s connection read-only to another manager", async () => {
+  it("allows an editor to remove another person’s assignment", async () => {
     mocks.userId = "user_manager";
     mocks.bindings.mockResolvedValue([
       {
@@ -521,7 +516,7 @@ describe("Agent key MCP servers", () => {
     expect(await screen.findByText("Jordan Example's connection")).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Remove assignment" }),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Unlock" })).toBeNull();
     await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
     expect(mocks.detach).not.toHaveBeenCalled();

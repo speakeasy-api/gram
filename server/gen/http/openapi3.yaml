@@ -62886,7 +62886,7 @@ paths:
                 name: UpdateRemoteSessionIssuer
     /rpc/remoteSessions.attachBinding:
         post:
-            description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+            description: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
             operationId: attachBinding
             parameters:
                 - allowEmptyValue: true
@@ -63190,7 +63190,7 @@ paths:
                 name: RemoteSessionsCount
     /rpc/remoteSessions.detachBinding:
         post:
-            description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+            description: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
             operationId: detachBinding
             parameters:
                 - allowEmptyValue: true
@@ -63674,7 +63674,7 @@ paths:
                 name: RemoteSessions
     /rpc/remoteSessions.listBindings:
         get:
-            description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+            description: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
             operationId: listBindings
             parameters:
                 - allowEmptyValue: true
@@ -111162,7 +111162,7 @@ components:
             properties:
                 connection_needs_refresh:
                     type: boolean
-                    description: An assigned owner connection has expired or is no longer available; the owner must reconnect and assign it again
+                    description: An assigned connection has expired or is no longer available; an authorized editor must reconnect their own account and assign it again
                 created_at:
                     type: string
                     format: date-time

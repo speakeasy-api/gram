@@ -35,7 +35,7 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 			source := config
 			client := createRemoteClient(t, ctx, ti, issuer, config.String(), "attachment-client")
 			session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), source.String(), client)
-			binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, SubjectUrn: session.SubjectUrn.String(), RemoteSessionID: session.ID})
+			binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, RemoteSessionID: session.ID, SubjectUrn: session.SubjectUrn.String()})
 			require.NoError(t, err)
 			_, err = testrepo.New(ti.conn).EnableAttachmentSourceRefreshFixture(ctx, testrepo.EnableAttachmentSourceRefreshFixtureParams{ID: session.ID, UpdatedAt: pgtype.Timestamptz{Time: time.Now().Add(-25 * time.Hour), Valid: true}})
 			require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 			require.NoError(t, err)
 			switch state {
 			case "detach":
-				_, err = q.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, ID: binding.ID, SubjectUrn: session.SubjectUrn.String()})
+				_, err = q.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, ID: binding.ID})
 			case "session-revoked":
 				_, err = q.RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{ID: session.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
 			case "agent-suspended":
@@ -97,6 +97,13 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 				_, err = testrepo.New(ti.conn).DisableAttachmentRefreshFeatureFixture(ctx, auth.ActiveOrganizationID)
 			}
 			require.NoError(t, err)
+			if state == "owner-transfer" {
+				_, err = q.GetPrincipalRemoteSessionBinding(ctx, lookup)
+				require.NoError(t, err, "a valid delegation survives agent ownership transfer")
+				_, err = q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(session.ID, auth.ActiveOrganizationID))
+				require.NoError(t, err)
+				return
+			}
 			_, err = q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(session.ID, auth.ActiveOrganizationID))
 			require.ErrorIs(t, err, pgx.ErrNoRows)
 			rows, err = q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())

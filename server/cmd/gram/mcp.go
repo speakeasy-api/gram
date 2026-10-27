@@ -405,12 +405,20 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsService.SetFeatureFlags(featureFlags)
 	remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())
-	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil {
 			return oops.C(oops.CodeNotFound)
 		}
-		_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		authorizer := agentmanagement.NewAuthorizer(authzEngine)
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil && !write {
+			_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
+		}
 		if err != nil {
 			return fmt.Errorf("authorize attachment owner: %w", err)
 		}

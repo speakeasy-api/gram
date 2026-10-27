@@ -269,7 +269,7 @@ func TestConsentProvenanceOnlyAuthorizesSelectedAgentAttachments(t *testing.T) {
 	tx := testenv.BeginTx(t, ctx, conn)
 	_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
 	require.NoError(t, err)
-	for _, predicate := range []OwnerPredicate{OwnedAgentRead, OwnedAgentSetup, OwnedAgentTransfer} {
+	for _, predicate := range []OwnerPredicate{OwnedAgentRead, OwnedAgentTransfer} {
 		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, predicate)
 		requireOopsCode(t, err, oops.CodeUnauthorized)
 	}

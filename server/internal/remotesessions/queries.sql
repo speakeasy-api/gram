@@ -2467,7 +2467,7 @@ WITH due AS (
             AND b.revoked_at IS NULL
             AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
             AND a.owner_reassignment_required_at IS NULL
-            AND s.subject_urn = 'user:' || a.owner_user_id
+            AND EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
             AND b.attached_by_subject_id = s.subject_urn
             AND (usi.project_id = bp.id OR (usi.project_id IS NULL AND usi.organization_id = bp.organization_id))
             AND (source.project_id = bp.id OR (source.project_id IS NULL AND source.organization_id = bp.organization_id))
@@ -2580,7 +2580,7 @@ WHERE s.id = @id
             AND b.revoked_at IS NULL
             AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
             AND a.owner_reassignment_required_at IS NULL
-            AND s.subject_urn = 'user:' || a.owner_user_id
+            AND EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
             AND b.attached_by_subject_id = s.subject_urn
             AND (usi.project_id = bp.id OR (usi.project_id IS NULL AND usi.organization_id = bp.organization_id))
             AND (source.project_id = bp.id OR (source.project_id IS NULL AND source.organization_id = bp.organization_id))
@@ -4297,7 +4297,7 @@ JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
 JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
   AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
 JOIN remote_sessions AS s ON s.id = b.remote_session_id
-  AND s.subject_urn = 'user:' || a.owner_user_id
+  AND EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
   AND b.attached_by_subject_id = s.subject_urn
   AND s.grant_generation = b.grant_generation
   AND s.remote_session_client_id = b.remote_session_client_id
@@ -4366,7 +4366,7 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND c.deleted IS FALSE AND i.deleted IS FALSE AND usi.deleted IS FALSE AND source.deleted IS FALSE
   AND s.deleted IS FALSE AND s.subject_urn = @subject_urn
   AND s.id = @remote_session_id
-  AND EXISTS (SELECT 1 FROM agents AS a WHERE a.id = @principal_id AND a.organization_id = p.organization_id AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL AND s.subject_urn = 'user:' || a.owner_user_id)
+  AND EXISTS (SELECT 1 FROM agents AS a WHERE a.id = @principal_id AND a.organization_id = p.organization_id AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL)
 ON CONFLICT (project_id, principal_id, user_session_issuer_id, remote_session_client_id) WHERE revoked_at IS NULL
 DO UPDATE SET updated_at = principal_remote_session_bindings.updated_at
 WHERE principal_remote_session_bindings.grant_generation = EXCLUDED.grant_generation
@@ -4386,7 +4386,6 @@ JOIN remote_sessions AS s ON s.id = b.remote_session_id AND s.remote_session_cli
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
 JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
-  AND 'user:' || a.owner_user_id = b.attached_by_subject_id
 WHERE b.project_id = @project_id AND b.organization_id = @organization_id
   AND b.principal_id = @principal_id AND b.user_session_issuer_id = @user_session_issuer_id
   AND b.attached_by_subject_id = s.subject_urn
@@ -4398,8 +4397,7 @@ UPDATE principal_remote_session_bindings AS b
 SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE b.project_id = @project_id AND b.organization_id = @organization_id
   AND b.principal_id = @principal_id AND b.user_session_issuer_id = @user_session_issuer_id
-  AND b.id = @id AND b.attached_by_subject_id = @subject_urn AND b.revoked_at IS NULL
-  AND EXISTS (SELECT 1 FROM remote_sessions AS s WHERE s.id = b.remote_session_id AND s.subject_urn = @subject_urn)
+  AND b.id = @id AND b.revoked_at IS NULL
 RETURNING b.remote_session_id, b.remote_session_client_id, b.grant_generation;
 
 -- name: LockPrincipalRemoteSessionBindings :many

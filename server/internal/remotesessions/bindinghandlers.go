@@ -11,7 +11,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -24,9 +23,9 @@ import (
 // SetBindingAuthorizer wires the human-only agent management authorizer without
 // creating an import cycle with agentmanagement's session revocation support.
 // Configure before serving requests. The callback must use the supplied transaction
-// to RequireAgentOwnerForUpdate with OwnedAgentAuthorize, retaining its membership
+// to require agent write permission for mutations and authorize or write for reads, retaining membership
 // and agent locks through commit. An unconfigured service fails closed.
-func (s *Service) SetBindingAuthorizer(authorize func(context.Context, pgx.Tx, uuid.UUID) error) {
+func (s *Service) SetBindingAuthorizer(authorize func(context.Context, pgx.Tx, uuid.UUID, bool) error) {
 	s.bindingAuthorizer = authorize
 }
 
@@ -67,7 +66,7 @@ func bindingHuman(ctx context.Context) (*contextvalues.AuthContext, error) {
 	return auth, nil
 }
 
-func (s *Service) beginBindingOperation(ctx context.Context, principal, issuer string) (*bindingOperation, error) {
+func (s *Service) beginBindingOperation(ctx context.Context, principal, issuer string, write bool) (*bindingOperation, error) {
 	auth, err := bindingHuman(ctx)
 	if err != nil {
 		return nil, err
@@ -90,7 +89,7 @@ func (s *Service) beginBindingOperation(ctx context.Context, principal, issuer s
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin remote session attachment operation")
 	}
-	if err := s.bindingAuthorizer(ctx, tx, principalID); err != nil {
+	if err := s.bindingAuthorizer(ctx, tx, principalID, write); err != nil {
 		_ = tx.Rollback(ctx)
 		return nil, err
 	}
@@ -109,7 +108,7 @@ func (op *bindingOperation) candidates(ctx context.Context) ([]repo.ListPrincipa
 }
 
 func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPayload) (*gen.ListBindingsResult, error) {
-	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID)
+	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -139,27 +138,11 @@ func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPay
 }
 
 func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingPayload) (*gen.PrincipalRemoteSessionBinding, error) {
-	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID)
+	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, true)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = op.tx.Rollback(ctx) }()
-	// The runtime serves an agent only its owner's attachments, so another
-	// caller's attachment would never be used, would be hidden from every
-	// listing, and would hold the client's only slot. Delegated agent:authorize
-	// lets a caller manage the agent, not lend it their own connection. The
-	// authorizer has already locked the agent row in this transaction, so the
-	// owner cannot change before commit.
-	agent, err := agentsrepo.New(op.tx).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: op.organizationID, ID: op.principalID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load attachment agent owner")
-	}
-	if urn.NewUserSubject(agent.OwnerUserID).String() != op.subject.String() {
-		return nil, oops.E(oops.CodeForbidden, nil, "only the agent's owner can let it use their connection")
-	}
 	sessionID, err := uuid.Parse(payload.RemoteSessionID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_id")
@@ -204,7 +187,7 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 }
 
 func (s *Service) DetachBinding(ctx context.Context, payload *gen.DetachBindingPayload) error {
-	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID)
+	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, true)
 	if err != nil {
 		return err
 	}
@@ -214,7 +197,7 @@ func (s *Service) DetachBinding(ctx context.Context, payload *gen.DetachBindingP
 		return oops.E(oops.CodeBadRequest, err, "invalid binding id")
 	}
 	row, err := op.queries.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{
-		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(), ID: id,
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, ID: id,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil

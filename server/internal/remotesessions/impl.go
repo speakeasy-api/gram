@@ -89,7 +89,7 @@ type Service struct {
 	// not become so: a set is always backed by a customer-provisioned KMS key,
 	// which is what ties this one link to customer_managed_encryption_keys.
 	productFeatures   *productfeatures.Client
-	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID) error
+	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID, bool) error
 
 	// featureFlags gates rollouts; nil reads every flag as off.
 	featureFlags feature.Provider

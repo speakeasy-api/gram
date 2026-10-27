@@ -16,7 +16,7 @@ var PrincipalRemoteSessionBinding = Type("PrincipalRemoteSessionBinding", func()
 func principalBindingMethods() {
 	for _, name := range []string{"listBindings", "attachBinding", "detachBinding"} {
 		Method(name, func() {
-			Description("Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.")
+			Description("Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.")
 			Security(security.Session, security.ProjectSlug)
 			Payload(func() {
 				Attribute("principal_id", String, func() { Format(FormatUUID) })

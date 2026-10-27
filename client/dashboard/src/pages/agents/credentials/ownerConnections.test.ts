@@ -167,7 +167,7 @@ describe("attachOwnerConnections", () => {
     );
   });
 
-  it("keeps an attachment that already serves the agent", async () => {
+  it("keeps another person’s valid attachment even without a personal candidate", async () => {
     const { fake, attachBinding, detachBinding } = api({
       clients: [client("client_one")],
       candidates: [session({})],
@@ -175,7 +175,7 @@ describe("attachOwnerConnections", () => {
         {
           id: "binding_live",
           remoteSessionClientId: "client_one",
-          remoteSession: session({}),
+          remoteSession: session({ subjectUrn: "user:another_person" }),
         },
       ],
     });
@@ -233,6 +233,19 @@ describe("attachOwnerConnections", () => {
     expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
       attachBindingRequestBody: { remoteSessionId: "session_new" },
     });
+  });
+
+  it("reports missing servers during bulk selection without removing assignments", async () => {
+    const { fake, attachBinding, detachBinding } = api({
+      clients: [client("client_one")],
+      candidates: [],
+      bindings: [],
+    });
+    await expect(
+      attachOwnerConnections(fake, "agent_new", [server], undefined, true),
+    ).resolves.toEqual(["Linear"]);
+    expect(attachBinding).not.toHaveBeenCalled();
+    expect(detachBinding).not.toHaveBeenCalled();
   });
 
   it("names the server whose connection is gone instead of attaching nothing", async () => {

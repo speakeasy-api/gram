@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -577,7 +578,7 @@ export function CredentialsWizard({
   );
   // New agents attach the creator's connections as part of provisioning.
   const offersConnections = !editing && !existing;
-  const connections = useOwnerConnections(listedServers, offersConnections);
+  const connections = useOwnerConnections(listedServers, true, agent?.id);
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
@@ -842,6 +843,22 @@ export function CredentialsWizard({
         user.id,
         agent.id,
       );
+      if (allServers) {
+        const missing = await attachOwnerConnections(
+          sdk,
+          agent.id,
+          listedServers,
+          undefined,
+          true,
+        );
+        if (missing.length)
+          toast.warning(
+            `No connection assigned for: ${missing.join(", ")}. Connect these servers to finish setup.`,
+          );
+        await queryClient.invalidateQueries({
+          queryKey: ["owner-connections"],
+        });
+      }
       // Saving is the end of editing: what follows are the platform's own
       // settings, which this flow only describes.
       onDone();
@@ -956,13 +973,9 @@ export function CredentialsWizard({
       // "all servers", and discovery rightly answers that nothing can be
       // delegated.
       const reach = allServers
-        ? inventory.servers
-            .filter((server) =>
-              reachCoversProject(allServersProjectIDs, server.projectId),
-            )
-            // Each of these needs an account attached to the agent before a
-            // key can call it, which this flow has no step for.
-            .filter((server) => !server.issuerId)
+        ? inventory.servers.filter((server) =>
+            reachCoversProject(allServersProjectIDs, server.projectId),
+          )
         : selected.map((entry) => entry.server);
       // A server that signs in as a person is reached through the owner's own
       // connection, attached before the key is cut so the key works from its
@@ -971,12 +984,17 @@ export function CredentialsWizard({
       // to choose, and the agent's page connects accounts for its keys.
       if (offersConnections) {
         try {
-          await attachOwnerConnections(
+          const missing = await attachOwnerConnections(
             sdk,
             target.id,
             reach,
             controller.signal,
+            allServers,
           );
+          if (missing.length)
+            toast.warning(
+              `No connection assigned for: ${missing.join(", ")}. Connect these accounts to let the agent use them.`,
+            );
         } catch (failure) {
           const reason = failure instanceof Error ? failure.message : "";
           throw new Error(
@@ -1182,7 +1200,7 @@ export function CredentialsWizard({
               id: entry.server.id,
               name: entry.server.name,
               detail: entry.server.issuerId
-                ? "all tools, using the owner’s connection"
+                ? "all tools, using an assigned connection"
                 : "all tools",
             }))
       }
@@ -1260,7 +1278,7 @@ export function CredentialsWizard({
                 setHighlight(next ? "server:all" : null);
               }}
               selected={selected}
-              connections={offersConnections ? connections : undefined}
+              connections={connections}
               onChange={(next) => {
                 setSelected(next);
                 // The one just added, or the last one left when removing.
