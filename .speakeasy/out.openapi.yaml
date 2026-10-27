@@ -100500,6 +100500,9 @@ components:
           type: string
           description: The ID of the MCP server
           format: uuid
+        legacy_platform_slug:
+          type: string
+          description: 'The slug of a legacy Speakeasy-hosted address that still serves this hosted server: its custom-domain address, which the Speakeasy domain also answers until the server takes a platform endpoint with that slug. Absent otherwise.'
         name:
           type: string
           description: A human-readable display name for the server
