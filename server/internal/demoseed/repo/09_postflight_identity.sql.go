@@ -952,22 +952,21 @@ JOIN remote_session_client_user_session_issuers link
  AND link.user_session_issuer_id = us.user_session_issuer_id
 WHERE b.organization_id = $2::text AND b.project_id = $3::uuid
   AND b.revoked_at IS NULL AND a.suspended_at IS NULL AND a.revoked_at IS NULL
-  AND b.remote_session_id = $4::uuid
+  AND b.remote_session_id = ANY($4::uuid[])
   AND b.remote_session_client_id = rs.remote_session_client_id
   AND b.grant_generation = rs.grant_generation
   AND b.user_session_issuer_id = us.user_session_issuer_id
-  AND rs.subject_urn = us.subject_urn
-  AND rs.subject_urn = 'user:' || a.owner_user_id
-  AND b.attached_by_subject_id = 'user:' || a.owner_user_id
+  AND rs.subject_urn = b.attached_by_subject_id
+  AND b.attached_by_subject_id = rs.subject_urn
   AND rs.access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT'
   AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE
 `
 
 type PostflightIDSessionAttachmentsParams struct {
-	UserSessionID   uuid.UUID
-	OrgID           string
-	ProjectID       uuid.UUID
-	RemoteSessionID uuid.UUID
+	UserSessionID    uuid.UUID
+	OrgID            string
+	ProjectID        uuid.UUID
+	RemoteSessionIds []uuid.UUID
 }
 
 func (q *Queries) PostflightIDSessionAttachments(ctx context.Context, arg PostflightIDSessionAttachmentsParams) (int64, error) {
@@ -975,7 +974,7 @@ func (q *Queries) PostflightIDSessionAttachments(ctx context.Context, arg Postfl
 		arg.UserSessionID,
 		arg.OrgID,
 		arg.ProjectID,
-		arg.RemoteSessionID,
+		arg.RemoteSessionIds,
 	)
 	var count int64
 	err := row.Scan(&count)

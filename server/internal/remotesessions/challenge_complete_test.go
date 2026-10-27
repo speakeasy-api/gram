@@ -19,6 +19,7 @@ func TestCompleteRemoteLogin_ReturnsTheCommittedGrant(t *testing.T) {
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "set", &spy)
 
+	fx.parent.ConnectionPopup = true
 	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, fx.parent, fx.clients[0])
 	require.NoError(t, err)
 	parsed, err := url.Parse(authURL)
@@ -31,6 +32,8 @@ func TestCompleteRemoteLogin_ReturnsTheCommittedGrant(t *testing.T) {
 
 	require.Contains(t, result.RedirectURL, "/mcp/"+fx.parent.McpSlug+"/connect?state="+url.QueryEscape(fx.parent.ID))
 	require.NotNil(t, result.Grant)
+	require.Positive(t, result.Grant.GrantGeneration)
+	require.True(t, result.Grant.ConnectionPopup)
 	require.Equal(t, fx.parent.ID, result.Grant.ParentChallengeID)
 	require.Equal(t, fx.parent.UserSessionIssuerID, result.Grant.UserSessionIssuerID)
 	require.Equal(t, fx.clients[0].ID, result.Grant.RemoteSessionClientID)
@@ -56,6 +59,7 @@ func TestCompleteRemoteLogin_ReturnsToTheGatewayServerPage(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 
+	require.False(t, result.Grant.ConnectionPopup)
 	require.True(t, strings.HasSuffix(result.RedirectURL, "/mcp/"+parent.McpSlug+"/connect?state="+url.QueryEscape(parent.ID)+"&server=eng.github"), result.RedirectURL)
 }
 

@@ -344,6 +344,19 @@
           showError(error);
         }
       }
+      function connectionUsable(session) {
+        if (!session) return false;
+        if (
+          session.HasRefreshToken &&
+          (!session.RefreshExpiresAt ||
+            new Date(session.RefreshExpiresAt).getTime() > Date.now())
+        )
+          return true;
+        return (
+          !session.AccessExpiresAt ||
+          new Date(session.AccessExpiresAt).getTime() > Date.now()
+        );
+      }
       function accountLabel(session) {
         return (
           [session.UpstreamDisplayName, session.UpstreamEmail]
@@ -378,10 +391,7 @@
               return (
                 binding.RemoteSessionClientID ===
                   provider.getAttribute("data-remote-client") &&
-                binding.RemoteSession &&
-                (data.candidates || []).some(function (session) {
-                  return session.ID === binding.RemoteSessionID;
-                })
+                connectionUsable(binding.RemoteSession)
               );
             });
           });
@@ -398,11 +408,7 @@
             var attached = document.createElement("span");
             attached.className = "text-muted-foreground text-xs";
             var account = binding.RemoteSession;
-            var eligible =
-              account &&
-              (data.candidates || []).some(function (candidate) {
-                return candidate.ID === binding.RemoteSessionID;
-              });
+            var eligible = connectionUsable(account);
             var connectedAs = provider.getAttribute("data-connected-as");
             var sameAccount =
               account &&
@@ -415,6 +421,13 @@
                 (sameAccount ? "" : " · " + accountLabel(account))
               : "Agent access unavailable. Detach it before choosing an account. Your service connection has not been changed.";
             row.appendChild(attached);
+            if (!data.canManageConnections) {
+              var readonly = document.createElement("span");
+              readonly.textContent =
+                "Only agent editors can change this assignment.";
+              row.appendChild(readonly);
+              return;
+            }
             var detach = document.createElement("button");
             detach.type = "button";
             detach.className =
@@ -425,6 +438,10 @@
             });
             row.appendChild(detach);
           } else {
+            if (!data.canManageConnections) {
+              row.textContent = "Ask an agent editor to assign a connection.";
+              return;
+            }
             var candidates = (data.candidates || []).filter(function (item) {
               return item.RemoteSessionClientID === clientId;
             });
