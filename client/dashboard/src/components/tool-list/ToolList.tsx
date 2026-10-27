@@ -698,12 +698,7 @@ function ToolGroupHeader({
         !isFirstGroup && "border-neutral-softest border-t",
       )}
     >
-      <button
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
-        className="flex items-center gap-4 transition-opacity hover:opacity-70"
-      >
+      <div className="flex items-center gap-4 transition-opacity hover:opacity-70">
         <div className="relative size-4 shrink-0">
           <Icon
             className={cn(
@@ -719,19 +714,25 @@ function ToolGroupHeader({
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onSelectAll}
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
+                aria-label={`${allSelected ? "Deselect" : "Select"} ${group.title} tools`}
                 className={cn(
                   "absolute inset-0 opacity-0 transition-opacity",
-                  "group-hover/header:opacity-100",
+                  "group-hover/header:opacity-100 focus-visible:opacity-100",
                 )}
               />
             </SimpleTooltip>
           )}
         </div>
-        <p className="text-foreground text-sm leading-6">{group.title}</p>
-      </button>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+          className="text-foreground text-sm leading-6"
+        >
+          {group.title}
+        </button>
+      </div>
       <button
         onClick={onToggle}
         aria-expanded={isExpanded}

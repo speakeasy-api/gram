@@ -132,6 +132,26 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ManageToolsDialog tool editing", () => {
+  it("keeps group selection separate from expansion", () => {
+    renderDialog({ onToolUpdate: vi.fn() });
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Select Custom tools",
+    });
+    expect(document.querySelector("button button")).toBeNull();
+    const expand = screen.getAllByRole("button", {
+      name: "Collapse Custom group",
+    })[0]!;
+    fireEvent.click(checkbox);
+    expect(checkbox.getAttribute("aria-checked")).toBe("true");
+    expect(expand.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(expand);
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    expect(checkbox.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(checkbox);
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("waits for the supplied update before reporting success and closing", async () => {
     const update = deferred<void>();
     const onToolUpdate = vi.fn(() => update.promise);
