@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -106,7 +107,8 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 		return nil, fmt.Errorf("load catalog authorization lifetime: %w", err)
 	}
 	lifetime, ok := conv.PGIntervalToDuration(issuer.SessionDuration)
-	if !ok || lifetime <= 0 {
+	// The record's expiry adds the grant window, so leave room for it.
+	if !ok || lifetime <= 0 || lifetime > math.MaxInt64-userSessionGrantTTL {
 		return nil, fmt.Errorf("invalid catalog authorization lifetime")
 	}
 	if durationHours > 0 {
