@@ -879,6 +879,24 @@ const (
 	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
 	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
 	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
+	// Device-side delivery failure reports (client.delivery_failed): what the
+	// speakeasy-hooks binary observed when an event could not reach the
+	// control plane. Rows carrying these are diagnostic
+	// (gram.event.source=hook_diagnostic) and stamp the device attributes
+	// above from the report body, since the request that carries a report is
+	// a later spool drain. SessionID is the failed event's session, kept off
+	// gen_ai.conversation.id so the report never joins a chat.
+	HookDeliveryEventTypeKey            = attribute.Key("gram.hook.delivery.event_type")
+	HookDeliveryPhaseKey                = attribute.Key("gram.hook.delivery.phase")
+	HookDeliveryCauseKey                = attribute.Key("gram.hook.delivery.cause")
+	HookDeliveryStatusCodeKey           = attribute.Key("gram.hook.delivery.status_code")
+	HookDeliveryElapsedMsKey            = attribute.Key("gram.hook.delivery.elapsed_ms")
+	HookDeliveryAttemptsKey             = attribute.Key("gram.hook.delivery.attempts")
+	HookDeliveryGatingKey               = attribute.Key("gram.hook.delivery.gating")
+	HookDeliveryAttemptedAtKey          = attribute.Key("gram.hook.delivery.attempted_at")
+	HookDeliveryFailedIdempotencyKeyKey = attribute.Key("gram.hook.delivery.failed_idempotency_key")
+	HookDeliverySessionIDKey            = attribute.Key("gram.hook.delivery.session_id")
+	HookDeliverySpoolDepthKey           = attribute.Key("gram.hook.delivery.spool_depth")
 	// Hardware identity the Speakeasy device agent (speakeasyd) reports via
 	// the Gram-Device-* headers, recorded on the request log for its
 	// endpoints so a fleet's requests can be counted and told apart per
@@ -1557,6 +1575,44 @@ func SlogAgentDeviceEnvironment(v string) slog.Attr {
 
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
 func SlogHookReplayed(v bool) slog.Attr      { return slog.Bool(string(HookReplayedKey), v) }
+
+func HookDeviceOS(v string) attribute.KeyValue { return HookDeviceOSKey.String(v) }
+func SlogHookDeviceOS(v string) slog.Attr      { return slog.String(string(HookDeviceOSKey), v) }
+
+func SlogHookDeviceArch(v string) slog.Attr { return slog.String(string(HookDeviceArchKey), v) }
+
+func HookDeviceBinaryVersion(v string) attribute.KeyValue {
+	return HookDeviceBinaryVersionKey.String(v)
+}
+func SlogHookDeviceBinaryVersion(v string) slog.Attr {
+	return slog.String(string(HookDeviceBinaryVersionKey), v)
+}
+
+func HookDeviceHarness(v string) attribute.KeyValue { return HookDeviceHarnessKey.String(v) }
+func SlogHookDeviceHarness(v string) slog.Attr      { return slog.String(string(HookDeviceHarnessKey), v) }
+
+func HookDeliveryEventType(v string) attribute.KeyValue { return HookDeliveryEventTypeKey.String(v) }
+func SlogHookDeliveryEventType(v string) slog.Attr {
+	return slog.String(string(HookDeliveryEventTypeKey), v)
+}
+
+func HookDeliveryPhase(v string) attribute.KeyValue { return HookDeliveryPhaseKey.String(v) }
+func SlogHookDeliveryPhase(v string) slog.Attr      { return slog.String(string(HookDeliveryPhaseKey), v) }
+
+func HookDeliveryCause(v string) attribute.KeyValue { return HookDeliveryCauseKey.String(v) }
+func SlogHookDeliveryCause(v string) slog.Attr      { return slog.String(string(HookDeliveryCauseKey), v) }
+
+func SlogHookDeliveryStatusCode(v int) slog.Attr {
+	return slog.Int(string(HookDeliveryStatusCodeKey), v)
+}
+
+func SlogHookDeliveryElapsedMs(v int) slog.Attr { return slog.Int(string(HookDeliveryElapsedMsKey), v) }
+
+func SlogHookDeliveryAttempts(v int) slog.Attr { return slog.Int(string(HookDeliveryAttemptsKey), v) }
+
+func SlogHookDeliverySpoolDepth(v int) slog.Attr {
+	return slog.Int(string(HookDeliverySpoolDepthKey), v)
+}
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
