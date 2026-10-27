@@ -382,6 +382,22 @@ func (q *Queries) FindOAuthAuthClients(ctx context.Context, arg FindOAuthAuthCli
 	return items, nil
 }
 
+const getAuthClientFixture = `-- name: GetAuthClientFixture :one
+SELECT client_type, deleted FROM mcp_auth_clients WHERE id = $1
+`
+
+type GetAuthClientFixtureRow struct {
+	ClientType string
+	Deleted    bool
+}
+
+func (q *Queries) GetAuthClientFixture(ctx context.Context, id uuid.UUID) (GetAuthClientFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getAuthClientFixture, id)
+	var i GetAuthClientFixtureRow
+	err := row.Scan(&i.ClientType, &i.Deleted)
+	return i, err
+}
+
 const getAuthClientState = `-- name: GetAuthClientState :one
 SELECT ac.id, ac.client_type, ac.deleted
 FROM mcp_auth_clients AS ac
@@ -1455,6 +1471,76 @@ func (q *Queries) ListBackfillClientsOfTypes(ctx context.Context, arg ListBackfi
 	return items, nil
 }
 
+const listBackfillLinkedServersFixture = `-- name: ListBackfillLinkedServersFixture :many
+SELECT mcp_server_id
+FROM mcp_server_auth_clients
+WHERE auth_client_id = $1 AND source = 'backfill' AND deleted IS FALSE
+ORDER BY mcp_server_id
+`
+
+func (q *Queries) ListBackfillLinkedServersFixture(ctx context.Context, authClientID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listBackfillLinkedServersFixture, authClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBackfillLinksOfClients = `-- name: ListBackfillLinksOfClients :many
+SELECT l.id, l.mcp_server_id, l.auth_client_id
+FROM mcp_server_auth_clients AS l
+WHERE l.organization_id = $1::text
+  AND l.auth_client_id = ANY($2::uuid[])
+  AND l.source = 'backfill'
+  AND l.deleted IS FALSE
+ORDER BY l.id
+`
+
+type ListBackfillLinksOfClientsParams struct {
+	OrganizationID string
+	AuthClientIds  []uuid.UUID
+}
+
+type ListBackfillLinksOfClientsRow struct {
+	ID           uuid.UUID
+	McpServerID  uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+// Live backfilled server links in the organization to any of the given auth
+// clients.
+func (q *Queries) ListBackfillLinksOfClients(ctx context.Context, arg ListBackfillLinksOfClientsParams) ([]ListBackfillLinksOfClientsRow, error) {
+	rows, err := q.db.Query(ctx, listBackfillLinksOfClients, arg.OrganizationID, arg.AuthClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBackfillLinksOfClientsRow
+	for rows.Next() {
+		var i ListBackfillLinksOfClientsRow
+		if err := rows.Scan(&i.ID, &i.McpServerID, &i.AuthClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBackfillLinksOfTypes = `-- name: ListBackfillLinksOfTypes :many
 SELECT l.id, l.mcp_server_id, l.auth_client_id, ac.client_type, ac.deleted AS client_deleted
 FROM mcp_server_auth_clients AS l
@@ -1517,7 +1603,7 @@ WITH creds AS (
          rh.value_from_request_header AS forwarded_from
   FROM remote_mcp_server_headers AS rh
   JOIN remote_mcp_servers AS r ON r.id = rh.remote_mcp_server_id AND r.deleted IS FALSE
-  JOIN projects AS p ON p.id = r.project_id AND p.organization_id = $3::text AND p.deleted IS FALSE
+  JOIN projects AS p ON p.id = r.project_id AND p.organization_id = $4::text AND p.deleted IS FALSE
   WHERE rh.deleted IS FALSE
     AND (lower(rh.name) = 'authorization' OR rh.value_from_request_header IS NOT NULL OR rh.is_secret)
   UNION ALL
@@ -1525,7 +1611,7 @@ WITH creds AS (
          th.value_from_request_header
   FROM tunneled_mcp_server_headers AS th
   JOIN tunneled_mcp_servers AS t ON t.id = th.tunneled_mcp_server_id AND t.deleted IS FALSE
-  JOIN projects AS p ON p.id = t.project_id AND p.organization_id = $3::text AND p.deleted IS FALSE
+  JOIN projects AS p ON p.id = t.project_id AND p.organization_id = $4::text AND p.deleted IS FALSE
   WHERE th.deleted IS FALSE
     AND (lower(th.name) = 'authorization' OR th.value_from_request_header IS NOT NULL OR th.is_secret)
 )
@@ -1544,13 +1630,16 @@ SELECT c.source_kind,
        COALESCE(array_agg(c.header_id ORDER BY c.header_id) FILTER (WHERE lower(c.name) <> 'authorization'), ARRAY[]::uuid[])::uuid[] AS other_header_ids
 FROM creds AS c
 WHERE c.source_id > $1::uuid
+  -- Set to decide one source's headers as they are written.
+  AND ($2::uuid IS NULL OR c.source_id = $2::uuid)
 GROUP BY c.source_kind, c.source_id, c.project_id
 ORDER BY c.source_id
-LIMIT $2::int
+LIMIT $3::int
 `
 
 type ListCredentialSourcesParams struct {
 	Cursor         uuid.UUID
+	OnlySourceID   uuid.NullUUID
 	PageSize       int32
 	OrganizationID string
 }
@@ -1576,7 +1665,12 @@ type ListCredentialSourcesRow struct {
 // from the request; other static headers stay server headers. Read-only and
 // value-free.
 func (q *Queries) ListCredentialSources(ctx context.Context, arg ListCredentialSourcesParams) ([]ListCredentialSourcesRow, error) {
-	rows, err := q.db.Query(ctx, listCredentialSources, arg.Cursor, arg.PageSize, arg.OrganizationID)
+	rows, err := q.db.Query(ctx, listCredentialSources,
+		arg.Cursor,
+		arg.OnlySourceID,
+		arg.PageSize,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2081,6 +2175,46 @@ func (q *Queries) ListLiveAuthClientIDsFixture(ctx context.Context, organization
 	return items, nil
 }
 
+const listLiveBackfillClients = `-- name: ListLiveBackfillClients :many
+SELECT ac.id
+FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = $1::text
+  AND ac.id = ANY($2::uuid[])
+  AND ac.source = 'backfill'
+  AND ac.client_type = ANY($3::text[])
+  AND ac.deleted IS FALSE
+ORDER BY ac.id
+`
+
+type ListLiveBackfillClientsParams struct {
+	OrganizationID string
+	AuthClientIds  []uuid.UUID
+	ClientTypes    []string
+}
+
+// The clients among those given, in the organization, that are live
+// backfilled clients of one of the given types. Only those can be retired, so
+// a sync reads the live ones once instead of attempting every derived id.
+func (q *Queries) ListLiveBackfillClients(ctx context.Context, arg ListLiveBackfillClientsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLiveBackfillClients, arg.OrganizationID, arg.AuthClientIds, arg.ClientTypes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveCredentialClasses = `-- name: ListLiveCredentialClasses :many
 SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
        COALESCE(s.credential_id, s.id)::uuid AS credential_id,
@@ -2318,6 +2452,43 @@ func (q *Queries) ListOrganizationIDsForGrants(ctx context.Context) ([]string, e
 	var items []string
 	for rows.Next() {
 		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSourceHeaderIDs = `-- name: ListRemoteSourceHeaderIDs :many
+SELECT h.id
+FROM remote_mcp_server_headers AS h
+JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id
+JOIN projects AS p ON p.id = r.project_id AND p.organization_id = $1::text
+WHERE h.remote_mcp_server_id = $2::uuid
+ORDER BY h.id
+`
+
+type ListRemoteSourceHeaderIDsParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// Every header ever recorded on one remote source of the organization,
+// deleted ones included, so the auth clients derived from any of them can be
+// found by their stable ids.
+func (q *Queries) ListRemoteSourceHeaderIDs(ctx context.Context, arg ListRemoteSourceHeaderIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRemoteSourceHeaderIDs, arg.OrganizationID, arg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -3436,6 +3607,31 @@ SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
 func (q *Queries) LockOrganizationBackfill(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, lockOrganizationBackfill, organizationID)
 	return err
+}
+
+const lockRemoteCredentialSource = `-- name: LockRemoteCredentialSource :one
+SELECT r.id
+FROM remote_mcp_servers AS r
+JOIN projects AS p ON p.id = r.project_id AND p.organization_id = $1::text
+WHERE r.id = $2::uuid
+FOR UPDATE OF r
+`
+
+type LockRemoteCredentialSourceParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// Locks one remote source of the organization, live or deleted, so header
+// syncs for it run one at a time and see each other's writes. The source's
+// own writers take this lock before touching its headers, so the two never
+// wait on each other in opposite order. No row means the source is not the
+// organization's.
+func (q *Queries) LockRemoteCredentialSource(ctx context.Context, arg LockRemoteCredentialSourceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRemoteCredentialSource, arg.OrganizationID, arg.SourceID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockSelectionIssuerBinding = `-- name: LockSelectionIssuerBinding :exec

@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
@@ -140,6 +141,14 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		McpServerSlug:    slug,
 	}); err != nil {
 		return repo.McpServer{}, fmt.Errorf("audit MCP server creation: %w", err)
+	}
+
+	// A source's credential headers are usually set up before any server
+	// fronts them, so offer their auth clients from this server as it appears.
+	if server.RemoteMcpServerID.Valid {
+		if err := authclientbackfill.SyncRemoteSource(ctx, tx, input.OrganizationID, server.RemoteMcpServerID.UUID); err != nil {
+			return repo.McpServer{}, fmt.Errorf("sync remote source auth clients: %w", err)
+		}
 	}
 
 	return server, nil

@@ -71,6 +71,7 @@ func runHeaders(ctx context.Context, tx pgx.Tx, opts Options, pageSize int32, re
 		rows, err := q.ListCredentialSources(ctx, ListCredentialSourcesParams{
 			OrganizationID: opts.OrganizationID,
 			Cursor:         cursor,
+			OnlySourceID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			PageSize:       pageSize,
 		})
 		if err != nil {

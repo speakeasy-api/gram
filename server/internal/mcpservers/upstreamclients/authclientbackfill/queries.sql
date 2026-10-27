@@ -422,6 +422,8 @@ SELECT c.source_kind,
        COALESCE(array_agg(c.header_id ORDER BY c.header_id) FILTER (WHERE lower(c.name) <> 'authorization'), ARRAY[]::uuid[])::uuid[] AS other_header_ids
 FROM creds AS c
 WHERE c.source_id > @cursor::uuid
+  -- Set to decide one source's headers as they are written.
+  AND (sqlc.narg('only_source_id')::uuid IS NULL OR c.source_id = sqlc.narg('only_source_id')::uuid)
 GROUP BY c.source_kind, c.source_id, c.project_id
 ORDER BY c.source_id
 LIMIT @page_size::int;
@@ -1485,6 +1487,53 @@ WHERE id = @id::uuid
   AND source = 'backfill'
   AND deleted IS FALSE;
 
+-- name: LockRemoteCredentialSource :one
+-- Locks one remote source of the organization, live or deleted, so header
+-- syncs for it run one at a time and see each other's writes. The source's
+-- own writers take this lock before touching its headers, so the two never
+-- wait on each other in opposite order. No row means the source is not the
+-- organization's.
+SELECT r.id
+FROM remote_mcp_servers AS r
+JOIN projects AS p ON p.id = r.project_id AND p.organization_id = @organization_id::text
+WHERE r.id = @source_id::uuid
+FOR UPDATE OF r;
+
+-- name: ListRemoteSourceHeaderIDs :many
+-- Every header ever recorded on one remote source of the organization,
+-- deleted ones included, so the auth clients derived from any of them can be
+-- found by their stable ids.
+SELECT h.id
+FROM remote_mcp_server_headers AS h
+JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id
+JOIN projects AS p ON p.id = r.project_id AND p.organization_id = @organization_id::text
+WHERE h.remote_mcp_server_id = @source_id::uuid
+ORDER BY h.id;
+
+-- name: ListLiveBackfillClients :many
+-- The clients among those given, in the organization, that are live
+-- backfilled clients of one of the given types. Only those can be retired, so
+-- a sync reads the live ones once instead of attempting every derived id.
+SELECT ac.id
+FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = @organization_id::text
+  AND ac.id = ANY(@auth_client_ids::uuid[])
+  AND ac.source = 'backfill'
+  AND ac.client_type = ANY(@client_types::text[])
+  AND ac.deleted IS FALSE
+ORDER BY ac.id;
+
+-- name: ListBackfillLinksOfClients :many
+-- Live backfilled server links in the organization to any of the given auth
+-- clients.
+SELECT l.id, l.mcp_server_id, l.auth_client_id
+FROM mcp_server_auth_clients AS l
+WHERE l.organization_id = @organization_id::text
+  AND l.auth_client_id = ANY(@auth_client_ids::uuid[])
+  AND l.source = 'backfill'
+  AND l.deleted IS FALSE
+ORDER BY l.id;
+
 -- name: ListUndecidedUpstreamAuthServers :many
 -- The servers among those given, in the organization, whose need for upstream
 -- authentication is still undecided and that still hold the evidence of a
@@ -2148,6 +2197,15 @@ SELECT auth_client_id
 FROM mcp_server_auth_clients
 WHERE mcp_server_id = @mcp_server_id AND deleted IS FALSE
 ORDER BY auth_client_id;
+
+-- name: GetAuthClientFixture :one
+SELECT client_type, deleted FROM mcp_auth_clients WHERE id = @id;
+
+-- name: ListBackfillLinkedServersFixture :many
+SELECT mcp_server_id
+FROM mcp_server_auth_clients
+WHERE auth_client_id = @auth_client_id AND source = 'backfill' AND deleted IS FALSE
+ORDER BY mcp_server_id;
 
 -- name: SoftDeleteServerAuthClientLinksFixture :exec
 UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp() WHERE mcp_server_id = @mcp_server_id;
