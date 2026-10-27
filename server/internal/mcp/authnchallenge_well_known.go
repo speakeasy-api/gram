@@ -447,7 +447,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		grantTypes = append(grantTypes, "client_credentials")
 	}
 	var grantProfiles []string
-	if endpoint.idJAGConfigured {
+	if endpoint.idJAGConfigured && s.idJAGAdvertised(ctx, endpoint.LogWith(s.logger), endpoint.OrganizationID, endpoint.UserSessionIssuerID) {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
 	}

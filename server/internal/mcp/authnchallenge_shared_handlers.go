@@ -96,7 +96,7 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 		grantTypes = append(grantTypes, "client_credentials")
 	}
 	var grantProfiles []string
-	if issuer.idJAGConfigured {
+	if issuer.idJAGConfigured && s.idJAGAdvertised(ctx, issuer.logger, issuer.organizationID, issuer.authorizationServer.issuerID) {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
 	} else if s.workloadGrant != nil {

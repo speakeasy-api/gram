@@ -31,7 +31,6 @@ import (
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -78,8 +77,7 @@ func (a idJAGTestAssertion) sign(t *testing.T, issuer, audience, resource, clien
 	return raw
 }
 
-// signWithoutResource signs an ID-JAG shaped like Okta's, which carries no
-// resource claim.
+// signWithoutResource signs an ID-JAG shaped like Okta's, with no resource claim.
 func (a idJAGTestAssertion) signWithoutResource(t *testing.T, issuer, audience, clientID, email, assertionID string) string {
 	t.Helper()
 	now := time.Now()
@@ -170,26 +168,7 @@ func createTrustedIDJAGIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true},
 	})
 	require.NoError(t, err)
-	// ID-JAGs are accepted only by issuers in shared mode.
-	rows, err := testrepo.New(ti.conn).SetUserSessionIssuerAuthorizationServerModeFixture(ctx, testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{
-		AuthorizationServerMode: "shared",
-		PinnedIssuerUrl:         pgtype.Text{},
-		IssuerID:                issuer.ID,
-		OrganizationID:          organizationID,
-	})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, rows)
-	issuer.AuthorizationServerMode = "shared"
 	return issuer
-}
-
-// idJAGAudienceAndResource returns the issuer an MCP server's authorization
-// server metadata announces, which ID-JAGs are addressed to, and the server's
-// resource identifier.
-func idJAGAudienceAndResource(t *testing.T, ctx context.Context, ti *testInstance, slug string) (string, string) {
-	t.Helper()
-	audience, _ := fetchAdvertisedIssuer(t, ctx, ti, slug)
-	return audience, ti.serverURL.JoinPath("mcp", slug).String()
 }
 
 func createIDJAGClient(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID) usersessionsrepo.UserSessionClient {
@@ -244,9 +223,9 @@ func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
 	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
 
-	audience, resource := idJAGAudienceAndResource(t, ctx, ti, toolset.McpSlug.String)
+	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
 	assertionID := uuid.NewString()
-	assertion := assertionSigner.sign(t, upstreamIssuer, audience, resource, client.ClientID, mockidp.MockUserEmail, assertionID)
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, assertionID)
 	w := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
@@ -304,8 +283,8 @@ func TestTokenIDJAGExchangeRejectsMismatchedResourceWithoutConsumingAssertion(t 
 	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
 
-	audience, resource := idJAGAudienceAndResource(t, ctx, ti, toolset.McpSlug.String)
-	assertion := assertionSigner.sign(t, upstreamIssuer, audience, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
 	rejected := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion, resource, "https://other.example.test/mcp")
 	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
 	require.JSONEq(t, `{"error":"invalid_target","error_description":"resource does not identify this MCP server (expected \"`+resource+`\")"}`, rejected.Body.String())
@@ -335,8 +314,8 @@ func TestTokenIDJAGExchangeAppliesCurrentCIMDAdmissionBeforeConsumingAssertion(t
 	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
 
-	audience, resource := idJAGAudienceAndResource(t, ctx, ti, toolset.McpSlug.String)
-	assertion := assertionSigner.sign(t, upstreamIssuer, audience, resource, ds.clientID, mockidp.MockUserEmail, uuid.NewString())
+	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
+	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, ds.clientID, mockidp.MockUserEmail, uuid.NewString())
 	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModePresets)
 	rejected := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, ds.clientID, assertion, resource)
 	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
@@ -428,4 +407,34 @@ func TestTokenIDJAGExchangeRejectsTrustedIssuerFromAnotherOrganization(t *testin
 	require.NoError(t, ti.service.ServeToken(w, req, endpoint))
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"assertion is invalid"}`, w.Body.String())
+}
+
+// An Okta-style assertion on a per-endpoint authorization server binds to the requested server.
+func TestTokenIDJAGExchangeWithoutResourceClaimBindsRequestedResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	const upstreamIssuer = "https://identity.example.test"
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksURL)
+	toolset, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
+
+	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
+	assertion := assertionSigner.signWithoutResource(t, upstreamIssuer, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	missing := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
+	require.Equal(t, http.StatusBadRequest, missing.Code, missing.Body.String())
+	require.Equal(t, "invalid_request", decodeSharedTokenResponse(t, missing).Error)
+
+	accepted := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion, resource)
+	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
+	require.Equal(t, []any{resource}, unverifiedClaims(t, decodeSharedTokenResponse(t, accepted).AccessToken)["aud"])
 }

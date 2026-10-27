@@ -2,4 +2,4 @@
 "server": minor
 ---
 
-Inbound EMA now accepts ID-JAGs without a `resource` claim, such as the ones Okta issues. The token request must then name the MCP server in its `resource` parameter, and the session is bound to that server. Inbound EMA requires an organization MCP Authentication in shared mode whose trusted identity provider publishes a JWKS URL: metadata advertises the ID-JAG grant only then, and linking a trusted identity provider without a JWKS URL, or without a trusted client on an MCP Authentication not in shared mode, is refused.
+Inbound EMA accepts ID-JAGs with no `resource` claim, like the ones Okta issues. The token request then names the MCP server in its `resource` parameter, and the session works only for that server. An inbound-only trust link now needs an identity provider with a JWKS URL. Metadata stops advertising the ID-JAG grant when that URL is missing.

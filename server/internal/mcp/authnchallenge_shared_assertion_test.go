@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/go-jose/go-jose/v4/jwt"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
@@ -31,6 +33,7 @@ func sharedIDJAGFixture(t *testing.T) (context.Context, *testInstance, idJAGTest
 	ctx, ti, signer, jwksURL := newIDJAGTestService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, sharedTestUpstreamIssuer, jwksURL)
+	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
 	f := sharedIssuerFixture{
 		issuer: issuer, client: createIDJAGClient(t, ctx, ti, issuer.ID),
 		slugA:     seedPublicServerOnIssuer(t, ctx, ti, issuer.ID),
@@ -293,8 +296,7 @@ func TestSharedAuthorizationServer_MetadataRequiresPublicWorkloadResource(t *tes
 	}
 }
 
-// Okta's ID-JAGs carry no resource claim. The token request's resource
-// parameter then names the MCP server, and the session is bound to it alone.
+// An Okta-style assertion binds the session to the server the request names, and only that one.
 func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimBindsRequestedResource(t *testing.T) {
 	t.Parallel()
 	ctx, ti, signer, f := sharedIDJAGFixture(t)
@@ -320,26 +322,23 @@ func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimBindsRequestedResour
 	}
 }
 
-// Without a resource claim or a resource parameter nothing names the MCP
-// server, so the per-endpoint token endpoint refuses the target and leaves the
-// assertion unspent.
-func TestTokenIDJAGWithoutResourceClaimRequiresResourceParameter(t *testing.T) {
+// A resource-less assertion naming a server the person cannot connect to is an invalid target.
+func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimRefusesUnauthorizedResource(t *testing.T) {
 	t.Parallel()
 	ctx, ti, signer, f := sharedIDJAGFixture(t)
-	audience, resource := idJAGAudienceAndResource(t, ctx, ti, f.slugA)
-	assertion := signer.signWithoutResource(t, sharedTestUpstreamIssuer, audience, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())
-
-	rejected := postIDJAGToken(t, ctx, ti, f.slugA, f.client.ClientID, assertion)
-	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
-	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, rejected).Error)
-
-	accepted := postIDJAGToken(t, ctx, ti, f.slugA, f.client.ClientID, assertion, resource)
-	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
-	require.Equal(t, []any{resource}, unverifiedClaims(t, decodeSharedTokenResponse(t, accepted).AccessToken)["aud"])
+	req := sharedRequest(authztest.WithExactGrants(t, ctx), http.MethodPost, "/oauth/usi/"+f.issuer.ID.String()+"/token", f.issuer.ID.String(), strings.NewReader(url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.signWithoutResource(t, sharedTestUpstreamIssuer, f.issuerURL, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+		oauthwire.ParamResource:  {f.resource(ti, f.slugA)},
+	}.Encode()))
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleSharedToken(w, req))
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
 }
 
-// A resource-less assertion cannot reach another issuer's MCP server, whether
-// that issuer is in the same organization or not.
+// A resource-less assertion cannot reach another issuer's MCP server.
 func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimRefusesForeignResource(t *testing.T) {
 	t.Parallel()
 	ctx, ti, signer, f := sharedIDJAGFixture(t)
@@ -354,12 +353,12 @@ func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimRefusesForeignResour
 	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
 }
 
-// Shared metadata does not advertise the ID-JAG profile for a trusted issuer
-// without a jwks_uri.
+// Shared metadata omits the ID-JAG profile for a trusted issuer without a jwks_uri.
 func TestSharedAuthorizationServer_MetadataOmitsIDJAGWithoutTrustedIssuerJWKS(t *testing.T) {
 	t.Parallel()
 	ctx, ti, _, _ := newIDJAGTestService(t)
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, requireProjectAuthContext(t, ctx).ActiveOrganizationID, sharedTestUpstreamIssuer, "")
+	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
 	issuerURL := ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String()
 	w := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleSharedAuthorizationServerMetadata(w, sharedRequest(ctx, http.MethodGet, issuerURL+"/.well-known/oauth-authorization-server", issuer.ID.String(), nil)))

@@ -199,6 +199,9 @@ type Service struct {
 	// idJAGValidator authenticates enterprise identity grants, enforces replay
 	// protection, and resolves their subjects to provisioned Speakeasy users.
 	idJAGValidator *idjag.Validator
+
+	// idJAGTrust is the validator's trust lookup, reused by metadata.
+	idJAGTrust idjag.Store
 	// aiToolBlockReads are the database reads behind the Shadow AI gateway
 	// block check, held as values so a test can make one of them fail.
 	aiToolBlockReads  aiToolBlockReads
@@ -532,7 +535,11 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)
 	}
-	idJAGValidator, err := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger)
+	idJAGTrust, err := idjag.NewPostgresStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("initialize ID-JAG store: %w", err)
+	}
+	idJAGValidator, err := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger, idJAGTrust)
 	if err != nil {
 		return nil, fmt.Errorf("initialize ID-JAG validator: %w", err)
 	}
@@ -592,6 +599,7 @@ func NewService(
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
 		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
 		idJAGValidator:            idJAGValidator,
+		idJAGTrust:                idJAGTrust,
 		aiToolBlockReads:          defaultAIToolBlockReads(),
 		toolProxy: gateway.NewToolProxy(
 			logger,

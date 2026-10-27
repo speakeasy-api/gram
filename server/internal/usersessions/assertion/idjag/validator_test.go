@@ -256,8 +256,7 @@ func TestValidateRejectsInvalidClaimsBeforeSpendingJTI(t *testing.T) {
 	}
 }
 
-// oktaStyleExtra is an ID-JAG's additional claims as Okta issues them: no
-// resource claim at all.
+// oktaStyleExtra is an ID-JAG's additional claims as Okta issues them, with no resource claim.
 type oktaStyleExtra struct {
 	ClientID string `json:"client_id"`
 	Email    string `json:"email"`

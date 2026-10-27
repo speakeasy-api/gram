@@ -11,7 +11,6 @@ import (
 
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -38,8 +37,7 @@ func NewPostgresStore(db *pgxpool.Pool) (*PostgresStore, error) {
 var _ Store = (*PostgresStore)(nil)
 
 // TrustedIssuer follows an organization-level user session issuer's explicit
-// link to an active organization or global remote issuer. Only an issuer in
-// shared mode accepts ID-JAGs, so every MCP server has one assertion audience.
+// link to an active organization or global remote issuer.
 func (s *PostgresStore) TrustedIssuer(ctx context.Context, organizationID string, userSessionIssuerID uuid.UUID) (TrustedIssuer, error) {
 	issuer, err := s.userSessions.GetOrganizationUserSessionIssuerByID(ctx, usersessionsrepo.GetOrganizationUserSessionIssuerByIDParams{
 		ID: userSessionIssuerID, OrganizationID: organizationID,
@@ -50,7 +48,7 @@ func (s *PostgresStore) TrustedIssuer(ctx context.Context, organizationID string
 	if err != nil {
 		return TrustedIssuer{}, fmt.Errorf("load user session issuer: %w", err)
 	}
-	if !issuer.TrustedRemoteSessionIssuerID.Valid || !authserver.IssuerInSharedMode(issuer) {
+	if !issuer.TrustedRemoteSessionIssuerID.Valid {
 		return TrustedIssuer{}, ErrNoTrustedIssuer
 	}
 	trusted, err := s.remoteSessions.GetTrustedRemoteSessionIssuerForOrganization(ctx, remotesessionsrepo.GetTrustedRemoteSessionIssuerForOrganizationParams{
@@ -62,8 +60,8 @@ func (s *PostgresStore) TrustedIssuer(ctx context.Context, organizationID string
 	if err != nil {
 		return TrustedIssuer{}, fmt.Errorf("load linked remote issuer: %w", err)
 	}
-	if !trusted.JwksUri.Valid || trusted.JwksUri.String == "" {
-		return TrustedIssuer{}, errors.New("linked remote issuer has no jwks_uri")
+	if !JWKSURIConfigured(trusted.JwksUri) {
+		return TrustedIssuer{}, ErrTrustedIssuerHasNoJWKS
 	}
 	return TrustedIssuer{ID: trusted.ID, Issuer: trusted.Issuer, JWKSURI: trusted.JwksUri.String}, nil
 }

@@ -74,9 +74,9 @@ type ResolvedMcpEndpoint struct {
 	IsPublic bool
 
 	// idJAGConfigured reports whether this endpoint's organization-level user
-	// session issuer serves a shared authorization server and trusts a linked
-	// remote issuer with a jwks_uri. It controls capability discovery only; the
-	// token exchange validates the live linked issuer independently.
+	// session issuer has an explicit trusted remote issuer link. It controls
+	// capability discovery only; the token exchange validates the live linked
+	// issuer and its JWKS configuration independently.
 	idJAGConfigured bool
 
 	// issuerStamped reports that RequireUserSessionIssuer has copied the

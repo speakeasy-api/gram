@@ -1358,6 +1358,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// Carried verbatim, NULL included; admission.ResolveMode is the one
 	// place that decides what an absent or unrecognized value means.
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
+	endpoint.idJAGConfigured = issuerIDJAGConfigured(issuer)
 	endpoint.useAuthenticationHost = issuer.UseAuthenticationHost
 	// A shared-mode issuer whose shared authorization server cannot be built
 	// keeps its MCP servers on their per-endpoint authorization servers, which
@@ -1373,16 +1374,6 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 		} else {
 			endpoint.sharedAuthorizationServer = shared
 		}
-	}
-	// ID-JAG assertions are addressed to the shared authorization server, so
-	// an issuer serving per-endpoint ones in its place does not advertise them.
-	endpoint.idJAGConfigured = false
-	if endpoint.sharedAuthorizationServer != nil {
-		configured, err := s.issuerIDJAGConfigured(ctx, issuer)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "load ID-JAG configuration").LogError(ctx, s.logger)
-		}
-		endpoint.idJAGConfigured = configured
 	}
 	endpoint.issuerStamped = true
 	// The authentication host serves only issuers that opt in to it. To any

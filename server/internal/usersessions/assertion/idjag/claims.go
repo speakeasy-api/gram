@@ -10,8 +10,7 @@ type Claims struct {
 	ExternalSubject string
 	// Email is the verified identity used for subject resolution.
 	Email string
-	// Resource identifies the MCP server named by the assertion, empty when it
-	// names none and the token request's resource parameter bound it instead.
+	// Resource identifies the MCP server named by the assertion, empty when it names none.
 	Resource string
 	// ClientID identifies the client named by the assertion.
 	ClientID string
