@@ -719,6 +719,8 @@ Handlers do not query grants directly. Their job is to describe the access they 
 
 Scope overrides are a special case. In local development, authenticated users can use override headers. In production, only platform admins can. When valid overrides are present, RBAC is enforced so the overridden grant set is what the request experiences.
 
+Agent identity management (the `agents` service, agent API keys, and assigning an agent to a workload) always authorizes from live database grants. There, a valid override only narrows: each `agent:*` check must pass both the live grants and the override, so an override can never widen agent access. The agent roster uses live read grants or ownership for visibility, so narrowing an override keeps registered agents visible while their returned permissions and selected-agent operations are restricted. Ownership is not an RBAC grant, so owners keep managing their own agents under any override. Delegation containment still uses live grants. An override that is not valid is ignored, as it is elsewhere.
+
 RBAC is not currently enforced for API key requests. Unauthenticated contexts are handled as authorization errors by the normal auth path. This may change as the RBAC model expands, especially when API keys move into RBAC.
 
 ### Add checks at the handler boundary
