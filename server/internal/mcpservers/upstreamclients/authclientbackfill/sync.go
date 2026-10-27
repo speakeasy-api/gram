@@ -142,6 +142,15 @@ func syncSourceClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, 
 	if !live {
 		return nil
 	}
+	// With no live server left on the source, no client is recorded, so an
+	// earlier one is retired, exactly as the backfill decides it.
+	servers, err := sourceServers(ctx, q, opts.OrganizationID, SourceKindRemote, row.SourceID)
+	if err != nil {
+		return err
+	}
+	if len(servers) == 0 {
+		return nil
+	}
 	want.clients[id] = true
 	noAnchor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	_, raced, err := syncHeaders(ctx, tx, q, opts, report, KindHeader, id, true, noAnchor, noAnchor, SourceKindRemote, row.HeaderIds)
@@ -152,12 +161,22 @@ func syncSourceClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, 
 		want.race(id)
 		return nil
 	}
-	// Which servers offer it is the backfill's to decide, so its links stand.
+	// Which of the source's servers offer it depends on their upstream OAuth
+	// and EMA clients, so the backfill's choice among them stands. A server no
+	// longer on the source is not one of them, and keeping its link would go
+	// on sending the source's credential headers from it.
+	onSource := make(map[uuid.UUID]bool, len(servers))
+	for _, server := range servers {
+		onSource[server.id] = true
+	}
 	links, err := q.ListBackfillLinksOfClients(ctx, ListBackfillLinksOfClientsParams{OrganizationID: opts.OrganizationID, AuthClientIds: []uuid.UUID{id}})
 	if err != nil {
 		return fmt.Errorf("list links of auth client %s: %w", id, err)
 	}
 	for _, link := range links {
+		if !onSource[link.McpServerID] {
+			continue
+		}
 		want.links[linkKey{serverID: link.McpServerID, clientID: id}] = true
 	}
 	return nil

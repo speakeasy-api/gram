@@ -255,6 +255,11 @@ func TestDeleteServer_RetiresTypedAuthClient(t *testing.T) {
 	headerID := addAuthorizationHeader(t, ctx, ti, created.RemoteMcpServer.ID, "Bearer upstream-token")
 	clientID := derivedClientID(t, ctx, created.RemoteMcpServer.ID, headerID, "static_credential")
 
+	_, live, found := authClientState(t, ctx, ti, clientID)
+	require.True(t, found)
+	require.True(t, live)
+	require.Len(t, liveLinkedServers(t, ctx, ti, clientID), 1)
+
 	require.NoError(t, ti.service.DeleteServer(ctx, &gen.DeleteServerPayload{
 		ID:               created.RemoteMcpServer.ID,
 		SessionToken:     nil,
@@ -262,7 +267,7 @@ func TestDeleteServer_RetiresTypedAuthClient(t *testing.T) {
 		ProjectSlugInput: nil,
 	}))
 
-	_, live, _ := authClientState(t, ctx, ti, clientID)
+	_, live, _ = authClientState(t, ctx, ti, clientID)
 	require.False(t, live, "the deleted source's auth client is still live")
 	require.Empty(t, liveLinkedServers(t, ctx, ti, clientID))
 }

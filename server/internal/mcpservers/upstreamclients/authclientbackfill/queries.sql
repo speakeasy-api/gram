@@ -2163,6 +2163,9 @@ INSERT INTO remote_mcp_servers (id, project_id, transport_type, url) VALUES (@id
 -- name: SeedMCPServerFixture :exec
 INSERT INTO mcp_servers (id, project_id, slug, remote_mcp_server_id, visibility) VALUES (@id, @project_id, @slug, @remote_mcp_server_id, 'private');
 
+-- name: MoveServerSourceFixture :exec
+UPDATE mcp_servers SET remote_mcp_server_id = @remote_mcp_server_id WHERE id = @id;
+
 -- name: SeedAssociationFixture :one
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
 VALUES (

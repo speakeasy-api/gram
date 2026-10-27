@@ -3934,6 +3934,20 @@ func (q *Queries) MarkServersRequiringUpstreamAuth(ctx context.Context, arg Mark
 	return items, nil
 }
 
+const moveServerSourceFixture = `-- name: MoveServerSourceFixture :exec
+UPDATE mcp_servers SET remote_mcp_server_id = $1 WHERE id = $2
+`
+
+type MoveServerSourceFixtureParams struct {
+	RemoteMcpServerID uuid.NullUUID
+	ID                uuid.UUID
+}
+
+func (q *Queries) MoveServerSourceFixture(ctx context.Context, arg MoveServerSourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, moveServerSourceFixture, arg.RemoteMcpServerID, arg.ID)
+	return err
+}
+
 const organizationExistsForGrants = `-- name: OrganizationExistsForGrants :one
 SELECT EXISTS (SELECT 1 FROM organization_metadata WHERE id = $1)::boolean
 `
