@@ -20,6 +20,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { promisify } from "node:util";
+import { createPRLookup, type PrInfo } from "./worktree-prs.mts";
 
 const execFile = promisify(execFileCb);
 
@@ -49,75 +50,15 @@ const strip = (s: string) => s.replace(ANSI_RE, "");
 const link = (text: string, url: string) =>
   `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`;
 
-// PR per branch: a bulk lookup covers recent PRs, with targeted lookups for
-// worktree branches outside that window. Refreshed less often than boot state.
-type PrInfo = { number: number; url: string; state: string };
-const prByBranch = new Map<string, PrInfo>();
+const lookupPRs = createPRLookup();
+let prByBranch = new Map<string, PrInfo>();
 let prLoaded = false;
 let prFetching = false;
-// open > merged > closed when a branch has several PRs (gh lists newest
-// first, so within the same state the newest wins).
-const PR_RANK: Record<string, number> = {
-  open: 0,
-  draft: 0,
-  merged: 1,
-  closed: 2,
-};
 async function fetchPRs(rows: Row[]): Promise<void> {
   if (prFetching) return;
   prFetching = true;
-  const next = new Map<string, PrInfo>();
-  const query = async (limit: string, branch?: string) => {
-    const { stdout } = await execFile(
-      "gh",
-      [
-        "pr",
-        "list",
-        "--state",
-        "all",
-        "--json",
-        "number,url,headRefName,state,isDraft",
-        "--limit",
-        limit,
-        ...(branch ? ["--head", branch] : []),
-      ],
-      { maxBuffer: 8 * 1024 * 1024 },
-    );
-    for (const pr of JSON.parse(stdout)) {
-      const state =
-        pr.state === "OPEN"
-          ? pr.isDraft
-            ? "draft"
-            : "open"
-          : pr.state.toLowerCase();
-      const existing = next.get(pr.headRefName);
-      if (existing && PR_RANK[existing.state] <= PR_RANK[state]) continue;
-      next.set(pr.headRefName, { number: pr.number, url: pr.url, state });
-    }
-  };
   try {
-    await query("200");
-    const missing = [...new Set(rows.map((row) => row.branch))].filter(
-      (branch) => branch && !next.has(branch),
-    );
-    // Bound concurrent gh processes; a failed branch lookup must not hide
-    // successful results for the other worktrees.
-    for (let i = 0; i < missing.length; i += 4) {
-      await Promise.allSettled(
-        missing.slice(i, i + 4).map(async (branch) => {
-          try {
-            await query("10", branch);
-          } catch {
-            const previous = prByBranch.get(branch);
-            if (previous) next.set(branch, previous);
-          }
-        }),
-      );
-    }
-    prByBranch.clear();
-    for (const [branch, pr] of next) prByBranch.set(branch, pr);
-  } catch {
-    /* gh missing or offline — retain the last successful lookup */
+    prByBranch = await lookupPRs(rows.map((row) => row.branch));
   } finally {
     prLoaded = true; // stop the loader either way
     prFetching = false;
