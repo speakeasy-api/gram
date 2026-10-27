@@ -18,6 +18,13 @@ describe("organization suggestions", () => {
     });
   });
 
+  it("leaves a too-short slug for the operator to fill", () => {
+    expect(organizationSuggestionsFromHostname("a.co")).toEqual({
+      name: "a",
+      slug: "",
+    });
+  });
+
   it("keeps an empty hostname neutral", () => {
     expect(organizationSuggestionsFromHostname("")).toEqual({
       name: "",

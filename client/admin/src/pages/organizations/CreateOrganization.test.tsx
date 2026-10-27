@@ -228,6 +228,15 @@ describe("creating an organization", () => {
 
     expect(organizationNameField().value).toBe("Customer-facing name");
     expect(slugField().value).toBe("acme");
+
+    fireEvent.change(slugField(), {
+      target: { value: "example-customer" },
+    });
+
+    type("example.org");
+
+    expect(organizationNameField().value).toBe("Customer-facing name");
+    expect(slugField().value).toBe("example-customer");
   });
 
   it("names the organization it created, on screen and out loud", async () => {

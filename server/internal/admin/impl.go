@@ -1579,9 +1579,9 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	// A row can already exist under the derived ID: WorkOS fires
 	// organization.created the moment the call above returns, so the sync
-	// activity can win the race to insert it. That row's slug is already in the
-	// organization's URL, and re-deriving one would find the base taken by that
-	// very row and write a suffixed variant over it.
+	// activity can win the race to insert it. Without an explicit slug, that
+	// row's slug is kept: re-deriving one would find the base taken by that very
+	// row and write a suffixed variant over it.
 	uniqueSlug := ""
 	if requestedSlug != "" {
 		if lockErr := queries.LockOrganizationSlug(ctx, requestedSlug); lockErr != nil {

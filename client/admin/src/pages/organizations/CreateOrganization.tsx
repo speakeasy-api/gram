@@ -30,6 +30,7 @@ import {
 
 import type { WriteReporter } from "./OrganizationActions";
 import {
+  isValidOrganizationSlug,
   organizationSuggestionsFromHostname,
   organizationUrlPreview,
 } from "./organizationUrl";
@@ -110,10 +111,7 @@ export function CreateOrganization({
   });
 
   const preview = organizationUrlPreview(url);
-  const slugValid =
-    slug.length >= 2 &&
-    slug.length <= 100 &&
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
+  const slugValid = isValidOrganizationSlug(slug);
   const canSubmit =
     Boolean(preview.hostname) &&
     Boolean(name.trim()) &&

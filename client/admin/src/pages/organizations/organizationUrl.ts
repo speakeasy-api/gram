@@ -19,7 +19,17 @@ export function organizationSuggestionsFromHostname(hostname: string): {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-  return { name, slug };
+  // Leave an invalid suggestion (such as a single character) for the operator
+  // to fill rather than opening the dialog on an error.
+  return { name, slug: isValidOrganizationSlug(slug) ? slug : "" };
+}
+
+export function isValidOrganizationSlug(slug: string): boolean {
+  return (
+    slug.length >= 2 &&
+    slug.length <= 100 &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)
+  );
 }
 
 export function organizationUrlPreview(raw: string): {
