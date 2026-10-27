@@ -29,12 +29,12 @@ import (
 
 // KitWorkloadBinding records an exact, runtime-owned admission, not a credential.
 type KitWorkloadBinding struct {
-	IssuerID       uuid.UUID                  `json:"issuer_id"`
-	Subject        string                     `json:"subject"`
-	Identity       assistantidentity.Identity `json:"identity"`
-	ServiceAccount string                     `json:"service_account"`
-	Audience       string                     `json:"audience"`
-	Generation     string                     `json:"generation"`
+	IssuerID       uuid.UUID                         `json:"issuer_id"`
+	Subject        string                            `json:"subject"`
+	Identity       assistantidentity.RuntimeIdentity `json:"identity"`
+	ServiceAccount string                            `json:"service_account"`
+	Audience       string                            `json:"audience"`
+	Generation     string                            `json:"generation"`
 }
 
 func kitWorkloadSubject(r assistantRuntimeRecord, c KitLocalCompositionConfig, gateway string) (string, string, error) {
@@ -60,13 +60,13 @@ func kitWorkloadIssuerName(issuer string) string {
 	return fmt.Sprintf("kit-runtime-%x", sum[:16])
 }
 
-func kitWorkloadIdentityMatches(r assistantRuntimeRecord, identity assistantidentity.Identity) bool {
-	return r.RuntimeVersion == 3 && r.ID != uuid.Nil && r.ProjectID != uuid.Nil && r.AssistantID != uuid.Nil && identity.ProjectID == r.ProjectID && identity.AssistantID == r.AssistantID && identity.OrganizationID != "" && identity.AgentID != uuid.Nil && identity.TriggerID != uuid.Nil && identity.IssuerID != uuid.Nil && identity.Subject != ""
+func kitWorkloadIdentityMatches(r assistantRuntimeRecord, identity assistantidentity.RuntimeIdentity) bool {
+	return r.RuntimeVersion == 3 && r.ID != uuid.Nil && r.ProjectID != uuid.Nil && r.AssistantID != uuid.Nil && identity.ProjectID == r.ProjectID && identity.AssistantID == r.AssistantID && identity.OrganizationID != "" && identity.AgentID != uuid.Nil && identity.BindingID != uuid.Nil && identity.BindingGeneration > 0
 }
 
 // The caller owns the runtime lifecycle fence. Local callers get an atomic
 // transaction here; GKE callers keep writes in their existing lifecycle transaction.
-func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRuntimeRecord, c KitLocalCompositionConfig, identity assistantidentity.Identity, gateway string) (*KitWorkloadBinding, error) {
+func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRuntimeRecord, c KitLocalCompositionConfig, identity assistantidentity.RuntimeIdentity, gateway string) (*KitWorkloadBinding, error) {
 	if !kitWorkloadIdentityMatches(r, identity) {
 		return nil, ErrKitRuntimeBinding
 	}
@@ -104,11 +104,11 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 		return binding, nil
 	}
 	db := r.LifecycleTx
-	resolved, err := s.identities.ResolveLocked(ctx, db, identity.OrganizationID, r.ProjectID, r.AssistantID, identity.TriggerID)
+	resolved, err := s.identities.ResolveRuntimeLocked(ctx, db, identity.OrganizationID, r.ProjectID, r.AssistantID)
 	if err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	if resolved.State != assistantidentity.Active || resolved.Identity == nil || *resolved.Identity != identity {
+	if resolved != identity {
 		return nil, assistantidentity.ErrInvalidIdentity
 	}
 	// Check the agent's own effective grants, never the initiating user's grants.

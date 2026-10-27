@@ -8,11 +8,10 @@ const mocks = vi.hoisted(() => ({
     organizationOverride: false,
     impersonatorEmail: undefined as string | undefined,
   },
-  isPlatformAdmin: false,
-  scopeOverride: null as string | null,
   sdk: { name: "sdk" },
   projectSlug: "project-one",
   routeProjectSlug: "project-one" as string | undefined,
+  scopeOverride: null as string | null,
   search: "?range=30d&from=2025-01-01&to=2025-01-31&tab=ignored",
   navigate: vi.fn(),
   href: vi.fn((urn: string) => `/identities/${urn}/overview`),
@@ -38,10 +37,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => mocks.organization,
   useSession: () => mocks.session,
-  useIsPlatformAdmin: () => mocks.isPlatformAdmin,
 }));
-vi.mock("@/components/dev-toolbar-utils", () => ({
-  getRBACScopeOverrideHeader: () => mocks.scopeOverride,
+vi.mock("@/hooks/useRBACScopeOverride", () => ({
+  useRBACScopeOverride: () => mocks.scopeOverride,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mocks.sdk,
@@ -96,10 +94,9 @@ describe("useAgentIdentityCandidates", () => {
     mocks.session.user.id = "user-one";
     mocks.session.organizationOverride = false;
     mocks.session.impersonatorEmail = undefined;
-    mocks.isPlatformAdmin = false;
-    mocks.scopeOverride = null;
     mocks.projectSlug = "project-one";
     mocks.routeProjectSlug = "project-one";
+    mocks.scopeOverride = null;
     mocks.queryData = undefined;
     mocks.hasNextPage = false;
     mocks.isFetchingNextPage = false;
@@ -128,6 +125,7 @@ describe("useAgentIdentityCandidates", () => {
         "[]",
         "[]",
         "",
+        null,
       ],
       enabled: false,
       retry: false,
@@ -161,7 +159,6 @@ describe("useAgentIdentityCandidates", () => {
       "impersonated session",
       () => (mocks.session.impersonatorEmail = "operator@example.test"),
     ],
-    ["RBAC override", () => (mocks.scopeOverride = "project:read")],
   ])("does not expose agents in a %s", (_label, restrict) => {
     mocks.queryData = {
       pages: [{ items: [{ id: "agent-one", name: "Build bot" }] }],
@@ -174,6 +171,31 @@ describe("useAgentIdentityCandidates", () => {
 
     expect(queryEnabled()).toBe(false);
     expect(result.current).toEqual([]);
+  });
+
+  it("keeps registered agents discoverable under a narrowed override", () => {
+    mocks.scopeOverride = "rbac-override:none";
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            {
+              id: "agent-one",
+              name: "Build bot",
+              permissions: { write: false },
+            },
+          ],
+        },
+      ],
+    };
+    const { result } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    expect(queryEnabled()).toBe(true);
+    expect(result.current.map((candidate) => candidate.id)).toEqual([
+      "agent-identity:agent-one",
+    ]);
+    expect(mocks.queryOptions?.queryKey).toContain("rbac-override:none");
   });
 
   it("maps names and canonical URNs without exposing them to intent ranking", () => {

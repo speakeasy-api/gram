@@ -524,7 +524,11 @@ func kitConsumeNotifications(ctx context.Context, notifications <-chan kitacp.No
 // Images must already be materialized by server attachment loading. Never fetch
 // untrusted image URLs from the control-plane adapter.
 func kitProtocolPrompt(req runTurnRequest) ([]map[string]any, error) {
-	prompt := []map[string]any{{"type": "text", "text": req.Prompt}}
+	prompt := []map[string]any{}
+	if req.SourceInstructions != "" {
+		prompt = append(prompt, map[string]any{"type": "text", "text": req.SourceInstructions})
+	}
+	prompt = append(prompt, map[string]any{"type": "text", "text": req.Prompt})
 	for _, part := range req.InputParts {
 		switch part.Type {
 		case "text":

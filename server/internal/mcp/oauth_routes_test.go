@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
@@ -85,6 +86,26 @@ func TestOAuthMountedRoutesSetupErrors(t *testing.T) {
 					bases = append(bases, "/oauth/usi/"+uuid.NewString(), "/mcp/gateway/missing")
 				}
 				for _, base := range bases {
+					for _, route := range []struct{ method, suffix, body string }{
+						{http.MethodGet, "/authorize", ""},
+						{http.MethodGet, "/connect", ""},
+						{http.MethodPost, "/connect", ""},
+						{http.MethodPost, "/connect/remote-session", "action=connect"},
+						{http.MethodPost, "/connect/remote-session", "action=connect&unused=%zz"},
+					} {
+						request := httptest.NewRequestWithContext(t.Context(), route.method, base+route.suffix, strings.NewReader(route.body))
+						request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+						if host != "" {
+							request.Host = host
+						}
+						response := httptest.NewRecorder()
+						handler.ServeHTTP(response, request)
+						status := http.StatusNotFound
+						if outage {
+							status = http.StatusInternalServerError
+						}
+						require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, response, status).Code)
+					}
 					for _, suffix := range []string{"/token", "/revoke"} {
 						request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, base+suffix, nil)
 						if host != "" {
