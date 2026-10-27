@@ -53,7 +53,7 @@ var identities = sync.OnceValue(func() map[string]Identity {
 // name) to its product and client. Every product and client the pipeline
 // records comes from here.
 func Identify(name string) (Identity, bool) {
-	normalized := normalize(name)
+	normalized := normalize(withoutMCPRemote(name))
 	if normalized == "" {
 		return Identity{ProductID: "", Client: ClientUnknown}, false
 	}
@@ -65,6 +65,20 @@ func Identify(name string) (Identity, bool) {
 		return identity, true
 	}
 	return Identity{ProductID: "", Client: ClientUnknown}, false
+}
+
+// mcpRemoteSuffix is how mcp-remote, the stdio bridge to a remote server,
+// decorates the name of the client it relays for.
+const mcpRemoteSuffix = " (via mcp-remote "
+
+// withoutMCPRemote drops a trailing "(via mcp-remote x.y.z)" so the relayed
+// client is identified by its own name.
+func withoutMCPRemote(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if index := strings.Index(trimmed, mcpRemoteSuffix); index > 0 && strings.HasSuffix(trimmed, ")") {
+		return trimmed[:index]
+	}
+	return name
 }
 
 // normalize case-folds a name and unifies its separators to hyphens.

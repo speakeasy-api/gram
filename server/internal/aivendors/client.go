@@ -18,15 +18,34 @@ const (
 	ClientSlack   Client = "slack"
 )
 
-var ideTerminals = []string{"vscode", "cursor", "windsurf", "zed", "jetbrains", "intellij", "pycharm", "webstorm", "goland"}
+// Terminal types that are not a person at a command line.
+const (
+	// terminalNonInteractive is a headless run: the SDK, a pipe or the
+	// desktop app's background session.
+	terminalNonInteractive = "non-interactive"
 
-// ClientFromTerminal reads an editor's terminal as the IDE and any other as the CLI.
+	// terminalClaudeDesktop is Claude Code running inside the desktop app.
+	terminalClaudeDesktop = "claude-desktop"
+)
+
+// ideTerminals are the names editors give their integrated terminals,
+// JetBrains IDEs each under their own.
+var ideTerminals = []string{
+	"vscode", "cursor", "windsurf", "zed", "fleet",
+	"jetbrains", "intellij", "pycharm", "webstorm", "goland", "phpstorm", "rider",
+	"clion", "rubymine", "datagrip", "dataspell", "studio",
+}
+
+// ClientFromTerminal reads an editor's terminal as the IDE, the desktop app's
+// as the desktop, a headless run as nothing, and any other as the CLI.
 func ClientFromTerminal(terminalType string) Client {
 	normalized := strings.ToLower(strings.TrimSpace(terminalType))
-	if normalized == "" {
+	switch normalized {
+	case "", terminalNonInteractive:
 		return ClientUnknown
-	}
-	if normalized == string(ClientIDE) {
+	case terminalClaudeDesktop:
+		return ClientDesktop
+	case string(ClientIDE):
 		return ClientIDE
 	}
 	for _, ide := range ideTerminals {

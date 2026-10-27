@@ -44,6 +44,10 @@ const (
 // from recognising the producer rather than from an attribute.
 const scopeNameKey = "scope.name"
 
+// serviceNameKey is the resource attribute a producer names its running
+// program under.
+const serviceNameKey = "service.name"
+
 // tokensDisjoint clamps a producer-reported cached count into [0, input] and
 // returns the disjoint (input excluding cache reads, cache reads) pair, so bad
 // client data can never increase usage.

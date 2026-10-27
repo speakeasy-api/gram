@@ -68,15 +68,11 @@ func (ClaudeCodeSpan) Surface(*otelv1.InboundSpan) (string, string, error) {
 	return scopeNameKey, claudeCodeSurface, nil
 }
 
-// Identity is Claude Code, in the IDE or at a command line by terminal.type.
 func (ClaudeCodeSpan) Identity(span *otelv1.InboundSpan) (string, aivendors.Identity, error) {
-	identity, _ := aivendors.Identify(claudeCodeSurface)
-	key, terminal := getOneAttr(span, claudeCodeTerminalTypeKey)
-	if client := aivendors.ClientFromTerminal(terminal); client != aivendors.ClientUnknown {
-		identity.Client = client
-		return key, identity, nil
-	}
-	return scopeNameKey, identity, nil
+	serviceKey, serviceName := getSpanResourceAttr(span, serviceNameKey)
+	terminalKey, terminal := getOneAttr(span, claudeCodeTerminalTypeKey)
+	key, identity := claudeCodeIdentity(serviceKey, serviceName, terminalKey, terminal)
+	return key, identity, nil
 }
 
 func (ClaudeCodeSpan) EventName(span *otelv1.InboundSpan) (string, string, error) {

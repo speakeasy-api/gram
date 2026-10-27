@@ -84,7 +84,13 @@ func (CodexLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return scopeNameKey, codexSurface, nil
 }
 
-func (CodexLog) Identity(*otelv1.InboundLogRecord) (string, aivendors.Identity, error) {
+// Identity is Codex, with the client its service.name implies: the Rust CLI
+// and exec runs report their own names.
+func (CodexLog) Identity(record *otelv1.InboundLogRecord) (string, aivendors.Identity, error) {
+	serviceKey, serviceName := getLogResourceAttr(record, serviceNameKey)
+	if identity, ok := aivendors.Identify(serviceName); ok && identity.ProductID == codexSurface {
+		return serviceKey, identity, nil
+	}
 	identity, _ := aivendors.Identify(codexSurface)
 	return scopeNameKey, identity, nil
 }

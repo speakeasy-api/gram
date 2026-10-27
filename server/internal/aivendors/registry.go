@@ -35,7 +35,7 @@ var registry = []Product{
 			ProcessNames: []string{"claude"},
 		},
 		VersionPlistKey: "",
-		ClientInfoNames: []string{"claude-code", "Claude Code", "claude-ai"},
+		ClientInfoNames: []string{"claude-code", "Claude Code"},
 		Aliases: []Alias{
 			{Name: "claude-code", Client: ClientUnknown},
 			{Name: "claude-code-cli", Client: ClientCLI},
@@ -64,6 +64,8 @@ var registry = []Product{
 			{Name: "claude-web", Client: ClientWeb},
 			{Name: "claude-desktop", Client: ClientDesktop},
 			{Name: "claude-chat-desktop", Client: ClientDesktop},
+			{Name: "Anthropic/ClaudeAI", Client: ClientUnknown},
+			{Name: "claude-ai", Client: ClientDesktop},
 		},
 		Documents: []Document{{
 			URL:         "https://claude.ai/oauth/mcp-oauth-client-metadata",
@@ -83,8 +85,8 @@ var registry = []Product{
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
 		Aliases: []Alias{
-			{Name: "cowork", Client: ClientUnknown},
-			{Name: "claude-cowork", Client: ClientUnknown},
+			{Name: "cowork", Client: ClientDesktop},
+			{Name: "claude-cowork", Client: ClientDesktop},
 			{Name: "cowork-desktop", Client: ClientDesktop},
 		},
 		Documents: nil,
@@ -226,6 +228,7 @@ var registry = []Product{
 		Aliases: []Alias{
 			{Name: "chatgpt", Client: ClientUnknown},
 			{Name: "chatgpt-work", Client: ClientUnknown},
+			{Name: "openai-mcp", Client: ClientUnknown},
 		},
 		Documents: []Document{
 			{
@@ -318,6 +321,12 @@ var registry = []Product{
 			{Name: "codex", Client: ClientUnknown},
 			{Name: "codex-cli", Client: ClientCLI},
 			{Name: "codex-web", Client: ClientCloud},
+			{Name: "openai-mcp (Codex)", Client: ClientCloud},
+			{Name: "codex-cli-rs", Client: ClientCLI},
+			{Name: "codex-exec", Client: ClientCLI},
+			{Name: "codex-exec-server", Client: ClientUnknown},
+			{Name: "codex-app-server", Client: ClientUnknown},
+			{Name: "codex-mcp-client", Client: ClientUnknown},
 		},
 		Documents: []Document{
 			{
@@ -458,7 +467,9 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Aliases:         nil,
+		Aliases: []Alias{
+			{Name: "hermes-agent", Client: ClientUnknown},
+		},
 		Documents: []Document{{
 			URL:         "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
 			DisplayName: "Hermes Agent",
@@ -526,7 +537,9 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Aliases:         nil,
+		Aliases: []Alias{
+			{Name: "copilot-cli", Client: ClientCLI},
+		},
 		Documents: []Document{{
 			URL:         "https://github.com/copilot/cli/client-metadata.json",
 			DisplayName: "GitHub Copilot CLI",
@@ -1020,8 +1033,11 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"amp", "Amp"},
-		Aliases:         nil,
-		Documents:       nil,
+		Aliases: []Alias{
+			{Name: "amp-thread-actor", Client: ClientUnknown},
+			{Name: "amp-mcp-client", Client: ClientUnknown},
+		},
+		Documents: nil,
 	},
 
 	// Binary verified 2026-09-11 from PyPI openhands-ai.

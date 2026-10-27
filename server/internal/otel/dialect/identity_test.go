@@ -25,6 +25,12 @@ func TestEveryDialectIdentityIsAnAIVendorsProduct(t *testing.T) {
 			Attributes: attributes,
 		}).Build()
 	}
+	serviceLog := func(scope, serviceName string) *otelv1.InboundLogRecord {
+		return (&otelv1.InboundLogRecord_builder{
+			Scope:    (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(scope)}).Build(),
+			Resource: (&otelv1.InboundLogRecord_Resource_builder{Attributes: []*otelv1.InboundLogRecord_KeyValue{logDialectStringAttribute(serviceNameKey, serviceName)}}).Build(),
+		}).Build()
+	}
 	span := (&otelv1.InboundSpan_builder{
 		Scope: (&otelv1.InboundSpan_InstrumentationScope_builder{Name: new("com.anthropic.claude_code")}).Build(),
 	}).Build()
@@ -38,6 +44,18 @@ func TestEveryDialectIdentityIsAnAIVendorsProduct(t *testing.T) {
 		}},
 		{name: "it names codex on a log", identity: func() (string, aivendors.Identity, error) {
 			return CodexLog{}.Identity(logRecord("codex_otel"))
+		}},
+		{name: "it names claude code in the desktop app on a log", identity: func() (string, aivendors.Identity, error) {
+			return ClaudeCodeLog{}.Identity(serviceLog("com.anthropic.claude_code.events", "claude-code-desktop"))
+		}},
+		{name: "it names cowork on a log", identity: func() (string, aivendors.Identity, error) {
+			return ClaudeCodeLog{}.Identity(serviceLog("com.anthropic.claude_code.events", "cowork"))
+		}},
+		{name: "it names the codex cli on a log", identity: func() (string, aivendors.Identity, error) {
+			return CodexLog{}.Identity(serviceLog("codex_otel", "codex_cli_rs"))
+		}},
+		{name: "it names the codex app server on a log", identity: func() (string, aivendors.Identity, error) {
+			return CodexLog{}.Identity(serviceLog("codex_otel", "codex-app-server"))
 		}},
 		{name: "it names claude code on a span", identity: func() (string, aivendors.Identity, error) {
 			return ClaudeCodeSpan{}.Identity(span)
@@ -59,6 +77,18 @@ func TestEveryDialectIdentityIsAnAIVendorsProduct(t *testing.T) {
 			require.NotEmpty(t, key)
 			require.True(t, products[identity.ProductID], "%q is not an aivendors product", identity.ProductID)
 		})
+	}
+}
+
+func TestClaudeCodeProductsAreAIVendorsProducts(t *testing.T) {
+	t.Parallel()
+
+	for _, productID := range claudeCodeProducts {
+		found := false
+		for _, product := range aivendors.Products() {
+			found = found || product.ID == productID
+		}
+		require.True(t, found, "%q is not an aivendors product", productID)
 	}
 }
 
