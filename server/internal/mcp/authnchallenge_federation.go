@@ -412,9 +412,9 @@ func (s *Service) finishFederatedFailure(w http.ResponseWriter, r *http.Request,
 	}
 	if state.FirstParty {
 		if declined {
-			return fmt.Errorf("complete identity login: %w", oops.WithBrowserClient(oops.WithBrowserReason(failure, oauthui.ReasonCanceled), "Speakeasy dashboard"))
+			return fmt.Errorf("complete identity login: %w", s.firstPartyBrowserError(oops.WithBrowserReason(failure, oauthui.ReasonCanceled)))
 		}
-		return failure
+		return s.firstPartyBrowserError(failure)
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")

@@ -494,7 +494,7 @@ func TestHandleMCPAuthCallbackInvalidClientRetiresCIMDClient(t *testing.T) {
 	mux := goahttp.NewMuxer()
 	Attach(mux, service)
 	mux.ServeHTTP(rec, req)
-	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, rec, http.StatusBadRequest).Code)
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, rec, http.StatusBadRequest, "https://app.getgram.ai/@self/projects/default/assistants").Code)
 	require.NotContains(t, rec.Body.String(), "Authentication complete")
 
 	row, err := assistantrepo.New(conn).GetAssistantMCPOAuthClient(t.Context(), assistantrepo.GetAssistantMCPOAuthClientParams{

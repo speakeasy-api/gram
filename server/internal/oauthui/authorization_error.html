@@ -93,7 +93,11 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           Ask your organization's administrators to review this connection.
           Share the technical details below with them.
           {{else if or (eq .Kind "expired") (eq .Kind "session-changed") (eq .Kind "invalid-link") (eq .Kind "canceled")}}
+          {{if .Recovery}}
+          Use the button below to return to {{template "client" .}} and start connecting again.
+          {{else}}
           Close this tab and start connecting again from {{template "client" .}}.
+          {{end}}
           {{else if eq .Kind "invalid-client"}}
           Start connecting again from {{template "client" .}}. If it still fails,
           share the technical details with the client's support.

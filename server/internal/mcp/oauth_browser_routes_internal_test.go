@@ -3,6 +3,7 @@ package mcp
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -172,4 +173,40 @@ func TestRemoteCallbackBrowserMismatchPagePreservesState(t *testing.T) {
 	require.Contains(t, response.Body.String(), "doesn't match your current browser")
 	_, err := service.remoteLoginCache.Get(t.Context(), "remoteLogin:"+remote.ID)
 	require.NoError(t, err)
+}
+
+func TestFirstPartyBrowserRecovery(t *testing.T) {
+	t.Parallel()
+	for _, route := range []string{"start", "idp", "consent", "action"} {
+		t.Run(route, func(t *testing.T) {
+			t.Parallel()
+			service := browserTestService(t)
+			var err error
+			service.siteURL, err = url.Parse("https://app.example.test")
+			require.NoError(t, err)
+			state := browserTestState()
+			state.FirstParty = true
+			require.NoError(t, service.authnChallengeCache.Store(t.Context(), state))
+			request := httptest.NewRequest(http.MethodGet, "/connect?state="+state.ID+"&redirect_uri=https://untrusted.example/", nil)
+			handler := service.HandleFirstPartyConnect
+			switch route {
+			case "idp":
+				handler = service.HandleIDPCallback
+			case "consent":
+				handler = func(w http.ResponseWriter, r *http.Request) error {
+					return service.ServeConsent(w, r, &ResolvedMcpEndpoint{})
+				}
+			case "action":
+				handler = func(w http.ResponseWriter, r *http.Request) error {
+					return service.ServeConsentAction(w, r, &ResolvedMcpEndpoint{})
+				}
+				request = httptest.NewRequest(http.MethodPost, "/connect", strings.NewReader("state="+state.ID+"&action=connect"))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			response := httptest.NewRecorder()
+			oops.BrowserErrHandle(service.logger, handler).ServeHTTP(response, request)
+			require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, response, http.StatusBadRequest, "https://app.example.test/@self").Code)
+			require.Contains(t, response.Body.String(), "Return to dashboard")
+		})
+	}
 }

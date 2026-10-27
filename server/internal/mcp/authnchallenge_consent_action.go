@@ -62,7 +62,7 @@ func (s *Service) HandleConsentAction(w http.ResponseWriter, r *http.Request) er
 }
 
 // ServeConsentAction is the post-resolution handler.
-func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
@@ -83,6 +83,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return consentChallengeCacheError(ctx, logger, err)
+	}
+	if challengeState.FirstParty {
+		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))

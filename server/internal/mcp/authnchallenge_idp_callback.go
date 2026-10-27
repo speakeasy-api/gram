@@ -45,7 +45,7 @@ import (
 // WorkOS alone may upsert users. Federation offers ephemeral credentials only
 // to an explicitly installed, post-authorization consumer. No chat session
 // persists.
-func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (retErr error) {
 	ctx := r.Context()
 	routeMcpSlug := chi.URLParam(r, "mcpSlug")
 	routeClientID := chi.URLParam(r, "clientID")
@@ -69,6 +69,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// attribute to an issuer, and an expired state is closer to abandonment
 		// than a flow failure, so it is left to the started-without-terminal gap.
 		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
+	}
+
+	if challengeState.FirstParty {
+		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 
 	if challengeState.Subject != nil || challengeState.AuthorizerUserID != "" {
@@ -246,7 +250,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			if idpErr == "access_denied" {
 				s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 				logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
-				return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserClient(oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "login was declined").LogWarn(ctx, logger), oauthui.ReasonCanceled), "Speakeasy dashboard"))
+				return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "login was declined").LogWarn(ctx, logger), oauthui.ReasonCanceled))
 			}
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
