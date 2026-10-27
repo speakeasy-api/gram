@@ -100888,12 +100888,23 @@ components:
         CreateOrganizationRequestBody:
             type: object
             properties:
+                name:
+                    type: string
+                    description: Organization display name. When omitted, a name is derived from the registrable company domain.
+                    minLength: 1
+                    maxLength: 100
                 ownership_confirmed:
                     type: boolean
                     description: The operator confirms that domain ownership was established outside this form.
+                slug:
+                    type: string
+                    description: Preferred organization URL slug. When omitted, a unique slug is derived from the organization name. Explicit slugs use lowercase letters, numbers, and hyphens.
+                    pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+                    minLength: 2
+                    maxLength: 100
                 url:
                     type: string
-                    description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.
+                    description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the verified email domain.
                     minLength: 1
             required:
                 - url

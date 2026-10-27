@@ -2124,8 +2124,15 @@ type CreateOnboardingUseCasePayload struct {
 type CreateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
-	// the name and verified email domain.
+	// the verified email domain.
 	URL string
+	// Organization display name. When omitted, a name is derived from the
+	// registrable company domain.
+	Name *string
+	// Preferred organization URL slug. When omitted, a unique slug is derived from
+	// the organization name. Explicit slugs use lowercase letters, numbers, and
+	// hyphens.
+	Slug *string
 	// The operator confirms that domain ownership was established outside this
 	// form.
 	OwnershipConfirmed bool

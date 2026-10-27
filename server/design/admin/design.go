@@ -999,8 +999,17 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 			Required("url", "ownership_confirmed")
 			Meta("openapi:typename", "CreateOrganizationRequestBody")
-			Attribute("url", String, "Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.", func() {
+			Attribute("url", String, "Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the verified email domain.", func() {
 				MinLength(1)
+			})
+			Attribute("name", String, "Organization display name. When omitted, a name is derived from the registrable company domain.", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("slug", String, "Preferred organization URL slug. When omitted, a unique slug is derived from the organization name. Explicit slugs use lowercase letters, numbers, and hyphens.", func() {
+				MinLength(2)
+				MaxLength(100)
+				Pattern("^[a-z0-9]+(?:-[a-z0-9]+)*$")
 			})
 			Attribute("ownership_confirmed", Boolean, "The operator confirms that domain ownership was established outside this form.")
 		})
