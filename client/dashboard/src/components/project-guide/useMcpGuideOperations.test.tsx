@@ -317,6 +317,27 @@ describe("useMcpGuideOperations", () => {
     ).toEqual(["Linear"]);
   });
 
+  it("keeps unknown OAuth setup out of automatic onboarding but allows CIMD", () => {
+    const unknown = catalogServer({
+      title: "Notion",
+      supportsDcr: false,
+      authSetup: "unknown",
+    });
+    const cimd = catalogServer({
+      title: "Linear",
+      supportsDcr: false,
+      supportsCimd: true,
+      authSetup: "cimd",
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [unknown, cimd] }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
   it("reports OAuth setup in the activity output", async () => {
     const oauthServer = catalogServer({
       title: "Notion",

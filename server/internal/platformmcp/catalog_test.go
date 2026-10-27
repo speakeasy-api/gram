@@ -52,11 +52,11 @@ func TestCatalogDetailsUseSnakeCaseJSONKeys(t *testing.T) {
 	t.Parallel()
 
 	encoded, err := json.Marshal(CatalogDetails{CatalogCandidate: CatalogCandidate{
-		ProviderKey: "provider", CatalogRef: "reviewed/mcp", ToolCount: 1, SetupIntent: "authorize",
+		ProviderKey: "provider", CatalogRef: "reviewed/mcp", ToolCount: 1, SetupIntent: "authorize", SupportsCIMD: true, AuthSetup: "cimd",
 	}, Transport: "streamable-http", ToolNames: []string{"tool"}})
 
 	require.NoError(t, err)
-	require.JSONEq(t, `{"provider_key":"provider","catalog_ref":"reviewed/mcp","name":"","description":"","version":"","tool_count":1,"setup_intent":"authorize","transport":"streamable-http","tool_names":["tool"],"configuration":null,"requires_dashboard_setup":false}`, string(encoded))
+	require.JSONEq(t, `{"provider_key":"provider","catalog_ref":"reviewed/mcp","name":"","description":"","version":"","tool_count":1,"setup_intent":"authorize","transport":"streamable-http","tool_names":["tool"],"configuration":null,"requires_dashboard_setup":false,"supports_dcr":false,"supports_cimd":true,"auth_setup":"cimd"}`, string(encoded))
 }
 
 func TestCatalogConfigurationRejectsSecretAndUndeclaredValues(t *testing.T) {
