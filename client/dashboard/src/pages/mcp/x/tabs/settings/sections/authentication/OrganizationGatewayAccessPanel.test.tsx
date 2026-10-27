@@ -53,9 +53,10 @@ function client(
 
 function renderPanel(
   props: Partial<Parameters<typeof OrganizationGatewayAccessPanel>[0]> = {},
+  queryClient: QueryClient = new QueryClient(),
 ): void {
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <OrganizationGatewayAccessPanel
         serverUserSessionIssuerId={SERVER_ISSUER}
         clients={[client("client-a", [SERVER_ISSUER])]}
@@ -155,6 +156,37 @@ describe("OrganizationGatewayAccessPanel", () => {
     expect(mocks.detach).toHaveBeenCalledWith(attachRequest("client-a"));
     expect(mocks.detach).toHaveBeenCalledWith(attachRequest("client-c"));
     expect(mocks.attach).not.toHaveBeenCalled();
+  });
+
+  it("updates the cached client lists in place instead of refetching them", async () => {
+    const queryClient = new QueryClient();
+    const listKey = [
+      "@gram/client",
+      "remoteSessionClients",
+      "list",
+      "infinite",
+      { userSessionIssuerId: SERVER_ISSUER },
+    ];
+    queryClient.setQueryData(listKey, {
+      pages: [
+        { result: { items: [client("client-a", [SERVER_ISSUER]).client] } },
+      ],
+      pageParams: [undefined],
+    });
+    const updated = client("client-a", [SERVER_ISSUER, GATEWAY_ISSUER]).client;
+    mocks.attach.mockResolvedValue(updated);
+    renderPanel({}, queryClient);
+
+    fireEvent.click(gatewaySwitch());
+
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryData<{
+          pages: { result: { items: RemoteSessionClient[] } }[];
+        }>(listKey)?.pages[0]?.result.items[0]?.userSessionIssuerIds,
+      ).toEqual([SERVER_ISSUER, GATEWAY_ISSUER]);
+    });
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false);
   });
 
   it("reports a refused change", async () => {

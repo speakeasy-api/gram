@@ -6,11 +6,40 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import { useAttachUserSessionIssuerMutation } from "@gram/client/react-query/attachUserSessionIssuer.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
 import { useOrganizationGateway } from "@gram/client/react-query/organizationGateway.js";
-import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
-import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { AuthRow } from "./AuthRow";
+
+type ClientListPage = { result: { items: RemoteSessionClient[] } };
+
+/**
+ * Writes an updated client into every cached client list, and marks the other
+ * cached copies stale. Refetching the lists instead would put the whole
+ * identity section back into its loading state for a change to one field.
+ */
+function storeClient(queryClient: QueryClient, client: RemoteSessionClient) {
+  const replace = (page: ClientListPage): ClientListPage => ({
+    ...page,
+    result: {
+      ...page.result,
+      items: page.result.items.map((item) =>
+        item.id === client.id ? client : item,
+      ),
+    },
+  });
+  queryClient.setQueriesData<ClientListPage | { pages: ClientListPage[] }>(
+    { queryKey: ["@gram/client", "remoteSessionClients", "list"] },
+    (data) => {
+      if (!data) return data;
+      if ("pages" in data) return { ...data, pages: data.pages.map(replace) };
+      return replace(data);
+    },
+  );
+  void queryClient.invalidateQueries({
+    predicate: ({ queryKey }) =>
+      queryKey[1] === "remoteSessionClients" && queryKey[2] !== "list",
+  });
+}
 
 export type GatewaySignInClient = {
   client: RemoteSessionClient;
@@ -98,8 +127,10 @@ export function OrganizationGatewayAccessPanel({
             userSessionIssuerId: gatewayIssuerId,
           },
         };
-        if (next) await attach.mutateAsync({ request });
-        else await detach.mutateAsync({ request });
+        const updated = next
+          ? await attach.mutateAsync({ request })
+          : await detach.mutateAsync({ request });
+        storeClient(queryClient, updated);
       }
     } catch (error) {
       handleError(error, {
@@ -108,10 +139,6 @@ export function OrganizationGatewayAccessPanel({
           : "Couldn't remove this server from the organization gateway",
       });
     } finally {
-      await Promise.all([
-        invalidateAllRemoteSessionClients(queryClient),
-        invalidateAllServerClientAssociations(queryClient),
-      ]);
       setPending(false);
     }
   };
