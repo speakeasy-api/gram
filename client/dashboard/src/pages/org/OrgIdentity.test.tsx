@@ -244,6 +244,10 @@ describe("identity top-level tabs", () => {
     expect(
       screen.queryByRole("link", { name: "Identity providers" }),
     ).toBeTruthy();
+    expect(mocks.ema).toHaveBeenCalledWith({
+      showExternal: true,
+      showSpeakeasy: false,
+    });
   });
 
   it("keeps the issuer off the Single sign-on tab", () => {
