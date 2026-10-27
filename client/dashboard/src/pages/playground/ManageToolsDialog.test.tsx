@@ -144,7 +144,9 @@ describe("ManageToolsDialog tool editing", () => {
     fireEvent.click(checkbox);
     expect(checkbox.getAttribute("aria-checked")).toBe("true");
     expect(expand.getAttribute("aria-expanded")).toBe("true");
-    fireEvent.click(expand);
+    const icon = expand.querySelector("svg");
+    expect(icon).not.toBeNull();
+    fireEvent.click(icon!);
     expect(expand.getAttribute("aria-expanded")).toBe("false");
     expect(checkbox.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(checkbox);
