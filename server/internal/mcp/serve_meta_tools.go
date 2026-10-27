@@ -65,7 +65,7 @@ func (s *Service) handleMetaDescribeServerCall(
 
 	member, ok := findMetaMember(members, args.Server)
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", args.Server).LogWarn(ctx, logger)
+		return nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
 	}
 	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
@@ -243,7 +243,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	}
 	member, ok := findMetaMember(members, serverSlug)
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", serverSlug).LogWarn(ctx, logger)
+		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
 	}
 	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
@@ -681,4 +681,16 @@ func marshalToolErrorResult(ctx context.Context, logger *slog.Logger, id mcpjson
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call response").LogError(ctx, logger)
 	}
 	return bs, nil
+}
+
+// unknownMetaMemberError says when the server is one the caller hid, so the
+// model can point them at the connect page instead of calling it missing.
+func unknownMetaMemberError(ctx context.Context, logger *slog.Logger, gate *metaGateContext, slug string) error {
+	if _, hidden := findMetaMember(gate.hiddenMembers, slug); hidden {
+		if gate.connectURL != "" {
+			return oops.E(oops.CodeNotFound, nil, "server %q is hidden by the user; they can show it again at %s", slug, gate.connectURL).LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeNotFound, nil, "server %q is hidden by the user", slug).LogWarn(ctx, logger)
+	}
+	return oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", slug).LogWarn(ctx, logger)
 }

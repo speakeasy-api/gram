@@ -1,3 +1,4 @@
+import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
@@ -254,7 +255,7 @@ function buildServerConfig(
     name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
     remotes: server.remotes ?? [],
     headerValues: {},
-    identityMode: server.supportsDcr ? "user" : "none",
+    identityMode: supportsAutomaticOAuth(server) ? "user" : "none",
     agentAuthorization: "",
   };
 }
@@ -615,7 +616,9 @@ export function useRemoteMcpInstallWorkflow({
             currentConfig.selectedRemoteUrls.has(r.url),
           ),
           headerValues: {},
-          identityMode: currentConfig.server.supportsDcr ? "user" : "none",
+          identityMode: supportsAutomaticOAuth(currentConfig.server)
+            ? "user"
+            : "none",
           agentAuthorization: "",
         },
       ]);
@@ -1160,7 +1163,7 @@ function guardrailServerSummary(config: ServerConfig): GuardrailServerSummary {
     destructiveTools: tools
       .filter((tool) => tool.destructive)
       .map((tool) => tool.name),
-    oauth: config.server.supportsDcr,
+    oauth: supportsAutomaticOAuth(config.server),
   };
 }
 
