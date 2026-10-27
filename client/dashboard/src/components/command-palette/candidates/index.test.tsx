@@ -1836,7 +1836,7 @@ describe("gateway candidates", () => {
     mocks.gateways = [{ id: "gateway-example", name: "Operations gateway" }];
   });
 
-  it("registers named gateways and opens their canonical overview", () => {
+  it("registers named gateways and opens their canonical overview", async () => {
     const { result } = renderCandidates();
     const gateway = result.current.find(
       (c) => c.id === "gateway:gateway-example",
@@ -1848,7 +1848,7 @@ describe("gateway candidates", () => {
       keywords: ["gateway", "mcp", "gateway-example"],
       verbs: ["open"],
     });
-    gateway?.run("open");
+    await gateway?.run("open");
     expect(mocks.goToGatewayOverview).toHaveBeenCalledWith("gateway-example");
     expect(mocks.rbacCalls).toContainEqual({
       fn: "hasScope",
