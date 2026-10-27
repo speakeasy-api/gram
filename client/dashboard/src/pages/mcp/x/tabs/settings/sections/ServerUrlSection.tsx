@@ -71,6 +71,10 @@ export type EndpointBackendRef =
   | { mcpServerId: string }
   | { metaMcpServerId: string };
 
+function backendServerId(backend: EndpointBackendRef): string | undefined {
+  return "mcpServerId" in backend ? backend.mcpServerId : undefined;
+}
+
 function generateAddressSuffix() {
   let suffix = "";
   for (let i = 0; i < ADDRESS_RANDOM_SUFFIX_LENGTH; i += 1) {
@@ -525,6 +529,7 @@ function AddressRow({
     endpoint.customDomainId ?? null,
     endpoint.slug,
     hosted,
+    backendServerId(backend),
   );
 
   const dirty = fullSlug !== endpoint.slug;
@@ -805,7 +810,13 @@ function NewPlatformAddressRow({
   const { orgSlug } = useSlugs();
   const slugPrefix = orgSlug ? `${orgSlug}-` : "";
   const fullSlug = `${slugPrefix}${suffix.trim()}`;
-  const slugError = useMcpEndpointSlugValidation(fullSlug, null);
+  const slugError = useMcpEndpointSlugValidation(
+    fullSlug,
+    null,
+    undefined,
+    false,
+    backendServerId(backend),
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -911,6 +922,7 @@ function NewCustomAddressRow({
     domainId || null,
     undefined,
     hosted,
+    backendServerId(backend),
   );
 
   const [submitting, setSubmitting] = useState(false);
