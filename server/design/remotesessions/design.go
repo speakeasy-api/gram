@@ -371,7 +371,12 @@ var _ = Service("organizationRemoteSessions", func() {
 				Format(FormatUUID)
 			})
 			Required("client_id")
-			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("search", String, "Case-insensitive literal identity search.", func() { MaxLength(200) })
+			Attribute("status", String, "Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.", func() { Enum("active", "expired", "all") })
+			Attribute("created_after", String, "Inclusive creation lower bound.", func() { Format(FormatDateTime) })
+			Attribute("created_before", String, "Exclusive creation upper bound.", func() { Format(FormatDateTime) })
+			Attribute("sort", String, "Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.", func() { Enum("newest", "oldest", "last_used", "expiry") })
+			Attribute("cursor", String, "Pagination cursor. Preserve the filters and ordering when following it.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -382,6 +387,11 @@ var _ = Service("organizationRemoteSessions", func() {
 		HTTP(func() {
 			GET("/rpc/organizationRemoteSessions.list")
 			Param("client_id")
+			Param("search")
+			Param("status")
+			Param("created_after")
+			Param("created_before")
+			Param("sort")
 			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
@@ -504,6 +514,8 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("authorization_expires_at", String, "Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("last_used_at", String, "Last recorded upstream request, accurate to within five minutes. Null means unknown.", func() { Format(FormatDateTime) })
+
 	Attribute("has_refresh_token", Boolean, "Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.")
 	Attribute("scopes", ArrayOf(String), "Scopes held by this session.")
 	Attribute("created_at", String, func() {

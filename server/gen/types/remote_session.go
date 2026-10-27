@@ -43,6 +43,9 @@ type RemoteSession struct {
 	// Upstream authorization deadline. When present, the connection cannot be used
 	// or refreshed after this time even if its tokens have later expiries.
 	AuthorizationExpiresAt *string
+	// Last recorded upstream request, accurate to within five minutes. Null means
+	// unknown.
+	LastUsedAt *string
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.

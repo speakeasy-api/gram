@@ -58,6 +58,9 @@ type RefreshSessionResponseBody struct {
 	// Upstream authorization deadline. When present, the connection cannot be used
 	// or refreshed after this time even if its tokens have later expiries.
 	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
+	// Last recorded upstream request, accurate to within five minutes. Null means
+	// unknown.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.
@@ -871,6 +874,9 @@ type RemoteSessionResponseBody struct {
 	// Upstream authorization deadline. When present, the connection cannot be used
 	// or refreshed after this time even if its tokens have later expiries.
 	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
+	// Last recorded upstream request, accurate to within five minutes. Null means
+	// unknown.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.
@@ -919,6 +925,7 @@ func NewRefreshSessionResponseBody(res *types.RemoteSession) *RefreshSessionResp
 		AccessExpiresAt:        res.AccessExpiresAt,
 		RefreshExpiresAt:       res.RefreshExpiresAt,
 		AuthorizationExpiresAt: res.AuthorizationExpiresAt,
+		LastUsedAt:             res.LastUsedAt,
 		HasRefreshToken:        res.HasRefreshToken,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
@@ -1546,9 +1553,14 @@ func NewRevokeAllClientSessionsGatewayErrorResponseBody(res *goa.ServiceError) *
 
 // NewListClientSessionsPayload builds a organizationRemoteSessions service
 // listClientSessions endpoint payload.
-func NewListClientSessionsPayload(clientID string, cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessions.ListClientSessionsPayload {
+func NewListClientSessionsPayload(clientID string, search *string, status *string, createdAfter *string, createdBefore *string, sort *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessions.ListClientSessionsPayload {
 	v := &organizationremotesessions.ListClientSessionsPayload{}
 	v.ClientID = clientID
+	v.Search = search
+	v.Status = status
+	v.CreatedAfter = createdAfter
+	v.CreatedBefore = createdBefore
+	v.Sort = sort
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken

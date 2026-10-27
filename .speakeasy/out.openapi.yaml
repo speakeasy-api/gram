@@ -26670,6 +26670,293 @@ paths:
       x-speakeasy-name-override: verifyGcpKms
       x-speakeasy-react-hook:
         name: VerifyGcpKmsKey
+  /rpc/gatewaySessions.list:
+    get:
+      operationId: listGatewaySessions
+      parameters:
+        - allowEmptyValue: true
+          description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+          in: query
+          name: gateway_id
+          schema:
+            description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Case-insensitive literal search by subject URN, name, or email.
+          in: query
+          name: search
+          schema:
+            description: Case-insensitive literal search by subject URN, name, or email.
+            maxLength: 200
+            type: string
+        - allowEmptyValue: true
+          description: Filter by an upstream account associated with this member server.
+          in: query
+          name: server_id
+          schema:
+            description: Filter by an upstream account associated with this member server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Filter by upstream provider issuer.
+          in: query
+          name: provider_id
+          schema:
+            description: Filter by upstream provider issuer.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Inbound authorization status.
+          in: query
+          name: status
+          schema:
+            default: active
+            description: Inbound authorization status.
+            enum:
+              - active
+              - expired
+              - revoked
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive creation time lower bound.
+          in: query
+          name: created_after
+          schema:
+            description: Inclusive creation time lower bound.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive creation time upper bound.
+          in: query
+          name: created_before
+          schema:
+            description: Exclusive creation time upper bound.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Ordering; expiry uses the inbound authorization deadline, not access-token expiry. Unknown last-use times sort last.
+          in: query
+          name: sort
+          schema:
+            default: newest
+            description: Ordering; expiry uses the inbound authorization deadline, not access-token expiry. Unknown last-use times sort last.
+            enum:
+              - newest
+              - oldest
+              - last_used
+              - expiry
+            type: string
+        - allowEmptyValue: true
+          description: Opaque cursor bound to the current filters and ordering.
+          in: query
+          name: cursor
+          schema:
+            description: Opaque cursor bound to the current filters and ordering.
+            type: string
+        - allowEmptyValue: true
+          description: Page size.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Page size.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewaySessionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: listGatewaySessions gatewaySessions
+      tags:
+        - gatewaySessions
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: GatewaySessions
+  /rpc/gatewaySessions.listFacets:
+    get:
+      description: Complete configured member server and provider choices, independent of pagination and active filters.
+      operationId: listGatewaySessionFacets
+      parameters:
+        - allowEmptyValue: true
+          description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+          in: query
+          name: gateway_id
+          schema:
+            description: Project gateway id. Omit for the Organization Gateway; organization access is then required and the selected project is ignored.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewaySessionFacets'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: listGatewaySessionFacets gatewaySessions
+      tags:
+        - gatewaySessions
+      x-speakeasy-name-override: listFacets
+      x-speakeasy-react-hook:
+        name: GatewaySessionFacets
   /rpc/hooks.claude:
     post:
       tags:
@@ -41649,11 +41936,58 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
-          description: Pagination cursor.
+          description: Case-insensitive literal identity search.
+          in: query
+          name: search
+          schema:
+            description: Case-insensitive literal identity search.
+            maxLength: 200
+            type: string
+        - allowEmptyValue: true
+          description: Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.
+          in: query
+          name: status
+          schema:
+            description: Filter by effective upstream authorization status. Access expiry alone does not expire a refreshable account.
+            enum:
+              - active
+              - expired
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive creation lower bound.
+          in: query
+          name: created_after
+          schema:
+            description: Inclusive creation lower bound.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive creation upper bound.
+          in: query
+          name: created_before
+          schema:
+            description: Exclusive creation upper bound.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.
+          in: query
+          name: sort
+          schema:
+            description: Ordering. Authorization expiry is the earliest hard authorization deadline and usable refresh/access deadline. Omit to retain ID ordering and UUID cursors.
+            enum:
+              - newest
+              - oldest
+              - last_used
+              - expiry
+            type: string
+        - allowEmptyValue: true
+          description: Pagination cursor. Preserve the filters and ordering when following it.
           in: query
           name: cursor
           schema:
-            description: Pagination cursor.
+            description: Pagination cursor. Preserve the filters and ordering when following it.
             type: string
         - allowEmptyValue: true
           description: Page size (default 50, max 100).
@@ -93427,6 +93761,41 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    GatewaySessionFacet:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+      required:
+        - value
+        - label
+    GatewaySessionFacets:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewaySessionFacet'
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewaySessionFacet'
+      required:
+        - servers
+        - providers
+    GatewaySessionsResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSession'
+        next_cursor:
+          type: string
+      required:
+        - items
     GcpIamCredential:
       type: object
       properties:
@@ -104863,6 +105232,10 @@ components:
         identity_source:
           type: string
           description: The upstream identity interface that supplied the stored account identity, such as an ID token or userinfo response. Absent when upstream identity is unknown.
+        last_used_at:
+          type: string
+          description: Last recorded upstream request, accurate to within five minutes. Null means unknown.
+          format: date-time
         refresh_expires_at:
           type: string
           description: Upstream refresh-token expiry. Null when the session has no refresh token.
@@ -117396,7 +117769,7 @@ components:
           format: date-time
         expires_at:
           type: string
-          description: Terminal session expiry; ceiling on refresh_expires_at.
+          description: Current access-token expiry. Sessions with a refresh grant may refresh before refresh_expires_at; workload and other sessions without a refresh grant cannot.
           format: date-time
         id:
           type: string
@@ -117414,7 +117787,7 @@ components:
           format: date-time
         refresh_expires_at:
           type: string
-          description: Next refresh deadline.
+          description: Inbound authorization deadline. Refresh is possible until this time only when the session has a refresh grant.
           format: date-time
         revoked_at:
           type: string
@@ -119152,6 +119525,8 @@ tags:
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+  - name: gatewaySessions
+    description: Sessions authorized for a project gateway or the Organization Gateway. Issuer-scoped sessions may authorize several endpoints; resource-bound sessions are restricted to the selected endpoint. Server filters describe configured upstream associations, not historical usage.
   - name: widgets
     description: 'Widgets: Explore''s saved questions, each kept with the chart that draws it.'
   - name: workloadIdentities

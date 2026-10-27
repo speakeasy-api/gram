@@ -18,12 +18,16 @@ func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectE
 		v := row.RefreshExpiresAt.Time.Format(time.RFC3339)
 		refreshExpiresAt = &v
 	}
-	var authorizationExpiresAt *string
+	var authorizationExpiresAt, lastUsedAt *string
 	if row.AuthorizationExpiresAt.Valid {
-		v := row.AuthorizationExpiresAt.Time.Format(time.RFC3339)
-		authorizationExpiresAt = &v
+		authorizationExpiresAt = new(row.AuthorizationExpiresAt.Time.Format(time.RFC3339))
+	}
+	if row.LastUsedAt.Valid {
+		lastUsedAt = new(row.LastUsedAt.Time.Format(time.RFC3339))
 	}
 	return &types.RemoteSession{
+		AuthorizationExpiresAt: authorizationExpiresAt,
+		LastUsedAt:             lastUsedAt,
 		ID:                     row.ID.String(),
 		SubjectUrn:             row.SubjectUrn.String(),
 		SubjectDisplayName:     subjectDisplayName,
@@ -35,7 +39,6 @@ func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectE
 		RemoteSessionClientID:  row.RemoteSessionClientID.String(),
 		AccessExpiresAt:        row.AccessExpiresAt.Time.Format(time.RFC3339),
 		RefreshExpiresAt:       refreshExpiresAt,
-		AuthorizationExpiresAt: authorizationExpiresAt,
 		HasRefreshToken:        row.RefreshTokenEncrypted.Valid && row.RefreshTokenEncrypted.String != "",
 		Scopes:                 row.Scopes,
 		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),

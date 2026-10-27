@@ -2459,6 +2459,7 @@ func unmarshalRemoteSessionResponseBodyToTypesRemoteSession(v *RemoteSessionResp
 		AccessExpiresAt:        *v.AccessExpiresAt,
 		RefreshExpiresAt:       v.RefreshExpiresAt,
 		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
+		LastUsedAt:             v.LastUsedAt,
 		HasRefreshToken:        *v.HasRefreshToken,
 		CreatedAt:              *v.CreatedAt,
 		UpdatedAt:              *v.UpdatedAt,

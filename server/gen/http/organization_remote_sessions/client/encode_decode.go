@@ -54,6 +54,21 @@ func EncodeListClientSessionsRequest(encoder func(*http.Request) goahttp.Encoder
 		}
 		values := req.URL.Query()
 		values.Add("client_id", p.ClientID)
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		if p.Status != nil {
+			values.Add("status", *p.Status)
+		}
+		if p.CreatedAfter != nil {
+			values.Add("created_after", *p.CreatedAfter)
+		}
+		if p.CreatedBefore != nil {
+			values.Add("created_before", *p.CreatedBefore)
+		}
+		if p.Sort != nil {
+			values.Add("sort", *p.Sort)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
@@ -982,6 +997,7 @@ func unmarshalRemoteSessionResponseBodyToTypesRemoteSession(v *RemoteSessionResp
 		AccessExpiresAt:        *v.AccessExpiresAt,
 		RefreshExpiresAt:       v.RefreshExpiresAt,
 		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
+		LastUsedAt:             v.LastUsedAt,
 		HasRefreshToken:        *v.HasRefreshToken,
 		CreatedAt:              *v.CreatedAt,
 		UpdatedAt:              *v.UpdatedAt,

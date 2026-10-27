@@ -34,6 +34,10 @@ export type RemoteSession = {
    */
   identitySource?: string | undefined;
   /**
+   * Last recorded upstream request, accurate to within five minutes. Null means unknown.
+   */
+  lastUsedAt?: Date | undefined;
+  /**
    * Upstream refresh-token expiry. Null when the session has no refresh token.
    */
   refreshExpiresAt?: Date | undefined;
@@ -92,6 +96,9 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
     has_refresh_token: z.boolean(),
     id: z.string(),
     identity_source: z.optional(z.string()),
+    last_used_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     refresh_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -115,6 +122,7 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "has_refresh_token": "hasRefreshToken",
       "identity_source": "identitySource",
+      "last_used_at": "lastUsedAt",
       "refresh_expires_at": "refreshExpiresAt",
       "remote_session_client_id": "remoteSessionClientId",
       "subject_display_name": "subjectDisplayName",
