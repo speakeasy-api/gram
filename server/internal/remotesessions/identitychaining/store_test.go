@@ -709,3 +709,25 @@ func TestStore_OIDCOnlyConnectionBoundsTheGrant(t *testing.T) {
 		require.Equal(t, ReasonMalformedAssertion, outcome.Reason, "scope %v exceeds the recorded set", tc.scope)
 	}
 }
+
+// A binding serves only requests signed in through its own user session
+// issuer in its own project: a server gated directly by another issuer, or a
+// gateway member in another project, never borrows it, however the auth
+// client backfill offers its EMA client.
+func TestStore_SelectBindingRestrictedToInboundIssuerAndProject(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	direct := f.req
+	direct.UserSessionIssuerID = uuid.New()
+	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), direct)
+	require.Equal(t, notApplicable, outcome, "a request through another inbound issuer selects nothing")
+
+	foreign := f.req
+	foreign.ProjectID = uuid.New()
+	_, outcome = f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), foreign)
+	require.Equal(t, notApplicable, outcome, "a request in another project selects nothing")
+
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
+	require.Equal(t, success, outcome, "the binding's own issuer and project select it")
+	require.Equal(t, f.sel.bindingID, sel.bindingID)
+}

@@ -153,14 +153,16 @@ type liveCredential struct {
 // choice's credential. A choice the upstream client choice reads as no-auth,
 // explicit or naming the server's headers, holds while the server has no
 // upstream OAuth client association, as GetUpstreamClientSelection reads it,
-// and the server offers no enabled OAuth-backed client. A choice already
+// and the server offers no enabled OAuth-backed client, counting an EMA
+// client reached only through the gateways only for a choice whose credential
+// the gateways' issuer issued. A choice already
 // naming an auth client is usable while that client is, as the typed
 // resolver reads it, whatever the legacy issuer binding. An unmapped OAuth
 // choice holds while its registration is associated with the server and
 // bound to issuer, which is what the upstream client choice serves it on.
 func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID) (SelectionOutcome, uuid.UUID) {
 	readsNoAuth := row.NoAuth || row.NamesHeaders
-	staleNoAuth := readsNoAuth && (row.ServerHasAssociations || row.ServerHasOauthClients)
+	staleNoAuth := readsNoAuth && (row.ServerHasAssociations || row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
 	oauthRejected := !readsNoAuth && (!row.RegistrationAssociated || !slices.Contains(row.RegistrationIssuerIds, issuer))
 	switch {
 	case staleNoAuth:

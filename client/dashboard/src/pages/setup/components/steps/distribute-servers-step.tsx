@@ -8,6 +8,7 @@ import {
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { StepContainer } from "../step-container";
+import { supportsAutomaticOAuth } from "@/pages/catalog/hooks/serverMetadata";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   filterToHttpRemotes,
@@ -186,12 +187,10 @@ export function DistributeServersStep({
     () => (data?.servers as PulseMCPServer[]) ?? [],
     [data],
   );
-  // Onboarding surfaces servers the catalog marks as DCR-capable, from native
-  // staff-curated metadata or legacy discovery metadata. Installation still
-  // checks live OAuth readiness. Other servers may need manual OAuth setup or
-  // an API key, so we steer the user to the full catalog for those.
+  // Onboarding offers advertised automatic OAuth setup; installation still
+  // checks live readiness. Unconfirmed or manual setup stays in the full catalog.
   const autoConfigurableServers = useMemo(
-    () => servers.filter((s) => s.supportsDcr),
+    () => servers.filter(supportsAutomaticOAuth),
     [servers],
   );
 
