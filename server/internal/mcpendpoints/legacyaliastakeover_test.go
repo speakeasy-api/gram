@@ -180,3 +180,38 @@ func TestHostedAliasCannotMoveOntoAnotherCustomDomainAliasSlug(t *testing.T) {
 	require.Equal(t, f.endpoint.Slug, stored.McpSlug.String)
 	require.False(t, stored.CustomDomainID.Valid)
 }
+
+func TestCheckSlugAvailabilityLetsServerClaimItsOwnAlias(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	suffix := uuid.NewString()[:8]
+	slug := authCtx.OrganizationSlug + "-own-alias-" + suffix
+	domainID := seedCustomDomain(t, ctx, ti.conn, "own-alias-"+suffix)
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
+	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, domainID)
+	seedCanonicalToolsetWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+
+	check := func(serverID *string) bool {
+		available, err := ti.service.CheckMcpEndpointSlugAvailability(ctx, &gen.CheckMcpEndpointSlugAvailabilityPayload{
+			Slug: types.McpEndpointSlug(slug), McpServerID: serverID,
+		})
+		require.NoError(t, err)
+		return available
+	}
+
+	require.False(t, check(nil))
+	require.True(t, check(conv.PtrEmpty(toolset.ID.String())), "the canonical server may claim its own alias")
+	nonCanonical := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	require.False(t, check(conv.PtrEmpty(nonCanonical.String())))
+
+	_, other, otherSlug := seedCustomDomainAliasInOtherProject(t, ctx, ti)
+	available, err := ti.service.CheckMcpEndpointSlugAvailability(ctx, &gen.CheckMcpEndpointSlugAvailabilityPayload{
+		Slug: types.McpEndpointSlug(otherSlug), McpServerID: conv.PtrEmpty(other.ID.String()),
+	})
+	require.NoError(t, err)
+	require.False(t, available, "a server outside the project cannot discount its alias")
+}

@@ -695,6 +695,21 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		return false, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").LogError(ctx, logger)
 	}
 
+	mcpServerID, err := conv.PtrToNullUUID(payload.McpServerID)
+	if err != nil {
+		return false, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)
+	}
+	if mcpServerID.Valid {
+		// Only a server in this project may discount its own addresses.
+		_, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID.UUID, ProjectID: *authCtx.ProjectID})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return false, nil
+		case err != nil:
+			return false, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
+		}
+	}
+
 	// A foreign or unknown domain reads as "unavailable" so slugs can't be
 	// probed under domains the caller doesn't own.
 	available, err := CheckSlugAvailable(ctx, s.db, SlugAvailabilityCheck{
@@ -702,7 +717,7 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		CustomDomainID:           customDomainID,
 		OrganizationID:           authCtx.ActiveOrganizationID,
 		ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExcludeMcpServerID:       mcpServerID,
 		SkipDomainOwnershipCheck: false,
 	})
 	if err != nil {

@@ -351,6 +351,21 @@ describe("ServerUrlSection", () => {
       "domain-1",
       "example",
       true,
+      "toolset-1",
+    );
+  });
+
+  it("checks a new hosted address against the server so its own legacy alias reads as available", () => {
+    renderSection(hosted(), [platformEndpoint]);
+    slugValidation.mockClear();
+
+    fireEvent.click(screen.getByLabelText("Add hosted address"));
+    expect(slugValidation).toHaveBeenCalledWith(
+      expect.any(String),
+      null,
+      undefined,
+      false,
+      "toolset-1",
     );
   });
 });
