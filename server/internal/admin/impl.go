@@ -1118,6 +1118,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		ProjectID:              filter.ProjectID,
 		CursorSeq:              pgtype.Int8{Int64: 0, Valid: false},
 		ActorID:                conv.PtrToPGTextEmpty(filter.ActorID),
+		ActorType:              pgtype.Text{String: "", Valid: false},
 		Action:                 conv.PtrToPGTextEmpty(filter.Action),
 		SubjectType:            conv.PtrToPGTextEmpty(filter.SubjectType),
 		IncludeAssistantEvents: true,

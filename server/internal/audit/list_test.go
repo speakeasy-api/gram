@@ -177,3 +177,27 @@ func TestListAuditLogs_ActorNameIsTenantScoped(t *testing.T) {
 	require.Empty(t, resolved[actors[2].id],
 		"an actor from another organization must not be named here")
 }
+
+func TestListAuditLogsActorTypeIsOptional(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	queries := repo.New(conn)
+	for _, actorType := range []string{"user", "agent", "system"} {
+		_, err := queries.InsertAuditLog(ctx, repo.InsertAuditLogParams{
+			OrganizationID: "audit-typed-actor-test", ActorID: "same-id", ActorType: actorType,
+			Action: "project:update", SubjectID: "project", SubjectType: "project",
+		})
+		require.NoError(t, err)
+	}
+	params := repo.ListAuditLogsParams{OrganizationID: "audit-typed-actor-test", ActorID: conv.ToPGText("same-id"), ActorType: pgtype.Text{}}
+	rows, err := queries.ListAuditLogs(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 3, "existing HTTP and staff actor-only filters remain unrestricted by actor type")
+	params.ActorType = conv.ToPGText("user")
+	rows, err = queries.ListAuditLogs(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "user", rows[0].ActorType)
+}

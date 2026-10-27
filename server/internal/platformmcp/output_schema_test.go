@@ -18,8 +18,9 @@ import (
 // sampleWireValues supplies a valid sample for a type whose JSON form cannot be
 // derived from its Go shape, because it has its own MarshalJSON.
 var sampleWireValues = map[reflect.Type]any{
-	reflect.TypeFor[SubjectCount](): NewSubjectCount(25),
-	reflect.TypeFor[time.Time]():    time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC),
+	reflect.TypeFor[json.RawMessage](): json.RawMessage(`{"sample":true}`),
+	reflect.TypeFor[SubjectCount]():    NewSubjectCount(25),
+	reflect.TypeFor[time.Time]():       time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC),
 }
 
 // A client keeps the output schema it fetched when it connected and validates
