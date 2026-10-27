@@ -544,8 +544,8 @@ export function GatewayDebugTab({
         to={debugWindow.to}
         phrase={WINDOW_PHRASE[span]}
       />
-      <div className="grid items-start gap-4 2xl:grid-cols-4">
-        <div className="min-w-0 2xl:col-span-3">
+      <div className="grid items-start gap-4 min-[1728px]:grid-cols-4">
+        <div className="min-w-0 min-[1728px]:col-span-3">
           <GatewayConnectionHealth
             gatewayId={gatewayId}
             span={span}
