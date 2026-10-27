@@ -87,7 +87,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.43.0
 	github.com/tidwall/gjson v1.19.0
-	github.com/tiktoken-go/tokenizer v0.8.1
+	github.com/tiktoken-go/tokenizer v0.10.0
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/workos/workos-go/v6 v6.5.0
 	github.com/zricethezav/gitleaks/v8 v8.30.1
