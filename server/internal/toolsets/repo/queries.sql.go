@@ -1582,6 +1582,41 @@ func (q *Queries) MoveToolsetMCPAlias(ctx context.Context, arg MoveToolsetMCPAli
 	return err
 }
 
+const otherCustomDomainAliasServedOnPlatform = `-- name: OtherCustomDomainAliasServedOnPlatform :one
+SELECT (
+  NOT EXISTS (
+    SELECT 1
+    FROM toolsets pa
+    WHERE pa.mcp_slug = $1
+      AND pa.custom_domain_id IS NULL
+      AND pa.deleted IS FALSE
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM toolsets t
+    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+    WHERE t.mcp_slug = $1
+      AND t.custom_domain_id IS NOT NULL
+      AND t.deleted IS FALSE
+      AND t.id <> $2
+  )
+)::boolean AS served
+`
+
+type OtherCustomDomainAliasServedOnPlatformParams struct {
+	Slug      pgtype.Text
+	ToolsetID uuid.UUID
+}
+
+// Whether another live-project toolset's custom-domain alias holds the slug while no platform alias does: the
+// loose platform lookup serves that alias, so a second custom-domain alias with the slug would contend for it.
+func (q *Queries) OtherCustomDomainAliasServedOnPlatform(ctx context.Context, arg OtherCustomDomainAliasServedOnPlatformParams) (bool, error) {
+	row := q.db.QueryRow(ctx, otherCustomDomainAliasServedOnPlatform, arg.Slug, arg.ToolsetID)
+	var served bool
+	err := row.Scan(&served)
+	return served, err
+}
+
 const toolsetHasExternalMCPProxy = `-- name: ToolsetHasExternalMCPProxy :one
 WITH latest_toolset_version AS (
   SELECT tv.tool_urns

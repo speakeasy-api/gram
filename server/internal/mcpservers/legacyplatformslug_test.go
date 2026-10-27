@@ -56,6 +56,35 @@ func TestGetMcpServer_LegacyPlatformSlug(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, conv.PtrEmpty(slug), get(), "the platform host serves the custom-domain alias")
 
+	nonCanonical, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: *authCtx.ProjectID, Name: conv.ToPGText(slug + "-other"), Slug: conv.ToPGText(slug + "-other"),
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "public",
+	})
+	require.NoError(t, err)
+	otherID := nonCanonical.ID.String()
+	got, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{ID: &otherID})
+	require.NoError(t, err)
+	require.Nil(t, got.LegacyPlatformSlug, "only the canonical server reports the alias")
+
+	otherDomain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: "org-other-" + slug, Domain: slug + "-other.example.com",
+		IngressName: pgtype.Text{String: "", Valid: false}, CertSecretName: pgtype.Text{String: "", Valid: false}, IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	twin, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		Name: slug + "-twin", Slug: slug + "-twin", McpSlug: conv.ToPGText(slug), McpEnabled: true,
+	})
+	require.NoError(t, err)
+	require.Nil(t, get(), "a platform alias of another toolset wins the slug")
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
+		CustomDomainID: uuid.NullUUID{UUID: otherDomain.ID, Valid: true}, Slug: twin.Slug, ProjectID: *authCtx.ProjectID,
+	}))
+	require.Nil(t, get(), "two custom-domain aliases share the slug, so neither is reported")
+	_, err = toolsetsrepo.New(ti.conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: twin.Slug, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, conv.PtrEmpty(slug), get())
+
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: *authCtx.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: slug,
 	})
