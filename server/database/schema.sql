@@ -14998,6 +14998,36 @@ COMMENT ON COLUMN okta_server_suggestion_dismissals.updated_at IS '@access: conf
 CREATE INDEX IF NOT EXISTS okta_server_suggestion_dismissals_registry_entry_id_idx
 ON okta_server_suggestion_dismissals (registry_entry_id);
 
+-- A person hid an MCP server they do not use. Gateways leave hidden servers
+-- out of the person's tools and list them last on the consent page, and the
+-- device agent reads the same rows. One row per organization x user x server;
+-- unhiding deletes it, so created_at is when it was hidden.
+CREATE TABLE IF NOT EXISTS user_hidden_mcp_servers (
+  organization_id TEXT NOT NULL,
+  -- Speakeasy users.id.
+  user_id TEXT NOT NULL,
+  mcp_server_id uuid NOT NULL,
+  -- The hidden server's project.
+  project_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT user_hidden_mcp_servers_pkey PRIMARY KEY (organization_id, user_id, mcp_server_id),
+  CONSTRAINT user_hidden_mcp_servers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT user_hidden_mcp_servers_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT user_hidden_mcp_servers_mcp_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN user_hidden_mcp_servers.organization_id IS '@access: confidential';
+COMMENT ON COLUMN user_hidden_mcp_servers.user_id IS '@access: confidential';
+COMMENT ON COLUMN user_hidden_mcp_servers.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN user_hidden_mcp_servers.project_id IS '@access: confidential';
+COMMENT ON COLUMN user_hidden_mcp_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_hidden_mcp_servers.updated_at IS '@access: confidential';
+
+-- Serves the cascades from projects and mcp_servers.
+CREATE INDEX IF NOT EXISTS user_hidden_mcp_servers_project_id_mcp_server_id_idx
+ON user_hidden_mcp_servers (project_id, mcp_server_id);
+
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,

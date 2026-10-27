@@ -242,12 +242,16 @@ var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 	Attribute("meta", Any, "Opaque metadata from the registry")
 	Attribute("tool_count", Int, "Number of tools the server exposes")
 	Attribute("is_read_only", Boolean, "Whether every tool on the server is read-only")
-	Attribute("supports_dcr", Boolean, "Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).")
+	Attribute("supports_dcr", Boolean, "Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). False alone does not establish that manual setup is required.")
+	Attribute("supports_cimd", Boolean, "Whether issuer metadata advertises compatible Client ID Metadata Document support.")
+	Attribute("auth_setup", String, "Advertised authentication setup; unknown means evidence is insufficient, not that manual setup is required.", func() { Enum("none", "dcr", "cimd", "manual", "unknown") })
+
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 	Attribute("repository", ExternalMCPRepository, "The source repository the registry links for this server, when it declares one")
 	Attribute("packages", ArrayOf(ExternalMCPPackage), "Published packages that run this server, when the registry declares any")
 
-	// tool_count, is_read_only, and supports_dcr are always computed for every catalog entry.
+	// These computed fields are required by existing clients. New capability fields
+	// remain optional so clients can also read responses from older servers.
 	Required("registry_specifier", "version", "description", "tool_count", "is_read_only", "supports_dcr")
 })
 

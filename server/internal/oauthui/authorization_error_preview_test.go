@@ -39,6 +39,12 @@ func TestAuthorizationErrorPagePreview(t *testing.T) {
 		name, redirectURI string
 		page              oauthui.AuthorizationError
 	}{
+		{"setup-invalid", "", oauthui.AuthorizationError{Recovery: &oauthui.RecoveryLink{URL: "https://app.example.test/@self/setup", Label: "Open organization setup"}, Setup: true, Status: 400, Code: oautherr.CodeInvalidRequest, Description: "missing intent parameter"}},
+		{"setup-forbidden", "", oauthui.AuthorizationError{Recovery: &oauthui.RecoveryLink{URL: "https://app.example.test/@self/setup", Label: "Open organization setup"}, Setup: true, Status: 403, Code: oautherr.CodeAccessDenied, Description: "forbidden"}},
+		{"setup-unavailable", "", oauthui.AuthorizationError{Recovery: &oauthui.RecoveryLink{URL: "https://app.example.test/@self/setup", Label: "Open organization setup"}, Setup: true, Status: 500, Code: oautherr.CodeServerError, Description: "internal error"}},
+		{"dashboard-canceled", "", oauthui.AuthorizationError{Recovery: &oauthui.RecoveryLink{URL: "https://app.example.test/@self", Label: "Return to dashboard"}, Status: 403, Code: "forbidden", Description: "login was declined", Reason: oauthui.ReasonCanceled, ClientName: "Speakeasy dashboard"}},
+		{"assistant-canceled", "", oauthui.AuthorizationError{Recovery: &oauthui.RecoveryLink{URL: "https://app.example.test/example/projects/default/chat/example-conversation", Label: "Return to conversation"}, Status: 400, Code: "bad_request", Description: "connection was not completed; return to your assistant conversation and try again", Reason: oauthui.ReasonCanceled, ClientName: "Speakeasy Assistant"}},
+		{"assistant-expired", "", oauthui.AuthorizationError{Recovery: &oauthui.RecoveryLink{URL: "https://app.example.test/@self/projects/default/assistants", Label: "Open assistants"}, Status: 400, Code: "bad_request", Reason: oauthui.ReasonExpired, ClientName: "Speakeasy Assistant"}},
 		{"blocked-no-callback", "", oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: oauthui.ReasonOrganizationBlocked, Description: "This client is blocked by organization policy", ClientName: "Example Client", ServerName: "example-observability"}},
 		{"expired-no-callback", "", oauthui.AuthorizationError{Code: "bad_request", Reason: oauthui.ReasonExpired, Description: "authorization state not found or expired"}},
 		{"approval-expired", "", oauthui.AuthorizationError{Status: 403, Code: "Forbidden", Reason: oauthui.ReasonExpired, Approval: true, Description: "approval expired or changed"}},

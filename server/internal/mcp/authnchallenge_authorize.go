@@ -237,7 +237,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
-	challengeState := AuthnChallengeState{ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
+	challengeState := AuthnChallengeState{WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:                  nil,
 		Federation:               nil,
 		ID:                       challengeID,
@@ -386,6 +386,8 @@ func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWr
 // presented, which the browser already holds.
 func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientID, serverName string) oauthui.AuthorizationError {
 	page := oauthui.AuthorizationError{
+		Recovery:       nil,
+		Setup:          false,
 		Status:         http.StatusBadRequest,
 		Reason:         oauthui.ReasonDefault,
 		Approval:       false,
