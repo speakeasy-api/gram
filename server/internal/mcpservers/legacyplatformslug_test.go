@@ -66,6 +66,7 @@ func TestGetMcpServer_LegacyPlatformSlug(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, got.LegacyPlatformSlug, "only the canonical server reports the alias")
 
+	// An organization holds one live domain, so the second domain is filed under another organization id.
 	otherDomain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
 		OrganizationID: "org-other-" + slug, Domain: slug + "-other.example.com",
 		IngressName: pgtype.Text{String: "", Valid: false}, CertSecretName: pgtype.Text{String: "", Valid: false}, IpAllowlist: []string{},
