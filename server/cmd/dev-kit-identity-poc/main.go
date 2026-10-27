@@ -66,13 +66,13 @@ func verify(ctx context.Context, raw, subject, audience string, publicKeys keys)
 	}
 	source, err := jwks.NewRemoteSource(googleJWKS)
 	if err != nil {
-		return out, err
+		return out, fmt.Errorf("create Google JWKS source: %w", err)
 	}
 	verifier, err := workload.NewVerifier(publicKeys, &guard{seen: map[replay.Key]bool{}})
 	if err != nil {
-		return out, err
+		return out, fmt.Errorf("create workload verifier: %w", err)
 	}
-	expected := workload.Expectation{Issuer: googleIssuer, Subject: subject, KeySource: source, ReplayIssuer: "kit-identity-poc", ReplayParty: "google", Audiences: []string{audience}, MaxLifetime: time.Hour}
+	expected := workload.Expectation{Issuer: googleIssuer, Subject: subject, KeySource: source, ReplayIssuer: "kit-identity-poc", ReplayParty: "google", Audiences: []string{audience}, MaxLifetime: time.Hour, AllowAssertionReuse: false}
 	result, err := verifier.Verify(ctx, raw, expected)
 	if err != nil {
 		return out, fmt.Errorf("workload verification failed: %s", workload.ReasonOf(err))
@@ -121,16 +121,16 @@ func run() error {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, googleJWKS, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("create Google JWKS request: %w", err)
 	}
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("JWKS redirect rejected") }}
 	res, err := client.Do(req)
 	if err != nil {
-		return errors.New("Google JWKS fetch failed")
+		return errors.New("fetch Google JWKS failed")
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("Google JWKS HTTP %d", res.StatusCode)
+		return fmt.Errorf("fetch Google JWKS: HTTP %d", res.StatusCode)
 	}
 	var publicKeys keys
 	if err = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&publicKeys.set); err != nil {
@@ -140,7 +140,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(os.Stdout).Encode(out)
+	if err := json.NewEncoder(os.Stdout).Encode(out); err != nil {
+		return fmt.Errorf("encode verification report: %w", err)
+	}
+	return nil
 }
 func main() {
 	if err := run(); err != nil {

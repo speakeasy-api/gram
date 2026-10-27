@@ -274,11 +274,10 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	out.Template = kitObject("SandboxTemplate", "extensions.agents.x-k8s.io/v1beta1", kitGKETemplateName(in.Name), in.Identity)
 	out.Template.Object["spec"] = map[string]any{"networkPolicyManagement": "Managed", "networkPolicy": map[string]any{
 		"ingress": []any{map[string]any{"from": []any{map[string]any{"ipBlock": map[string]any{"cidr": in.IngressCIDR}}}, "ports": []any{map[string]any{"protocol": "TCP", "port": int64(in.GuestPort)}}}},
-		"egress":  []any{map[string]any{"to": []any{map[string]any{"ipBlock": map[string]any{"cidr": "0.0.0.0/0", "except": []any{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"}}}, map[string]any{"ipBlock": map[string]any{"cidr": "::/0", "except": []any{"fc00::/7", "fe80::/10"}}}}}},
+		"egress": []any{map[string]any{"to": []any{map[string]any{"ipBlock": map[string]any{"cidr": "0.0.0.0/0", "except": []any{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"}}}, map[string]any{"ipBlock": map[string]any{"cidr": "::/0", "except": []any{"fc00::/7", "fe80::/10"}}}}},
+			// GKE metadata identity is the only link-local egress exception.
+			map[string]any{"to": []any{map[string]any{"ipBlock": map[string]any{"cidr": "169.254.169.254/32"}}}, "ports": []any{map[string]any{"protocol": "TCP", "port": int64(80)}}}},
 	}, "podTemplate": podMap}
-	// GKE metadata identity is the only link-local egress exception.
-	policy := out.Template.Object["spec"].(map[string]any)["networkPolicy"].(map[string]any)
-	policy["egress"] = append(policy["egress"].([]any), map[string]any{"to": []any{map[string]any{"ipBlock": map[string]any{"cidr": "169.254.169.254/32"}}}, "ports": []any{map[string]any{"protocol": "TCP", "port": int64(80)}}})
 	// Zero replicas prohibit speculative pods carrying this runtime's credentials.
 	// Claims cold-create from the pool's template when no warm sandbox exists.
 	out.WarmPool = kitObject("SandboxWarmPool", "extensions.agents.x-k8s.io/v1beta1", kitGKEWarmPoolName(in.Name), in.Identity)

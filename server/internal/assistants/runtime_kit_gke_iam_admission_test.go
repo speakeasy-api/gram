@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
@@ -20,15 +22,17 @@ import (
 )
 
 func TestKitGKEIAMAdmissionUsesAgentAndRejectsRetiredSubject(t *testing.T) {
+	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
-	tx, err := db.Begin(t.Context())
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) }()
+	tx := testenv.BeginTx(t, t.Context(), db)
 	r.LifecycleTx = tx
 	c.WorkloadIssuerURL, c.WorkloadJWKSURL = "https://accounts.google.com", "https://www.googleapis.com/oauth2/v3/certs"
 	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 	client.PrependReactor("create", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
-		obj := action.(ktesting.CreateAction).GetObject().(*unstructured.Unstructured)
+		create, ok := action.(ktesting.CreateAction)
+		require.True(t, ok)
+		obj, ok := create.GetObject().(*unstructured.Unstructured)
+		require.True(t, ok)
 		obj.SetUID("pending-uid")
 		obj.SetResourceVersion("1")
 		return false, nil, nil
@@ -39,7 +43,14 @@ func TestKitGKEIAMAdmissionUsesAgentAndRejectsRetiredSubject(t *testing.T) {
 		switch {
 		case req.Method == http.MethodPost && strings.HasSuffix(req.URL.Path, "/serviceAccounts"):
 			var create iam.CreateServiceAccountRequest
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&create))
+			if !assert.NoError(t, json.NewDecoder(req.Body).Decode(&create)) {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			if !assert.NotNil(t, create.ServiceAccount) {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 			account = create.ServiceAccount
 			account.Email = create.AccountId + "@identity-project.iam.gserviceaccount.com"
 			// Simulate an attempted replay of a retired Google subject. Real Google

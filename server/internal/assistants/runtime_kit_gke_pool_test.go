@@ -68,7 +68,8 @@ func TestKitGKEPoolCleanupUIDPreconditions(t *testing.T) {
 		}
 		deleted = append(deleted, action.GetResource().Resource)
 		if action.GetResource() == kitWarmPoolGVR {
-			deletion := action.(ktesting.DeleteAction)
+			deletion, ok := action.(ktesting.DeleteAction)
+			require.True(t, ok)
 			require.Equal(t, m.WarmPoolName, deletion.GetName())
 			require.Equal(t, m.WarmPoolUID, *deletion.GetDeleteOptions().Preconditions.UID)
 		}

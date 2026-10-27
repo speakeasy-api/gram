@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
@@ -22,9 +23,13 @@ import (
 )
 
 func TestKitGKEIAMPendingRecoversUnobservedCreateAndFailedDeletes(t *testing.T) {
+	t.Parallel()
 	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 	client.PrependReactor("create", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
-		obj := action.(ktesting.CreateAction).GetObject().(*unstructured.Unstructured)
+		create, ok := action.(ktesting.CreateAction)
+		require.True(t, ok)
+		obj, ok := create.GetObject().(*unstructured.Unstructured)
+		require.True(t, ok)
 		obj.SetUID("pending-uid")
 		obj.SetResourceVersion("1")
 		return false, nil, nil
@@ -35,7 +40,9 @@ func TestKitGKEIAMPendingRecoversUnobservedCreateAndFailedDeletes(t *testing.T) 
 			journalDeleteFails = false
 			return true, nil, fmt.Errorf("journal deletion unavailable")
 		}
-		opts := action.(ktesting.DeleteAction).GetDeleteOptions()
+		deletion, ok := action.(ktesting.DeleteAction)
+		require.True(t, ok)
+		opts := deletion.GetDeleteOptions()
 		require.EqualValues(t, "pending-uid", *opts.Preconditions.UID)
 		return false, nil, nil
 	})
@@ -47,7 +54,10 @@ func TestKitGKEIAMPendingRecoversUnobservedCreateAndFailedDeletes(t *testing.T) 
 		if req.Method == http.MethodPost && strings.HasSuffix(req.URL.Path, "/serviceAccounts") {
 			// The journal must already be durable when the remote create starts.
 			_, err := client.Resource(kitGKEIAMPendingGVR).Namespace("kit-test").Get(req.Context(), kitGKEName(r)+"-iam", metav1.GetOptions{})
-			require.NoError(t, err)
+			if !assert.NoError(t, err) {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 			exists = true
 			w.WriteHeader(503)
 			_, _ = w.Write([]byte(`{"error":{"code":503,"message":"response lost after create"}}`))
@@ -62,8 +72,14 @@ func TestKitGKEIAMPendingRecoversUnobservedCreateAndFailedDeletes(t *testing.T) 
 			_ = json.NewEncoder(w).Encode(&iam.ServiceAccount{Email: kitGKEIAMAccount(ksa) + "@identity-project.iam.gserviceaccount.com", UniqueId: "123", Description: "Speakeasy Kit workload kit-test/" + ksa})
 			return
 		}
-		require.Equal(t, http.MethodDelete, req.Method)
-		require.True(t, strings.HasSuffix(req.URL.Path, "/123"))
+		if !assert.Equal(t, http.MethodDelete, req.Method) {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if !assert.True(t, strings.HasSuffix(req.URL.Path, "/123")) {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		if iamDeleteFails {
 			iamDeleteFails = false
 			w.WriteHeader(503)
@@ -91,6 +107,7 @@ func TestKitGKEIAMPendingRecoversUnobservedCreateAndFailedDeletes(t *testing.T) 
 }
 
 func TestKitGKEIAMUsesFixedGoogleIssuer(t *testing.T) {
+	t.Parallel()
 	c := KitGKECompositionConfig{
 		IAMProject: "identity-project", WorkloadPoolProject: "pool-project",
 		KitLocalCompositionConfig: KitLocalCompositionConfig{WorkloadIssuerURL: "https://container.googleapis.com/v1/projects/pool-project/locations/region/clusters/cluster", WorkloadJWKSURL: "https://legacy.example/jwks"},
@@ -104,18 +121,29 @@ func TestKitGKEIAMUsesFixedGoogleIssuer(t *testing.T) {
 }
 
 func TestKitGKEIAMPendingDefinitiveRejectionDoesNotStrandIntent(t *testing.T) {
+	t.Parallel()
 	for _, status := range []int{400, 403, 404, 429} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			t.Parallel()
 			client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 			client.PrependReactor("create", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
-				obj := action.(ktesting.CreateAction).GetObject().(*unstructured.Unstructured)
+				create, ok := action.(ktesting.CreateAction)
+				require.True(t, ok)
+				obj, ok := create.GetObject().(*unstructured.Unstructured)
+				require.True(t, ok)
 				obj.SetUID("pending-uid")
 				obj.SetResourceVersion("1")
 				return false, nil, nil
 			})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				require.Equal(t, http.MethodPost, req.Method)
-				require.True(t, strings.HasSuffix(req.URL.Path, "/serviceAccounts"))
+				if !assert.Equal(t, http.MethodPost, req.Method) {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				if !assert.True(t, strings.HasSuffix(req.URL.Path, "/serviceAccounts")) {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(status)
 				_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, status)
@@ -135,8 +163,10 @@ func TestKitGKEIAMPendingDefinitiveRejectionDoesNotStrandIntent(t *testing.T) {
 }
 
 func TestKitGKEIAMPendingRejectsForeignOwnershipAndMissingUID(t *testing.T) {
+	t.Parallel()
 	for _, field := range []string{"runtime", "assistant", "project", "iam_project", "uid"} {
 		t.Run(field, func(t *testing.T) {
+			t.Parallel()
 			r := assistantRuntimeRecord{ID: uuid.New(), AssistantID: uuid.New(), ProjectID: uuid.New(), LifecycleTx: kitGKEFixtureTransaction{}}
 			obj := &unstructured.Unstructured{Object: map[string]any{
 				"apiVersion": "v1", "kind": "ConfigMap", "metadata": map[string]any{"name": kitGKEName(r) + "-iam", "namespace": "kit-test", "uid": "pending-uid"},

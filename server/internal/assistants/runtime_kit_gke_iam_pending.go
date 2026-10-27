@@ -21,7 +21,7 @@ var kitGKEIAMPendingGVR = schema.GroupVersionResource{Group: "", Version: "v1", 
 // until the previous account has been deleted. It contains no credentials.
 func (m *kitGKEIAM) preparePending(ctx context.Context, r assistantRuntimeRecord, ksa string) (*unstructured.Unstructured, error) {
 	if m.dynamic == nil || r.ID == uuid.Nil || r.LifecycleTx == nil {
-		return nil, errors.New("Kit GKE IAM requires durable pending evidence and lifecycle lock")
+		return nil, errors.New("kit GKE IAM requires durable pending evidence and lifecycle lock")
 	}
 	if err := m.removePending(ctx, r); err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func (m *kitGKEIAM) preparePending(ctx context.Context, r assistantRuntimeRecord
 
 func (m *kitGKEIAM) removePending(ctx context.Context, r assistantRuntimeRecord) error {
 	if m.dynamic == nil {
-		return errors.New("Kit GKE IAM pending evidence client is missing")
+		return errors.New("kit GKE IAM pending evidence client is missing")
 	}
 	resource := m.dynamic.Resource(kitGKEIAMPendingGVR).Namespace(m.namespace)
 	obj, err := resource.Get(ctx, kitGKEName(r)+"-iam", metav1.GetOptions{})
@@ -81,13 +81,13 @@ func (m *kitGKEIAM) removePending(ctx context.Context, r assistantRuntimeRecord)
 		// remotely followed by a failed journal delete must remain recoverable.
 		data["subject"] = sa.UniqueId
 		if err := unstructured.SetNestedStringMap(obj.Object, data, "data"); err != nil {
-			return err
+			return fmt.Errorf("set pending Kit GKE IAM subject: %w", err)
 		}
 		obj, err = resource.Update(ctx, obj, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("record pending Kit GKE IAM deletion: %w", err)
 		}
-		if err := m.remove(ctx, kitGKEIAMIdentity{account: account, subject: sa.UniqueId}); err != nil {
+		if err := m.remove(ctx, kitGKEIAMIdentity{account: account, subject: sa.UniqueId, email: ""}); err != nil {
 			return err
 		}
 	}
@@ -100,5 +100,8 @@ func (m *kitGKEIAM) deletePending(ctx context.Context, obj *unstructured.Unstruc
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("delete pending Kit GKE IAM record: %w", err)
+	}
+	return nil
 }

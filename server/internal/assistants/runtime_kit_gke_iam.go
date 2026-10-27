@@ -43,7 +43,7 @@ func kitGKEIAMAccount(ksa string) string {
 func kitGKEWorkloadSubject(ctx context.Context, ksa string) (string, error) {
 	attempt, ok := ctx.Value(kitGKEIAMContextKey{}).(*kitGKEIAMAttempt)
 	if !ok || attempt.manager == nil {
-		return "", errors.New("Kit GKE workload IAM provisioning is not configured")
+		return "", errors.New("kit GKE workload IAM provisioning is not configured")
 	}
 	pending, err := attempt.manager.preparePending(ctx, attempt.runtime, ksa)
 	if err != nil {
@@ -71,7 +71,7 @@ func (m *kitGKEIAM) provision(ctx context.Context, ksa string) (kitGKEIAMIdentit
 	email := account + "@" + m.project + ".iam.gserviceaccount.com"
 	name := "projects/" + m.project + "/serviceAccounts/" + email
 	accounts := m.service.Projects.ServiceAccounts
-	sa, err := accounts.Create("projects/"+m.project, &iam.CreateServiceAccountRequest{AccountId: account, ServiceAccount: &iam.ServiceAccount{DisplayName: "Speakeasy Kit workload", Description: m.description(ksa)}}).Context(ctx).Do()
+	sa, err := accounts.Create("projects/"+m.project, &iam.CreateServiceAccountRequest{AccountId: account, ForceSendFields: nil, NullFields: nil, ServiceAccount: &iam.ServiceAccount{Disabled: false, Email: "", Etag: "", Name: "", Oauth2ClientId: "", ProjectId: "", UniqueId: "", ServerResponse: googleapi.ServerResponse{HTTPStatusCode: 0, Header: nil}, ForceSendFields: nil, NullFields: nil, DisplayName: "Speakeasy Kit workload", Description: m.description(ksa)}}).Context(ctx).Do()
 	if kitGKEIAMStatus(err, 400) || kitGKEIAMStatus(err, 403) || kitGKEIAMStatus(err, 404) || kitGKEIAMStatus(err, 429) {
 		return identity, kitGKEIAMCreateRejectedError{err}
 	}
@@ -82,7 +82,7 @@ func (m *kitGKEIAM) provision(ctx context.Context, ksa string) (kitGKEIAMIdentit
 		return identity, fmt.Errorf("create Kit GKE workload service account: %w", err)
 	}
 	if sa.Email != email || sa.Description != m.description(ksa) || !kitGKEIAMSubjectPattern.MatchString(sa.UniqueId) || sa.Disabled {
-		return identity, errors.New("Kit GKE IAM account identity mismatch")
+		return identity, errors.New("kit GKE IAM account identity mismatch")
 	}
 	identity = kitGKEIAMIdentity{subject: sa.UniqueId, account: ksa, email: sa.Email}
 	name = "projects/" + m.project + "/serviceAccounts/" + sa.UniqueId
@@ -93,10 +93,10 @@ func (m *kitGKEIAM) provision(ctx context.Context, ksa string) (kitGKEIAMIdentit
 	member := "serviceAccount:" + m.workloadPoolProject + ".svc.id.goog[" + m.namespace + "/" + ksa + "]"
 	for _, binding := range policy.Bindings {
 		if binding.Role != "roles/iam.workloadIdentityUser" || binding.Condition != nil || len(binding.Members) != 1 || binding.Members[0] != member {
-			return identity, errors.New("Kit GKE workload service account has unexpected IAM grants")
+			return identity, errors.New("kit GKE workload service account has unexpected IAM grants")
 		}
 	}
-	_, err = accounts.SetIamPolicy(name, &iam.SetIamPolicyRequest{Policy: &iam.Policy{Etag: policy.Etag, Version: policy.Version, Bindings: []*iam.Binding{{Role: "roles/iam.workloadIdentityUser", Members: []string{member}}}}}).Context(ctx).Do()
+	_, err = accounts.SetIamPolicy(name, &iam.SetIamPolicyRequest{UpdateMask: "", ForceSendFields: nil, NullFields: nil, Policy: &iam.Policy{AuditConfigs: nil, ServerResponse: googleapi.ServerResponse{HTTPStatusCode: 0, Header: nil}, ForceSendFields: nil, NullFields: nil, Etag: policy.Etag, Version: policy.Version, Bindings: []*iam.Binding{{Condition: nil, ForceSendFields: nil, NullFields: nil, Role: "roles/iam.workloadIdentityUser", Members: []string{member}}}}}).Context(ctx).Do()
 	if err != nil {
 		return identity, fmt.Errorf("bind Kit GKE workload service account: %w", err)
 	}
@@ -133,7 +133,10 @@ func (m *kitGKEIAM) remove(ctx context.Context, identity kitGKEIAMIdentity) erro
 	if kitGKEIAMStatus(err, 404) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("delete Kit GKE workload service account: %w", err)
+	}
+	return nil
 }
 func (m *kitGKEIAM) removeRuntime(ctx context.Context, r assistantRuntimeRecord) error {
 	var metadata struct {
@@ -143,10 +146,10 @@ func (m *kitGKEIAM) removeRuntime(ctx context.Context, r assistantRuntimeRecord)
 		return nil
 	}
 	if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil {
-		return err
+		return fmt.Errorf("decode Kit workload metadata: %w", err)
 	}
 	if metadata.Workload == nil {
 		return nil
 	}
-	return m.remove(ctx, kitGKEIAMIdentity{subject: metadata.Workload.Subject, account: metadata.Workload.ServiceAccount})
+	return m.remove(ctx, kitGKEIAMIdentity{subject: metadata.Workload.Subject, account: metadata.Workload.ServiceAccount, email: ""})
 }
