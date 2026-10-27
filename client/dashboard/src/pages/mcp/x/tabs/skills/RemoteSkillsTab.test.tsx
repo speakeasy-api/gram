@@ -76,8 +76,8 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     skills: { detail: { href: (id: string) => `/skills/${id}` } },
     mcp: {
-      x: {
-        overview: { href: (slug: string) => `/mcp/x/${slug}/overview` },
+      details: {
+        overview: { href: (slug: string) => `/mcp/${slug}/overview` },
       },
     },
   }),
@@ -243,7 +243,7 @@ describe("RemoteSkillsTabRoute", () => {
       <RemoteSkillsTabRoute mcpServer={remote} mcpServerSlug="ticketing" />,
     );
     expect(screen.getByTestId("navigate").textContent).toBe(
-      "/mcp/x/ticketing/overview",
+      "/mcp/ticketing/overview",
     );
     expect(state.links).not.toHaveBeenCalled();
   });
@@ -256,7 +256,7 @@ describe("RemoteSkillsTabRoute", () => {
       />,
     );
     expect(screen.getByTestId("navigate").textContent).toBe(
-      "/mcp/x/ticketing/overview",
+      "/mcp/ticketing/overview",
     );
     expect(state.links).not.toHaveBeenCalled();
   });
