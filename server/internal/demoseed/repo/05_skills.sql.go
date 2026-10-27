@@ -220,7 +220,7 @@ const skillsInsertEditSuggestionChange = `-- name: SkillsInsertEditSuggestionCha
 INSERT INTO skill_edit_suggestion_changes (project_id, suggestion_id, proposed_diff, rationale, position)
 VALUES
   ($1::uuid, $2::uuid,
-E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount with the customer.\n+1a. If the customer pastes a card number, stop and ask them to remove it.\n 2. Use the process_refund tool with the confirmed amount.',
+E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount with the customer.\n+1a. If the customer pastes a card number, stop and ask them to remove it.\n 2. Use the process_refund tool with the confirmed amount.\n',
    'Make the PCI guardrail the first checkpoint instead of a trailing note.', 1)
 `
 
@@ -231,7 +231,8 @@ type SkillsInsertEditSuggestionChangeParams struct {
 
 // The diff MUST carry ---/+++ file headers: gitdiff.Parse yields zero file
 // fragments for a bare hunk, skilldiff.Apply then fails and the dashboard
-// retires the suggestion as "no longer lines up with the manifest".
+// retires the suggestion as "no longer lines up with the manifest". The last
+// line needs its newline too, or the final context line does not match.
 func (q *Queries) SkillsInsertEditSuggestionChange(ctx context.Context, arg SkillsInsertEditSuggestionChangeParams) error {
 	_, err := q.db.Exec(ctx, skillsInsertEditSuggestionChange, arg.ProjectID, arg.SuggestionID)
 	return err
