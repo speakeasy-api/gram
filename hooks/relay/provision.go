@@ -29,6 +29,7 @@ type PluginConfig struct {
 	HooksAPIKey  string
 	BrowserLogin bool
 	BinaryPath   string
+	WorkloadAuth bool
 }
 
 const pluginName = "speakeasy-observability"
@@ -212,6 +213,7 @@ func writeConfigFile(dir string, cfg PluginConfig) error {
 		HooksAPIKey:  cfg.HooksAPIKey,
 		BrowserLogin: cfg.BrowserLogin,
 		Nonblocking:  false,
+		WorkloadAuth: cfg.WorkloadAuth,
 	})
 }
 

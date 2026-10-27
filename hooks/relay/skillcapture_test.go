@@ -131,7 +131,7 @@ func TestRelayCacheRejectionUsesFinalOrgCredentialsForUploadTask(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "")
 	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "org-project", OrgID: "org-1", HooksAPIKey: "org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "org-project", OrgID: "org-1", HooksAPIKey: "org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	result, state := NewRelay(cfg).deliver(t.Context(), event)
 

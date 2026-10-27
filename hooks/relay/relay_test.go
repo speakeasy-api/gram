@@ -219,7 +219,7 @@ func authedConfig(t *testing.T, serverURL string) Config {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "test-hooks-key")
 	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
-	return Config{ServerURL: serverURL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	return Config{ServerURL: serverURL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 }
 
 func TestEnvelopeClaudePreToolUse(t *testing.T) {
@@ -472,7 +472,7 @@ func TestRatchetNeverAuthedFailsOpen(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -489,7 +489,7 @@ func TestRatchetEstablishedFailsClosed(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -510,7 +510,7 @@ func TestRatchetCopilotFailsClosedWithoutExitingNonZero(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderCopilot, "copilot/pre_tool_use.json")
 
@@ -535,7 +535,7 @@ func TestAuthRejectedForgetsCachedKey(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -551,7 +551,7 @@ func TestOrgKeyFallbackSendsWithoutPersonalCredential(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "shared-org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "shared-org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -574,7 +574,7 @@ func TestRejectedCacheRetriesThroughOrgKeyWithCachedIdentity(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "shared-org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "shared-org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -643,11 +643,11 @@ func TestCachedAuthUsesConfigProject(t *testing.T) {
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url=https://gram.test\napi_key=key-1\nproject=other-workspace\norg=org-1\n"), 0o600))
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 
-	c, ok := readCachedAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "this-workspace", OrgID: "org-1", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	c, ok := readCachedAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "this-workspace", OrgID: "org-1", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false})
 	require.True(t, ok)
 	require.Equal(t, "this-workspace", c.Project)
 
-	c, ok = readCachedAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "", OrgID: "org-1", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	c, ok = readCachedAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "", OrgID: "org-1", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false})
 	require.True(t, ok)
 	require.Equal(t, "other-workspace", c.Project, "cache project remains the fallback when the config has none")
 }
@@ -794,7 +794,7 @@ func TestLoginCommandCarriesConfig(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://gram.test","project":"acme","org":"org-1","hooks_api_key":"shared-key","browser_login":true}`), 0o600))
 
-	got, rest := SplitInlineFlags(Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + cfgPath, "--force"})
+	got, rest := SplitInlineFlags(Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}, []string{"--config=" + cfgPath, "--force"})
 	require.Equal(t, []string{"--force"}, rest)
 	require.Equal(t, cfgPath, got.ConfigPath)
 	require.Equal(t, "https://gram.test", got.ServerURL)
@@ -938,7 +938,7 @@ func TestClaudeConfigChangeIsRelayedAfterMCPInventory(t *testing.T) {
 // parsing when the plugin lives under a path with spaces.
 func TestLoginCommandQuotesUnsafePaths(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "plugin dir", "speakeasy.json")
-	cmd := NewRelay(Config{ServerURL: "https://gram.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: cfgPath, ConfigError: ""}).loginCommand()
+	cmd := NewRelay(Config{ServerURL: "https://gram.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: cfgPath, ConfigError: "", WorkloadAuth: false}).loginCommand()
 	require.Contains(t, cmd, " --config='"+cfgPath+"'")
 }
 
@@ -951,7 +951,7 @@ func TestNudgeEmittedOncePerSession(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
 	require.Equal(t, 0, first.ExitCode)
@@ -1397,7 +1397,7 @@ func TestRejectedCachedKeyNudgesPromptReconnect(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	t.Setenv("TMPDIR", t.TempDir())
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
 	require.Equal(t, 0, first.ExitCode, "a rejected cached key must fail the prompt open")
@@ -1427,7 +1427,7 @@ func TestRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(first.Stdout), `"permissionDecision":"deny"`)
@@ -1475,7 +1475,7 @@ func TestResolveAuthIgnoresGenericGramAPIKey(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_API_KEY", "mcp-key")
 
-	_, ok := resolveAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	_, ok := resolveAuth(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false})
 	require.False(t, ok, "GRAM_API_KEY is a different product surface and must not authenticate hooks")
 }
 
@@ -1501,7 +1501,7 @@ func TestInsecureServerURLFailsClosedWhenEstablished(t *testing.T) {
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "leaky-key")
-	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
@@ -1514,7 +1514,7 @@ func TestInsecureServerURLFailsClosedWhenEstablished(t *testing.T) {
 func TestInsecureServerURLFailsOpenNeverAuthed(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "leaky-key")
-	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Equal(t, 0, res.ExitCode)
@@ -1603,7 +1603,7 @@ func TestRejectedCachedKeyCursorPromptFailsOpen(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	t.Setenv("TMPDIR", t.TempDir())
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderCursor, "cursor/before_submit_prompt.json")
 	require.Equal(t, 0, res.ExitCode, "a rejected cached key must fail the prompt open on cursor too")
@@ -1617,7 +1617,7 @@ func TestRejectedCachedKeyCursorPromptFailsOpen(t *testing.T) {
 // TestSplitInlineFlagsRecordsConfigError pins that an unreadable --config file
 // is surfaced instead of silently keeping the default deployment identity.
 func TestSplitInlineFlagsRecordsConfigError(t *testing.T) {
-	cfg, rest := SplitInlineFlags(Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + filepath.Join(t.TempDir(), "missing.json"), "run"})
+	cfg, rest := SplitInlineFlags(Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}, []string{"--config=" + filepath.Join(t.TempDir(), "missing.json"), "run"})
 	require.NotEmpty(t, cfg.ConfigError)
 	require.Equal(t, []string{"run"}, rest)
 }
@@ -1629,7 +1629,7 @@ func TestLoadConfigReadsDebugLogFromEnv(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hooks-debug.log")
 	t.Setenv("SPEAKEASY_AI_HOOKS_DEBUG_LOG", "  "+path+"  ")
 
-	cfg := LoadConfig(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	cfg := LoadConfig(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false})
 	require.Equal(t, path, cfg.DebugLog)
 }
 
@@ -1640,7 +1640,7 @@ func TestDebugLogFlagBeatsEnv(t *testing.T) {
 	flagPath := filepath.Join(t.TempDir(), "flag.log")
 	t.Setenv("SPEAKEASY_AI_HOOKS_DEBUG_LOG", filepath.Join(t.TempDir(), "env.log"))
 
-	flagCfg, rest := SplitInlineFlags(Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--debug-log=" + flagPath, "run"})
+	flagCfg, rest := SplitInlineFlags(Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}, []string{"--debug-log=" + flagPath, "run"})
 	require.Equal(t, []string{"run"}, rest)
 	require.Equal(t, flagPath, LoadConfig(flagCfg).DebugLog)
 }
@@ -1673,7 +1673,7 @@ func TestBrokenConfigFailsClosedWhenEstablished(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
@@ -1689,7 +1689,7 @@ func TestBrokenConfigFailsOpenNeverAuthed(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	t.Setenv("TMPDIR", t.TempDir())
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory", WorkloadAuth: false}
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
 	require.Equal(t, 0, res.ExitCode)

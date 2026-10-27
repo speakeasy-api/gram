@@ -108,7 +108,7 @@ func TestSpoolSkipsWhenServerRejects4xx(t *testing.T) {
 func TestSpoolSkipsWithoutCredentials(t *testing.T) {
 	setSpoolStateHome(t)
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	cfg := Config{ServerURL: closedPortURL(t), ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: closedPortURL(t), ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Empty(t, spoolFiles(t))
@@ -275,7 +275,7 @@ func TestSpoolOversizeEntryShedsRawNotBacklog(t *testing.T) {
 		Data:          nil,
 		Raw:           json.RawMessage(`{"blob":"` + string(big) + `"}`),
 	}
-	NewRelay(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}).
+	NewRelay(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}).
 		spoolUnsent(newIdempotencyToken(), payload)
 
 	names := spoolFiles(t)

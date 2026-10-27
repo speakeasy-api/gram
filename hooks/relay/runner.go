@@ -124,6 +124,8 @@ const reauthNeededMessage = "Speakeasy hooks need to reconnect. Run the Speakeas
 
 const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in SPEAKEASY_AI_HOOKS_API_KEY (or the deprecated GRAM_HOOKS_API_KEY). Update or unset it, then run the Speakeasy hooks login command to reconnect."
 
+const workloadRejectedMessage = "Speakeasy refused this agent's workload identity for hooks. Check that the agent platform's connection to the Speakeasy device-agent token endpoint covers the hooks paths, that the workload is assigned to an agent, and that the agent may send hooks to this project."
+
 // deliver relays one event to the server, returning the result and the
 // credential posture. It performs no work when the machine holds no credential
 // so an unauthenticated install never leaks events.
@@ -203,6 +205,15 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			res.decision.Message = envKeyRejectedMessage + " Server response: " + msg
 		} else {
 			res.decision.Message = envKeyRejectedMessage
+		}
+	}
+	if res.authRejected && c.Source == credWorkload {
+		// No local sign-in can replace a workload's identity, so the fix
+		// lies in the platform's connection or the agent's grants.
+		if msg := strings.TrimSpace(res.decision.Message); msg != "" {
+			res.decision.Message = workloadRejectedMessage + " Server response: " + msg
+		} else {
+			res.decision.Message = workloadRejectedMessage
 		}
 	}
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
@@ -425,10 +436,11 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 // holds no usable credential — never authenticated, key lost or rejected, or a
 // shared cache minted for a different server or org — then relays the
 // session.started telemetry. Viability guards and the attempt cooldown keep
-// the browser from nagging.
+// the browser from nagging. A workload sandbox never signs in: its identity
+// comes from the platform, and nobody is at a browser.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
 	_, cached := readCachedAuth(r.cfg)
-	if r.cfg.BrowserLogin && Env("HOOKS_API_KEY") == "" && !cached {
+	if r.cfg.BrowserLogin && !r.cfg.WorkloadAuth && Env("HOOKS_API_KEY") == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)

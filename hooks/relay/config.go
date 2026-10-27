@@ -64,6 +64,14 @@ type Config struct {
 	// fall back to the default server where a cached key could route them to
 	// another workspace.
 	ConfigError string
+	// WorkloadAuth marks a sandbox whose egress proxy authenticates hooks
+	// requests as the agent's workload, such as Claude Tag's Agent Proxy
+	// attaching a device-agent token as Authorization. When the machine holds
+	// no explicit, cached, or org key, events are sent without Gram-Key and
+	// the proxy supplies the credential. The relay never sees that token, so
+	// a request the proxy did not authenticate reaches the server keyless and
+	// is acknowledged without processing, as for a machine never signed in.
+	WorkloadAuth bool
 }
 
 // FileConfig is the on-disk schema of a plugin's speakeasy.json. Evolution is
@@ -78,6 +86,7 @@ type FileConfig struct {
 	HooksAPIKey  string `json:"hooks_api_key,omitempty"`
 	BrowserLogin bool   `json:"browser_login,omitempty"`
 	Nonblocking  bool   `json:"nonblocking,omitempty"`
+	WorkloadAuth bool   `json:"workload_auth,omitempty"`
 }
 
 // SplitInlineFlags extracts the deployment flags from a hook command's argv and
@@ -89,7 +98,7 @@ type FileConfig struct {
 // manual overrides layered on top of the file.
 func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	cfg := defaults
-	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 	rest := make([]string, 0, len(args))
 	for _, a := range args {
 		switch {
@@ -104,6 +113,7 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 				cfg.HooksAPIKey = fc.HooksAPIKey
 				cfg.BrowserLogin = fc.BrowserLogin
 				cfg.Nonblocking = fc.Nonblocking
+				cfg.WorkloadAuth = fc.WorkloadAuth
 			} else {
 				cfg.ConfigError = err.Error()
 			}
@@ -154,6 +164,14 @@ func envDebugLog() string {
 	return Env("HOOKS_DEBUG_LOG")
 }
 
+// envWorkloadAuth reports whether SPEAKEASY_AI_HOOKS_WORKLOAD_AUTH opts this
+// environment into workload authentication. The environment can only turn it
+// on, so a sandbox cannot drop the setting a plugin's speakeasy.json carries.
+func envWorkloadAuth() bool {
+	v := Env("HOOKS_WORKLOAD_AUTH")
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
 // readFileConfig loads a speakeasy.json. A missing or malformed file yields an
 // error so the caller keeps its defaults; hooks must not crash over config.
 func readFileConfig(path string) (FileConfig, error) {
@@ -195,6 +213,9 @@ func LoadConfig(defaults Config) Config {
 	}
 	if Env("HOOKS_NONBLOCKING") != "" || Env("HOOKS_OBSERVABILITY_MODE") != "" {
 		cfg.Nonblocking = true
+	}
+	if envWorkloadAuth() {
+		cfg.WorkloadAuth = true
 	}
 	if cfg.DebugLog == "" {
 		cfg.DebugLog = envDebugLog()

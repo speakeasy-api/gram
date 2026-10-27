@@ -25,6 +25,12 @@ func requestedSkillUploadTask(c creds, res ingestResult, skill *resolvedSkill) (
 		!skill.captureReady || res.skillCapture.rawSHA256 != skill.rawSHA256 {
 		return skillUploadTask{}, false, nil
 	}
+	// The upload endpoint accepts only API keys, so a keyless workload
+	// credential skips it; the server requests the content again on the
+	// skill's next activation.
+	if c.Source == credWorkload {
+		return skillUploadTask{}, false, nil
+	}
 	task := skillUploadTask{
 		ServerURL: c.ServerURL,
 		Project:   c.Project,
