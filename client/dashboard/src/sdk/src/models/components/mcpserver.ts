@@ -78,6 +78,10 @@ export type McpServer = {
    */
   id: string;
   /**
+   * The slug of a legacy Speakeasy-hosted address that still serves this hosted server: its custom-domain address, which the Speakeasy domain also answers until the server takes a platform endpoint with that slug. Absent otherwise.
+   */
+  legacyPlatformSlug?: string | undefined;
+  /**
    * A human-readable display name for the server
    */
   name?: string | undefined;
@@ -173,6 +177,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       environment_id: z.optional(z.string()),
       has_endpoint: z.optional(z.boolean()),
       id: z.string(),
+      legacy_platform_slug: z.optional(z.string()),
       name: z.optional(z.string()),
       network_access_mode: McpServerNetworkAccessMode$inboundSchema,
       platform_endpoint_slug: z.optional(z.string()),
@@ -199,6 +204,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "created_at": "createdAt",
         "environment_id": "environmentId",
         "has_endpoint": "hasEndpoint",
+        "legacy_platform_slug": "legacyPlatformSlug",
         "network_access_mode": "networkAccessMode",
         "platform_endpoint_slug": "platformEndpointSlug",
         "primary_endpoint_id": "primaryEndpointId",

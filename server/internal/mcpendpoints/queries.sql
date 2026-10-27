@@ -161,6 +161,9 @@ RETURNING *;
 -- exclude_mcp_server_id discounts the toolset backing that server. Unless
 -- skip_domain_check, a supplied domain must be live and owned by
 -- organization_id or the result is false (blocks probing foreign domains).
+-- On the platform, a custom-domain alias in a live project also holds the slug
+-- while no platform alias does, since the loose legacy lookup serves it there;
+-- only that toolset or its canonical server may claim it.
 SELECT (
   @skip_domain_check::boolean
   OR sqlc.narg('custom_domain_id')::uuid IS NULL
@@ -205,15 +208,49 @@ SELECT (
           AND s.toolset_id = t.id
       )
     )
+) AND (
+  sqlc.narg('custom_domain_id')::uuid IS NOT NULL
+  OR EXISTS (
+    SELECT 1
+    FROM toolsets pa
+    WHERE pa.mcp_slug = @slug
+      AND pa.custom_domain_id IS NULL
+      AND pa.deleted IS FALSE
+  )
+  OR NOT EXISTS (
+    SELECT 1
+    FROM toolsets t
+    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+    WHERE t.mcp_slug = @slug
+      AND t.custom_domain_id IS NOT NULL
+      AND t.deleted IS FALSE
+      AND (
+        sqlc.narg('exclude_toolset_id')::uuid IS NULL
+        OR t.id <> sqlc.narg('exclude_toolset_id')::uuid
+      )
+      AND (
+        sqlc.narg('exclude_mcp_server_id')::uuid IS NULL
+        OR sqlc.narg('exclude_mcp_server_id')::uuid <> t.id
+        OR NOT EXISTS (
+          SELECT 1
+          FROM mcp_servers s
+          WHERE s.id = t.id
+            AND s.toolset_id = t.id
+        )
+      )
+  )
 );
 
 -- name: LockSlugScope :exec
 -- Serializes competing claims on one (namespace, slug) address for the rest of
 -- the caller's transaction; the per-table unique indexes cannot see
--- cross-table collisions.
-SELECT pg_advisory_xact_lock(hashtextextended(
-  'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
-));
+-- cross-table collisions. The platform lock comes first, also for a
+-- custom-domain claim, since the platform host serves custom-domain aliases.
+SELECT
+  pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0)),
+  pg_advisory_xact_lock(hashtextextended(
+    'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
+  ));
 
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
 -- Soft-delete all endpoints that point at a given mcp server. Used when the
