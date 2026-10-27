@@ -412,6 +412,7 @@ func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, client 
 		return
 	}
 	page := oauthui.AuthorizationError{
+		Recovery:       nil,
 		Setup:          false,
 		Status:         http.StatusBadRequest,
 		Reason:         oauthui.ReasonDefault,
@@ -476,6 +477,7 @@ func validStaffPKCEChallenge(challenge string) bool {
 
 func staffBrowserError(w http.ResponseWriter, r *http.Request, status int, code, description string, reason oauthui.Reason) {
 	_ = oauthui.WriteAuthorizationError(r.Context(), w, oauthui.AuthorizationError{
+		Recovery:       nil,
 		Setup:          false,
 		Status:         status,
 		Reason:         reason,

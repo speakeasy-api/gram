@@ -71,6 +71,7 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 				clientName = presentation.clientName
 			}
 			page := oauthui.AuthorizationError{
+				Recovery:       nil,
 				Setup:          false,
 				Status:         code,
 				Reason:         reason,

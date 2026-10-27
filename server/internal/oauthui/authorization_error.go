@@ -52,9 +52,23 @@ var authorizationErrorFallbackStart, authorizationErrorFallbackEnd = func() (str
 	return start.String(), end.String()
 }()
 
+// RecoveryLink returns the browser to a trusted application page where the
+// person can restart the flow. It never carries OAuth callback parameters.
+type RecoveryLink struct {
+	// URL is an absolute HTTP(S) URL built from server configuration and trusted
+	// application state, never from request-controlled return URLs.
+	URL string
+
+	// Label names the action the destination supports.
+	Label string
+}
+
 // AuthorizationError describes a refused browser authorization or approval
 // request. Protocol values only appear under Technical details.
 type AuthorizationError struct {
+	// Recovery optionally links to a trusted application page.
+	Recovery *RecoveryLink
+
 	// Setup selects organization setup recovery instructions.
 	Setup bool
 
@@ -166,6 +180,9 @@ func classifyError(page AuthorizationError) errorKind {
 }
 
 type authorizationErrorView struct {
+	// Recovery is the validated application link, separate from OAuth callbacks.
+	Recovery *RecoveryLink
+
 	// Setup selects organization setup copy.
 	Setup bool
 
@@ -240,7 +257,8 @@ func technicalDetailsText(view authorizationErrorView) string {
 }
 
 // WriteAuthorizationError renders a terminal error page with an optional callback
-// link. Rendering failures produce a static branded page before returning the error.
+// or application recovery link. Rendering failures produce a static branded page
+// before returning the error.
 // Callers must build CallbackURL only after matching the client's registered
 // redirect URI. Scheme validation here protects the HTML link even for stored
 // registrations created before the current redirect validation rules.
@@ -265,6 +283,16 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("render authorization error: %w", err)
 	}
+	if page.Recovery != nil {
+		target, err := url.Parse(page.Recovery.URL)
+		if err != nil {
+			return fmt.Errorf("parse authorization recovery link: %w", err)
+		}
+		if (target.Scheme != "https" && target.Scheme != "http") || target.Host == "" || target.User != nil || strings.TrimSpace(page.Recovery.Label) == "" {
+			return fmt.Errorf("validate authorization recovery link: absolute HTTP(S) URL and label required")
+		}
+	}
+
 	destination := ""
 	if page.CallbackURL != "" {
 		if err := oauthwire.ValidateRedirectURI(page.CallbackURL); err != nil {
@@ -291,6 +319,7 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 		return fmt.Errorf("generate authorization error script nonce: %w", err)
 	}
 	view := authorizationErrorView{
+		Recovery:       page.Recovery,
 		Styles:         consentpage.Styles,
 		Setup:          page.Setup,
 		Approval:       page.Approval,

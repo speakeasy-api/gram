@@ -144,8 +144,8 @@ func TestSetupCallbackRejectsInvalidOrigin(t *testing.T) {
 		"intent=sso&task=https://example.test", "intent=unknown&task=connect-idp",
 	} {
 		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/setup/callback?"+query, nil))
-		require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, rec, http.StatusBadRequest).Code)
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/setup/callback?"+query+"&return_to=https://untrusted.example", nil))
+		require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, rec, http.StatusBadRequest, "http://localhost:5173/@self/setup").Code)
 		require.Contains(t, rec.Body.String(), "Organization setup")
 		require.Empty(t, rec.Header().Get("Location"), query)
 	}
@@ -183,7 +183,7 @@ func TestSetupCallbackRequiresActiveOrganizationAdmin(t *testing.T) {
 					mux.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?intent="+intent+origin, nil))
 					require.Equal(t, http.StatusForbidden, rec.Code)
 					require.Empty(t, rec.Header().Get("Location"))
-					require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, rec, http.StatusForbidden).Code)
+					require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, rec, http.StatusForbidden, "http://localhost:5173/@self/setup").Code)
 					require.Contains(t, rec.Body.String(), "Organization setup")
 					require.Contains(t, rec.Body.String(), "Speakeasy dashboard")
 					require.Empty(t, ti.orgs.Calls, "denied callbacks must not call WorkOS")

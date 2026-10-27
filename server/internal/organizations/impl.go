@@ -1246,7 +1246,8 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) writeSetupCallbackError(w http.ResponseWriter, r *http.Request, description string, status int) {
 	page := oauthui.AuthorizationError{
-		Setup: true, Status: status, Reason: oauthui.ReasonDefault, Approval: false,
+		Recovery: &oauthui.RecoveryLink{URL: strings.TrimRight(s.siteURL, "/") + "/@self/setup", Label: "Open organization setup"},
+		Setup:    true, Status: status, Reason: oauthui.ReasonDefault, Approval: false,
 		ErrorID: "", Code: oautherr.CodeInvalidRequest, Description: description,
 		CallbackURL: "", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: "",
 	}

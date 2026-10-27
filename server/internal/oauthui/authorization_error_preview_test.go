@@ -39,9 +39,9 @@ func TestAuthorizationErrorPagePreview(t *testing.T) {
 		name, redirectURI string
 		page              oauthui.AuthorizationError
 	}{
-		{"setup-invalid", "", oauthui.AuthorizationError{Setup: true, Status: 400, Code: oautherr.CodeInvalidRequest, Description: "missing intent parameter"}},
-		{"setup-forbidden", "", oauthui.AuthorizationError{Setup: true, Status: 403, Code: oautherr.CodeAccessDenied, Description: "forbidden"}},
-		{"setup-unavailable", "", oauthui.AuthorizationError{Setup: true, Status: 500, Code: oautherr.CodeServerError, Description: "internal error"}},
+		{"setup-invalid", "", oauthui.AuthorizationError{Recovery: &oauthui.RecoveryLink{URL: "https://app.example.test/@self/setup", Label: "Open organization setup"}, Setup: true, Status: 400, Code: oautherr.CodeInvalidRequest, Description: "missing intent parameter"}},
+		{"setup-forbidden", "", oauthui.AuthorizationError{Recovery: &oauthui.RecoveryLink{URL: "https://app.example.test/@self/setup", Label: "Open organization setup"}, Setup: true, Status: 403, Code: oautherr.CodeAccessDenied, Description: "forbidden"}},
+		{"setup-unavailable", "", oauthui.AuthorizationError{Recovery: &oauthui.RecoveryLink{URL: "https://app.example.test/@self/setup", Label: "Open organization setup"}, Setup: true, Status: 500, Code: oautherr.CodeServerError, Description: "internal error"}},
 		{"dashboard-canceled", "", oauthui.AuthorizationError{Status: 403, Code: "forbidden", Description: "login was declined", Reason: oauthui.ReasonCanceled, ClientName: "Speakeasy dashboard"}},
 		{"assistant-canceled", "", oauthui.AuthorizationError{Status: 400, Code: "bad_request", Description: "connection was not completed; return to your assistant conversation and try again", Reason: oauthui.ReasonCanceled, ClientName: "Speakeasy Assistant"}},
 		{"blocked-no-callback", "", oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: oauthui.ReasonOrganizationBlocked, Description: "This client is blocked by organization policy", ClientName: "Example Client", ServerName: "example-observability"}},
