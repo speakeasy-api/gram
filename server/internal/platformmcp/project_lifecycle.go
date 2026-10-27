@@ -420,11 +420,12 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 		ValidateReplay: validProjectReceiptPayload,
 		EncodeResult:   encodeProjectReceipt,
 		Mutate: func(ctx context.Context, tx pgx.Tx) (projectReceipt, error) {
-			renamed, err := s.core.RenameInTransaction(ctx, tx, projects.RenameProjectMutation{
-				OrganizationID: principal.OrganizationID,
-				ProjectID:      project.ID,
-				Name:           name,
-				Actor:          projects.ProjectActor{UserID: principal.UserID, DisplayName: nil},
+			renamed, err := s.core.UpdateInTransaction(ctx, tx, projects.UpdateProjectMutation{
+				RequireMCPGateway: nil,
+				OrganizationID:    principal.OrganizationID,
+				ProjectID:         project.ID,
+				Name:              name,
+				Actor:             projects.ProjectActor{UserID: principal.UserID, DisplayName: nil},
 			})
 			switch {
 			case errors.Is(err, projects.ErrProjectNotFound):

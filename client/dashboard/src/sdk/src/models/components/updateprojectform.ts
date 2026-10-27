@@ -3,26 +3,40 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdateProjectForm = {
   /**
    * The display name of the project
    */
   name: string;
+  /**
+   * Require MCP connections through a gateway. Omit to preserve the current setting.
+   */
+  requireMcpGateway?: boolean | undefined;
 };
 
 /** @internal */
 export type UpdateProjectForm$Outbound = {
   name: string;
+  require_mcp_gateway?: boolean | undefined;
 };
 
 /** @internal */
 export const UpdateProjectForm$outboundSchema: z.ZodMiniType<
   UpdateProjectForm$Outbound,
   UpdateProjectForm
-> = z.object({
-  name: z.string(),
-});
+> = z.pipe(
+  z.object({
+    name: z.string(),
+    requireMcpGateway: z.optional(z.boolean()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      requireMcpGateway: "require_mcp_gateway",
+    });
+  }),
+);
 
 export function updateProjectFormToJSON(
   updateProjectForm: UpdateProjectForm,

@@ -99,7 +99,7 @@ func BuildUpdateProjectPayload(projectsUpdateProjectBody string, projectsUpdateP
 	{
 		err = json.Unmarshal([]byte(projectsUpdateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"require_mcp_gateway\": false\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -115,7 +115,8 @@ func BuildUpdateProjectPayload(projectsUpdateProjectBody string, projectsUpdateP
 		}
 	}
 	v := &projects.UpdateProjectPayload{
-		Name: body.Name,
+		Name:              body.Name,
+		RequireMcpGateway: body.RequireMcpGateway,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

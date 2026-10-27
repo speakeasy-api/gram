@@ -4,13 +4,18 @@ import {
 } from "@/components/detail/settings-section";
 import { RequireScope } from "@/components/require-scope";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useProject as useProjectDetails } from "@gram/client/react-query/project";
 import { Input } from "@/components/ui/Input";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import type { SessionInfoResponse } from "@gram/client/models/operations/sessioninfo.js";
 import { invalidateAllListProjects } from "@gram/client/react-query/listProjects";
 import { invalidateAllProject } from "@gram/client/react-query/project";
 import { useUpdateProjectMutation } from "@gram/client/react-query/updateProject";
-import { useForm } from "@tanstack/react-form";
+import { useEffect, useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -43,21 +48,49 @@ function firstError(errors: unknown[]): string | undefined {
 export function ProjectNameSection(): React.ReactNode {
   const project = useProject();
 
-  return <ProjectNameForm key={project.id} project={project} />;
+  const details = useProjectDetails({ slug: project.slug });
+  if (details.isPending) return <Skeleton className="h-64 w-full" />;
+  if (details.isError)
+    return (
+      <FieldError>
+        Could not load project settings.{" "}
+        <Button variant="secondary" onClick={() => void details.refetch()}>
+          Retry
+        </Button>
+      </FieldError>
+    );
+  return (
+    <ProjectNameForm
+      key={project.id}
+      project={{ ...project, name: details.data.project.name }}
+      requireMcpGateway={details.data.project.requireMcpGateway ?? false}
+    />
+  );
 }
 
 function ProjectNameForm({
   project,
+  requireMcpGateway,
 }: {
   project: ReturnType<typeof useProject>;
+  requireMcpGateway: boolean;
 }): React.ReactNode {
   const organization = useOrganization();
   const session = useSession();
   const queryClient = useQueryClient();
+  const [defaultValues, setDefaultValues] = useState({
+    name: project.name,
+    requireMcpGateway,
+  });
 
   const update = useUpdateProjectMutation({
     onSuccess: async ({ project: updatedProject }) => {
-      form.reset({ name: updatedProject.name });
+      const savedValues = {
+        name: updatedProject.name,
+        requireMcpGateway: updatedProject.requireMcpGateway ?? false,
+      };
+      setDefaultValues(savedValues);
+      form.reset(savedValues);
 
       queryClient.setQueriesData<SessionInfoResponse>(
         { queryKey: ["@gram/client", "auth", "info"] },
@@ -86,16 +119,21 @@ function ProjectNameForm({
         invalidateAllProject(queryClient),
       ]);
 
-      toast.success("Project name updated");
+      toast.success("Project settings updated");
     },
   });
 
   const form = useForm({
-    defaultValues: { name: project.name },
+    defaultValues,
     onSubmit: ({ value }) => {
       update.mutate({
         request: {
-          updateProjectForm: { name: projectNameSchema.parse(value.name) },
+          updateProjectForm: {
+            name: projectNameSchema.parse(value.name),
+            ...(value.requireMcpGateway !== defaultValues.requireMcpGateway
+              ? { requireMcpGateway: value.requireMcpGateway }
+              : {}),
+          },
         },
         security: {
           projectSlugHeaderGramProject: project.slug,
@@ -104,6 +142,17 @@ function ProjectNameForm({
       });
     },
   });
+
+  const isDirty = useStore(form.store, (state) => state.isDirty);
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
 
   return (
     <SettingsSection>
@@ -165,9 +214,38 @@ function ProjectNameForm({
                 <Input id="project-slug" value={project.slug} disabled />
               </Field>
             </div>
+            <form.Field name="requireMcpGateway">
+              {(field) => (
+                <Field>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="require-mcp-gateway"
+                      checked={field.state.value}
+                      onCheckedChange={(checked) => {
+                        update.reset();
+                        field.handleChange(checked === true);
+                      }}
+                      disabled={update.isPending}
+                      aria-describedby="require-mcp-gateway-description"
+                    />
+                    <FieldLabel htmlFor="require-mcp-gateway">
+                      Require an MCP gateway
+                    </FieldLabel>
+                  </div>
+                  <p
+                    id="require-mcp-gateway-description"
+                    className="text-sm text-muted-foreground"
+                  >
+                    Block direct connections to this project's MCP servers,
+                    including existing connections. Set up a gateway and give
+                    users its URL before saving.
+                  </p>
+                </Field>
+              )}
+            </form.Field>
             {update.isError && (
               <FieldError className="max-w-md">
-                {update.error.message}
+                Could not save project settings. Try again.
               </FieldError>
             )}
           </SettingsSection.Body>

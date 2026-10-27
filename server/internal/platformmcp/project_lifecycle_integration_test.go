@@ -615,7 +615,7 @@ func TestProjectLifecycleUnavailableRegistrationMatchesLiveManifest(t *testing.T
 
 	live := describe(fixture.service)
 	unavailable := describe(nil)
-	require.Len(t, unavailable, 2)
+	require.Len(t, unavailable, 3)
 	require.Len(t, live, len(unavailable))
 	for name, descriptor := range unavailable {
 		other, ok := live[name]

@@ -204,3 +204,29 @@ func TestUpdateProjectRequiresProjectWrite(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	assert.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
+
+func TestUpdateProjectGatewayRequirement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProjectsService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	before, err := repo.New(ti.conn).GetProjectByID(ctx, *auth.ProjectID)
+	require.NoError(t, err)
+	require.False(t, before.RequireMcpGateway.Bool)
+
+	enabled, err := ti.service.UpdateProject(ctx, &gen.UpdateProjectPayload{Name: before.Name, RequireMcpGateway: new(true)})
+	require.NoError(t, err)
+	require.True(t, enabled.Project.RequireMcpGateway)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, true, snapshot["RequireMcpGateway"])
+
+	renamed, err := ti.service.UpdateProject(ctx, &gen.UpdateProjectPayload{Name: "New name"})
+	require.NoError(t, err)
+	require.True(t, renamed.Project.RequireMcpGateway, "omission must preserve the setting")
+	disabled, err := ti.service.UpdateProject(ctx, &gen.UpdateProjectPayload{Name: "New name", RequireMcpGateway: new(false)})
+	require.NoError(t, err)
+	require.False(t, disabled.Project.RequireMcpGateway)
+}

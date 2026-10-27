@@ -168,6 +168,10 @@ func (s *Service) serveResolvedMCPEndpoint(
 ) error {
 	ctx := r.Context()
 
+	if err := s.enforceMCPGateway(ctx, mcpEndpoint.ProjectID); err != nil {
+		return err
+	}
+
 	s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, mcpServer.ID, uuid.Nil, "")
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
@@ -1120,4 +1124,18 @@ func (s *Service) BuildResolvedMcpEndpointForMetaServer(
 	}
 	logger.DebugContext(ctx, "resolved meta mcp endpoint", attr.SlogMetaMcpServerID(metaServer.ID.String()))
 	return resolved, nil
+}
+
+// enforceMCPGateway reads the live setting on each direct request so existing
+// connections cannot retain access after an administrator requires a gateway.
+// Gateway member dispatch is in-process and never enters this direct handler.
+func (s *Service) enforceMCPGateway(ctx context.Context, projectID uuid.UUID) error {
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "Unable to check project connection settings").LogError(ctx, s.logger)
+	}
+	if project.RequireMcpGateway.Bool {
+		return oops.E(oops.CodeForbidden, nil, "This project requires MCP connections through a gateway. Connect using your Speakeasy gateway URL.")
+	}
+	return nil
 }

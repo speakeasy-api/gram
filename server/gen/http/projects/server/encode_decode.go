@@ -2019,13 +2019,20 @@ func EncodeSetOrganizationWhitelistError(encoder func(context.Context, http.Resp
 // *ProjectResponseBody from a value of type *projects.Project.
 func marshalProjectsProjectToProjectResponseBody(v *projects.Project) *ProjectResponseBody {
 	res := &ProjectResponseBody{
-		ID:             v.ID,
-		Name:           v.Name,
-		Slug:           string(v.Slug),
-		OrganizationID: v.OrganizationID,
-		LogoAssetID:    v.LogoAssetID,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:                v.ID,
+		Name:              v.Name,
+		Slug:              string(v.Slug),
+		OrganizationID:    v.OrganizationID,
+		LogoAssetID:       v.LogoAssetID,
+		RequireMcpGateway: v.RequireMcpGateway,
+		CreatedAt:         v.CreatedAt,
+		UpdatedAt:         v.UpdatedAt,
+	}
+	{
+		var zero bool
+		if res.RequireMcpGateway == zero {
+			res.RequireMcpGateway = false
+		}
 	}
 
 	return res

@@ -50542,7 +50542,7 @@ paths:
       x-speakeasy-name-override: setOrganizationWhitelist
   /rpc/projects.update:
     post:
-      description: Update the display name of the current project.
+      description: Update the display name and connection settings of the current project.
       operationId: updateProject
       parameters:
         - allowEmptyValue: true
@@ -103527,6 +103527,10 @@ components:
         organization_id:
           type: string
           description: The ID of the organization that owns the project
+        require_mcp_gateway:
+          type: boolean
+          description: Whether direct MCP connections are blocked in favor of a gateway
+          default: false
         slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -116042,6 +116046,9 @@ components:
         name:
           type: string
           description: The display name of the project
+        require_mcp_gateway:
+          type: boolean
+          description: Require MCP connections through a gateway. Omit to preserve the current setting.
       required:
         - name
     UpdateProjectResult:

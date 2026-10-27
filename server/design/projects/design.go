@@ -60,7 +60,7 @@ var _ = Service("projects", func() {
 	})
 
 	Method("updateProject", func() {
-		Description("Update the display name of the current project.")
+		Description("Update the display name and connection settings of the current project.")
 
 		Security(security.Session, security.ProjectSlug)
 
@@ -267,6 +267,7 @@ var UpdateProjectForm = Type("UpdateProjectForm", func() {
 	Required("name")
 
 	Attribute("name", String, "The display name of the project")
+	Attribute("require_mcp_gateway", Boolean, "Require MCP connections through a gateway. Omit to preserve the current setting.")
 })
 
 var UpdateProjectResult = Type("UpdateProjectResult", func() {

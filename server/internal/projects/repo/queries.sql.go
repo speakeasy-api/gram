@@ -38,7 +38,7 @@ INSERT INTO projects (
   , $2
   , $3
 )
-RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateProjectParams struct {
@@ -57,6 +57,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.RequireMcpGateway,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -95,7 +96,7 @@ func (q *Queries) DeleteProjectEMATombstones(ctx context.Context, arg DeleteProj
 }
 
 const getFirstProject = `-- name: GetFirstProject :one
-SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE deleted IS FALSE
 ORDER BY id ASC
@@ -115,6 +116,7 @@ func (q *Queries) GetFirstProject(ctx context.Context) (Project, error) {
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.RequireMcpGateway,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -124,7 +126,7 @@ func (q *Queries) GetFirstProject(ctx context.Context) (Project, error) {
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE id = $1
   AND deleted IS FALSE
@@ -140,6 +142,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.RequireMcpGateway,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -149,7 +152,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 }
 
 const getProjectByIDAndOrganizationID = `-- name: GetProjectByIDAndOrganizationID :one
-SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE id = $1
   AND organization_id = $2
@@ -171,6 +174,7 @@ func (q *Queries) GetProjectByIDAndOrganizationID(ctx context.Context, arg GetPr
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.RequireMcpGateway,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -180,7 +184,7 @@ func (q *Queries) GetProjectByIDAndOrganizationID(ctx context.Context, arg GetPr
 }
 
 const getProjectByIDAndOrganizationIDForUpdate = `-- name: GetProjectByIDAndOrganizationIDForUpdate :one
-SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE id = $1
   AND organization_id = $2
@@ -203,6 +207,7 @@ func (q *Queries) GetProjectByIDAndOrganizationIDForUpdate(ctx context.Context, 
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.RequireMcpGateway,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -212,7 +217,7 @@ func (q *Queries) GetProjectByIDAndOrganizationIDForUpdate(ctx context.Context, 
 }
 
 const getProjectByIDForUpdate = `-- name: GetProjectByIDForUpdate :one
-SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE id = $1
   AND deleted IS FALSE
@@ -229,6 +234,7 @@ func (q *Queries) GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (Pr
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.RequireMcpGateway,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -238,7 +244,7 @@ func (q *Queries) GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (Pr
 }
 
 const getProjectBySlug = `-- name: GetProjectBySlug :one
-SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE slug = $1
   AND organization_id = $2
@@ -260,6 +266,7 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, arg GetProjectBySlugPara
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.RequireMcpGateway,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -408,7 +415,7 @@ func (q *Queries) ListApprovedOriginsByProjectID(ctx context.Context, projectID 
 }
 
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
-SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -431,6 +438,7 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 			&i.OrganizationID,
 			&i.LogoAssetID,
 			&i.FunctionsRunnerVersion,
+			&i.RequireMcpGateway,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -447,7 +455,7 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 }
 
 const listProjectsByOrganizationLimited = `-- name: ListProjectsByOrganizationLimited :many
-SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -476,6 +484,7 @@ func (q *Queries) ListProjectsByOrganizationLimited(ctx context.Context, arg Lis
 			&i.OrganizationID,
 			&i.LogoAssetID,
 			&i.FunctionsRunnerVersion,
+			&i.RequireMcpGateway,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -492,7 +501,7 @@ func (q *Queries) ListProjectsByOrganizationLimited(ctx context.Context, arg Lis
 }
 
 const listProjectsByOrganizationPage = `-- name: ListProjectsByOrganizationPage :many
-SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -523,6 +532,7 @@ func (q *Queries) ListProjectsByOrganizationPage(ctx context.Context, arg ListPr
 			&i.OrganizationID,
 			&i.LogoAssetID,
 			&i.FunctionsRunnerVersion,
+			&i.RequireMcpGateway,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -598,19 +608,21 @@ func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizat
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects
 SET name = $1,
+    require_mcp_gateway = COALESCE($2::boolean, require_mcp_gateway),
     updated_at = clock_timestamp()
-WHERE id = $2
+WHERE id = $3
   AND deleted IS FALSE
-RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateProjectParams struct {
-	Name      string
-	ProjectID uuid.UUID
+	Name              string
+	RequireMcpGateway pgtype.Bool
+	ProjectID         uuid.UUID
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
-	row := q.db.QueryRow(ctx, updateProject, arg.Name, arg.ProjectID)
+	row := q.db.QueryRow(ctx, updateProject, arg.Name, arg.RequireMcpGateway, arg.ProjectID)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -619,6 +631,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.RequireMcpGateway,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -633,7 +646,7 @@ SET logo_asset_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2
   AND deleted IS FALSE
-RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, require_mcp_gateway, created_at, updated_at, deleted_at, deleted
 `
 
 type UploadProjectLogoParams struct {
@@ -651,6 +664,7 @@ func (q *Queries) UploadProjectLogo(ctx context.Context, arg UploadProjectLogoPa
 		&i.OrganizationID,
 		&i.LogoAssetID,
 		&i.FunctionsRunnerVersion,
+		&i.RequireMcpGateway,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

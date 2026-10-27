@@ -26,6 +26,7 @@ const (
 // construction, and renaming the project it lives in is a person's decision
 // rather than something a project assistant should do on its own.
 func registerProjectLifecycleTools(reg *Registrar, service *ProjectLifecycleService) {
+	registerProjectConnectionsTool(reg, service)
 	create := unavailableProjectLifecycleHandler[CreateProjectInput]()
 	rename := unavailableProjectLifecycleHandler[RenameProjectInput]()
 	if service.valid() {

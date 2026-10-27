@@ -115,13 +115,14 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 
 	return &gen.GetProjectResult{
 		Project: &gen.Project{
-			ID:             proj.ID.String(),
-			Name:           proj.Name,
-			Slug:           types.Slug(proj.Slug),
-			OrganizationID: proj.OrganizationID,
-			LogoAssetID:    conv.FromNullableUUID(proj.LogoAssetID),
-			CreatedAt:      proj.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:      proj.UpdatedAt.Time.Format(time.RFC3339),
+			ID:                proj.ID.String(),
+			Name:              proj.Name,
+			Slug:              types.Slug(proj.Slug),
+			OrganizationID:    proj.OrganizationID,
+			LogoAssetID:       conv.FromNullableUUID(proj.LogoAssetID),
+			RequireMcpGateway: proj.RequireMcpGateway.Bool,
+			CreatedAt:         proj.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:         proj.UpdatedAt.Time.Format(time.RFC3339),
 		},
 	}, nil
 }
@@ -182,13 +183,14 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 
 	project := &gen.CreateProjectResult{
 		Project: &gen.Project{
-			ID:             prj.ID.String(),
-			Name:           prj.Name,
-			Slug:           types.Slug(prj.Slug),
-			OrganizationID: prj.OrganizationID,
-			LogoAssetID:    nil,
-			CreatedAt:      prj.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:      prj.UpdatedAt.Time.Format(time.RFC3339),
+			ID:                prj.ID.String(),
+			Name:              prj.Name,
+			Slug:              types.Slug(prj.Slug),
+			OrganizationID:    prj.OrganizationID,
+			LogoAssetID:       nil,
+			RequireMcpGateway: false,
+			CreatedAt:         prj.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:         prj.UpdatedAt.Time.Format(time.RFC3339),
 		},
 	}
 
@@ -211,11 +213,12 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	renamed, err := s.core.RenameInTransaction(ctx, dbtx, RenameProjectMutation{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		Name:           payload.Name,
-		Actor:          ProjectActor{UserID: authCtx.UserID, DisplayName: authCtx.Email},
+	renamed, err := s.core.UpdateInTransaction(ctx, dbtx, UpdateProjectMutation{
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+		Name:              payload.Name,
+		RequireMCPGateway: payload.RequireMcpGateway,
+		Actor:             ProjectActor{UserID: authCtx.UserID, DisplayName: authCtx.Email},
 	})
 	switch {
 	case errors.Is(err, ErrProjectNameInvalid):
@@ -560,12 +563,13 @@ func projectNameError(err error) error {
 
 func toProject(p repo.Project) *gen.Project {
 	return &gen.Project{
-		ID:             p.ID.String(),
-		Name:           p.Name,
-		Slug:           types.Slug(p.Slug),
-		OrganizationID: p.OrganizationID,
-		LogoAssetID:    conv.FromNullableUUID(p.LogoAssetID),
-		CreatedAt:      p.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      p.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                p.ID.String(),
+		Name:              p.Name,
+		Slug:              types.Slug(p.Slug),
+		OrganizationID:    p.OrganizationID,
+		LogoAssetID:       conv.FromNullableUUID(p.LogoAssetID),
+		RequireMcpGateway: p.RequireMcpGateway.Bool,
+		CreatedAt:         p.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:         p.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }

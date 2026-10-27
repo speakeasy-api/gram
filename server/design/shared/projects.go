@@ -23,6 +23,7 @@ var Project = Type("Project", func() {
 	Attribute("slug", Slug, "The slug of the project")
 	Attribute("organization_id", String, "The ID of the organization that owns the project")
 	Attribute("logo_asset_id", String, "The ID of the logo asset for the project")
+	Attribute("require_mcp_gateway", Boolean, "Whether direct MCP connections are blocked in favor of a gateway", func() { Default(false) })
 	Attribute("created_at", String, func() {
 		Description("The creation date of the project.")
 		Format(FormatDateTime)
