@@ -118,8 +118,8 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
     if (mode === "canvas") rememberCanvasPath(path);
   }, [mode, path]);
 
-  // Rollout control only: the headless route stays reachable by URL, it just
-  // has no chrome-level entry point until the flag is on.
+  // Only organization admins see this entry point, matching the Headless
+  // page's own authorization check.
   if (!enabled) return null;
 
   const hrefs: Record<Mode, string> = {
