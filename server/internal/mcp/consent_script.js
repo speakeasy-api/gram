@@ -71,6 +71,94 @@
     });
   }
 
+  // Hide and Show update in place; without the script the forms post and redirect.
+  var visibleServers = document.querySelector("[data-gateway-visible-list]");
+  var hiddenServers = document.querySelector("[data-gateway-hidden-list]");
+  if (visibleServers && hiddenServers) {
+    var hiddenSection = document.querySelector("[data-gateway-hidden-section]");
+    var allHidden = document.querySelector("[data-gateway-all-hidden]");
+    var gatewaySummary = document.querySelector("[data-gateway-summary]");
+    var hiddenCount = document.querySelector("[data-gateway-hidden-count]");
+    var visibilityError = document.querySelector(
+      "[data-gateway-visibility-error]",
+    );
+
+    var refreshGatewayCounts = function () {
+      var visibleRows = visibleServers.querySelectorAll(
+        "[data-gateway-server]",
+      );
+      var hiddenRows = hiddenServers.querySelectorAll("[data-gateway-server]");
+      var ready = Array.prototype.filter.call(visibleRows, function (row) {
+        return row.getAttribute("data-gateway-server-ready") === "true";
+      }).length;
+      var summary =
+        ready +
+        " of " +
+        visibleRows.length +
+        (visibleRows.length === 1 ? " server" : " servers") +
+        " connected";
+      if (hiddenRows.length) summary += " · " + hiddenRows.length + " hidden";
+      gatewaySummary.textContent = summary;
+      hiddenCount.textContent = String(hiddenRows.length);
+      visibleServers.hidden = visibleRows.length === 0;
+      allHidden.hidden = visibleRows.length !== 0;
+      hiddenSection.hidden = hiddenRows.length === 0;
+    };
+
+    var moveGatewayRow = function (row, hide) {
+      Array.prototype.forEach.call(
+        row.querySelectorAll(
+          "[data-gateway-server-status], [data-gateway-server-actions]",
+        ),
+        function (el) {
+          el.hidden = hide;
+        },
+      );
+      var toggle = row.querySelector("[data-gateway-visibility-toggle]");
+      toggle.value = hide ? "show_server" : "hide_server";
+      toggle.textContent = hide ? "Show" : "Hide";
+      toggle.title = hide
+        ? "Make this server available to your tools again"
+        : "Hide this server from your tools";
+      (hide ? hiddenServers : visibleServers).appendChild(row);
+    };
+
+    document.addEventListener("submit", async function (event) {
+      var visibilityForm = event.target;
+      if (!visibilityForm.matches("[data-gateway-visibility-form]")) return;
+      event.preventDefault();
+      var toggle = visibilityForm.querySelector(
+        "[data-gateway-visibility-toggle]",
+      );
+      if (toggle.disabled) return;
+      var hide = toggle.value === "hide_server";
+      var body = new URLSearchParams(new FormData(visibilityForm));
+      body.set("action", toggle.value);
+      toggle.disabled = true;
+      visibilityError.hidden = true;
+      var moved = false;
+      try {
+        var response = await fetch(visibilityForm.getAttribute("action"), {
+          method: "POST",
+          credentials: "same-origin",
+          body: body,
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        moveGatewayRow(visibilityForm.closest("[data-gateway-server]"), hide);
+        moved = true;
+        refreshGatewayCounts();
+      } catch (_) {
+        visibilityError.textContent =
+          "Couldn't update that server. Reload the page and try again.";
+        visibilityError.hidden = false;
+      } finally {
+        toggle.disabled = false;
+        if (moved) toggle.focus();
+      }
+    });
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
@@ -256,6 +344,19 @@
           showError(error);
         }
       }
+      function connectionUsable(session) {
+        if (!session) return false;
+        if (
+          session.HasRefreshToken &&
+          (!session.RefreshExpiresAt ||
+            new Date(session.RefreshExpiresAt).getTime() > Date.now())
+        )
+          return true;
+        return (
+          !session.AccessExpiresAt ||
+          new Date(session.AccessExpiresAt).getTime() > Date.now()
+        );
+      }
       function accountLabel(session) {
         return (
           [session.UpstreamDisplayName, session.UpstreamEmail]
@@ -290,10 +391,7 @@
               return (
                 binding.RemoteSessionClientID ===
                   provider.getAttribute("data-remote-client") &&
-                binding.RemoteSession &&
-                (data.candidates || []).some(function (session) {
-                  return session.ID === binding.RemoteSessionID;
-                })
+                connectionUsable(binding.RemoteSession)
               );
             });
           });
@@ -310,11 +408,7 @@
             var attached = document.createElement("span");
             attached.className = "text-muted-foreground text-xs";
             var account = binding.RemoteSession;
-            var eligible =
-              account &&
-              (data.candidates || []).some(function (candidate) {
-                return candidate.ID === binding.RemoteSessionID;
-              });
+            var eligible = connectionUsable(account);
             var connectedAs = provider.getAttribute("data-connected-as");
             var sameAccount =
               account &&
@@ -327,6 +421,13 @@
                 (sameAccount ? "" : " · " + accountLabel(account))
               : "Agent access unavailable. Detach it before choosing an account. Your service connection has not been changed.";
             row.appendChild(attached);
+            if (!data.canManageConnections) {
+              var readonly = document.createElement("span");
+              readonly.textContent =
+                "Only agent editors can change this assignment.";
+              row.appendChild(readonly);
+              return;
+            }
             var detach = document.createElement("button");
             detach.type = "button";
             detach.className =
@@ -337,6 +438,10 @@
             });
             row.appendChild(detach);
           } else {
+            if (!data.canManageConnections) {
+              row.textContent = "Ask an agent editor to assign a connection.";
+              return;
+            }
             var candidates = (data.candidates || []).filter(function (item) {
               return item.RemoteSessionClientID === clientId;
             });

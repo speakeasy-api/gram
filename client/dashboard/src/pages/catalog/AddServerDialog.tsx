@@ -1,3 +1,4 @@
+import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { catalogLogoClassName } from "./logo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -946,7 +947,7 @@ function CatalogServerIdentity({
         }
         credential={credential}
         upstreamName={config.name || "this server"}
-        advertisesOAuth={!!config.server.supportsDcr}
+        advertisesOAuth={supportsAutomaticOAuth(config.server)}
         authenticationRequired={false}
         canCreateIdentity={canCreateIdentity}
         rbacLoading={rbacLoading}

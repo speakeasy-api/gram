@@ -7877,6 +7877,21 @@ type UserAccount struct {
 	Deleted bool
 }
 
+type UserHiddenMcpServer struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type UserOauthToken struct {
 	// @access: confidential
 	ID uuid.UUID

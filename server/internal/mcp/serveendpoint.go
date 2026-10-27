@@ -252,7 +252,11 @@ func (s *Service) serveResolvedMCPEndpoint(
 	case mcpServer.RemoteMcpServerID.Valid, mcpServer.TunneledMcpServerID.Valid:
 		var upstreamToken remotesessions.UpstreamToken
 		if pendingIssuerGate != nil {
+			pendingIssuerGate.directWorkloadHandoff = true
 			upstreamToken, err = s.resolveDirectUpstreamToken(ctx, w, logger, pendingIssuerGate, upstreamResource, mcpServer.TunneledMcpServerID.Valid, mcpServer.RemoteSessionIssuerID)
+			if errors.Is(err, errWorkloadReconnectRequired) {
+				return s.serveWorkloadReconnect(w, r, pendingIssuerGate, sessionToolSelection)
+			}
 			if err != nil {
 				return err
 			}
