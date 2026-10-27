@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// MandatoryPolicySource names the policy a mandatory decision evaluated.
+// MandatoryPolicySource names the policy or public visibility admission behind a mandatory decision.
 type MandatoryPolicySource string
 
 const (
@@ -46,8 +46,10 @@ const (
 	MandatoryDenyReasonUnauthenticated    MandatoryDenyReason = "unauthenticated"
 )
 
-// MandatoryDecision is the outcome of a mandatory check. Allowed is true only
-// when a real policy was evaluated and allowed every check.
+// MandatoryDecision is the outcome of a mandatory check. Allowed is true when
+// a policy allowed every check, or DecideServerAdmission explicitly admitted an
+// anonymous caller to a public server. Source distinguishes policy evaluation
+// from public visibility admission, which grants only mcp:connect.
 type MandatoryDecision struct {
 	Allowed bool
 	Source  MandatoryPolicySource
@@ -129,6 +131,7 @@ func (e *Engine) AuthorizeMandatory(ctx context.Context, checks ...Check) (Manda
 // change ctx.
 func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, error) {
 	m := MandatoryAuthorization{
+		publicAnonymous: false,
 		organizationID:  "",
 		caller:          MandatoryCallerAnonymous,
 		principalID:     "",
