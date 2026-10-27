@@ -211,3 +211,34 @@ export function Console({
     </ol>
   );
 }
+
+/**
+ * Why a value the snippet needs is not filled in, and what stands in for it
+ * meanwhile. The reason comes first because it is what the reader acts on;
+ * the placeholder line tells them the snippet is not ready to paste yet.
+ */
+export function PendingValues({
+  placeholders,
+  children,
+}: {
+  placeholders: string[];
+  /** Why Speakeasy cannot fill the values in yet. */
+  children?: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="space-y-2">
+      {children}
+      <Text muted small className="block">
+        Until then, the snippet below shows{" "}
+        {placeholders.map((placeholder, index) => (
+          <span key={placeholder}>
+            {index > 0 && " and "}
+            <code>{placeholder}</code>
+          </span>
+        ))}{" "}
+        in {placeholders.length > 1 ? "their places" : "its place"}. Replace{" "}
+        {placeholders.length > 1 ? "them" : "it"} before using it.
+      </Text>
+    </div>
+  );
+}
