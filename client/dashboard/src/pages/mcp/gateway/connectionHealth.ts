@@ -443,7 +443,8 @@ const REASONS: Record<string, string> = {
   consent_config_changed:
     "The server's configuration changed since approval. Reconnecting lets the person approve it again.",
   no_member_listed: "No server in the gateway could be listed.",
-  rate_limited: "The server's upstream rate-limited the listing.",
+  rate_limited:
+    "The server's upstream rate-limited the listing (HTTP 429). Try again later.",
   upstream_unavailable: "The server's upstream was unavailable.",
   upstream_rejected: "The server's upstream rejected the listing.",
   listing_timeout: "The server did not answer in time.",

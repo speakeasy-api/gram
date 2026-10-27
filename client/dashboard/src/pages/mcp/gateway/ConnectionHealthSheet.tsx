@@ -1,5 +1,8 @@
+import { ChartLegend } from "@/components/chart/ChartLegend";
+import { overviewLabels } from "@/components/chart/overviewLabels";
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
   Collapsible,
@@ -260,20 +263,24 @@ export function ConnectionHealthSheet({
       }}
     >
       <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
-        <SheetHeader>
+        <SheetHeader className="border-b pb-4">
+          <Text className="text-eyebrow">Failure hot spot</Text>
           <SheetTitle>{hotspot.subject.label}</SheetTitle>
           <SheetDescription>
-            {[
-              stageLabel,
-              hotspot.client.label,
-              hotspot.provider.label,
-              windowPhrase,
-            ].join(" · ")}
+            {stageLabel} · {windowPhrase}
           </SheetDescription>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="neutral" className="max-w-full whitespace-normal">
+              <span>Provider: {hotspot.provider.label}</span>
+            </Badge>
+            <Badge variant="neutral" className="max-w-full whitespace-normal">
+              <span>Client: {hotspot.client.label}</span>
+            </Badge>
+          </div>
         </SheetHeader>
         {body}
         {keyed && (
-          <SheetFooter className="mt-auto">
+          <SheetFooter className="sticky bottom-0 mt-auto border-t bg-card py-4">
             <MatchingConnections
               matching={matching}
               onShow={() => onShowConnections(matching.filters)}
@@ -693,20 +700,22 @@ function KeyedDetail({
 
   return (
     <div className="space-y-6 px-4">
-      <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
+      <StatTileGroup compact>
         {inbound &&
           stageTiles(stage).map((tile) => (
-            <StatTile key={tile.title} {...tile} format="number" />
+            <StatTile compact key={tile.title} {...tile} format="number" />
           ))}
         {!inbound && (
           <>
             <StatTile
+              compact
               title="Attempts"
               value={stage.attempts}
               format="number"
               tone="information"
             />
             <StatTile
+              compact
               title="Failed"
               value={failed}
               format="number"
@@ -715,6 +724,7 @@ function KeyedDetail({
             />
             {stage.stage === "discovery_listing" && (
               <StatTile
+                compact
                 title="Partial"
                 value={partial}
                 format="number"
@@ -724,6 +734,7 @@ function KeyedDetail({
             )}
             {stage.stage === "discovery_member" && (
               <StatTile
+                compact
                 title="Needs sign-in or consent"
                 value={blocked}
                 format="number"
@@ -736,9 +747,15 @@ function KeyedDetail({
       </StatTileGroup>
       <FirstAttempt first={first} />
 
-      <section className="space-y-2">
-        <h3 className="text-eyebrow">Over time</h3>
-        <StackedTimeBarChart {...chart} height={180} />
+      <section className="space-y-3 border-y py-4">
+        <h3 className="text-eyebrow">Attempts over time</h3>
+        <StackedTimeBarChart
+          {...chart}
+          labels={overviewLabels(chart.labels)}
+          compact
+          height={100}
+        />
+        <ChartLegend datasets={chart.datasets} />
       </section>
 
       {hotspot.reasons.length > 0 && (
@@ -746,11 +763,27 @@ function KeyedDetail({
           <h3 className="text-eyebrow">Why it fails</h3>
           <ul className="space-y-2">
             {hotspot.reasons.map((reason) => (
-              <li key={reason.reason} className="flex gap-3">
-                <Text small className="w-10 shrink-0 tabular-nums">
+              <li
+                key={reason.reason}
+                className="grid grid-cols-12 items-center gap-3 py-1"
+              >
+                <Text small className="col-span-7">
+                  {reasonText(reason.reason, stage.stage)}
+                </Text>
+                <span aria-hidden="true" className="bg-muted col-span-4 h-1.5">
+                  <span
+                    className="bg-destructive block h-full"
+                    style={{
+                      width: `${(reason.count / Math.max(1, ...hotspot.reasons.map((item) => item.count))) * 100}%`,
+                    }}
+                  />
+                </span>
+                <Text
+                  small
+                  className="text-destructive text-right tabular-nums"
+                >
                   {reason.count.toLocaleString()}
                 </Text>
-                <Text small>{reasonText(reason.reason, stage.stage)}</Text>
               </li>
             ))}
           </ul>
@@ -771,9 +804,9 @@ function KeyedDetail({
         </section>
       )}
 
-      {related}
-
       <RecentAttempts stage={stage.stage} recent={recent} />
+
+      {related}
     </div>
   );
 }
@@ -864,7 +897,7 @@ function RecentAttempts({
     );
   }
   return (
-    <section className="space-y-2">
+    <section aria-label={title} className="space-y-3 border-t pt-4">
       <h3 className="text-eyebrow">{title}</h3>
       {content}
     </section>

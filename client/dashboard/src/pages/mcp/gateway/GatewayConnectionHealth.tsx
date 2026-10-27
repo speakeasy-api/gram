@@ -1,4 +1,7 @@
+import { ChartLegend } from "@/components/chart/ChartLegend";
+import { overviewLabels } from "@/components/chart/overviewLabels";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
@@ -190,48 +193,50 @@ export function GatewayConnectionHealth({
     isUnavailable(health.error) || isUnavailable(hotspots.error);
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-heading-sm">Connection health</h2>
-        <Text small muted>
-          How clients fared signing in to this gateway, connecting providers,
-          and listing its tools {phrase}. Each count is what the gateway
-          observed, not whether a redirect arrived, sign-in finished, or a token
-          was used.
-        </Text>
-        <Collapsible>
-          <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-sm underline underline-offset-4">
-            <ChevronDown
-              aria-hidden="true"
-              className="size-3.5 transition-transform group-data-[state=open]:rotate-180"
-            />
-            What isn&apos;t counted
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              <li>
+    <Card.Dashboard
+      title="Connection health"
+      headerClassName="px-4 py-3"
+      bodyClassName="space-y-3 p-3"
+      tooltip={`Sign-in, provider and tool-listing outcomes ${phrase}. These record what the gateway observed, not whether a client used a token.`}
+    >
+      <Collapsible>
+        <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-xs underline underline-offset-4">
+          <ChevronDown
+            aria-hidden="true"
+            className="size-3.5 transition-transform group-data-[state=open]:rotate-180"
+          />
+          What isn&apos;t counted
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <Text small muted className="mt-2 block">
+            How clients fared signing in to this gateway, connecting providers,
+            and listing its tools {phrase}. Each count is what the gateway
+            observed, not whether a redirect arrived, sign-in finished, or a
+            token was used.
+          </Text>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>
+              <Text small muted>
+                For tool listings, only Direct listings are recorded.
+              </Text>
+            </li>
+            {summary?.notRecorded.map((gap) => (
+              <li key={gap.stage}>
                 <Text small muted>
-                  For tool listings, only Direct listings are recorded.
+                  {gap.note}
                 </Text>
               </li>
-              {summary?.notRecorded.map((gap) => (
-                <li key={gap.stage}>
-                  <Text small muted>
-                    {gap.note}
-                  </Text>
-                </li>
-              ))}
-              {!summary && (
-                <li>
-                  <Text small muted>
-                    Coverage notes are unavailable.
-                  </Text>
-                </li>
-              )}
-            </ul>
-          </CollapsibleContent>
-        </Collapsible>
-      </div>
+            ))}
+            {!summary && (
+              <li>
+                <Text small muted>
+                  Coverage notes are unavailable.
+                </Text>
+              </li>
+            )}
+          </ul>
+        </CollapsibleContent>
+      </Collapsible>
       <Page.Toolbar>
         <Page.Toolbar.Leading>
           <Select
@@ -278,9 +283,18 @@ export function GatewayConnectionHealth({
                 <>
                   <StackedTimeBarChart
                     {...chart}
-                    height={expandedChart === CHART_ID ? 420 : 240}
+                    compact={expandedChart !== CHART_ID}
+                    labels={
+                      expandedChart === CHART_ID
+                        ? chart.labels
+                        : overviewLabels(chart.labels)
+                    }
+                    height={expandedChart === CHART_ID ? 420 : 120}
                     expanded={expandedChart === CHART_ID}
                   />
+                  {expandedChart !== CHART_ID && (
+                    <ChartLegend datasets={chart.datasets} />
+                  )}
                   <Text muted small>
                     UTC intervals of {intervalLabel(summary!.intervalSeconds)}.
                     {stage.lastSeenAt &&
@@ -291,7 +305,7 @@ export function GatewayConnectionHealth({
             </ChartCard>
           )}
           <div className="space-y-3">
-            <h3 className="text-eyebrow">Where connections fail</h3>
+            <h3 className="text-eyebrow">Failure hotspots</h3>
             <Page.Toolbar>
               <Page.Toolbar.Leading>
                 <SegmentedControl
@@ -340,7 +354,7 @@ export function GatewayConnectionHealth({
           }}
         />
       )}
-    </div>
+    </Card.Dashboard>
   );
 }
 
@@ -383,9 +397,9 @@ function StageSummary({
   }
   if (!recorded) {
     return (
-      <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
+      <StatTileGroup compact>
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-[116px] flex-1" />
+          <Skeleton key={i} className="h-24 flex-1" />
         ))}
       </StatTileGroup>
     );
@@ -407,9 +421,9 @@ function StageSummary({
     );
   }
   return (
-    <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
+    <StatTileGroup compact>
       {stageTiles(stage).map((tile) => (
-        <StatTile key={tile.title} format="number" {...tile} />
+        <StatTile compact key={tile.title} format="number" {...tile} />
       ))}
     </StatTileGroup>
   );
@@ -471,17 +485,18 @@ function Hotspots({
           </SimpleTooltip>
         </span>
       ),
-      width: "120px",
+      width: "80px",
       render: (row) => (
         <Text>{countOf(row.outcomes, "partial").toLocaleString()}</Text>
       ),
     });
   }
+  const largestFailureCount = Math.max(1, ...rows.map((row) => row.failed));
   const columns: Column<HotspotRow>[] = [
     {
       key: "subject",
-      header: "Person or agent",
-      width: "1.5fr",
+      header: "Identity",
+      width: "1.2fr",
       render: (row) => {
         // Only a person or agent the reader may see carries an id.
         let identifier: IdentityRef | null = null;
@@ -529,11 +544,22 @@ function Hotspots({
     {
       key: "failed",
       header: "Failed",
-      width: "96px",
+      width: "136px",
       render: (row) => (
-        <Text>
-          {row.failed.toLocaleString()} of {row.attempts.toLocaleString()}
-        </Text>
+        <div className="space-y-1.5">
+          <Text
+            small
+            className={row.failed > 0 ? "text-destructive" : undefined}
+          >
+            {row.failed.toLocaleString()} of {row.attempts.toLocaleString()}
+          </Text>
+          <span aria-hidden="true" className="bg-muted block h-1.5 w-full">
+            <span
+              className="bg-destructive block h-full"
+              style={{ width: `${(row.failed / largestFailureCount) * 100}%` }}
+            />
+          </span>
+        </div>
       ),
     },
     ...partialColumns,
@@ -563,7 +589,7 @@ function Hotspots({
                 </SimpleTooltip>
               </span>
             ),
-            width: "120px",
+            width: "80px",
             render: (row: HotspotRow) => (
               <Text>{row.blocked.toLocaleString()}</Text>
             ),
@@ -573,8 +599,12 @@ function Hotspots({
     {
       key: "rate",
       header: "Failure rate",
-      width: "120px",
-      render: (row) => <Text>{failureRate(row)}</Text>,
+      width: "88px",
+      render: (row) => (
+        <Text className={row.failed > 0 ? "text-destructive" : undefined}>
+          {failureRate(row)}
+        </Text>
+      ),
     },
     {
       key: "reasons",
@@ -621,7 +651,7 @@ function Hotspots({
     <>
       <div className="overflow-x-auto">
         <Table
-          className="min-w-[960px]"
+          className="min-w-3xl"
           columns={columns}
           data={rows}
           // Hidden rows carry no key and may share labels, so rows are keyed

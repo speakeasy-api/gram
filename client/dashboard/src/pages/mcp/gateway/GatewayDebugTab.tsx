@@ -544,14 +544,18 @@ export function GatewayDebugTab({
         to={debugWindow.to}
         phrase={WINDOW_PHRASE[span]}
       />
-      <GatewayConnectionHealth
-        gatewayId={gatewayId}
-        span={span}
-        from={debugWindow.from}
-        to={debugWindow.to}
-        onShowConnections={showMatching}
-      />
-      <GatewayClientAdmission gatewayId={gatewayId} issuerId={issuerId} />
+      <div className="grid items-start gap-4 xl:grid-cols-4">
+        <div className="min-w-0 xl:col-span-3">
+          <GatewayConnectionHealth
+            gatewayId={gatewayId}
+            span={span}
+            from={debugWindow.from}
+            to={debugWindow.to}
+            onShowConnections={showMatching}
+          />
+        </div>
+        <GatewayClientAdmission gatewayId={gatewayId} issuerId={issuerId} />
+      </div>
       <Text small muted>
         Sessions issued for this gateway, identified by their recorded origin or
         consent selection. Unattributed sessions are not shown.
