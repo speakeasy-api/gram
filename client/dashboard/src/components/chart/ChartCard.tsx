@@ -7,6 +7,7 @@ import { ChartButton } from "./ChartButton";
 
 export type ChartCardProps = {
   title: string;
+  className?: string;
   /** Renders the title as a link to the card's fuller page. */
   titleHref?: string;
   chartId: string;
@@ -33,6 +34,7 @@ export type ChartCardProps = {
 
 export function ChartCard({
   title,
+  className,
   titleHref,
   chartId,
   hasData = true,
@@ -56,6 +58,7 @@ export function ChartCard({
       className={cn(
         "border-border bg-card border p-4 transition-all duration-200 ease-in-out",
         expandedChart && !isExpanded && "hidden",
+        className,
       )}
     >
       <div className="mb-4 flex items-center justify-between">

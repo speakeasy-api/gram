@@ -1,4 +1,4 @@
-import { ChartLegend } from "@/components/chart/ChartLegend";
+import { ChartLegend } from "@/components/ui/ChartLegend";
 import { overviewLabels } from "@/components/chart/overviewLabels";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { Card } from "@/components/ui/Card";
@@ -199,6 +199,10 @@ export function GatewayConnectionHealth({
       bodyClassName="space-y-3 p-3"
       tooltip={`Sign-in, provider and tool-listing outcomes ${phrase}. These record what the gateway observed, not whether a client used a token.`}
     >
+      <Text small muted>
+        Counts show what the gateway observed, not whether a redirect arrived,
+        sign-in finished, or a token was used.
+      </Text>
       <Collapsible>
         <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-xs underline underline-offset-4">
           <ChevronDown
@@ -210,9 +214,7 @@ export function GatewayConnectionHealth({
         <CollapsibleContent>
           <Text small muted className="mt-2 block">
             How clients fared signing in to this gateway, connecting providers,
-            and listing its tools {phrase}. Each count is what the gateway
-            observed, not whether a redirect arrived, sign-in finished, or a
-            token was used.
+            and listing its tools {phrase}.
           </Text>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>
@@ -273,6 +275,7 @@ export function GatewayConnectionHealth({
           />
           {stage && stage.attempts > 0 && (
             <ChartCard
+              className="border-0 p-0"
               title={`${stageLabel} over time`}
               chartId={CHART_ID}
               expandedChart={expandedChart}

@@ -1,4 +1,4 @@
-import { ChartLegend } from "@/components/chart/ChartLegend";
+import { ChartLegend } from "@/components/ui/ChartLegend";
 import { overviewLabels } from "@/components/chart/overviewLabels";
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";

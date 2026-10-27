@@ -4,6 +4,13 @@ import { MetricCard as UiMetricCard } from "@/components/ui/MetricCard";
 import { cn } from "@/lib/utils";
 import type { ComponentProps } from "react";
 
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { formatCompact } from "@/lib/format";
+import { ThresholdConfig } from "./chartUtils";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Loader2 } from "lucide-react";
+import { Link } from "react-router";
+
 /**
  * Lays StatTiles flush in one bordered strip with hairline dividers — the
  * prototype's stat-row idiom. Wrap every row of StatTiles in this (a single
@@ -21,18 +28,12 @@ export function StatTileGroup({
       {...props}
       className={cn(
         compact &&
-          "grid grid-cols-2 divide-x-0 [&>*]:border-b [&>*]:border-r sm:flex sm:divide-x sm:[&>*]:border-0",
+          "grid grid-cols-2 gap-px divide-x-0 bg-border [&>:last-child:nth-child(odd)]:col-span-2 sm:flex sm:gap-0 sm:divide-x",
         className,
       )}
     />
   );
 }
-import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { formatCompact } from "@/lib/format";
-import { ThresholdConfig } from "./chartUtils";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Loader2 } from "lucide-react";
-import { Link } from "react-router";
 
 export type StatTileProps = {
   /** Smaller figures and spacing for a diagnostic summary strip. */

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { ChartLegend } from "./ChartLegend";
-import { ACCENT_RED, GOOD_GREEN } from "./palette";
+import { ChartLegend } from ".";
+import { ACCENT_RED, GOOD_GREEN } from "@/components/chart/palette";
 const meta: Meta<typeof ChartLegend> = {
   title: "Charts/ChartLegend",
   component: ChartLegend,

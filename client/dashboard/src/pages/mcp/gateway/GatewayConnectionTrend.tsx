@@ -1,4 +1,4 @@
-import { ChartLegend } from "@/components/chart/ChartLegend";
+import { ChartLegend } from "@/components/ui/ChartLegend";
 import { overviewLabels } from "@/components/chart/overviewLabels";
 import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/chart/ChartCard";
@@ -209,6 +209,7 @@ function TrendBody({
           }
         >
           <ChartCard
+            className="border-0 p-0"
             title="Created and revoked"
             chartId={EVENTS_CHART}
             expandedChart={expandedChart}
@@ -232,6 +233,7 @@ function TrendBody({
             )}
           </ChartCard>
           <ChartCard
+            className="border-0 p-0"
             title="Active at each interval's end"
             chartId={ACTIVE_CHART}
             expandedChart={expandedChart}
@@ -251,9 +253,9 @@ function TrendBody({
             />
           </ChartCard>
           <Text muted small className="lg:col-span-2">
-            UTC intervals of one {trend.bucket}. Active means unexpired with no
-            recorded revocation; it does not mean it worked, could reach its
-            tools, or was used.
+            UTC intervals of one {trend.bucket}. Created and revoked happen
+            during an interval; active is the count just before it ends. It does
+            not mean it worked, could reach its tools, or was used.
           </Text>
         </div>
       )}
