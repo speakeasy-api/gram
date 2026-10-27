@@ -56,7 +56,7 @@ func (c bindingClient) VerifyScopes(ctx context.Context, scopes []string) (*okta
 }
 func newBindingService(t *testing.T) (context.Context, *serviceInstance) {
 	t.Helper()
-	return newTestServiceWithClientFactory(t, nil, 0, func(base okta.ClientFactory) okta.ClientFactory { return bindingFactory{ClientFactory: base} })
+	return newTestServiceWithClientFactory(t, 0, func(base okta.ClientFactory) okta.ClientFactory { return bindingFactory{ClientFactory: base} })
 }
 func rejectBindingReads(si *serviceInstance) {
 	si.oktaFakes.Fake(fullOrgURL).SetMethodError("ListApps", &okta.APIError{StatusCode: http.StatusUnauthorized, ErrorCode: "invalid_client"})

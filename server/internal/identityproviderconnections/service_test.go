@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
@@ -650,48 +649,9 @@ func TestRBAC_ReadersCannotMutate(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestFlag_OnlyGatesCreate(t *testing.T) {
+func TestCreate_RequiresOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
-
-	created := createConnection(t, ctx, si, fullOrgURL)
-	si.flags.SetFlag(feature.FlagOktaConnections, si.orgID, false)
-
-	fetched, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
-	require.NoError(t, err)
-	require.Equal(t, created.ID, fetched.Connection.ID)
-	revoked, err := si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: created.ID})
-	require.NoError(t, err)
-	require.Equal(t, identityproviderconnections.StatusRevoked, revoked.Status)
-
-	_, err = si.svc.Create(ctx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
-	requireOopsCode(t, err, oops.CodeForbidden)
-
-	errCtx, errSi := newTestServiceWithFlags(t, errFlags{})
-	empty, err := errSi.svc.Get(errCtx, &gen.GetPayload{SessionToken: nil, ID: nil})
-	require.NoError(t, err)
-	require.Nil(t, empty.Connection)
-	_, err = errSi.svc.Create(errCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
-	requireOopsCode(t, err, oops.CodeUnavailable)
-}
-
-func TestFlag_OrganizationLookupFailureIsUnavailable(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-
-	missingOrgID := "org_missing_" + uuid.NewString()
-	other := *si.authCtx
-	other.ActiveOrganizationID = missingOrgID
-	missingCtx := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &other), authz.NewGrant(authz.ScopeOrgAdmin, missingOrgID))
-	si.flags.SetFlag(feature.FlagOktaConnections, missingOrgID, true)
-
-	_, err := si.svc.Create(missingCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
-	requireOopsCode(t, err, oops.CodeUnavailable)
-}
-
-func TestFlag_RBACRunsBeforeTheFlag(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestServiceWithFlags(t, errFlags{})
 
 	noneCtx := authztest.WithExactGrants(t, ctx)
 	_, err := si.svc.Create(noneCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
@@ -1042,7 +1002,7 @@ func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing
 	for _, maxConns := range []int32{2, 4} {
 		t.Run(fmt.Sprintf("pool_%d", maxConns), func(t *testing.T) {
 			t.Parallel()
-			ctx, si := newTestServiceWithPoolLimit(t, nil, maxConns)
+			ctx, si := newTestServiceWithPoolLimit(t, maxConns)
 			ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
 			slots := int(maxConns / 2)
@@ -1108,7 +1068,7 @@ func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing
 
 func TestCreate_SingleConnectionPoolIsUnavailable(t *testing.T) {
 	t.Parallel()
-	ctx, si := newTestServiceWithPoolLimit(t, nil, 1)
+	ctx, si := newTestServiceWithPoolLimit(t, 1)
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	_, err := si.svc.Create(ctx, &gen.CreatePayload{OrgURL: fullOrgURL})
@@ -1125,7 +1085,7 @@ func TestCreate_SingleConnectionPoolIsUnavailable(t *testing.T) {
 // connection available to it.
 func TestMutations_CompleteWithOneSparePoolConnection(t *testing.T) {
 	t.Parallel()
-	ctx, si := newTestServiceWithPoolLimit(t, nil, 2)
+	ctx, si := newTestServiceWithPoolLimit(t, 2)
 	created := createConnection(t, ctx, si, fullOrgURL)
 
 	held, err := si.conn.conn.Acquire(ctx)

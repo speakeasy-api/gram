@@ -27,7 +27,7 @@ export class OktaServerSuggestions extends ClientSDK {
    * dismiss oktaServerSuggestions
    *
    * @remarks
-   * Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.
+   * Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin.
    */
   async dismiss(
     request: DismissOktaServerSuggestionRequest,
@@ -46,7 +46,7 @@ export class OktaServerSuggestions extends ClientSDK {
    * list oktaServerSuggestions
    *
    * @remarks
-   * List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.
+   * List the catalog servers suggested from the Okta applications snapshot. Requires org:admin and a verified identity provider connection.
    */
   async list(
     request?: ListOktaServerSuggestionsRequest | undefined,
@@ -65,7 +65,7 @@ export class OktaServerSuggestions extends ClientSDK {
    * restore oktaServerSuggestions
    *
    * @remarks
-   * Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.
+   * Restore a dismissed suggestion currently made to the organization. Requires org:admin.
    */
   async restore(
     request: RestoreOktaServerSuggestionRequest,

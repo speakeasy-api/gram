@@ -37,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
@@ -47,7 +46,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktacredentials"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -120,7 +118,6 @@ type Service struct {
 	auth          *auth.Auth
 	authz         *authz.Engine
 	audit         *audit.Logger
-	features      feature.Provider
 	provisioner   *Provisioner
 	oktaClients   okta.ClientFactory
 	enc           *encryption.Client
@@ -171,7 +168,6 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	features feature.Provider,
 	provisioner *Provisioner,
 	oktaClients okta.ClientFactory,
 	enc *encryption.Client,
@@ -187,7 +183,6 @@ func NewService(
 		auth:        auth.New(logger, db, sessions, authzEngine),
 		authz:       authzEngine,
 		audit:       auditLogger,
-		features:    features,
 		provisioner: provisioner,
 		oktaClients: oktaClients,
 		enc:         enc,
@@ -246,22 +241,6 @@ func (s *Service) authorize(ctx context.Context, scope authz.Scope, mutation boo
 		return nil, logger, oops.E(oops.CodeUnavailable, nil, "identity provider connections are not configured on this deployment").LogError(ctx, logger)
 	}
 	return authCtx, logger, nil
-}
-
-// requireEnabled checks the rollout flag; a lookup failure reads as unavailable, never forbidden.
-func (s *Service) requireEnabled(ctx context.Context, logger *slog.Logger, organizationID string) error {
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
-	}
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagOktaConnections, organizationID, feature.OrgProjectGroups(org.Slug, ""))
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
-	}
-	if !enabled {
-		return oops.E(oops.CodeForbidden, nil, "okta connections are not enabled for this organization")
-	}
-	return nil
 }
 
 func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID string, id uuid.NullUUID) (*connectionRows, error) {
@@ -386,9 +365,6 @@ func (s *Service) allow(ctx context.Context, logger *slog.Logger, limiter *ratel
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.OktaIdentityProviderConnection, error) {
 	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 

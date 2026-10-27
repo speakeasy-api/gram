@@ -515,7 +515,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCodeModeAvailability(config.CodeModeAvailable).
-		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
@@ -1229,7 +1229,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCodeModeAvailability(config.CodeModeAvailable).
-		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
