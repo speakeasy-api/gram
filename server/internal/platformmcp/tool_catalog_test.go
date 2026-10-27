@@ -15,9 +15,10 @@ func TestCandidateInspectionIncludesCatalogSetupIntent(t *testing.T) {
 	registrar := newRegistrar(server)
 	catalog := testCatalog{details: CatalogDetails{
 		CatalogCandidate: CatalogCandidate{
-			ProviderKey: "provider",
-			CatalogRef:  "reviewed/mcp",
-			SetupIntent: "dashboard_source_settings",
+			ProviderKey:  "provider",
+			CatalogRef:   "reviewed/mcp",
+			SetupIntent:  "dashboard_source_settings",
+			SupportsCIMD: true, AuthSetup: "cimd",
 		},
 		Transport: "streamable-http",
 	}}
@@ -32,6 +33,9 @@ func TestCandidateInspectionIncludesCatalogSetupIntent(t *testing.T) {
 	inspection, ok := result.(CandidateInspection)
 	require.True(t, ok)
 	require.Equal(t, "dashboard_source_settings", inspection.SetupIntent)
+	require.Equal(t, new(false), inspection.SupportsDCR)
+	require.Equal(t, new(true), inspection.SupportsCIMD)
+	require.Equal(t, "cimd", inspection.AuthSetup)
 }
 
 func TestCandidateInspectionReturnsSafeDirectRemoteErrors(t *testing.T) {
@@ -126,6 +130,9 @@ func TestCandidateInspectionReportsAutomaticClientRegistrationPath(t *testing.T)
 			encoded, err := json.Marshal(inspection)
 			require.NoError(t, err)
 			require.Contains(t, string(encoded), `"automatic_client_registration":"`+test.registration+`"`)
+			require.NotContains(t, string(encoded), `"supports_dcr"`)
+			require.NotContains(t, string(encoded), `"supports_cimd"`)
+			require.NotContains(t, string(encoded), `"auth_setup"`)
 		})
 	}
 }

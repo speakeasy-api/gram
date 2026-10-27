@@ -150,11 +150,12 @@ func decideSource(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, row 
 		id = HeaderClientID(opts.OrganizationID, row.SourceKind, row.SourceID, row.AuthorizationHeaderID, clientType)
 	} else {
 		// Without an Authorization header, a server with an upstream OAuth
-		// client or an EMA client gets the credential headers on that client
-		// instead.
+		// client or an EMA client serving its direct route gets the credential
+		// headers on that client instead. One reached only through the
+		// gateways keeps this client for its direct route.
 		linked = nil
 		for _, server := range servers {
-			if !server.hasOAuth && !ema.reaches(server.id) {
+			if !server.hasOAuth && !ema.reachesDirectly(server.id) {
 				linked = append(linked, server)
 			}
 		}

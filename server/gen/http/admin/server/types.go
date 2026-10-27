@@ -2106,17 +2106,18 @@ type ListRegistryPromotionCandidatesResponseBody struct {
 // GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
 // "getRegistryPromotionCandidate" endpoint HTTP response body.
 type GetRegistryPromotionCandidateResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2142,17 +2143,18 @@ type GetRegistryPromotionCandidateResponseBody struct {
 // PromoteRegistryCandidateResponseBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP response body.
 type PromoteRegistryCandidateResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2178,17 +2180,18 @@ type PromoteRegistryCandidateResponseBody struct {
 // CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
 // service "curateRegistryPromotionCandidate" endpoint HTTP response body.
 type CurateRegistryPromotionCandidateResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2214,17 +2217,18 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 // RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
 // "retryRegistryPromotionDocs" endpoint HTTP response body.
 type RetryRegistryPromotionDocsResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -23242,17 +23246,18 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
 // response body types.
 type AdminRegistryPromotionCandidateResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -23285,6 +23290,15 @@ type AdminRegistryPromotionSuggestionsResponseBody struct {
 	DocumentationURL  *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	DocsSlug          *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
 	AuthMode          *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
+}
+
+// AdminRegistryPromotionAuthDiscoveryResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionAuthDiscoveryResponseBody struct {
+	SupportsDcr  bool   `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
+	SupportsCimd bool   `form:"supports_cimd" json:"supports_cimd" xml:"supports_cimd"`
+	AuthSetup    string `form:"auth_setup" json:"auth_setup" xml:"auth_setup"`
+	Status       string `form:"status" json:"status" xml:"status"`
 }
 
 // AdminRegistryOktaCandidateResponseBody is used to define fields on response
@@ -25441,6 +25455,9 @@ func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromot
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
 	}
+	if res.AuthDiscovery != nil {
+		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
+	}
 	return body
 }
 
@@ -25480,6 +25497,9 @@ func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCa
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.AuthDiscovery != nil {
+		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
 	}
 	return body
 }
@@ -25522,6 +25542,9 @@ func NewCurateRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPro
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
 	}
+	if res.AuthDiscovery != nil {
+		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
+	}
 	return body
 }
 
@@ -25562,6 +25585,9 @@ func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotion
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.AuthDiscovery != nil {
+		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
 	}
 	return body
 }

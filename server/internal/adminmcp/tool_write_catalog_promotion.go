@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -18,6 +20,7 @@ import (
 // catalogPromotionMutator shares the same transactional rules as the admin UI.
 type catalogPromotionMutator interface {
 	GetCandidate(context.Context, catalogpromotion.Target) (catalogpromotion.Candidate, error)
+	DiscoverAuth(context.Context, string, string) catalogauth.Discovery
 	ValidateTx(context.Context, pgx.Tx, catalogpromotion.Target, string, string, catalogpromotion.PublicMetadata, bool) (catalogpromotion.Candidate, error)
 	PromoteTx(context.Context, pgx.Tx, catalogpromotion.Request, string) (catalogpromotion.Candidate, error)
 }
@@ -41,7 +44,7 @@ type PrepareCatalogPromotionInput struct {
 	// OverrideEligibility permits promotion if health evidence does not meet the criteria.
 	OverrideEligibility bool `json:"override_eligibility,omitempty" jsonschema:"Explicit staff permission to promote if health evidence is insufficient, failed, or unavailable; never bypasses source safety checks"`
 	// RetryKey deduplicates preparation of this exact change.
-	RetryKey string `json:"retry_key" jsonschema:"Unique retry key for this exact change, at most 128 characters"`
+	RetryKey string `json:"retry_key" jsonschema:"Unique retry key for this exact change, at most 128 characters. Reusing a key retains its original authentication discovery snapshot; use a new key to recheck unavailable or partial discovery and approve the new proposal"`
 }
 
 type catalogPromotionWriter struct {
@@ -71,7 +74,7 @@ func catalogPromotionRequest(input PrepareCatalogPromotionInput) (catalogpromoti
 	return catalogpromotion.Request{
 		Target:         catalogpromotion.Target{OrganizationID: input.OrganizationID, ProjectID: uuid.MustParse(input.ProjectID), MCPServerID: uuid.MustParse(input.MCPServerID)},
 		SourceRevision: input.SourceRevision, CurationRevision: input.CurationRevision, Public: input.Public,
-		PublicMetadataConfirmed: true, OverrideEligibility: input.OverrideEligibility, RetryKey: input.RetryKey,
+		PublicMetadataConfirmed: true, OverrideEligibility: input.OverrideEligibility, RetryKey: input.RetryKey, AuthDiscovery: catalogauth.Discovery{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "", Status: ""},
 	}, nil
 }
 
@@ -95,6 +98,25 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 	if (!candidate.Eligible && (!request.OverrideEligibility || !candidate.CanOverrideEligibility())) || candidate.SourceRevision != request.SourceRevision || candidate.CurationRevision != request.CurationRevision || candidate.Status != "candidate" {
 		return ProposalOutput{}, ErrStaleState
 	}
+	// A retry reuses the prepared discovery snapshot; live metadata cannot change an approved proposal.
+	var lookup Proposal
+	lookup.SubjectURN = owner.SubjectURN
+	lookup.OAuthClientID = owner.ClientRowID
+	lookup.Operation = OperationPromoteRegistryCandidate
+	lookup.IdempotencyKey = request.RetryKey
+	prior, found, err := findByKey(ctx, repo.New(w.store.db), lookup)
+	if err != nil {
+		return ProposalOutput{}, err
+	}
+	if found {
+		stored, err := storedCatalogPromotion(prior)
+		if err != nil {
+			return ProposalOutput{}, err
+		}
+		request.AuthDiscovery = stored.AuthDiscovery
+	} else {
+		request.AuthDiscovery = w.mutator.DiscoverAuth(ctx, request.Public.URL, request.Public.AuthMode)
+	}
 	tx, err := w.store.db.Begin(ctx)
 	if err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
@@ -112,11 +134,35 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 	if err != nil {
 		return ProposalOutput{}, fmt.Errorf("encode promotion proposal: %w", err)
 	}
-	proposal, replay, err := w.store.Create(ctx, owner, NewProposal{
+	prepared := NewProposal{
 		Operation: OperationPromoteRegistryCandidate, SchemaVersion: 1,
 		Target:         ProposalTarget{OrganizationID: request.Target.OrganizationID, ProjectID: uuid.NullUUID{UUID: request.Target.ProjectID, Valid: true}, ResourceKind: "mcp_server", ResourceID: request.Target.MCPServerID.String()},
 		IdempotencyKey: request.RetryKey, Arguments: args, ExpectedState: args, Preview: args,
-	}, w.now())
+	}
+	proposal, replay, err := w.store.Create(ctx, owner, prepared, w.now())
+	if errors.Is(err, ErrProposalConflict) && !found {
+		// Concurrent preparations may discover different metadata for identical caller input.
+		winner, exists, readErr := findByKey(ctx, repo.New(w.store.db), lookup)
+		if readErr != nil {
+			return ProposalOutput{}, readErr
+		}
+		if !exists {
+			return ProposalOutput{}, err
+		}
+		stored, storedErr := storedCatalogPromotion(winner)
+		if storedErr != nil {
+			return ProposalOutput{}, storedErr
+		}
+		request.AuthDiscovery = stored.AuthDiscovery
+		if request != stored {
+			return ProposalOutput{}, ErrProposalConflict
+		}
+		prepared.Arguments = winner.Arguments
+		prepared.ExpectedState = winner.Arguments
+		prepared.Preview = winner.Arguments
+		// Create rechecks the staff connection and the complete stored proposal digest.
+		proposal, replay, err = w.store.Create(ctx, owner, prepared, w.now())
+	}
 	if err != nil {
 		return ProposalOutput{}, err
 	}
@@ -180,6 +226,8 @@ func (w *catalogPromotionWriter) view(proposal Proposal) (proposalView, error) {
 			{Setting: "Public documentation", Before: "", After: request.Public.DocumentationURL},
 			{Setting: "Guide slug", Before: "", After: request.Public.DocsSlug},
 			{Setting: "Authentication", Before: "", After: request.Public.AuthMode},
+			{Setting: "Advertised authentication setup", Before: "", After: request.AuthDiscovery.AuthSetup},
+			{Setting: "Authentication discovery", Before: "", After: request.AuthDiscovery.Status},
 		},
 		SideEffects: "Publishes the reviewed fields to the Speakeasy catalogue, visible under the existing catalogue rollout. Queues a public setup-docs guide draft. Guide publication retains the setup-docs repository's merge review. Source credentials and configuration are excluded.",
 	}, nil
@@ -216,7 +264,7 @@ func (w *catalogPromotionWriter) execution(authority writeAuthority) ProposalExe
 func (w *catalogPromotionWriter) registerPrepare(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(true), Title: ""},
 		Name:        "prepare_registry_promotion", Title: "Prepare Catalogue Promotion",
 		Description: "Prepare publication of a remote MCP source using exact organization, project, server and current source and curation revisions. Supply independently reviewed public metadata only. Set override_eligibility only for explicit staff permission to promote if health evidence is insufficient, failed, or unavailable; source safety checks still apply. Creates a stored preview for same-staff browser approval; execute_admin_proposal publishes and queues setup docs. Requires admin:write. Does not publish during preparation.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareCatalogPromotionInput) (*mcp.CallToolResult, ProposalOutput, error) {

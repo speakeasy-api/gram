@@ -3,7 +3,10 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/sessionlist"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -106,30 +109,83 @@ func (s *Service) ListClientSessions(ctx context.Context, payload *orgsessionsge
 	}
 
 	limit := pageLimit(payload.Limit)
-	cursor, err := parseCursor(payload.Cursor)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, logger)
+	sort := conv.PtrValOr(payload.Sort, "id")
+	status := conv.PtrValOr(payload.Status, "all")
+	search := strings.TrimSpace(conv.PtrValOr(payload.Search, ""))
+	switch sort {
+	case "id", "newest", "oldest", "last_used", "expiry":
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid session ordering")
 	}
-
+	switch status {
+	case "active", "expired", "all":
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid session status")
+	}
+	after, err := sessionlist.Date(payload.CreatedAfter)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid created_after")
+	}
+	before, err := sessionlist.Date(payload.CreatedBefore)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid created_before")
+	}
+	if after.Valid && before.Valid && !after.Time.Before(before.Time) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "created_after must precede created_before")
+	}
+	fingerprint := sessionlist.Fingerprint(authCtx.ActiveOrganizationID, payload.ClientID, search, status, sort, conv.PtrValOr(payload.CreatedAfter, ""), conv.PtrValOr(payload.CreatedBefore, ""))
+	cursorTime := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false}
+	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	cursor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if sort == "id" {
+		cursor, err = parseCursor(payload.Cursor)
+	} else {
+		cursorTime, cursorID, err = sessionlist.Decode(payload.Cursor, fingerprint)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
+	}
 	rows, err := repo.New(s.db).ListOrganizationRemoteSessionsByClientID(ctx, repo.ListOrganizationRemoteSessionsByClientIDParams{
-		RemoteSessionClientID: clientID,
-		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		Cursor:                cursor,
-		LimitValue:            limit,
+		RemoteSessionClientID: clientID, OrganizationID: authCtx.ActiveOrganizationID,
+		Cursor: cursor, CursorID: cursorID, CursorTime: cursorTime, LimitValue: limit + 1,
+		Search: search, Status: status, Sort: sort, CreatedAfter: after, CreatedBefore: before,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization admin remote sessions").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization remote sessions").LogError(ctx, logger)
+	}
+	var nextCursor *string
+	if len(rows) > int(limit) {
+		rows = rows[:limit]
+		last := rows[len(rows)-1].RemoteSession
+		if sort == "id" {
+			nextCursor = new(last.ID.String())
+		} else {
+			at := last.CreatedAt.Time
+			switch sort {
+			case "last_used":
+				at = time.Time{}
+				if last.LastUsedAt.Valid {
+					at = last.LastUsedAt.Time
+				}
+			case "expiry":
+				at = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
+				grantExpiry := last.AccessExpiresAt
+				if last.RefreshTokenEncrypted.Valid {
+					grantExpiry = last.RefreshExpiresAt
+				}
+				for _, deadline := range []pgtype.Timestamptz{last.AuthorizationExpiresAt, grantExpiry} {
+					if deadline.Valid && deadline.Time.Before(at) {
+						at = deadline.Time
+					}
+				}
+			}
+			nextCursor = new(sessionlist.Encode(at, last.ID, fingerprint))
+		}
 	}
 
 	items := make([]*types.RemoteSession, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, mv.BuildRemoteSessionView(row.RemoteSession, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail)))
-	}
-
-	var nextCursor *string
-	if len(rows) >= int(limit) {
-		c := rows[len(rows)-1].RemoteSession.ID.String()
-		nextCursor = &c
 	}
 
 	return &orgsessionsgen.ListOrganizationRemoteSessionsResult{
