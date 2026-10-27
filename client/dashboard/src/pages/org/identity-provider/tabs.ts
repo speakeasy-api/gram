@@ -9,6 +9,7 @@ export const PROVIDER_IDS = ["okta", "speakeasy"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export const OKTA_VIEWS = [
+  "overview",
   "setup",
   "applications",
   "cross-app-access",

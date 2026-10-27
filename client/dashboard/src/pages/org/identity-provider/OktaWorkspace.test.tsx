@@ -55,6 +55,22 @@ vi.mock("./tabs/cross-app-access/CrossAppAccessTab", async () => {
     ),
   };
 });
+vi.mock("./OktaOverview", () => ({
+  OktaOverview: ({ connection }: { connection: { kind: string } }) => (
+    <div>Okta content: overview ({connection.kind})</div>
+  ),
+}));
+vi.mock("./oktaEma", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./oktaEma")>()),
+  connectionsUnavailable: (error: unknown) =>
+    error instanceof Error && error.message === "unavailable",
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "missing" }),
+}));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ userSessionIssuers: { href: () => "/issuers" } }),
+}));
 vi.mock("@/components/api-error-alert", () => ({
   ApiErrorAlert: ({ error }: { error: Error | null }) =>
     error ? <div role="alert">{error.message}</div> : null,
@@ -94,7 +110,6 @@ describe("Okta workspace", () => {
       ).toBeTruthy();
       expect(screen.queryByRole("tab")).toBeNull();
       expect(screen.queryByText(/Okta content:/)).toBeNull();
-      expect(screen.queryByText(/Leverage your Okta connection/)).toBeNull();
       expect(screen.getByRole("region", { name: "Okta" })).toBeTruthy();
       expect(
         screen
@@ -127,20 +142,22 @@ describe("Okta workspace", () => {
   });
 
   it.each([
+    ["overview", "overview (connected)"],
     ["setup", "setup"],
     ["applications", "applications"],
     ["cross-app-access", "cross-app-access"],
-    ["unknown", "setup"],
-  ])("opens the %s Okta view", (view, tab) => {
+    ["unknown", "overview (connected)"],
+  ])("opens the %s Okta view", (view, content) => {
     mocks.query.data.connection = {
       provider: "okta",
       status: "verified",
       orgUrl: "https://example.okta.com",
     };
     show(view);
-    expect(screen.getByText(`Okta content: ${tab}`)).toBeTruthy();
+    expect(screen.getByText(`Okta content: ${content}`)).toBeTruthy();
     expect(screen.getAllByRole("tab").map((el) => el.textContent)).toEqual([
-      "Setup",
+      "Overview",
+      "Connection",
       "Applications",
       "Cross App Access",
     ]);
@@ -157,7 +174,7 @@ describe("Okta workspace", () => {
       orgUrl: "https://example.okta.com",
     };
     show("setup");
-    const setup = screen.getByRole("tab", { name: "Setup" });
+    const setup = screen.getByRole("tab", { name: "Connection" });
     setup.focus();
     fireEvent.keyDown(setup, { key: "ArrowRight" });
     await waitFor(() =>
@@ -205,30 +222,40 @@ describe("Okta workspace", () => {
       expect(group().getAttribute("aria-expanded")).toBe("false"),
     );
   });
-  it.each(["setup", "applications", "cross-app-access"])(
-    "shows creation without workspace navigation for unconnected %s links",
-    (view) => {
+  it("offers the overview and connection, not Applications or Cross App Access, before Okta is connected", () => {
+    show("setup");
+    expect(screen.getByRole("heading", { name: "Okta" })).toBeTruthy();
+    expect(screen.getByText("Okta content: setup")).toBeTruthy();
+    expect(screen.getAllByRole("tab").map((el) => el.textContent)).toEqual([
+      "Overview",
+      "Connection",
+    ]);
+  });
+  it.each([
+    ["applications", "no", undefined],
+    ["applications", "a revoked", "revoked"],
+    ["cross-app-access", "no", undefined],
+    ["cross-app-access", "a revoked", "revoked"],
+  ])(
+    "lands %s links on the overview with %s connection",
+    (view, _, status) => {
+      if (status) {
+        mocks.query.data.connection = {
+          provider: "okta",
+          status,
+          orgUrl: "https://example.okta.com",
+        };
+      }
       show(view);
-      expect(screen.queryByRole("heading", { name: "Okta" })).toBeNull();
       expect(
-        screen.getByRole("link", { name: "All identity providers" }),
+        screen.getByText("Okta content: overview (not-connected)"),
       ).toBeTruthy();
-      expect(screen.getByText("Okta content: setup")).toBeTruthy();
-      expect(screen.queryByRole("tablist")).toBeNull();
-      expect(screen.queryByText(/Leverage your Okta connection/)).toBeNull();
+      expect(
+        screen.queryByRole("tab", { name: "Cross App Access" }),
+      ).toBeNull();
+      expect(screen.queryByRole("tab", { name: "Applications" })).toBeNull();
     },
   );
-  it("treats revoked connections as unconnected for deep links", () => {
-    mocks.query.data.connection = {
-      provider: "okta",
-      status: "revoked",
-      orgUrl: "https://example.okta.com",
-    };
-    show("cross-app-access");
-    expect(screen.getByText("Okta content: setup")).toBeTruthy();
-    expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByText(/Leverage your Okta connection/)).toBeNull();
-  });
   it.each(["pending", "verified"])(
     "keeps workspace tabs for %s connections",
     (status) => {
@@ -237,21 +264,18 @@ describe("Okta workspace", () => {
         status,
         orgUrl: "https://example.okta.com",
       };
-      show("applications");
-      expect(screen.getAllByRole("tab")).toHaveLength(3);
-      expect(screen.getByText("Okta content: applications")).toBeTruthy();
-      expect(screen.getByText(/Leverage your Okta connection/)).toBeTruthy();
+      show("cross-app-access");
+      expect(screen.getAllByRole("tab")).toHaveLength(4);
+      expect(screen.getByText("Okta content: cross-app-access")).toBeTruthy();
     },
   );
   it("hides workspace navigation while the connection loads", () => {
     mocks.query.isPending = true;
-    show("applications");
-    expect(screen.queryByRole("heading", { name: "Okta" })).toBeNull();
+    show("setup");
     expect(
       screen.getByRole("link", { name: "All identity providers" }),
     ).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByText(/Leverage your Okta connection/)).toBeNull();
     expect(screen.queryByText(/Okta content:/)).toBeNull();
   });
   it("shows a failed load inline without tabs", () => {
@@ -261,6 +285,16 @@ describe("Okta workspace", () => {
     expect(screen.getByRole("alert").textContent).toBe("Could not load Okta");
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByText(/Okta content:/)).toBeNull();
+  });
+  it("keeps what needs only the domain when this deployment cannot connect Okta", () => {
+    mocks.query.data = undefined as never;
+    mocks.query.error = new Error("unavailable");
+    show("setup");
+    expect(
+      screen.getByText("Okta content: overview (unavailable)"),
+    ).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
   });
 });
 

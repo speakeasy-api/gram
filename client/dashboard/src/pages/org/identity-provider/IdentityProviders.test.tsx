@@ -37,6 +37,12 @@ vi.mock("./tabs/applications/ApplicationsTab", () => ({
 vi.mock("./tabs/cross-app-access/CrossAppAccessTab", () => ({
   CrossAppAccessTab: () => <div>Okta content: cross-app-access</div>,
 }));
+vi.mock("./OktaOverview", () => ({
+  OktaOverview: () => <div>Okta overview</div>,
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "missing" }),
+}));
 vi.mock("@/components/api-error-alert", () => ({
   ApiErrorAlert: ({ error }: { error: Error | null }) =>
     error ? <div role="alert">{error.message}</div> : null,
@@ -94,8 +100,10 @@ describe("Identity providers", () => {
     expect(screen.getByText(/live on the Single sign-on tab/)).toBeTruthy();
     expect(screen.getByText("Not connected")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Connect Okta" }).getAttribute("href"),
-    ).toBe("/example/identity?tab=identity-providers&provider=okta&view=setup");
+      screen.getByRole("link", { name: "Set up Okta" }).getAttribute("href"),
+    ).toBe(
+      "/example/identity?tab=identity-providers&provider=okta&view=overview",
+    );
     expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.queryByRole("tab", { name: "Applications" })).toBeNull();
   });
@@ -121,13 +129,13 @@ describe("Identity providers", () => {
       orgUrl: "https://example.okta.com",
     };
     show();
-    expect(screen.getByRole("link", { name: "Connect Okta" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Set up Okta" })).toBeTruthy();
   });
   it("does not show a disconnected status while loading", () => {
     mocks.query.isPending = true;
     show();
     expect(screen.queryByText("Not connected")).toBeNull();
-    expect(screen.queryByRole("link", { name: "Connect Okta" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Set up Okta" })).toBeNull();
   });
   it("lets administrators retry failed provider loads", () => {
     mocks.query.data = undefined as never;
@@ -146,7 +154,7 @@ describe("Identity providers", () => {
     };
     show();
     fireEvent.click(screen.getByRole("link", { name: "Manage Okta" }));
-    expect(screen.getByText("Okta content: setup")).toBeTruthy();
+    expect(screen.getByText("Okta overview")).toBeTruthy();
     // Installed Radix Tabs activates pointer selection on mouseDown, not click.
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Applications" }), {
       button: 0,
