@@ -176,6 +176,7 @@ func TestRun_EMAGatewayStaysInTheBindingsProjectAndResource(t *testing.T) {
 	other := f.inProject()
 	otherProject := other.serverAt(gatewayResource, other.userSessionIssuer())
 	otherResource := f.serverAt("https://mcp.other.example.com/mcp", f.userSessionIssuer())
+	otherResourceSameIssuer := f.serverAt("https://mcp.other.example.com/mcp", gatewayIssuer)
 	f.binding(gatewayIssuer, issuerID, clientID, gatewayResource, []string{})
 
 	f.run(true)
@@ -184,8 +185,9 @@ func TestRun_EMAGatewayStaysInTheBindingsProjectAndResource(t *testing.T) {
 	require.Equal(t, []uuid.UUID{ema[0].ID}, f.links(server))
 	require.Empty(t, f.links(otherProject), "a gateway chains a member in its own project only")
 	require.Empty(t, f.links(otherResource), "a gateway chains only the binding's resource")
+	require.Empty(t, f.links(otherResourceSameIssuer), "the binding's issuer reaches only the binding's resource, directly too")
 
-	for _, serverID := range []uuid.UUID{otherProject, otherResource} {
+	for _, serverID := range []uuid.UUID{otherProject, otherResource, otherResourceSameIssuer} {
 		n, err := f.q.LinkEMAServer(t.Context(), LinkEMAServerParams{OrganizationID: f.orgID, AuthClientID: ema[0].ID, McpServerID: serverID})
 		require.NoError(t, err)
 		require.Zero(t, n, "the writer checks the reach itself")
@@ -228,4 +230,74 @@ func TestRun_AdminDetachedEMAGatewayLinkStaysDetached(t *testing.T) {
 	n, err := f.q.LinkEMAServer(t.Context(), LinkEMAServerParams{OrganizationID: f.orgID, AuthClientID: ema[0].ID, McpServerID: server})
 	require.NoError(t, err)
 	require.Zero(t, n, "the write repeats the detach check")
+}
+
+// A choice migrated on the direct route keeps naming its header client, and
+// the backfill never moves it onto the EMA client a gateway binding adds: that
+// client cannot serve the direct route, whose issuer has no binding. With an
+// Authorization header the header client stays offered beside the EMA client.
+// The choice reads as no-auth beside an OAuth-backed client, so it is reported
+// stale for its owner to choose again rather than guessed.
+func TestRun_EMAGatewayReachLeavesADirectAuthorizationChoiceStale(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.organizationIssuer()
+	f.gatewaySetting(true)
+	source, server := f.emaSourceAt(gatewayResource, f.sessionIssuer())
+	f.staticHeader(source, "Authorization")
+	credential := f.interactiveCredential()
+	f.noAuthSelection(credential, server)
+	require.Equal(t, 1, f.run(true).SelectionsMapped)
+	headerClient := f.live(TypeStaticCredential)[0].ID
+
+	clientID, issuerID := f.emaClient()
+	f.binding(gatewayIssuer, issuerID, clientID, gatewayResource, []string{})
+	f.run(true)
+	report := f.run(true)
+
+	emaID := f.live(TypeEMA)[0].ID
+	require.ElementsMatch(t, []uuid.UUID{headerClient, emaID}, f.links(server), "the header client stays offered beside the EMA client")
+	row := f.selection(credential, server)
+	require.Equal(t, uuid.NullUUID{UUID: headerClient, Valid: true}, row.AuthClientID, "the choice is never moved onto the EMA client")
+	gaps := selectionGaps(report, SelectionStaleNoAuth)
+	require.Len(t, gaps, 1)
+	require.Equal(t, credential, gaps[0].CredentialID)
+	require.Zero(t, report.SelectionsMapped)
+}
+
+// Without an Authorization header, a server an EMA client serves carries its
+// auxiliary credential headers on that client, so the standalone header client
+// a direct-route choice was migrated onto is retired. The choice keeps naming
+// the retired client, which the typed resolver reads as a gap to reconnect,
+// and is never moved onto the EMA client or back to no-auth.
+func TestRun_EMAGatewayReachRetiresADirectAuxiliaryHeaderClient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.organizationIssuer()
+	f.gatewaySetting(true)
+	source, server := f.emaSourceAt(gatewayResource, f.sessionIssuer())
+	f.header(source, "X-Api-Key", true, secretValue, "")
+	credential := f.interactiveCredential()
+	f.noAuthSelection(credential, server)
+	require.Equal(t, 1, f.run(true).SelectionsMapped)
+	headerClient := f.live(TypeStaticCredential)[0].ID
+
+	clientID, issuerID := f.emaClient()
+	f.binding(gatewayIssuer, issuerID, clientID, gatewayResource, []string{})
+	f.run(true)
+	report := f.run(true)
+
+	require.Empty(t, f.live(TypeStaticCredential), "the standalone header client is retired")
+	emaID := f.live(TypeEMA)[0].ID
+	require.Equal(t, []uuid.UUID{emaID}, f.links(server))
+	headers := f.headers(emaID)
+	require.Len(t, headers, 1)
+	require.Equal(t, "X-Api-Key", headers[0].Name)
+	row := f.selection(credential, server)
+	require.Equal(t, uuid.NullUUID{UUID: headerClient, Valid: true}, row.AuthClientID, "the choice is never moved onto the EMA client")
+	require.False(t, row.NoAuth)
+	gaps := selectionGaps(report, SelectionStaleNoAuth)
+	require.Len(t, gaps, 1)
+	require.Equal(t, credential, gaps[0].CredentialID)
+	require.Zero(t, report.SelectionsMapped)
 }
