@@ -55,6 +55,9 @@ type RefreshSessionResponseBody struct {
 	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Upstream authorization deadline. When present, the connection cannot be used
+	// or refreshed after this time even if its tokens have later expiries.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.
@@ -865,6 +868,9 @@ type RemoteSessionResponseBody struct {
 	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Upstream authorization deadline. When present, the connection cannot be used
+	// or refreshed after this time even if its tokens have later expiries.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.
@@ -901,20 +907,21 @@ func NewListClientSessionsResponseBody(res *organizationremotesessions.ListOrgan
 // of the "refreshSession" endpoint of the "organizationRemoteSessions" service.
 func NewRefreshSessionResponseBody(res *types.RemoteSession) *RefreshSessionResponseBody {
 	body := &RefreshSessionResponseBody{
-		ID:                    res.ID,
-		SubjectUrn:            res.SubjectUrn,
-		SubjectDisplayName:    res.SubjectDisplayName,
-		SubjectEmail:          res.SubjectEmail,
-		UpstreamEmail:         res.UpstreamEmail,
-		UpstreamDisplayName:   res.UpstreamDisplayName,
-		IdentitySource:        res.IdentitySource,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		RemoteSessionClientID: res.RemoteSessionClientID,
-		AccessExpiresAt:       res.AccessExpiresAt,
-		RefreshExpiresAt:      res.RefreshExpiresAt,
-		HasRefreshToken:       res.HasRefreshToken,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                     res.ID,
+		SubjectUrn:             res.SubjectUrn,
+		SubjectDisplayName:     res.SubjectDisplayName,
+		SubjectEmail:           res.SubjectEmail,
+		UpstreamEmail:          res.UpstreamEmail,
+		UpstreamDisplayName:    res.UpstreamDisplayName,
+		IdentitySource:         res.IdentitySource,
+		UserSessionIssuerID:    res.UserSessionIssuerID,
+		RemoteSessionClientID:  res.RemoteSessionClientID,
+		AccessExpiresAt:        res.AccessExpiresAt,
+		RefreshExpiresAt:       res.RefreshExpiresAt,
+		AuthorizationExpiresAt: res.AuthorizationExpiresAt,
+		HasRefreshToken:        res.HasRefreshToken,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.Scopes != nil {
 		body.Scopes = make([]string, len(res.Scopes))

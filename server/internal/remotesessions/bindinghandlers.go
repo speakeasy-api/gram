@@ -119,17 +119,20 @@ func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session attachments")
 	}
+	sources, err := op.queries.ListEligiblePrincipalRemoteSessionBindings(ctx, repo.ListEligiblePrincipalRemoteSessionBindingsParams{
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve attached connections")
+	}
+	available := make(map[uuid.UUID]repo.RemoteSession, len(sources))
+	for _, source := range sources {
+		available[source.ID] = source
+	}
 	items := make([]*gen.PrincipalRemoteSessionBinding, 0, len(rows))
 	for _, row := range rows {
 		view := bindingView(row.ID, row.PrincipalID, row.UserSessionIssuerID, row.RemoteSessionClientID, row.RemoteSessionID)
-		source, err := op.queries.GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{
-			ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID,
-			UserSessionIssuerID: op.issuerID, RemoteSessionClientID: row.RemoteSessionClientID,
-		})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve attached connection")
-		}
-		if err == nil {
+		if source, ok := available[row.RemoteSessionID]; ok && source.GrantGeneration == row.GrantGeneration {
 			view.RemoteSession = mv.BuildRemoteSessionView(source, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail))
 		}
 		items = append(items, view)

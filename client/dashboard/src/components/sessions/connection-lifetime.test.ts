@@ -10,6 +10,43 @@ const now = Date.parse("2026-10-23T12:00:00Z");
 const hours = (n: number) => new Date(now + n * 3_600_000);
 
 describe("connectionLifetime", () => {
+  it("ends authorization even when access and refresh tokens remain valid", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(1),
+          refreshExpiresAt: hours(24),
+          authorizationExpiresAt: hours(-1),
+          hasRefreshToken: true,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "ended", at: hours(-1) });
+  });
+  it("bounds an otherwise non-expiring refresh grant by authorization", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(1),
+          authorizationExpiresAt: hours(12),
+          hasRefreshToken: true,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "refreshes-until", at: hours(12), soon: true });
+  });
+  it("keeps an earlier access deadline than authorization", () => {
+    expect(
+      connectionLifetime(
+        {
+          accessExpiresAt: hours(1),
+          authorizationExpiresAt: hours(12),
+          hasRefreshToken: false,
+        },
+        now,
+      ),
+    ).toEqual({ kind: "expires", at: hours(1), soon: true });
+  });
   it("reads a refresh token with no expiry as having no end", () => {
     const lifetime = connectionLifetime(
       { accessExpiresAt: hours(1), hasRefreshToken: true },

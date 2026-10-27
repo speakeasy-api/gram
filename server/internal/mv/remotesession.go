@@ -18,21 +18,27 @@ func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectE
 		v := row.RefreshExpiresAt.Time.Format(time.RFC3339)
 		refreshExpiresAt = &v
 	}
+	var authorizationExpiresAt *string
+	if row.AuthorizationExpiresAt.Valid {
+		v := row.AuthorizationExpiresAt.Time.Format(time.RFC3339)
+		authorizationExpiresAt = &v
+	}
 	return &types.RemoteSession{
-		ID:                    row.ID.String(),
-		SubjectUrn:            row.SubjectUrn.String(),
-		SubjectDisplayName:    subjectDisplayName,
-		SubjectEmail:          subjectEmail,
-		UpstreamEmail:         conv.FromPGText[string](row.UpstreamEmail),
-		UpstreamDisplayName:   conv.FromPGText[string](row.UpstreamDisplayName),
-		IdentitySource:        conv.FromPGText[string](row.IdentitySource),
-		UserSessionIssuerID:   row.UserSessionIssuerID.String(),
-		RemoteSessionClientID: row.RemoteSessionClientID.String(),
-		AccessExpiresAt:       row.AccessExpiresAt.Time.Format(time.RFC3339),
-		RefreshExpiresAt:      refreshExpiresAt,
-		HasRefreshToken:       row.RefreshTokenEncrypted.Valid && row.RefreshTokenEncrypted.String != "",
-		Scopes:                row.Scopes,
-		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                     row.ID.String(),
+		SubjectUrn:             row.SubjectUrn.String(),
+		SubjectDisplayName:     subjectDisplayName,
+		SubjectEmail:           subjectEmail,
+		UpstreamEmail:          conv.FromPGText[string](row.UpstreamEmail),
+		UpstreamDisplayName:    conv.FromPGText[string](row.UpstreamDisplayName),
+		IdentitySource:         conv.FromPGText[string](row.IdentitySource),
+		UserSessionIssuerID:    row.UserSessionIssuerID.String(),
+		RemoteSessionClientID:  row.RemoteSessionClientID.String(),
+		AccessExpiresAt:        row.AccessExpiresAt.Time.Format(time.RFC3339),
+		RefreshExpiresAt:       refreshExpiresAt,
+		AuthorizationExpiresAt: authorizationExpiresAt,
+		HasRefreshToken:        row.RefreshTokenEncrypted.Valid && row.RefreshTokenEncrypted.String != "",
+		Scopes:                 row.Scopes,
+		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }

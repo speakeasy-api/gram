@@ -45,6 +45,22 @@ const server: InventoryServer = {
 };
 
 describe("serverConnection", () => {
+  it("does not offer a session whose authorization ended before its tokens", () => {
+    const connection = serverConnection(
+      "issuer_one",
+      [client("client_one")],
+      [
+        session({
+          authorizationExpiresAt: earlier,
+          hasRefreshToken: true,
+          refreshExpiresAt: later,
+        }),
+      ],
+      now,
+    );
+    expect(connection.status).toBe("ended");
+    expect(connectionSelectable(connection)).toBe(false);
+  });
   it("needs no connection when the issuer asks for no personal sign-in", () => {
     const connection = serverConnection(
       "issuer_one",

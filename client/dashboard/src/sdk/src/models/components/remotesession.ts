@@ -16,6 +16,10 @@ export type RemoteSession = {
    * Upstream access-token expiry. Independent of refresh_expires_at.
    */
   accessExpiresAt: Date;
+  /**
+   * Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.
+   */
+  authorizationExpiresAt?: Date | undefined;
   createdAt: Date;
   /**
    * Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.
@@ -78,6 +82,9 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    authorization_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -104,6 +111,7 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "access_expires_at": "accessExpiresAt",
+      "authorization_expires_at": "authorizationExpiresAt",
       "created_at": "createdAt",
       "has_refresh_token": "hasRefreshToken",
       "identity_source": "identitySource",

@@ -145,7 +145,11 @@ export function useOwnerConnections(
   return {
     byServer,
     refetch: () => {
-      for (const read of [...sessions, ...clients, ...bindings])
+      for (const read of [
+        ...sessions,
+        ...clients,
+        ...(agentId ? bindings : []),
+      ])
         void read.refetch();
     },
   };

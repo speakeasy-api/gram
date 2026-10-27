@@ -24,7 +24,7 @@ import { useAgentsResumeMutation } from "@gram/client/react-query/agentsResume.j
 import { useAgentsRevokeMutation } from "@gram/client/react-query/agentsRevoke.js";
 import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
-import { useState } from "react";
+import { useState, type JSX } from "react";
 import { Link } from "react-router";
 import { useRoutes } from "@/routes";
 import { AlertTriangle } from "lucide-react";
@@ -478,7 +478,7 @@ function LifecycleBadge({
   );
 }
 
-export function AgentStatus({ agent }: { agent: ManagedAgent }) {
+export function AgentStatus({ agent }: { agent: ManagedAgent }): JSX.Element {
   if (agent.lifecycle === "active" && agent.connectionNeedsRefresh) {
     return (
       <span className="flex flex-wrap items-center gap-2">

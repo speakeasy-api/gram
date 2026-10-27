@@ -45,6 +45,11 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 			require.NoError(t, err)
 			require.Zero(t, humanSessions)
 			window := newSweepWindow()
+			bulkLookup := repo.ListEligiblePrincipalRemoteSessionBindingsParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config}
+			eligible, err := q.ListEligiblePrincipalRemoteSessionBindings(ctx, bulkLookup)
+			require.NoError(t, err)
+			require.Len(t, eligible, 1)
+			require.Equal(t, session.ID, eligible[0].ID)
 			lookup := repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, RemoteSessionClientID: session.RemoteSessionClientID}
 			_, err = q.GetPrincipalRemoteSessionBinding(ctx, lookup)
 			require.NoError(t, err)
@@ -100,6 +105,9 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 			if state == "owner-transfer" {
 				_, err = q.GetPrincipalRemoteSessionBinding(ctx, lookup)
 				require.NoError(t, err, "a valid delegation survives agent ownership transfer")
+				eligible, err = q.ListEligiblePrincipalRemoteSessionBindings(ctx, bulkLookup)
+				require.NoError(t, err)
+				require.Len(t, eligible, 1)
 				_, err = q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(session.ID, auth.ActiveOrganizationID))
 				require.NoError(t, err)
 				return
@@ -112,6 +120,9 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 			if state != "opt-out" && state != "policy-disabled" {
 				_, err = q.GetPrincipalRemoteSessionBinding(ctx, lookup)
 				require.ErrorIs(t, err, pgx.ErrNoRows)
+				eligible, err = q.ListEligiblePrincipalRemoteSessionBindings(ctx, bulkLookup)
+				require.NoError(t, err)
+				require.Empty(t, eligible)
 			}
 		})
 	}

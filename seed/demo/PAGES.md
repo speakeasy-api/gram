@@ -148,11 +148,10 @@ in the audit feed. Shared-demo agent access remains restricted as above.
 ### Exact remote-session attachments
 
 PG `remote_sessions` ×2 and `principal_remote_session_bindings` ×2 show a working
-connection on **Release assistant** and an expired owner connection on **Release notes assistant**. Other members see
-read-only assignments; only the owner can assign or refresh a connection. Linear MCP session
+owner connection on **Release assistant** and an expired connection delegated by the second demo member on **Release notes assistant**. Authorized editors can remove assignments and attach their own connections; only the connection owner can refresh it. Linear MCP session
 6 is the requesting human session; its issuer is explicitly linked to the
 upstream client. Each binding retains its source session’s exact ID, not a copy of
-its credential. Release notes assistant belongs to the second demo member; the original three
+its credential. Both release agents belong to the first demo member; the original three
 agent lifecycle fixtures remain unchanged.
 Both accounts have invalid ciphertext, no refresh token and auto-refresh disabled.
 Its client sits under Linear's remote identity provider (reserved example

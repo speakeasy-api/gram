@@ -116526,6 +116526,10 @@ components:
                     type: string
                     description: Upstream access-token expiry. Independent of refresh_expires_at.
                     format: date-time
+                authorization_expires_at:
+                    type: string
+                    description: Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.
+                    format: date-time
                 created_at:
                     type: string
                     format: date-time

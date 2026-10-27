@@ -494,87 +494,102 @@ describe("Agent key MCP servers", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Use account" }));
     await waitFor(() => expect(mocks.attach).toHaveBeenCalled());
   });
-  it("allows an editor to remove another person’s assignment", async () => {
-    mocks.userId = "user_manager";
-    mocks.bindings.mockResolvedValue([
-      {
-        id: "other_binding",
-        remoteSessionId: "other_session",
-        remoteSessionClientId: "client_example",
-        remoteSession: {
-          id: "other_session",
-          subjectUrn: "user:other",
-          subjectDisplayName: "Jordan Example",
-          remoteSessionClientId: "client_example",
-          scopes: [],
-          hasRefreshToken: false,
-          accessExpiresAt: new Date(Date.now() + 86_400_000),
-        },
-      },
-    ]);
-    const { ready } = setup(1, [server]);
-    expect(await screen.findByText("Jordan Example's connection")).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Remove assignment" }),
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Unlock" })).toBeNull();
-    await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
-    expect(mocks.detach).not.toHaveBeenCalled();
-  });
-  it("prompts the signed-in person to refresh an expired assigned connection", async () => {
-    const expired = {
-      id: "expired",
-      subjectUrn: "user:user_example",
-      subjectDisplayName: "Alex Example",
-      remoteSessionClientId: "client_example",
-      scopes: [],
-      hasRefreshToken: false,
-      accessExpiresAt: new Date(Date.now() - 86_400_000),
-    };
-    mocks.bindings.mockResolvedValue([
-      {
-        id: "expired_binding",
-        remoteSessionId: expired.id,
-        remoteSessionClientId: "client_example",
-        remoteSession: expired,
-      },
-    ]);
-    mocks.candidates.mockResolvedValue([expired]);
-    const { ready } = setup(1, [server]);
-    expect(
-      await screen.findByRole("link", { name: "Refresh connection" }),
-    ).toBeTruthy();
-    expect(ready).not.toHaveBeenCalledWith(true);
-    const refreshLink = screen.getByRole("link", {
-      name: "Refresh connection",
-    });
-    fireEvent.click(refreshLink);
-    expect(mocks.detach).not.toHaveBeenCalled();
-    const renewed = {
-      ...expired,
-      id: "renewed",
-      accessExpiresAt: new Date(Date.now() + 3_600_000),
-    };
-    mocks.candidates.mockResolvedValue([renewed]);
-    mocks.attach.mockImplementation(async () => {
+  it.each(["user:user_example", "user:other"])(
+    "allows an editor to remove another person’s assignment (%s)",
+    async (subjectUrn) => {
+      mocks.userId = "user_manager";
       mocks.bindings.mockResolvedValue([
         {
-          id: "renewed_binding",
-          remoteSessionId: renewed.id,
-          remoteSessionClientId: renewed.remoteSessionClientId,
-          remoteSession: renewed,
+          id: "other_binding",
+          remoteSessionId: "other_session",
+          remoteSessionClientId: "client_example",
+          remoteSession: {
+            id: "other_session",
+            subjectUrn,
+            subjectDisplayName: "Jordan Example",
+            remoteSessionClientId: "client_example",
+            scopes: [],
+            hasRefreshToken: false,
+            accessExpiresAt: new Date(Date.now() + 86_400_000),
+          },
         },
       ]);
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Refresh accounts" }));
-    await waitFor(() =>
-      expect(mocks.attach).toHaveBeenCalledWith(agent.id, renewed.id),
-    );
-    expect(mocks.detach).toHaveBeenCalledWith(agent.id, "expired_binding");
-    expect(mocks.attach).toHaveBeenCalledTimes(1);
-    expect(mocks.detach).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
-  });
+      const { ready } = setup(1, [server]);
+      expect(
+        await screen.findByText("Jordan Example's connection"),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Remove assignment" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Unlock" })).toBeNull();
+      await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
+      expect(mocks.detach).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["access", "authorization"])(
+    "prompts the signed-in person to refresh an expired assigned connection (%s)",
+    async (expiry) => {
+      const expired = {
+        id: "expired",
+        subjectUrn: "user:user_example",
+        subjectDisplayName: "Alex Example",
+        remoteSessionClientId: "client_example",
+        scopes: [],
+        hasRefreshToken: false,
+        accessExpiresAt: new Date(
+          Date.now() + (expiry === "access" ? -86_400_000 : 86_400_000),
+        ),
+        authorizationExpiresAt:
+          expiry === "authorization"
+            ? new Date(Date.now() - 86_400_000)
+            : undefined,
+      };
+      mocks.bindings.mockResolvedValue([
+        {
+          id: "expired_binding",
+          remoteSessionId: expired.id,
+          remoteSessionClientId: "client_example",
+          remoteSession: expired,
+        },
+      ]);
+      mocks.candidates.mockResolvedValue([expired]);
+      const { ready } = setup(1, [server]);
+      expect(
+        await screen.findByRole("link", { name: "Refresh connection" }),
+      ).toBeTruthy();
+      expect(ready).not.toHaveBeenCalledWith(true);
+      const refreshLink = screen.getByRole("link", {
+        name: "Refresh connection",
+      });
+      fireEvent.click(refreshLink);
+      expect(mocks.detach).not.toHaveBeenCalled();
+      const renewed = {
+        ...expired,
+        id: "renewed",
+        authorizationExpiresAt: undefined,
+        accessExpiresAt: new Date(Date.now() + 3_600_000),
+      };
+      mocks.candidates.mockResolvedValue([renewed]);
+      mocks.attach.mockImplementation(async () => {
+        mocks.bindings.mockResolvedValue([
+          {
+            id: "renewed_binding",
+            remoteSessionId: renewed.id,
+            remoteSessionClientId: renewed.remoteSessionClientId,
+            remoteSession: renewed,
+          },
+        ]);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Refresh accounts" }));
+      await waitFor(() =>
+        expect(mocks.attach).toHaveBeenCalledWith(agent.id, renewed.id),
+      );
+      expect(mocks.detach).toHaveBeenCalledWith(agent.id, "expired_binding");
+      expect(mocks.attach).toHaveBeenCalledTimes(1);
+      expect(mocks.detach).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
+    },
+  );
   it("does not accept missing or stale bindings as ready", async () => {
     mocks.bindings.mockResolvedValue([
       {

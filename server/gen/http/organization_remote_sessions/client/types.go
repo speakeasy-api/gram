@@ -55,6 +55,9 @@ type RefreshSessionResponseBody struct {
 	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Upstream authorization deadline. When present, the connection cannot be used
+	// or refreshed after this time even if its tokens have later expiries.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.
@@ -865,6 +868,9 @@ type RemoteSessionResponseBody struct {
 	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Upstream authorization deadline. When present, the connection cannot be used
+	// or refreshed after this time even if its tokens have later expiries.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.
@@ -1198,20 +1204,21 @@ func NewRevokeSessionGatewayError(body *RevokeSessionGatewayErrorResponseBody) *
 // service "refreshSession" endpoint result from a HTTP "OK" response.
 func NewRefreshSessionRemoteSessionOK(body *RefreshSessionResponseBody) *types.RemoteSession {
 	v := &types.RemoteSession{
-		ID:                    *body.ID,
-		SubjectUrn:            *body.SubjectUrn,
-		SubjectDisplayName:    body.SubjectDisplayName,
-		SubjectEmail:          body.SubjectEmail,
-		UpstreamEmail:         body.UpstreamEmail,
-		UpstreamDisplayName:   body.UpstreamDisplayName,
-		IdentitySource:        body.IdentitySource,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
-		RemoteSessionClientID: *body.RemoteSessionClientID,
-		AccessExpiresAt:       *body.AccessExpiresAt,
-		RefreshExpiresAt:      body.RefreshExpiresAt,
-		HasRefreshToken:       *body.HasRefreshToken,
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+		ID:                     *body.ID,
+		SubjectUrn:             *body.SubjectUrn,
+		SubjectDisplayName:     body.SubjectDisplayName,
+		SubjectEmail:           body.SubjectEmail,
+		UpstreamEmail:          body.UpstreamEmail,
+		UpstreamDisplayName:    body.UpstreamDisplayName,
+		IdentitySource:         body.IdentitySource,
+		UserSessionIssuerID:    *body.UserSessionIssuerID,
+		RemoteSessionClientID:  *body.RemoteSessionClientID,
+		AccessExpiresAt:        *body.AccessExpiresAt,
+		RefreshExpiresAt:       body.RefreshExpiresAt,
+		AuthorizationExpiresAt: body.AuthorizationExpiresAt,
+		HasRefreshToken:        *body.HasRefreshToken,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
 	}
 	v.Scopes = make([]string, len(body.Scopes))
 	for i, val := range body.Scopes {
@@ -1594,6 +1601,9 @@ func ValidateRefreshSessionResponseBody(body *RefreshSessionResponseBody) (err e
 	}
 	if body.RefreshExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.refresh_expires_at", *body.RefreshExpiresAt, goa.FormatDateTime))
+	}
+	if body.AuthorizationExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.authorization_expires_at", *body.AuthorizationExpiresAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2619,6 +2629,9 @@ func ValidateRemoteSessionResponseBody(body *RemoteSessionResponseBody) (err err
 	}
 	if body.RefreshExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.refresh_expires_at", *body.RefreshExpiresAt, goa.FormatDateTime))
+	}
+	if body.AuthorizationExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.authorization_expires_at", *body.AuthorizationExpiresAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

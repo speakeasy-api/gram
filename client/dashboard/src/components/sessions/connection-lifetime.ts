@@ -10,7 +10,8 @@ import { dateTimeFormatters } from "@/lib/dates";
  * A connection with a refresh token renews its access on use, so the deadline
  * that matters is the refresh token's, and an upstream that issues one with no
  * expiry has no deadline at all. Without a refresh token the access token's
- * expiry is the end, and nothing renews it.
+ * expiry is the end, and nothing renews it. The authorization deadline, when
+ * present, caps both: tokens cannot keep the connection alive beyond it.
  */
 export type ConnectionLifetime =
   /** No readable expiry was recorded, so nothing can be said about its end. */
@@ -29,7 +30,10 @@ const ENDING_SOON_MS = 24 * 60 * 60 * 1000;
 
 type SessionExpiry = Pick<
   RemoteSession,
-  "accessExpiresAt" | "refreshExpiresAt" | "hasRefreshToken"
+  | "accessExpiresAt"
+  | "refreshExpiresAt"
+  | "authorizationExpiresAt"
+  | "hasRefreshToken"
 >;
 
 /** A recorded instant, or undefined when it is absent or unreadable. */
@@ -43,9 +47,14 @@ export function connectionLifetime(
   session: SessionExpiry,
   now: number = Date.now(),
 ): ConnectionLifetime {
-  const access = instant(session.accessExpiresAt);
+  const authorization = instant(session.authorizationExpiresAt);
+  if (authorization && authorization.getTime() <= now)
+    return { kind: "ended", at: authorization };
+  const bounded = (at: Date | undefined) =>
+    authorization && (!at || authorization < at) ? authorization : at;
+  const access = bounded(instant(session.accessExpiresAt));
   if (session.hasRefreshToken) {
-    const refresh = instant(session.refreshExpiresAt);
+    const refresh = bounded(instant(session.refreshExpiresAt));
     if (!refresh) return { kind: "refreshes" };
     if (refresh.getTime() > now)
       return {

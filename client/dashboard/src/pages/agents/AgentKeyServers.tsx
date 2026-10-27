@@ -367,7 +367,7 @@ export function ServerAccounts({
   compact?: boolean;
   servers: KeyServer[];
   onReady: (ready: boolean) => void;
-}) {
+}): JSX.Element | null {
   const organization = useOrganization();
   const { user } = useSession();
   const sdk = useSdkClient();
@@ -454,6 +454,8 @@ export function ServerAccounts({
       clients: clientsQueries[index]?.data ?? [],
     })),
   };
+  const refetchAccounts = useRef(query.refetch);
+  refetchAccounts.current = query.refetch;
   // A row earns a card when it asks for an account, or when it still holds a
   // binding whose authorization is gone: that binding blocks `ready`, and
   // disconnecting it is the only way past, so the row has to stay on screen.
@@ -530,7 +532,7 @@ export function ServerAccounts({
           },
         });
         setRefreshing(undefined);
-        await query.refetch();
+        await refetchAccounts.current();
       } catch {
         setError(true);
       } finally {

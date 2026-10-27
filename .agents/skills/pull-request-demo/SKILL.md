@@ -143,7 +143,7 @@ Honor an existing user voice selection without asking for approval again. When c
 
 Time each sentence to the visible action, leave room to read the result, and avoid rushed acronyms. Review the final muxed audio for intelligibility, natural phrasing, clipped words, long silences, and alignment with the screen. When direct audio review is unavailable, present the final narrated file for user review and clearly state that its sound has not been assessed. Regenerate weak narration before publishing. Disclose synthesized narration without implying a real person recorded it.
 
-The trim example above uses `-an` for a silent capture. For already narrated footage, trim while preserving audio. For silent footage, trim first and then mux narration. Never publish a version whose narration was removed by `-an`, or use a silent GIF as the only deliverable. Inspect and publish the final file containing both picture and sound.
+The trim example above uses `-an` for a silent capture. For already narrated footage, trim while preserving audio. For silent footage, trim first and then mux narration into a temporary WebM. Replace `$DIR/demo-trimmed.webm` with that muxed output before inspection, GIF conversion, or upload so subsequent steps use the narrated artifact. Attach that WebM alongside any silent GIF fallback. Never publish a version whose narration was removed by `-an`, or use a silent GIF as the only deliverable. Inspect and publish the final file containing both picture and sound.
 
 ### GIF fallback
 
