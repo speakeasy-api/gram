@@ -227,6 +227,41 @@ func (m *mandatoryShadow) callerClass() string {
 // record evaluates check and records whether it agrees with legacyAllowed,
 // today's decision. It never changes the request.
 func (m *mandatoryShadow) record(ctx context.Context, surface string, legacyAllowed bool, check authz.Check) {
+	m.recordDecision(ctx, surface, legacyAllowed, check, func() (authz.MandatoryDecision, error) {
+		return m.authorization.Decide(m.organizationID, check)
+	})
+}
+
+// recordServer records a request that reached server admission: connect is
+// decided under the server's visibility, so
+// a public server's anonymous caller is admitted without a policy. A request
+// denied before admission, such as by a failed identity check, is recorded
+// with record instead.
+func (m *mandatoryShadow) recordServer(ctx context.Context, surface string, legacyAllowed bool, visibility authz.MandatoryServerVisibility, connect authz.Check) {
+	m.recordDecision(ctx, surface, legacyAllowed, connect, func() (authz.MandatoryDecision, error) {
+		return m.authorization.DecideServerAdmission(m.organizationID, visibility, connect)
+	})
+}
+
+// shadowRequireServer is recordServer against today's Require result. Only
+// access denials count as a deny.
+func (m *mandatoryShadow) shadowRequireServer(ctx context.Context, surface string, requireErr error, visibility authz.MandatoryServerVisibility, connect authz.Check) {
+	if requireErr != nil && !isAccessDenial(requireErr) {
+		return
+	}
+	m.recordServer(ctx, surface, requireErr == nil, visibility, connect)
+}
+
+// mandatoryVisibility maps a server's stored visibility to the visibility
+// admission decides under. Anything but public fails closed as private.
+func mandatoryVisibility(public bool) authz.MandatoryServerVisibility {
+	if public {
+		return authz.MandatoryServerPublic
+	}
+	return authz.MandatoryServerPrivate
+}
+
+func (m *mandatoryShadow) recordDecision(ctx context.Context, surface string, legacyAllowed bool, check authz.Check, decide func() (authz.MandatoryDecision, error)) {
 	if m == nil {
 		return
 	}
@@ -237,7 +272,7 @@ func (m *mandatoryShadow) record(ctx context.Context, surface string, legacyAllo
 	var decision authz.MandatoryDecision
 	err := m.err
 	if err == nil {
-		decision, err = m.authorization.Decide(m.organizationID, check)
+		decision, err = decide()
 	}
 	m.emit(ctx, surface, legacyAllowed, check.ResourceID, check.Dimensions[authz.SelectorKeyProjectID], decision, err, "")
 }

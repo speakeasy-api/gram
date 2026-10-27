@@ -1540,10 +1540,11 @@ func formatDurationHours(hours int) string {
 // presets at or below the issuer's maximum, with the maximum itself
 // guaranteed present and preselected.
 func buildSessionDurationOptions(issuer usersessions_repo.UserSessionIssuer) []sessionDurationOption {
-	if !issuer.SessionDuration.Valid || issuer.SessionDuration.Microseconds <= 0 {
+	maxLifetime, ok := conv.PGIntervalToDuration(issuer.SessionDuration)
+	if !ok || maxLifetime <= 0 {
 		return nil
 	}
-	maxHours := int(time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond / time.Hour)
+	maxHours := int(maxLifetime / time.Hour)
 	if maxHours < 1 {
 		return nil
 	}

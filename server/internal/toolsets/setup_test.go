@@ -167,7 +167,7 @@ func (fakeGitHubPublisher) HasDirectCollaborator(ctx context.Context, installati
 	return false, nil
 }
 
-func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error) {
 	return nil, ghclient.ErrRepoNotFound
 }
 
