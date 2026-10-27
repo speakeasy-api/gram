@@ -452,7 +452,7 @@ func (ti *testInstance) callbackWithNonce(ctx context.Context, t *testing.T) (*g
 	t.Helper()
 	ctx, stateParam := ti.stateWithNonce(ctx, t, "")
 	res, err := ti.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "mock_code",
+		Code:  new("mock_code"),
 		State: &stateParam,
 	})
 	if err != nil {

@@ -2447,20 +2447,22 @@ func unmarshalRemoteSessionResponseBodyToTypesRemoteSession(v *RemoteSessionResp
 		return nil
 	}
 	res := &types.RemoteSession{
-		ID:                    *v.ID,
-		SubjectUrn:            *v.SubjectUrn,
-		SubjectDisplayName:    v.SubjectDisplayName,
-		SubjectEmail:          v.SubjectEmail,
-		UpstreamEmail:         v.UpstreamEmail,
-		UpstreamDisplayName:   v.UpstreamDisplayName,
-		IdentitySource:        v.IdentitySource,
-		UserSessionIssuerID:   *v.UserSessionIssuerID,
-		RemoteSessionClientID: *v.RemoteSessionClientID,
-		AccessExpiresAt:       *v.AccessExpiresAt,
-		RefreshExpiresAt:      v.RefreshExpiresAt,
-		HasRefreshToken:       *v.HasRefreshToken,
-		CreatedAt:             *v.CreatedAt,
-		UpdatedAt:             *v.UpdatedAt,
+		ID:                     *v.ID,
+		SubjectUrn:             *v.SubjectUrn,
+		SubjectDisplayName:     v.SubjectDisplayName,
+		SubjectEmail:           v.SubjectEmail,
+		UpstreamEmail:          v.UpstreamEmail,
+		UpstreamDisplayName:    v.UpstreamDisplayName,
+		IdentitySource:         v.IdentitySource,
+		UserSessionIssuerID:    *v.UserSessionIssuerID,
+		RemoteSessionClientID:  *v.RemoteSessionClientID,
+		AccessExpiresAt:        *v.AccessExpiresAt,
+		RefreshExpiresAt:       v.RefreshExpiresAt,
+		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
+		LastUsedAt:             v.LastUsedAt,
+		HasRefreshToken:        *v.HasRefreshToken,
+		CreatedAt:              *v.CreatedAt,
+		UpdatedAt:              *v.UpdatedAt,
 	}
 	res.Scopes = make([]string, len(v.Scopes))
 	for i, val := range v.Scopes {

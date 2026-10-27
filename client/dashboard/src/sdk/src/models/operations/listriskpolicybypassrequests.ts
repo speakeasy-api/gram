@@ -24,7 +24,7 @@ export type ListRiskPolicyBypassRequestsSecurity = {
 /**
  * Optional request status filter.
  */
-export const QueryParamStatus = {
+export const ListRiskPolicyBypassRequestsQueryParamStatus = {
   Requested: "requested",
   Approved: "approved",
   Denied: "denied",
@@ -33,7 +33,9 @@ export const QueryParamStatus = {
 /**
  * Optional request status filter.
  */
-export type QueryParamStatus = ClosedEnum<typeof QueryParamStatus>;
+export type ListRiskPolicyBypassRequestsQueryParamStatus = ClosedEnum<
+  typeof ListRiskPolicyBypassRequestsQueryParamStatus
+>;
 
 export type ListRiskPolicyBypassRequestsRequest = {
   /**
@@ -43,7 +45,7 @@ export type ListRiskPolicyBypassRequestsRequest = {
   /**
    * Optional request status filter.
    */
-  status?: QueryParamStatus | undefined;
+  status?: ListRiskPolicyBypassRequestsQueryParamStatus | undefined;
   /**
    * API Key header
    */
@@ -166,9 +168,10 @@ export function listRiskPolicyBypassRequestsSecurityToJSON(
 }
 
 /** @internal */
-export const QueryParamStatus$outboundSchema: z.ZodMiniEnum<
-  typeof QueryParamStatus
-> = z.enum(QueryParamStatus);
+export const ListRiskPolicyBypassRequestsQueryParamStatus$outboundSchema:
+  z.ZodMiniEnum<typeof ListRiskPolicyBypassRequestsQueryParamStatus> = z.enum(
+    ListRiskPolicyBypassRequestsQueryParamStatus,
+  );
 
 /** @internal */
 export type ListRiskPolicyBypassRequestsRequest$Outbound = {
@@ -186,7 +189,9 @@ export const ListRiskPolicyBypassRequestsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     policyId: z.optional(z.string()),
-    status: z.optional(QueryParamStatus$outboundSchema),
+    status: z.optional(
+      ListRiskPolicyBypassRequestsQueryParamStatus$outboundSchema,
+    ),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),

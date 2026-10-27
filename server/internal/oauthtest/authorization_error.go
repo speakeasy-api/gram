@@ -41,6 +41,15 @@ func RequireAuthorizationErrorPage(t *testing.T, response *httptest.ResponseReco
 	return body
 }
 
+// RequireAuthorizationErrorRecovery verifies the only navigation link is the
+// expected application recovery destination and returns the public error.
+func RequireAuthorizationErrorRecovery(t *testing.T, response *httptest.ResponseRecorder, status int, destination string) oautherr.RFC6749Error {
+	t.Helper()
+	links, body := requireAuthorizationErrorPage(t, response, status)
+	require.Equal(t, []string{destination}, links)
+	return body
+}
+
 func requireAuthorizationErrorPage(t *testing.T, response *httptest.ResponseRecorder, status int) ([]string, oautherr.RFC6749Error) {
 	t.Helper()
 	require.Equal(t, status, response.Code, response.Body.String())

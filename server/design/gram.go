@@ -35,6 +35,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/externalkeys"
 	_ "github.com/speakeasy-api/gram/server/design/externalmcp"
 	_ "github.com/speakeasy-api/gram/server/design/functions"
+	_ "github.com/speakeasy-api/gram/server/design/hiddenmcpservers"
 	_ "github.com/speakeasy-api/gram/server/design/hooks"
 	_ "github.com/speakeasy-api/gram/server/design/identity"
 	_ "github.com/speakeasy-api/gram/server/design/identityproviderconnections"
