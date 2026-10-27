@@ -844,6 +844,49 @@ WHERE s.id = $3::uuid
           AND ec.source = 'backfill'
           AND ec.deleted IS FALSE
          WHERE el.mcp_server_id = s.id AND el.organization_id = p.organization_id AND el.deleted IS FALSE
+           AND NOT EXISTS (
+             -- Reached only through the gateways: the server's own issuer has no
+             -- ready binding for the client's upstream, so the client cannot serve
+             -- its direct route and leaves that route's configuration alone.
+             SELECT 1
+             FROM mcp_auth_client_emas AS gx
+             JOIN mcp_servers AS gs ON gs.id = el.mcp_server_id
+             WHERE gx.auth_client_id = ec.id
+               AND gx.deleted IS FALSE
+               AND NOT EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS db
+                 WHERE db.organization_id = gx.organization_id
+                   AND db.project_id = gs.project_id
+                   AND db.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND db.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.state = 'ready'
+                   AND db.user_session_issuer_id = gs.user_session_issuer_id
+               )
+               AND EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS gb
+                 WHERE gb.organization_id = gx.organization_id
+                   AND gb.project_id = gs.project_id
+                   AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND gb.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.state = 'ready'
+                   AND gb.user_session_issuer_id = (
+                     -- The gateways' issuer, as ListEMABindingServers reads it.
+                     SELECT (array_agg(gi.id))[1]
+                     FROM user_session_issuers AS gi
+                     WHERE gi.organization_id = gb.organization_id
+                       AND gi.project_id IS NULL
+                       AND gi.deleted IS FALSE
+                       AND EXISTS (
+                         SELECT 1 FROM organization_features AS gf
+                         WHERE gf.organization_id = gb.organization_id
+                           AND gf.feature_name = 'organization_gateway_disabled'
+                       )
+                     HAVING count(*) = 1
+                   )
+               )
+           )
        )))
   AND NOT EXISTS (
     -- An administrator detached this client from this server: the backfill
@@ -1652,6 +1695,7 @@ func (q *Queries) ListEMABackfillBindings(ctx context.Context, organizationID st
 const listEMABindingServers = `-- name: ListEMABindingServers :many
 SELECT s.id AS mcp_server_id,
        s.project_id,
+       COALESCE(s.user_session_issuer_id = b.user_session_issuer_id, FALSE)::boolean AS direct,
        (CASE WHEN rp.id IS NOT NULL AND rp.authorization_servers IS NOT NULL AND NOT EXISTS (
                SELECT 1 FROM unnest(rp.authorization_servers) AS allowed(server)
                WHERE rtrim(allowed.server, '/') = rtrim(rsi.issuer, '/')
@@ -1736,6 +1780,7 @@ type ListEMABindingServersParams struct {
 type ListEMABindingServersRow struct {
 	McpServerID uuid.UUID
 	ProjectID   uuid.UUID
+	Direct      bool
 	Match       string
 }
 
@@ -1750,7 +1795,8 @@ type ListEMABindingServersRow struct {
 // tunneled server whose resource identifier names it under its own derived
 // issuer. A remote server whose valid record lists authorization servers
 // without the binding's issuer is returned as issuer_not_allowed, since the
-// runtime would refuse it.
+// runtime would refuse it. direct reports that the server's own issuer is the
+// binding's.
 func (q *Queries) ListEMABindingServers(ctx context.Context, arg ListEMABindingServersParams) ([]ListEMABindingServersRow, error) {
 	rows, err := q.db.Query(ctx, listEMABindingServers, arg.BindingID, arg.OrganizationID)
 	if err != nil {
@@ -1760,7 +1806,12 @@ func (q *Queries) ListEMABindingServers(ctx context.Context, arg ListEMABindingS
 	var items []ListEMABindingServersRow
 	for rows.Next() {
 		var i ListEMABindingServersRow
-		if err := rows.Scan(&i.McpServerID, &i.ProjectID, &i.Match); err != nil {
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.Direct,
+			&i.Match,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2453,7 +2504,117 @@ SELECT sel.id,
            AND ac.deleted IS FALSE
            AND ac.enabled
            AND ac.client_type IN ('remote_session', 'service_account', 'ema')
-       )::boolean AS server_has_oauth_clients
+           AND NOT (ac.client_type = 'ema' AND EXISTS (
+             -- Reached only through the gateways: the server's own issuer has no
+             -- ready binding for the client's upstream, so the client cannot serve
+             -- its direct route and leaves that route's configuration alone.
+             SELECT 1
+             FROM mcp_auth_client_emas AS gx
+             JOIN mcp_servers AS gs ON gs.id = l.mcp_server_id
+             WHERE gx.auth_client_id = ac.id
+               AND gx.deleted IS FALSE
+               AND NOT EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS db
+                 WHERE db.organization_id = gx.organization_id
+                   AND db.project_id = gs.project_id
+                   AND db.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND db.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.state = 'ready'
+                   AND db.user_session_issuer_id = gs.user_session_issuer_id
+               )
+               AND EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS gb
+                 WHERE gb.organization_id = gx.organization_id
+                   AND gb.project_id = gs.project_id
+                   AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND gb.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.state = 'ready'
+                   AND gb.user_session_issuer_id = (
+                     -- The gateways' issuer, as ListEMABindingServers reads it.
+                     SELECT (array_agg(gi.id))[1]
+                     FROM user_session_issuers AS gi
+                     WHERE gi.organization_id = gb.organization_id
+                       AND gi.project_id IS NULL
+                       AND gi.deleted IS FALSE
+                       AND EXISTS (
+                         SELECT 1 FROM organization_features AS gf
+                         WHERE gf.organization_id = gb.organization_id
+                           AND gf.feature_name = 'organization_gateway_disabled'
+                       )
+                     HAVING count(*) = 1
+                   )
+               )
+           ))
+       )::boolean AS server_has_oauth_clients,
+       -- The issuers of the bindings through which an EMA client reaching the
+       -- server only through the gateways serves it: a choice whose credential
+       -- one of them issued reads the client as OAuth-backed, a choice made on
+       -- the direct route does not.
+       ARRAY(
+         SELECT DISTINCT gb2.user_session_issuer_id
+         FROM mcp_auth_clients AS ac
+         JOIN mcp_server_auth_clients AS l
+           ON l.auth_client_id = ac.id
+          AND l.mcp_server_id = sel.mcp_server_id
+          AND l.deleted IS FALSE
+         JOIN mcp_auth_client_emas AS x ON x.auth_client_id = ac.id AND x.deleted IS FALSE
+         JOIN remote_session_ema_bindings AS gb2
+           ON gb2.organization_id = x.organization_id
+          AND gb2.project_id = sel.project_id
+          AND gb2.remote_session_issuer_id = x.remote_session_issuer_id
+          AND gb2.remote_session_client_id = x.remote_session_client_id
+          AND rtrim(gb2.resource, '/') = rtrim(x.resource, '/')
+          AND gb2.state = 'ready'
+         WHERE ac.organization_id = sel.organization_id
+           AND ac.deleted IS FALSE
+           AND ac.enabled
+           AND ac.client_type = 'ema'
+           AND EXISTS (
+             -- Reached only through the gateways: the server's own issuer has no
+             -- ready binding for the client's upstream, so the client cannot serve
+             -- its direct route and leaves that route's configuration alone.
+             SELECT 1
+             FROM mcp_auth_client_emas AS gx
+             JOIN mcp_servers AS gs ON gs.id = l.mcp_server_id
+             WHERE gx.auth_client_id = ac.id
+               AND gx.deleted IS FALSE
+               AND NOT EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS db
+                 WHERE db.organization_id = gx.organization_id
+                   AND db.project_id = gs.project_id
+                   AND db.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND db.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.state = 'ready'
+                   AND db.user_session_issuer_id = gs.user_session_issuer_id
+               )
+               AND EXISTS (
+                 SELECT 1 FROM remote_session_ema_bindings AS gb
+                 WHERE gb.organization_id = gx.organization_id
+                   AND gb.project_id = gs.project_id
+                   AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
+                   AND gb.remote_session_client_id = gx.remote_session_client_id
+                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.state = 'ready'
+                   AND gb.user_session_issuer_id = (
+                     -- The gateways' issuer, as ListEMABindingServers reads it.
+                     SELECT (array_agg(gi.id))[1]
+                     FROM user_session_issuers AS gi
+                     WHERE gi.organization_id = gb.organization_id
+                       AND gi.project_id IS NULL
+                       AND gi.deleted IS FALSE
+                       AND EXISTS (
+                         SELECT 1 FROM organization_features AS gf
+                         WHERE gf.organization_id = gb.organization_id
+                           AND gf.feature_name = 'organization_gateway_disabled'
+                       )
+                     HAVING count(*) = 1
+                   )
+               )
+           )
+       )::uuid[] AS ema_gateway_issuer_ids
 FROM upstream_client_selections AS sel
 WHERE sel.organization_id = $1::text
   AND sel.credential_kind = 'user_session'
@@ -2486,6 +2647,7 @@ type ListSelectionMappingsRow struct {
 	RegistrationIssuerIds  []uuid.UUID
 	CandidateIds           []uuid.UUID
 	ServerHasOauthClients  bool
+	EmaGatewayIssuerIds    []uuid.UUID
 }
 
 // Every live user session choice in the organization after the cursor, or the
@@ -2536,6 +2698,7 @@ func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMa
 			&i.RegistrationIssuerIds,
 			&i.CandidateIds,
 			&i.ServerHasOauthClients,
+			&i.EmaGatewayIssuerIds,
 		); err != nil {
 			return nil, err
 		}
