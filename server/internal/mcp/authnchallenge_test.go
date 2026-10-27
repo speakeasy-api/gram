@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
@@ -395,9 +396,8 @@ func TestHandleAuthorize_InvalidClientID_ReturnsError(t *testing.T) {
 	require.NoError(t, err) // error written to response body, not returned
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Equal(t, "invalid_client", body["error"])
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusBadRequest)
+	require.Equal(t, "invalid_client", body.Code)
 }
 
 func TestHandleConsentGet_RendersCSRFToken(t *testing.T) {

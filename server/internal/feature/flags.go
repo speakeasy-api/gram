@@ -228,6 +228,29 @@ const (
 	// and protecting existing blocks, never depend on it. Targeted the same
 	// way as FlagAuthClientResolver.
 	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
+
+	// FlagPlatformMCPDiscoveryMode picks the tool surface a Platform MCP
+	// connection is served: the full flat catalogue, or a small fixed surface
+	// for hosts with a tool budget (see the PlatformMCPDiscovery variants).
+	// Evaluated server-side and locally on every Platform MCP request, with the
+	// organization ID as distinct ID and the person properties "harness" (the
+	// aivendors product ID of the connection's verified CIMD client, or
+	// "unknown") and "organization_id". Release conditions match on those
+	// person properties, so a harness joins or leaves the treatment by editing
+	// a condition. Fails closed to the full catalogue.
+	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
+)
+
+// Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an
+// unrecognized key, an unavailable provider, or an evaluation error — serves
+// the full flat catalogue, which is the pre-rollout behaviour.
+const (
+	// VariantPlatformMCPDiscoveryProgressive serves the search, describe and
+	// call meta-tools instead of the catalogue.
+	VariantPlatformMCPDiscoveryProgressive Variant = "progressive"
+	// VariantPlatformMCPDiscoveryCodeMode adds the execute tool to the
+	// progressive surface when the organization can use Code Mode.
+	VariantPlatformMCPDiscoveryCodeMode Variant = "code_mode"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
