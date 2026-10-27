@@ -3390,6 +3390,10 @@ type McpServerResponseBody struct {
 	// The slug of this server's primary platform endpoint, the oldest one. Absent
 	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of a legacy Speakeasy-hosted address that still serves this hosted
+	// server: its custom-domain address, which the Speakeasy domain also answers
+	// until the server takes a platform endpoint with that slug. Absent otherwise.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client

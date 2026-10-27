@@ -21,6 +21,10 @@ type McpServer struct {
 	// The slug of this server's primary platform endpoint, the oldest one. Absent
 	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string
+	// The slug of a legacy Speakeasy-hosted address that still serves this hosted
+	// server: its custom-domain address, which the Speakeasy domain also answers
+	// until the server takes a platform endpoint with that slug. Absent otherwise.
+	LegacyPlatformSlug *string
 	// The ID of the environment associated with the server
 	EnvironmentID *string
 	// The ID of the user session issuer that gates OAuth-based MCP client

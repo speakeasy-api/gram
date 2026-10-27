@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { ServerUrlSection } from "./ServerUrlSection";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: React.ReactNode }) => (
@@ -121,12 +122,14 @@ const customEndpoint = {
 
 function renderSection(mcpServer: McpServer, endpoints: McpEndpoint[]) {
   render(
-    <ServerUrlSection
-      backend={{ mcpServerId: mcpServer.id }}
-      endpoints={endpoints}
-      isLoadingEndpoints={false}
-      mcpServer={mcpServer}
-    />,
+    <TooltipProvider>
+      <ServerUrlSection
+        backend={{ mcpServerId: mcpServer.id }}
+        endpoints={endpoints}
+        isLoadingEndpoints={false}
+        mcpServer={mcpServer}
+      />
+    </TooltipProvider>,
   );
 }
 
@@ -224,6 +227,21 @@ describe("ServerUrlSection", () => {
     expect(screen.getAllByRole("button", { name: "Add" })).toHaveLength(1);
     expect(screen.getByText("No hosted address")).toBeTruthy();
     expect(screen.getByText("No custom address")).toBeTruthy();
+  });
+
+  it("shows the legacy Speakeasy address a custom-domain alias still serves", () => {
+    renderSection(
+      server({
+        id: "toolset-1",
+        toolsetId: "toolset-1",
+        legacyPlatformSlug: "example",
+      }),
+      [customEndpoint],
+    );
+
+    expect(screen.queryByText("No hosted address")).toBeNull();
+    expect(screen.getByText(/\/mcp\/example$/)).toBeTruthy();
+    expect(screen.getByLabelText("Add hosted address")).toBeTruthy();
   });
 
   it("lets a hosted server add another platform address", () => {

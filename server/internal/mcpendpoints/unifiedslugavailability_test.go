@@ -311,10 +311,29 @@ func TestCheckSlugAvailable_CustomDomainDoesNotCollideWithPlatform(t *testing.T)
 	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, domainID)
 
-	// The custom-domain address does not block the same slug on the platform
-	// scope.
+	// The platform host serves a custom-domain alias too, so it holds the
+	// platform slug.
 	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
 		Slug:               slug,
+		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	require.False(t, available)
+
+	// A custom-domain endpoint does not block the same slug on the platform.
+	endpointSlug := "scoped-endpoint-" + uuid.NewString()[:8]
+	_, err = repo.New(ti.conn).CreateMCPEndpoint(ctx, repo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true},
+		McpServerID:    uuid.NullUUID{UUID: seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID), Valid: true},
+		Slug:           endpointSlug,
+	})
+	require.NoError(t, err)
+	available, err = mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
+		Slug:               endpointSlug,
 		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
