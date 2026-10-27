@@ -59,15 +59,32 @@ func (s *ReadinessService) WithTelemetry(telemetry LifecycleTelemetry) *Readines
 // provider or consuming a repair budget. It is safe for the dashboard's
 // authoritative projection to call while resuming after a reload.
 func (s *ReadinessService) CurrentReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, Readiness, bool, error) {
-	return s.getReadiness(ctx, principal, projectSlug, registrationID, false, false)
+	return s.getReadiness(ctx, principal, projectSlug, registrationID, readStored, false)
 }
 
 func (s *ReadinessService) GetReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string, force bool) (ResolvedProject, Readiness, bool, error) {
-	return s.getReadiness(ctx, principal, projectSlug, registrationID, force, true)
+	mode := readOrFirstProbe
+	if force {
+		mode = readForced
+	}
+	return s.getReadiness(ctx, principal, projectSlug, registrationID, mode, true)
 }
 
-func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string, force, consumeBudget bool) (ResolvedProject, Readiness, bool, error) {
-	if s == nil || s.store == nil || s.gate == nil || (force && s.adapters == nil) || (consumeBudget && !s.repairBudget.valid()) || projectSlug == "" || registrationID == "" {
+// readinessProbeMode says how much provider probing a readiness read may do.
+type readinessProbeMode int
+
+const (
+	// readStored reports the stored result and never probes.
+	readStored readinessProbeMode = iota
+	// readOrFirstProbe reports the stored result, or runs a one-off first
+	// check when the server has never been checked.
+	readOrFirstProbe
+	// readForced always runs a fresh check under the probe limit.
+	readForced
+)
+
+func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string, mode readinessProbeMode, consumeBudget bool) (ResolvedProject, Readiness, bool, error) {
+	if s == nil || s.store == nil || s.gate == nil || (mode == readForced && !s.canProbe()) || (consumeBudget && !s.repairBudget.valid()) || projectSlug == "" || registrationID == "" {
 		return ResolvedProject{}, Readiness{}, false, ErrUnavailable
 	}
 	if consumeBudget {
@@ -97,9 +114,9 @@ func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal
 		return ResolvedProject{}, Readiness{}, false, fmt.Errorf("resolve platform mcp readiness registration: %w", err)
 	}
 
-	if !force {
+	if mode != readForced {
 		readiness, found, err := s.store.GetProviderReadiness(ctx, principal, project.ID, parsedRegistrationID)
-		if err != nil || found || !consumeBudget || s.adapters == nil {
+		if err != nil || found || mode != readOrFirstProbe || !s.canProbe() {
 			return project, readiness, found, err
 		}
 		// No check has been stored yet, typically right after the server was
@@ -117,6 +134,12 @@ func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal
 		return ResolvedProject{}, Readiness{}, false, err
 	}
 	return project, readiness, true, nil
+}
+
+// canProbe reports whether any prober is wired: reviewed provider adapters,
+// or the generic prober used for browser catalogue and direct remote servers.
+func (s *ReadinessService) canProbe() bool {
+	return s.adapters != nil || s.generic != nil
 }
 
 // probe runs one authenticated provider check under the per-registration
@@ -143,7 +166,8 @@ func (s *ReadinessService) probe(ctx context.Context, principal Principal, proje
 }
 
 func (s *ReadinessService) GetRepairPlan(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, Readiness, bool, error) {
-	project, readiness, found, err := s.GetReadiness(ctx, principal, projectSlug, registrationID, false)
+	// The repair plan reads the last stored check and never probes.
+	project, readiness, found, err := s.getReadiness(ctx, principal, projectSlug, registrationID, readStored, true)
 	if err != nil || found {
 		return project, readiness, found, err
 	}

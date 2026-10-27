@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,10 +18,14 @@ import (
 
 type countingCatalogReadinessProber struct {
 	calls atomic.Int32
+	err   error
 }
 
 func (p *countingCatalogReadinessProber) ProbeCatalogReadiness(_ context.Context, principal Principal, _, registrationID, _, _, _, _ uuid.UUID) (ProviderReadinessProbeResult, error) {
 	p.calls.Add(1)
+	if p.err != nil {
+		return ProviderReadinessProbeResult{}, p.err
+	}
 	now := time.Now().UTC()
 	return ProviderReadinessProbeResult{
 		AuthorizationIdentity: ProviderAuthorizationIdentity{
@@ -36,50 +41,112 @@ func (p *countingCatalogReadinessProber) ProbeCatalogReadiness(_ context.Context
 	}, nil
 }
 
-// A server that has never been checked reports its real state on the first
-// readiness read instead of a degraded "temporarily unavailable" placeholder.
-// Later reads use the stored result rather than checking again.
-func TestReadinessToolChecksAServerThatHasNeverBeenChecked(t *testing.T) {
-	t.Parallel()
+// newRemoteRegistrar returns a registrar whose register_remote_mcp tool
+// resolves every URL to canonicalURL.
+func newRemoteRegistrar(store *RegistrationStore, gate *testRegistrationGate, canonicalURL string) *Registrar {
+	registrations := newRegistrationService(testCatalog{}, gate, store).
+		WithDirectRemoteInspector(&testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: canonicalURL, Transport: "streamable-http", Trust: "user_supplied_unreviewed"}})
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	registerRemoteRegistrationTool(reg, registrations, nil)
+	return reg
+}
+
+// newNeverCheckedServer adds a server by URL and returns a registrar with the
+// readiness tools wired to the given probe limiter and prober.
+func newNeverCheckedServer(t *testing.T, dbName string, limiter Limiter, prober CatalogReadinessProber) (context.Context, *Registrar, string, string) {
+	t.Helper()
 
 	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_readiness_first_probe")
+	conn, err := platformMCPInfra.CloneTestDatabase(t, dbName)
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 	gate := &testRegistrationGate{enabled: true}
-	registrations := newRegistrationService(testCatalog{}, gate, store).
-		WithDirectRemoteInspector(&testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed"}})
-	prober := &countingCatalogReadinessProber{}
-
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
-	registerRemoteRegistrationTool(reg, registrations, nil)
-	registerReadinessTools(reg, NewReadinessService(store, gate, NewProviderAdapters(nil), allowOperationLimiter{}, allowBudget(), prober))
+	reg := newRemoteRegistrar(store, gate, "https://remote.example.test/mcp")
+	registerReadinessTools(reg, NewReadinessService(store, gate, NewProviderAdapters(nil), limiter, allowBudget(), prober))
 	callCtx := ContextWithPrincipal(ctx, principal)
 
 	remote, err := invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, reg, "register_remote_mcp", map[string]any{
 		"project_slug":    project.Slug,
 		"remote_url":      "https://remote.example.test/mcp",
-		"idempotency_key": "readiness-first-probe",
+		"idempotency_key": dbName,
 	})
 	require.NoError(t, err)
+	return callCtx, reg, project.Slug, remote.RegistrationID
+}
 
-	first, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", map[string]any{"project_slug": project.Slug, "registration_id": remote.RegistrationID})
+// A server that has never been checked reports its real state on the first
+// readiness read instead of a degraded "temporarily unavailable" placeholder.
+// Later reads use the stored result rather than checking again.
+func TestReadinessToolChecksAServerThatHasNeverBeenChecked(t *testing.T) {
+	t.Parallel()
+
+	prober := &countingCatalogReadinessProber{}
+	callCtx, reg, projectSlug, registrationID := newNeverCheckedServer(t, "platform_mcp_readiness_first_probe", allowOperationLimiter{}, prober)
+	args := map[string]any{"project_slug": projectSlug, "registration_id": registrationID}
+
+	first, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", args)
 	require.NoError(t, err)
 	require.Equal(t, ReadinessNeedsConfiguration, first.State)
 	require.Equal(t, "fresh", first.Freshness)
 	require.Equal(t, int32(1), prober.calls.Load())
 
-	second, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", map[string]any{"project_slug": project.Slug, "registration_id": remote.RegistrationID})
+	second, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", args)
 	require.NoError(t, err)
 	require.Equal(t, ReadinessNeedsConfiguration, second.State)
 	require.Equal(t, int32(1), prober.calls.Load(), "a stored result must be read, not checked again")
 }
 
+// When the first check is refused by the probe limit or fails, the read still
+// succeeds and reports the server as unchecked.
+func TestReadinessToolReportsUncheckedWhenTheFirstCheckCannotRun(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		limiter   Limiter
+		prober    *countingCatalogReadinessProber
+		wantCalls int32
+	}{
+		{name: "refused", limiter: denyOperationLimiter{}, prober: &countingCatalogReadinessProber{}, wantCalls: 0},
+		{name: "failed", limiter: allowOperationLimiter{}, prober: &countingCatalogReadinessProber{err: errors.New("provider unreachable")}, wantCalls: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			callCtx, reg, projectSlug, registrationID := newNeverCheckedServer(t, "platform_mcp_readiness_first_probe_"+tc.name, tc.limiter, tc.prober)
+
+			out, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", map[string]any{"project_slug": projectSlug, "registration_id": registrationID})
+			require.NoError(t, err)
+			require.Equal(t, ReadinessDegraded, out.State)
+			require.Equal(t, "readiness_unavailable", out.EvidenceCode)
+			require.Equal(t, "unavailable", out.Freshness)
+			require.Equal(t, tc.wantCalls, tc.prober.calls.Load())
+		})
+	}
+}
+
+// The repair plan reads the last stored check and never runs one, even for a
+// server that has never been checked.
+func TestRepairPlanDoesNotCheckAServerThatHasNeverBeenChecked(t *testing.T) {
+	t.Parallel()
+
+	prober := &countingCatalogReadinessProber{}
+	callCtx, reg, projectSlug, registrationID := newNeverCheckedServer(t, "platform_mcp_repair_plan_no_probe", allowOperationLimiter{}, prober)
+
+	plan, err := invokeTool[GetMCPRepairPlanToolOutput](t, callCtx, reg, "get_mcp_repair_plan", map[string]any{"project_slug": projectSlug, "registration_id": registrationID})
+	require.NoError(t, err)
+	require.Equal(t, ReadinessDegraded, plan.State)
+	require.Equal(t, "unavailable", plan.Freshness)
+	require.Equal(t, int32(0), prober.calls.Load())
+}
+
 // A server added by URL can be found by that URL after it is given its own
 // name, both when choosing candidates for authorization and in the inventory.
+// It ranks ahead of another server whose name only contains the URL.
 func TestInventorySearchMatchesTheSourceURL(t *testing.T) {
 	t.Parallel()
 
@@ -90,12 +157,20 @@ func TestInventorySearchMatchesTheSourceURL(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
-	registrations := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).
-		WithDirectRemoteInspector(&testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed"}})
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
-	registerRemoteRegistrationTool(reg, registrations, nil)
+	gate := &testRegistrationGate{enabled: true}
+	reg := newRemoteRegistrar(store, gate, "https://remote.example.test/mcp")
+	mirrorReg := newRemoteRegistrar(store, gate, "https://mirror.example.test/mcp")
+	callCtx := ContextWithPrincipal(ctx, principal)
 
-	remote, err := invokeTool[RegisterRemoteMCPToolOutput](t, ContextWithPrincipal(ctx, principal), reg, "register_remote_mcp", map[string]any{
+	// Added first so that, without exact URL ranking, it would sort first.
+	_, err = invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, mirrorReg, "register_remote_mcp", map[string]any{
+		"project_slug":    project.Slug,
+		"remote_url":      "https://mirror.example.test/mcp",
+		"display_name":    "https://remote.example.test/mcp mirror",
+		"idempotency_key": "inventory-source-url-mirror",
+	})
+	require.NoError(t, err)
+	remote, err := invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, reg, "register_remote_mcp", map[string]any{
 		"project_slug":    project.Slug,
 		"remote_url":      "https://remote.example.test/mcp",
 		"display_name":    "Renamed server",
@@ -121,7 +196,7 @@ func TestInventorySearchMatchesTheSourceURL(t *testing.T) {
 		LimitValue:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, candidates, 1)
+	require.Len(t, candidates, 2)
 	require.Equal(t, mcpServerID, candidates[0].ID)
 
 	rows, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
@@ -138,10 +213,12 @@ func TestInventorySearchMatchesTheSourceURL(t *testing.T) {
 		LimitValue:              10,
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
+	require.Len(t, rows, 2)
 	require.Equal(t, mcpServerID, rows[0].McpServerID)
 	require.Equal(t, "Renamed server", rows[0].McpName.String)
 
-	mcps := []MCP{mcpFromInventoryRow(rows[0], nil)}
-	require.Len(t, inventoryQueryResult(mcps, query, 10), 1)
+	mcps := []MCP{mcpFromInventoryRow(rows[0], nil), mcpFromInventoryRow(rows[1], nil)}
+	picked := inventoryQueryResult(mcps, query, 10)
+	require.Len(t, picked, 1)
+	require.Equal(t, mcpServerID.String(), picked[0].ID)
 }
