@@ -277,18 +277,24 @@ func (s *EMAClientRegistrationService) createWithReceipt(ctx context.Context, pr
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-ema-client-v1\x00"), normalized...))
 
-	// Validation and the bcrypt mint run before the receipt transaction.
-	prepared, err := s.management.PrepareJWTBearerClient(ctx, payload)
-	if err != nil {
-		return RegisterEMAClientOutput{}, fmt.Errorf("prepare ema client: %w", err)
-	}
 	encode := s.encodeReceipt
 	if encode == nil {
 		encode = encodeEMAClientReceipt
 	}
 
+	// A replay is answered before the bcrypt mint, which runs outside the receipt transaction.
+	var prepared *usersessions.PreparedJWTBearerClient
+	prepare := func(ctx context.Context) error {
+		p, err := s.management.PrepareJWTBearerClient(ctx, payload)
+		if err != nil {
+			return fmt.Errorf("prepare ema client: %w", err)
+		}
+		prepared = p
+		return nil
+	}
+
 	var secret string
-	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[RegisterEMAClientOutput]{
+	receipt, err := executeChargedMutationReceipt(ctx, prepare, mutationReceiptExecution[RegisterEMAClientOutput]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationRegisterEMAClient,
 		IdempotencyKey: key, InputHash: hex.EncodeToString(digest[:]), Label: "ema client",
 		Invalid:     func(error) error { return oops.C(oops.CodeUnauthorized) },

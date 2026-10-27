@@ -95,14 +95,19 @@ func failingEMAClientCreate(t *testing.T) func(context.Context, *orggen.CreateJW
 }
 
 func createdEMAClient(issuerID string, calls *int) func(context.Context, *orggen.CreateJWTBearerClientPayload) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error) {
+	return createdEMAClientWithTrust(issuerID, calls, false)
+}
+
+func createdEMAClientWithTrust(issuerID string, calls *int, trusted bool) func(context.Context, *orggen.CreateJWTBearerClientPayload) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error) {
 	return func(_ context.Context, p *orggen.CreateJWTBearerClientPayload) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error) {
 		*calls++
 		secret := "generated-secret"
 		issuerURL, tokenEndpoint := "https://auth.example.test/as/1", "https://auth.example.test/as/1/token"
 		return &orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult{
-			Client:       &types.UserSessionClient{ClientID: "client_" + uuid.NewString(), ClientName: p.ClientName},
-			ClientSecret: &secret,
-			Issuer:       &types.UserSessionIssuer{ID: issuerID, Slug: "corp", AuthorizationServerMode: "shared", IssuerURL: &issuerURL, TokenEndpoint: &tokenEndpoint},
+			Client:                            &types.UserSessionClient{ClientID: "client_" + uuid.NewString(), ClientName: p.ClientName},
+			ClientSecret:                      &secret,
+			Issuer:                            &types.UserSessionIssuer{ID: issuerID, Slug: "corp", AuthorizationServerMode: "shared", IssuerURL: &issuerURL, TokenEndpoint: &tokenEndpoint},
+			TrustedIdentityProviderConfigured: trusted,
 		}, nil
 	}
 }
@@ -264,6 +269,28 @@ func TestEMAClientRegistrationReturnsSecretOnceAndNextStep(t *testing.T) {
 	require.False(t, out.TrustedIdentityProviderConfigured)
 	require.Contains(t, out.NextStep, "shown only now")
 	require.Contains(t, out.NextStep, "does not trust an identity provider")
+}
+
+func TestEMAClientRegistrationTrustedIssuerOmitsTrustWarning(t *testing.T) {
+	t.Parallel()
+	issuerID := uuid.NewString()
+	calls := 0
+	service := &EMAClientRegistrationService{management: emaClientManagementStub{
+		get:    orgIssuerGetter(issuerID),
+		create: createdEMAClientWithTrust(issuerID, &calls, true),
+	}, trusted: func(context.Context, string, uuid.UUID) (bool, error) { return true, nil }}
+
+	for _, confirmed := range []bool{false, true} {
+		result, err := invokeEMAClientTool(t, emaClientTestContext(t), service, map[string]any{"issuer_id": issuerID, "client_name": "Codex", "token_endpoint_auth_method": "none", "confirmed": confirmed})
+		require.NoError(t, err)
+		out, ok := result.(RegisterEMAClientOutput)
+		require.True(t, ok)
+		require.Equal(t, !confirmed, out.Preview)
+		require.True(t, out.TrustedIdentityProviderConfigured)
+		require.NotEmpty(t, out.NextStep)
+		require.NotContains(t, out.NextStep, "does not trust an identity provider")
+	}
+	require.Equal(t, 1, calls)
 }
 
 func TestEMAClientRegistrationMapsManagementRefusals(t *testing.T) {

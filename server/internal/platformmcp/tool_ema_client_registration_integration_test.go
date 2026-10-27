@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -27,6 +29,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+type countingEMAPrepare struct {
+	EMAClientRegistrationManagement
+	prepares *atomic.Int32
+}
+
+func (c countingEMAPrepare) PrepareJWTBearerClient(ctx context.Context, p *orggen.CreateJWTBearerClientPayload) (*usersessions.PreparedJWTBearerClient, error) {
+	c.prepares.Add(1)
+	prepared, err := c.EMAClientRegistrationManagement.PrepareJWTBearerClient(ctx, p)
+	if err != nil {
+		return nil, fmt.Errorf("prepare: %w", err)
+	}
+	return prepared, nil
+}
 
 type emaRealFixture struct {
 	conn     *pgxpool.Pool
@@ -121,6 +137,8 @@ func TestEMAClientRegistrationReceiptFailureRollsBackClientAndAudit(t *testing.T
 	require.Equal(t, auditBefore, auditAfter)
 
 	f.service.encodeReceipt = nil
+	var prepares atomic.Int32
+	f.service.management = countingEMAPrepare{EMAClientRegistrationManagement: f.service.management, prepares: &prepares}
 	first, err := invokeEMAClientTool(t, ctx, f.service, f.arguments("codex-receipt"))
 	require.NoError(t, err)
 	firstOut, ok := first.(RegisterEMAClientOutput)
@@ -135,6 +153,7 @@ func TestEMAClientRegistrationReceiptFailureRollsBackClientAndAudit(t *testing.T
 	require.True(t, replayOut.Replayed)
 	require.Equal(t, firstOut.ClientID, replayOut.ClientID)
 	require.Empty(t, replayOut.ClientSecret)
+	require.Equal(t, int32(1), prepares.Load(), "a replay must not mint a secret")
 
 	require.Equal(t, 1, f.clientCount(t, ctx))
 	auditAfter, err = audittest.AuditLogCountByAction(ctx, f.conn, audit.ActionUserSessionClientCreate)
@@ -146,6 +165,7 @@ func TestEMAClientRegistrationReceiptFailureRollsBackClientAndAudit(t *testing.T
 	_, err = invokeEMAClientTool(t, ctx, f.service, different)
 	requireEMAClientRefusal(t, err, "idempotency_key_reused")
 	require.Equal(t, 1, f.clientCount(t, ctx))
+	require.Equal(t, int32(1), prepares.Load())
 }
 
 func TestEMAClientRegistrationConcurrentSameKeyCreatesOneClient(t *testing.T) {
