@@ -543,7 +543,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 var CreateOrganizationUserSessionIssuerJwtBearerClientForm = Type("CreateOrganizationUserSessionIssuerJwtBearerClientForm", func() {
 	Description("Form for registering a jwt-bearer (ID-JAG) client on an organization-owned user_session_issuer.")
 	Attribute("user_session_issuer_id", String, "The organization-owned user_session_issuer the client is registered on.", func() { Format(FormatUUID) })
-	Attribute("client_name", String, "Display name for the client, such as the MCP client application it configures.", func() {
+	Attribute("client_name", String, "Display name for the client, such as the MCP client application it configures. Leading and trailing whitespace is trimmed, and a name that is only whitespace is refused.", func() {
 		MinLength(1)
 		MaxLength(255)
 	})

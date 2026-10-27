@@ -101017,7 +101017,7 @@ components:
             properties:
                 client_name:
                     type: string
-                    description: Display name for the client, such as the MCP client application it configures.
+                    description: Display name for the client, such as the MCP client application it configures. Leading and trailing whitespace is trimmed, and a name that is only whitespace is refused.
                     minLength: 1
                     maxLength: 255
                 token_endpoint_auth_method:

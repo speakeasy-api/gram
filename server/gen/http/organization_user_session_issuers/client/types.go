@@ -107,7 +107,8 @@ type CreateJWTBearerClientRequestBody struct {
 	// The organization-owned user_session_issuer the client is registered on.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// Display name for the client, such as the MCP client application it
-	// configures.
+	// configures. Leading and trailing whitespace is trimmed, and a name that is
+	// only whitespace is refused.
 	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
 	// How the client authenticates at the token endpoint. 'none' registers a
 	// public client with no secret. 'client_secret_basic' and 'client_secret_post'

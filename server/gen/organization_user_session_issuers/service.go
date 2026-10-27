@@ -156,7 +156,8 @@ type CreateJWTBearerClientPayload struct {
 	// The organization-owned user_session_issuer the client is registered on.
 	UserSessionIssuerID string
 	// Display name for the client, such as the MCP client application it
-	// configures.
+	// configures. Leading and trailing whitespace is trimmed, and a name that is
+	// only whitespace is refused.
 	ClientName string
 	// How the client authenticates at the token endpoint. 'none' registers a
 	// public client with no secret. 'client_secret_basic' and 'client_secret_post'

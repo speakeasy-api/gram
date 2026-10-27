@@ -28,7 +28,7 @@ export type CreateOrganizationUserSessionIssuerJWTBearerClientFormTokenEndpointA
  */
 export type CreateOrganizationUserSessionIssuerJWTBearerClientForm = {
   /**
-   * Display name for the client, such as the MCP client application it configures.
+   * Display name for the client, such as the MCP client application it configures. Leading and trailing whitespace is trimmed, and a name that is only whitespace is refused.
    */
   clientName: string;
   /**
