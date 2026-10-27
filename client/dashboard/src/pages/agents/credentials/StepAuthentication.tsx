@@ -1,3 +1,4 @@
+import { ServerInfoPopover } from "./ServerInfoPopover";
 import type { JSX } from "react";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import {
@@ -104,9 +105,6 @@ export function StepAuthentication({
                       <span className="block truncate text-sm font-medium">
                         {server.name}
                       </span>
-                      <span className="text-muted-foreground block truncate text-xs font-normal">
-                        /mcp/{server.slug}
-                      </span>
                     </span>
                     {session && (
                       <Avatar
@@ -158,6 +156,7 @@ export function StepAuthentication({
                     </Badge>
                   </AccordionTrigger>
                 </div>
+                <ServerInfoPopover server={server} />
                 <Button
                   variant="tertiary"
                   size="sm"

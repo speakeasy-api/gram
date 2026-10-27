@@ -19,9 +19,12 @@ export interface InventoryServer {
   /** The id a policy selector names, which for a toolset is the toolset. */
   resourceId: string;
   name: string;
-  /** The path under /mcp/ the server answers on, which is what a row shows. */
+  /** The path under /mcp/ the server answers on. */
   slug: string;
   upstreamUrl?: string;
+  description?: string;
+  toolsetSlug?: string;
+  recentToolCalls?: number;
   projectId: string;
   projectName: string;
   projectSlug: string;
@@ -164,6 +167,7 @@ export function useServerInventory(): ServerInventory {
           resourceId: toolset.id,
           activityTarget: `hosted_mcp_server:${toolset.slug}`,
           name: toolset.name,
+          toolsetSlug: toolset.slug,
           // A toolset answers on its own mcpSlug, or on the legacy
           // project/toolset/environment route — never on the toolset slug by
           // itself, so the shared resolver decides the path.
@@ -182,6 +186,18 @@ export function useServerInventory(): ServerInventory {
         (toolset) => Boolean(toolset.projectSlug) && Boolean(toolset.slug),
       ),
   ];
+
+  const measuredProjects = new Set(
+    (organization.projects ?? [])
+      .filter((project) => project.slug)
+      .filter((_, index) => activity[index]?.data !== undefined)
+      .map((project) => project.id),
+  );
+  for (const server of inventory) {
+    server.recentToolCalls = measuredProjects.has(server.projectId)
+      ? (calls.get(`${server.projectId}:${server.activityTarget}`) ?? 0)
+      : undefined;
+  }
 
   return {
     servers: inventory.sort(

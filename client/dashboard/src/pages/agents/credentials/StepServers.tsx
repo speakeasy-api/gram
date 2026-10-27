@@ -1,3 +1,4 @@
+import { ServerInfoPopover } from "./ServerInfoPopover";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -262,10 +263,10 @@ export function StepServers({
                 const refusal = refusedServers?.get(server.id);
                 const locked = allServers || (!checked && !!refusal);
                 return (
-                  <li key={server.id}>
+                  <li key={server.id} className="flex items-center pr-4">
                     <label
                       className={cn(
-                        "flex items-center gap-4 px-4 py-3",
+                        "flex min-w-0 flex-1 items-center gap-4 px-4 py-3",
                         locked
                           ? "cursor-default"
                           : checked
@@ -295,15 +296,13 @@ export function StepServers({
                               {server.upstreamUrl}
                             </span>
                           )}
-                          <span className="text-muted-foreground min-w-0 font-mono text-xs break-all">
-                            ({server.slug.replace(/^\/mcp\//, "")})
-                          </span>
                         </span>
                         {refusal && (
                           <span className="mt-1 block text-xs">{refusal}</span>
                         )}
                       </span>
                     </label>
+                    <ServerInfoPopover server={server} />
                   </li>
                 );
               })}

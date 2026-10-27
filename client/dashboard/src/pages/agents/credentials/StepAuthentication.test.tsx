@@ -5,6 +5,12 @@ import type { RemoteSession } from "@gram/client/models/components/remotesession
 import { StepAuthentication } from "./StepAuthentication";
 import type { InventoryServer } from "./useServerInventory";
 
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcp: { details: { overview: { href: (id: string) => `/mcp/${id}` } } },
+  }),
+}));
+
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "editor", displayName: "Example Editor" } }),
 }));
