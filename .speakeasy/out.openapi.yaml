@@ -26963,6 +26963,256 @@ paths:
       x-speakeasy-name-override: listFacets
       x-speakeasy-react-hook:
         name: GatewaySessionFacets
+  /rpc/hiddenMcpServers.hide:
+    post:
+      description: Hide an MCP server for the signed-in user. Hiding a hidden server changes nothing.
+      operationId: hideMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HideMcpServerRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: hide hiddenMcpServers
+      tags:
+        - hiddenMcpServers
+      x-speakeasy-name-override: hide
+      x-speakeasy-react-hook:
+        name: HideMcpServer
+  /rpc/hiddenMcpServers.list:
+    get:
+      description: List the MCP servers the signed-in user hid in the active organization.
+      operationId: listHiddenMcpServers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListHiddenMcpServersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: list hiddenMcpServers
+      tags:
+        - hiddenMcpServers
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: HiddenMcpServers
+  /rpc/hiddenMcpServers.unhide:
+    post:
+      description: Show a hidden MCP server again for the signed-in user. Unhiding a server that is not hidden changes nothing.
+      operationId: unhideMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnhideMcpServerRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: unhide hiddenMcpServers
+      tags:
+        - hiddenMcpServers
+      x-speakeasy-name-override: unhide
+      x-speakeasy-react-hook:
+        name: UnhideMcpServer
   /rpc/hooks.claude:
     post:
       tags:
@@ -95458,6 +95708,45 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    HiddenMcpServer:
+      type: object
+      properties:
+        hidden_at:
+          type: string
+          description: When the user hid the server.
+          format: date-time
+        mcp_server_id:
+          type: string
+          description: The hidden MCP server.
+          format: uuid
+        name:
+          type: string
+          description: The server's display name, when it has one.
+        project_id:
+          type: string
+          description: The server's project.
+          format: uuid
+        project_slug:
+          type: string
+          description: The server's project slug.
+        slug:
+          type: string
+          description: The server's slug, when it has one.
+      description: An MCP server the signed-in user hid.
+      required:
+        - mcp_server_id
+        - project_id
+        - project_slug
+        - hidden_at
+    HideMcpServerRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+      required:
+        - mcp_server_id
     HookDeliveryFailureData:
       type: object
       properties:
@@ -98253,6 +98542,16 @@ components:
       description: Result type for the platform-administrator global issuer listing.
       required:
         - items
+    ListHiddenMcpServersResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/HiddenMcpServer'
+          description: Hidden servers, oldest first.
+      required:
+        - servers
     ListHooksTracesPayload:
       type: object
       properties:
@@ -115456,6 +115755,15 @@ components:
         plugin_id: 550e8400-e29b-41d4-a716-446655440001
       required:
         - id
+    UnhideMcpServerRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+      required:
+        - mcp_server_id
     UnknownSkillActivation:
       type: object
       properties:
@@ -119414,6 +119722,8 @@ tags:
     description: External MCP registry operations
   - name: functions
     description: Endpoints for working with functions.
+  - name: hiddenMcpServers
+    description: MCP servers the signed-in user hid. Gateways leave hidden servers out of the user's tools and list them last on the consent page. Each user manages only their own list.
   - name: hooksServerNames
     description: Manages display name overrides for hooks servers.
   - name: hooks
