@@ -2130,6 +2130,11 @@ func newStartCommand() *cli.Command {
 				PlatformMCPReadTools:          assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
 			}))
 
+			// Requests get their own base context so the shutdown deadline can
+			// cancel the ones still running without cancelling ctx, which the
+			// flushes and probe drain after it still need.
+			requestCtx, cancelRequests := context.WithCancelCause(ctx)
+			defer cancelRequests(nil)
 			srv := &http.Server{
 				Addr:              c.String("address"),
 				Handler:           mux,
@@ -2146,7 +2151,7 @@ func newStartCommand() *cli.Command {
 				// SSE/MCP streams this mux also serves.
 				IdleTimeout: 620 * time.Second,
 				BaseContext: func(net.Listener) context.Context {
-					return ctx
+					return requestCtx
 				},
 			}
 
@@ -2253,16 +2258,10 @@ func newStartCommand() *cli.Command {
 				)
 				defer graceCancel()
 
-				shutdownGroup := pool.New()
-				shutdownGroup.Go(func() {
-					if err := srv.Shutdown(graceCtx); err != nil {
-						if gerr := context.Cause(graceCtx); gerr != nil {
-							err = errors.Join(err, gerr)
-						}
-						logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
-					}
-				})
-				shutdownGroup.Wait()
+				// Listen streams never finish on their own, so end them first and
+				// let their clients reconnect to a replica that is still serving.
+				mcpService.StartDrain()
+				drainHTTPServer(ctx, logger, srv, cancelRequests, shutdownDrainTimeout, "failed to shutdown server")
 
 				// HTTP shutdown has quiesced handlers that produce realtime
 				// recordings. Closing scanner admission here also makes the

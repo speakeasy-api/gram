@@ -816,6 +816,16 @@ func (s *Service) remoteBackendProxyBuilder(
 	}, nil
 }
 
+// StartDrain ends the relayed remote and tunneled MCP streams that only carry
+// server-initiated messages, so their clients reconnect to a replica that is
+// still serving. Call it when the server starts shutting down, before waiting
+// for in-flight requests.
+func (s *Service) StartDrain() {
+	if s.remoteProxyManager != nil {
+		s.remoteProxyManager.StartDrain()
+	}
+}
+
 func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) error {
 	switch r.Method {
 	case http.MethodDelete:
