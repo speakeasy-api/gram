@@ -1,3 +1,4 @@
+import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import {
   BRAND_MESH_SURFACE_CLASS,
   BrandMeshLayers,
@@ -33,6 +34,7 @@ import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { AgentPlatformPickerItem } from "@/pages/setup/components/agent-platform-picker-item";
 import { PlatformInstrumentationSheet } from "@/pages/setup/components/platform-instrumentation-sheet";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { organizationGatewayInstallPlatforms } from "./organization-gateway-install";
 
 /**
@@ -73,9 +75,21 @@ function OrganizationGatewayContent({
   const canManage =
     !permissionsLoading && hasScope("org:admin", organizationId);
   const [reviewing, setReviewing] = useState(false);
-  const [selectedTab, setTab] = useState<string>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedTab = searchParams.get("tab");
+  const setTab = (value: string) =>
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set("tab", value);
+        return next;
+      },
+      { replace: true },
+    );
   const tab =
-    selectedTab ?? (isOn === false && canManage ? "assignments" : "install");
+    (["install", "assignments", "connections"].includes(selectedTab ?? "")
+      ? selectedTab
+      : undefined) ?? (isOn === false && canManage ? "assignments" : "install");
   const endpointUrl =
     isOn && gateway.data?.available ? gateway.data.url : undefined;
 
@@ -170,6 +184,7 @@ function OrganizationGatewayContent({
           <div className="border-border border-b">
             <PageTabsList>
               <PageTabsTrigger value="install">Install</PageTabsTrigger>
+              <PageTabsTrigger value="connections">Connections</PageTabsTrigger>
               <RequireScope scope="org:admin" level="component">
                 <PageTabsTrigger value="assignments">
                   View assignments
@@ -188,6 +203,9 @@ function OrganizationGatewayContent({
                 {installStatus}
               </Text>
             )}
+          </TabsContent>
+          <TabsContent value="connections" className="mt-6">
+            <ClientsAndSessionsTab gateway={{}} issuerId={undefined} />
           </TabsContent>
           <TabsContent value="assignments" className="mt-6">
             <RequireScope scope="org:admin" level="section">

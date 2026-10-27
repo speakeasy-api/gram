@@ -576,9 +576,10 @@ func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
 }
 
 // SetSiteURL wires the dashboard base URL used to smart-link CIMD client
-// metadata back to the assistant UI. Set after construction to match the
+// metadata and callback recovery links back to the assistant UI. Set after
+// construction to match the
 // existing post-construction injection pattern. A nil URL omits client_uri
-// from served documents.
+// from served documents and recovery links from callback error pages.
 func (s *ServiceCore) SetSiteURL(u *url.URL) {
 	s.siteURL = u
 }
@@ -3375,7 +3376,12 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		return nil, err
 	}
 	var canonicalUserMessageID uuid.UUID
+	var sourceInstructions string
 	if runtime.RuntimeVersion == 3 {
+		sourceInstructions, err = composeInstructions("", thread, nil)
+		if err != nil {
+			return nil, err
+		}
 		ids, err := assistantrepo.New(s.db).ResolveKitCurrentUserMessage(ctx, assistantrepo.ResolveKitCurrentUserMessageParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: event.ID})
 		if err != nil {
 			return nil, fmt.Errorf("resolve canonical Kit input: %w", err)
@@ -3391,6 +3397,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		EventID:                event.ID,
 		EventAttempt:           event.Attempts,
 		CanonicalUserMessageID: canonicalUserMessageID,
+		SourceInstructions:     sourceInstructions,
 		Model:                  assistant.Model,
 		ThreadID:               thread.ID,
 		IdempotencyKey:         event.ID.String(),
@@ -3698,6 +3705,8 @@ const assistantRuntimeTokenTTL = 60 * time.Minute
 // live in each adapter's OutputChannelGuidance.
 const mcpAuthAddendum = `## MCP authentication
 
+Use the supplied sign-in links for authentication. Never ask users to paste passwords or tokens, and never disclose workload credentials.
+
 OAuth + MCP auth are owner-only: only owner can sign in and complete flow. Owner = the person who set this assistant up — NOT simply whoever triggered the current turn. When your instructions record the owner's identity (an "Owner" entry, e.g. a Slack handle + user ID), treat the requester as owner only if they match it. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
 Two MCP auth events may appear in thread, each as <message-context> block with EventType and field lines.
@@ -3770,6 +3779,17 @@ func (m assistantMCPServerRow) endpointURL(base *url.URL) *url.URL {
 	return base.JoinPath("mcp", m.EndpointSlug)
 }
 
+func assistantMCPEnvironment(m assistantMCPServerRow) string {
+	switch {
+	case m.EnvironmentSlug.Valid:
+		return m.EnvironmentSlug.String
+	case m.ToolsetSlug.Valid && m.DefaultEnvironmentSlug.Valid:
+		return m.DefaultEnvironmentSlug.String
+	default:
+		return ""
+	}
+}
+
 func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, mcpServers []assistantMCPServerRow, platformToolsets []string) []runtimeMCPServer {
 	servers := make([]runtimeMCPServer, 0, len(mcpServers)+len(platformToolsets))
 	// Runtime server IDs must be unique — agentkit namespaces tool names by
@@ -3790,13 +3810,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		}
 
 		headers := map[string]string{}
-		envSlug := ""
-		switch {
-		case m.EnvironmentSlug.Valid:
-			envSlug = m.EnvironmentSlug.String
-		case hosted && m.DefaultEnvironmentSlug.Valid:
-			envSlug = m.DefaultEnvironmentSlug.String
-		}
+		envSlug := assistantMCPEnvironment(m)
 		if envSlug != "" {
 			headers["Gram-Environment"] = envSlug
 		}

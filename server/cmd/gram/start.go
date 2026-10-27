@@ -78,6 +78,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
@@ -316,6 +317,13 @@ func restoreLocalPluginRepositories(
 // terminationGracePeriodSeconds in Kubernetes, which must be set above this
 // value for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
+
+// relayedRequestInterruptAfter is how long after SIGTERM a request relayed to
+// a remote MCP server may keep waiting for its response before it is answered
+// with a JSON-RPC error. It leaves 15s of shutdownDrainTimeout to write those
+// errors, cancel the upstream calls, and let handlers return before the
+// deadline cancels whatever is left.
+const relayedRequestInterruptAfter = 45 * time.Second
 
 func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, devSingleProcess bool) (bool, error) {
 	if reconcileQueue == "" {
@@ -1769,6 +1777,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("registry validator: %w", err)
 			}
+			hiddenmcpservers.Attach(mux, hiddenmcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			oktaserversuggestions.Attach(mux, oktaserversuggestions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, registryValidator))
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
@@ -1799,23 +1808,35 @@ func newStartCommand() *cli.Command {
 			identityCommitter := remotesessions.NewIdentityCommitter(logger, db, encryptionClient, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
 			identityCommitter.SetCallbackOrigins(callbackOrigins)
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures, protectedResources)
-			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), mcpService.CodeModeAvailable, clientAssertionSigner))
+			userSessionsService := usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), mcpService.CodeModeAvailable, clientAssertionSigner)
+			usersessions.Attach(mux, userSessionsService)
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 			remoteSessionsService.SetFeatureFlags(featureFlags)
 			remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())
 			remoteSessionsService.SetSpeakeasyReadiness(identitychaining.SpeakeasyReadiness(logger, issuerGate, issuerSigner, featureFlags))
-			remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+			remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 				authCtx, ok := contextvalues.GetAuthContext(ctx)
 				if !ok || authCtx == nil {
 					return oops.C(oops.CodeNotFound)
 				}
-				_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+				predicate := agentmanagement.OwnedAgentAuthorize
+				if write {
+					predicate = agentmanagement.OwnedAgentSetup
+				}
+				authorizer := agentmanagement.NewAuthorizer(authzEngine)
+				_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+				if err != nil && !write {
+					_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
+				}
 				if err != nil {
 					return fmt.Errorf("authorize attachment owner: %w", err)
 				}
 				return nil
 			})
+			bindingRefreshAttempts := remotesessions.NewBindingRefreshAttempts(logger, cache.NewRedisCacheAdapter(redisClient))
+			remoteSessionsService.SetBindingRefreshAttempts(bindingRefreshAttempts)
+			mcpService.SetBindingRefreshAttempts(bindingRefreshAttempts)
 			mcpService.SetConsentBindingService(remoteSessionsService)
 			remotesessions.Attach(mux, remoteSessionsService)
 			remoteMcpService := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService, featureFlags).WithServerURL(serverURL).
@@ -1937,6 +1958,7 @@ func newStartCommand() *cli.Command {
 				TemporalEnv:               temporalEnv,
 				ProjectCore:               projects.NewCore(logger.With(attr.SlogComponent("projects")), auditLogger, temporalEnv, pluginsGitHub != nil),
 				Skills:                    skillsService,
+				GatewaySessions:           userSessionsService,
 				SkillInsights:             telemetryrepo.New(chDB),
 				RiskPolicyApprovals:       mcpApprovalService,
 				RiskPolicySignaler:        riskSignaler,
@@ -1969,6 +1991,7 @@ func newStartCommand() *cli.Command {
 				LocalFixture:              platformFixture,
 				RegistryDiscoveryEnabled:  c.Bool("registry-discovery-enabled"),
 				CodeModeAvailable:         mcpService.CodeModeAvailable,
+				CodeExecutor:              mcpService.CodeExecutor(),
 			}
 			agentService.WithConnectionStatuses(newAgentConnectionStatuses(platformMCPCfg)).
 				WithConnectionsLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-get-my-connections", agent.ConnectionsRate, ratelimit.WithMetrics(meterProvider)))
@@ -2131,6 +2154,11 @@ func newStartCommand() *cli.Command {
 				PlatformMCPReadTools:          assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
 			}))
 
+			// Requests get their own base context so the shutdown deadline can
+			// cancel the ones still running without cancelling ctx, which the
+			// flushes and probe drain after it still need.
+			requestCtx, cancelRequests := context.WithCancelCause(ctx)
+			defer cancelRequests(nil)
 			srv := &http.Server{
 				Addr:              c.String("address"),
 				Handler:           mux,
@@ -2147,7 +2175,7 @@ func newStartCommand() *cli.Command {
 				// SSE/MCP streams this mux also serves.
 				IdleTimeout: 620 * time.Second,
 				BaseContext: func(net.Listener) context.Context {
-					return ctx
+					return requestCtx
 				},
 			}
 
@@ -2254,16 +2282,10 @@ func newStartCommand() *cli.Command {
 				)
 				defer graceCancel()
 
-				shutdownGroup := pool.New()
-				shutdownGroup.Go(func() {
-					if err := srv.Shutdown(graceCtx); err != nil {
-						if gerr := context.Cause(graceCtx); gerr != nil {
-							err = errors.Join(err, gerr)
-						}
-						logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
-					}
-				})
-				shutdownGroup.Wait()
+				// Listen streams never finish on their own, so end them first and
+				// let their clients reconnect to a replica that is still serving.
+				mcpService.StartDrain(relayedRequestInterruptAfter)
+				drainHTTPServer(ctx, logger, srv, cancelRequests, shutdownDrainTimeout, "failed to shutdown server")
 
 				// HTTP shutdown has quiesced handlers that produce realtime
 				// recordings. Closing scanner admission here also makes the

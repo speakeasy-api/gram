@@ -1426,6 +1426,15 @@ type AdminRegistryPage struct {
 	NextCursor *string
 }
 
+// Publicly advertised authentication capabilities, not a verified OAuth
+// connection.
+type AdminRegistryPromotionAuthDiscovery struct {
+	SupportsDcr  bool
+	SupportsCimd bool
+	AuthSetup    string
+	Status       string
+}
+
 // AdminRegistryPromotionCandidate is the result type of the admin service
 // getRegistryPromotionCandidate method.
 type AdminRegistryPromotionCandidate struct {
@@ -1438,6 +1447,7 @@ type AdminRegistryPromotionCandidate struct {
 	CreatedAt         string
 	CurationRevision  string
 	SuggestedMetadata *AdminRegistryPromotionSuggestions
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscovery
 	SourceRevision    string
 	Eligible          bool
 	// Whether staff may explicitly accept this candidate's health evidence.
@@ -1637,6 +1647,9 @@ type AdminUpstreamOAuthMigrationAuthClients struct {
 	// agents and API keys are missing, which a run adds. Enforcement needs them,
 	// so existing callers keep their access.
 	PendingGrants *int64
+	// Agent attachments whose grants a run does not write while the organization's
+	// upstream selector writes are not allowed. While any wait, complete is false.
+	AttachmentsWaiting *int64
 	// Credential choice coverage for each credential class.
 	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClass
 	// The first live credential choices left without a usable auth client.

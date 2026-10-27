@@ -23201,6 +23201,9 @@ func marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidat
 	if v.SuggestedMetadata != nil {
 		res.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(v.SuggestedMetadata)
 	}
+	if v.AuthDiscovery != nil {
+		res.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(v.AuthDiscovery)
+	}
 
 	return res
 }
@@ -23220,6 +23223,23 @@ func marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSugges
 		DocumentationURL:  v.DocumentationURL,
 		DocsSlug:          v.DocsSlug,
 		AuthMode:          v.AuthMode,
+	}
+
+	return res
+}
+
+// marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody
+// builds a value of type *AdminRegistryPromotionAuthDiscoveryResponseBody from
+// a value of type *admin.AdminRegistryPromotionAuthDiscovery.
+func marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(v *admin.AdminRegistryPromotionAuthDiscovery) *AdminRegistryPromotionAuthDiscoveryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminRegistryPromotionAuthDiscoveryResponseBody{
+		SupportsDcr:  v.SupportsDcr,
+		SupportsCimd: v.SupportsCimd,
+		AuthSetup:    v.AuthSetup,
+		Status:       v.Status,
 	}
 
 	return res
@@ -23635,6 +23655,7 @@ func marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigra
 		SelectionsComplete:       v.SelectionsComplete,
 		PendingSelectionMappings: v.PendingSelectionMappings,
 		PendingGrants:            v.PendingGrants,
+		AttachmentsWaiting:       v.AttachmentsWaiting,
 		SelectionGapCount:        v.SelectionGapCount,
 	}
 	if v.UnresolvedAssociations != nil {
