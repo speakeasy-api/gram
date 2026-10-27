@@ -1,3 +1,4 @@
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import { IdentityLink } from "@/components/identity-link";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -330,10 +331,11 @@ function FindingDetail({
   const { hasScope } = useRBAC();
   const kind = findingKind(result);
   // Payload reveals need unrestricted chat:read; chat reveals follow the chat.
-  const canReveal = hasScope(
-    REVEAL_SCOPE,
-    kind === "mcp" ? "*" : (result.chatId ?? "*"),
-  );
+  // Impersonation blocks both payload and chat reveals regardless of scope.
+  const restricted = useRiskContentRestricted();
+  const canReveal =
+    !restricted &&
+    hasScope(REVEAL_SCOPE, kind === "mcp" ? "*" : (result.chatId ?? "*"));
   const chatLike = isChatLikeKind(kind);
   const [revealed, setRevealed] = useDrawerReveal(result.id);
 
@@ -507,8 +509,10 @@ function FindingDetail({
           )}
           {kind === "shadow" && (
             <Button asChild variant="secondary">
-              <Link to={routes.shadowAI.mcps.href()}>
-                Open Shadow MCP inventory
+              {/* The Shadow MCP inventory is the Shadow AI policy's server
+                  list under Guardrails rather than a page of its own. */}
+              <Link to={routes.policyCenter.href()}>
+                Open Shadow AI in Guardrails
                 <ArrowRight className="size-4" />
               </Link>
             </Button>

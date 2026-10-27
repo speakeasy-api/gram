@@ -45,7 +45,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	require.NoError(t, policyErr)
 	meterProvider := testenv.NewMeterProvider(t)
 	refresher := remotesessions.NewRefreshService(ti.logger, meterProvider, ti.conn, ti.enc, policy, nil, ti.cacheAdapter)
-	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil)
+	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
 	bindings.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 		require.False(t, contextvalues.HasValidatedGramSession(ctx))
 		auth, ok := contextvalues.GetAuthContext(ctx)
@@ -149,7 +149,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 			require.ErrorAs(t, err, &denied, "%s: %s", name, action)
 			want := oops.CodeForbidden
 			if name == "missing browser proof" {
-				want = oops.CodeUnauthorized
+				want = oops.CodeBadRequest
 			}
 			require.Equal(t, want, denied.Code, "%s: %s", name, action)
 		}

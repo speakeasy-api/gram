@@ -1,3 +1,4 @@
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import {
   Collapsible,
   CollapsibleContent,
@@ -575,6 +576,8 @@ const useCreateDeployment = (
       invalidateAllListTools(queryClient),
       // MCP usage on the shelf and source pages is read from the toolsets.
       invalidateAllListToolsets(queryClient),
+      // Hosted servers' tool counts on the MCP list.
+      invalidateAllMcpServers(queryClient),
     ]);
 
     return deployment;

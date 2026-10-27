@@ -171,3 +171,11 @@ func staffJSON(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
+
+func staffRequestError(w http.ResponseWriter, err error) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
+		staffOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
+	} else {
+		staffOAuthError(w, http.StatusBadRequest, "invalid_request", "invalid request")
+	}
+}

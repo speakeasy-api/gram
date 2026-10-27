@@ -218,6 +218,12 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 	if err != nil {
 		return SearchToolCallsOutput{}, err
 	}
+	// log:read is the authorization boundary for listing individual calls,
+	// exactly as it is for list_recent_tool_calls and the dashboard Tool Logs.
+	// It is checked before the budget so a refused call spends nothing.
+	if _, err := s.reader.ResolveProjectLogRead(ctx, principal, FindMCPInput{ProjectID: search.projectID}); err != nil {
+		return SearchToolCallsOutput{}, fmt.Errorf("authorize tool call search: %w", err)
+	}
 	// Metered on the sensitive allowance: a page carries masked identities and
 	// person references, so it must not be fundable by the summary budget.
 	if err := s.sensitiveBudget.Allow(ctx, principal); err != nil {
@@ -227,11 +233,6 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 	search.window, err = resolveWindow(input.Window, search.now, toolCallSearchWindowSpec)
 	if err != nil {
 		return SearchToolCallsOutput{}, err
-	}
-	// project:read is the authorization boundary for the project-wide read,
-	// exactly as it is for list_recent_tool_calls and the project overview.
-	if _, err := s.reader.ResolveProjectRead(ctx, principal, FindMCPInput{ProjectID: search.projectID}); err != nil {
-		return SearchToolCallsOutput{}, fmt.Errorf("authorize tool call search: %w", err)
 	}
 
 	output := SearchToolCallsOutput{
@@ -300,6 +301,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		MetaMCPMatchers:    matchers.meta,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: server.hostedToolsetSlugs,
+		MCPServerIDs:       nil,
 		MCPServerTargetIDs: server.mcpServerTargetIDs,
 		// Never set from a configured server: a shadow row is named by the
 		// calling app, so selecting one by name would fold an unrelated

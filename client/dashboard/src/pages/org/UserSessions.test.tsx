@@ -8,9 +8,6 @@ const state = vi.hoisted(() => ({
   project: { id: "project_a", slug: "first" },
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => state.project }));
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ isFeatureEnabled: () => true }),
-}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ mcp: { add: { href: () => "/mcp/add" } } }),
 }));
@@ -35,9 +32,6 @@ vi.mock("@gram/client/react-query/userSessions.js", () => ({
 }));
 vi.mock("./RemoteSessionRefreshPolicySetting", () => ({
   RemoteSessionRefreshPolicySetting: () => null,
-}));
-vi.mock("./ConsentToolFilteringSetting", () => ({
-  ConsentToolFilteringSetting: () => null,
 }));
 vi.mock("@/components/connections/ConnectionsList", () => ({
   ConnectionsList: () => null,

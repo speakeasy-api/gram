@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const KeyState = {
 /**
  * The lifecycle state of the key. pending: published for verifier cache warm-up but not signing yet. active: the key new signatures use; at most one per set. retired: no longer signing, still published so outstanding tokens keep verifying. revoked: withdrawn entirely; tokens signed with it stop verifying.
  */
-export type KeyState = ClosedEnum<typeof KeyState>;
+export type KeyState = OpenEnum<typeof KeyState>;
 
 /**
  * A published JSON Web Key inside a key set.
@@ -78,9 +79,8 @@ export type JSONWebKey = {
 };
 
 /** @internal */
-export const KeyState$inboundSchema: z.ZodMiniEnum<typeof KeyState> = z.enum(
-  KeyState,
-);
+export const KeyState$inboundSchema: z.ZodMiniType<KeyState, unknown> =
+  openEnums.inboundSchema(KeyState);
 
 /** @internal */
 export const JSONWebKey$inboundSchema: z.ZodMiniType<JSONWebKey, unknown> = z

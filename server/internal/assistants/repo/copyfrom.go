@@ -43,38 +43,3 @@ func (r iteratorForAddAssistantMcpServers) Err() error {
 func (q *Queries) AddAssistantMcpServers(ctx context.Context, arg []AddAssistantMcpServersParams) (int64, error) {
 	return q.db.CopyFrom(ctx, []string{"assistant_mcp_servers"}, []string{"assistant_id", "mcp_server_id", "environment_id", "project_id"}, &iteratorForAddAssistantMcpServers{rows: arg})
 }
-
-// iteratorForAddAssistantToolsets implements pgx.CopyFromSource.
-type iteratorForAddAssistantToolsets struct {
-	rows                 []AddAssistantToolsetsParams
-	skippedFirstNextCall bool
-}
-
-func (r *iteratorForAddAssistantToolsets) Next() bool {
-	if len(r.rows) == 0 {
-		return false
-	}
-	if !r.skippedFirstNextCall {
-		r.skippedFirstNextCall = true
-		return true
-	}
-	r.rows = r.rows[1:]
-	return len(r.rows) > 0
-}
-
-func (r iteratorForAddAssistantToolsets) Values() ([]interface{}, error) {
-	return []interface{}{
-		r.rows[0].AssistantID,
-		r.rows[0].ToolsetID,
-		r.rows[0].EnvironmentID,
-		r.rows[0].ProjectID,
-	}, nil
-}
-
-func (r iteratorForAddAssistantToolsets) Err() error {
-	return nil
-}
-
-func (q *Queries) AddAssistantToolsets(ctx context.Context, arg []AddAssistantToolsetsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"assistant_toolsets"}, []string{"assistant_id", "toolset_id", "environment_id", "project_id"}, &iteratorForAddAssistantToolsets{rows: arg})
-}

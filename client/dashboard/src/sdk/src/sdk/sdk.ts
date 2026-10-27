@@ -18,6 +18,7 @@ import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
+import { AuthClients } from "./authclients.js";
 import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
@@ -38,6 +39,7 @@ import { Identity } from "./identity.js";
 import { IdentityProviderConnections } from "./identityproviderconnections.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
+import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
@@ -182,6 +184,11 @@ export class Gram extends ClientSDK {
     return (this._auth ??= new Auth(this._options));
   }
 
+  private _authClients?: AuthClients;
+  get authClients(): AuthClients {
+    return (this._authClients ??= new AuthClients(this._options));
+  }
+
   private _businessMemories?: BusinessMemories;
   get businessMemories(): BusinessMemories {
     return (this._businessMemories ??= new BusinessMemories(this._options));
@@ -278,6 +285,13 @@ export class Gram extends ClientSDK {
   private _integrations?: Integrations;
   get integrations(): Integrations {
     return (this._integrations ??= new Integrations(this._options));
+  }
+
+  private _internalSessionIssuers?: InternalSessionIssuers;
+  get internalSessionIssuers(): InternalSessionIssuers {
+    return (this._internalSessionIssuers ??= new InternalSessionIssuers(
+      this._options,
+    ));
   }
 
   private _jsonWebKeySets?: JsonWebKeySets;

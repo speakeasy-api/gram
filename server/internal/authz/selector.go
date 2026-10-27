@@ -22,7 +22,40 @@ const (
 	SelectorKeyProjectID      = "project_id"
 	SelectorKeyServerURL      = "server_url"
 	SelectorKeyServerIdentity = "server_identity"
+	// SelectorKeyClientType and SelectorKeyConnectionOwner narrow mcp:auth and
+	// mcp:blocked_auth grants to an auth client type and to the owner of a
+	// personal connection.
+	SelectorKeyClientType      = "client_type"
+	SelectorKeyConnectionOwner = "connection_owner"
+	// SelectorKeyUpstreamClient narrows mcp:auth and mcp:blocked_auth grants
+	// on personal clients to one upstream OAuth client, the
+	// remote_session_clients id behind it. With a connection owner it names one
+	// logical connection across every auth client sharing that upstream
+	// client, which is what a connection owner's block names.
+	SelectorKeyUpstreamClient = "upstream_client"
 )
+
+// SelectorValueRepresentedUser is the connection_owner value naming the user a
+// request acts for. The engine binds it; checks never carry it.
+const SelectorValueRepresentedUser = "$represented_user"
+
+// Auth client types an mcp:auth check can name. Only remote_session clients
+// are personal: their checks carry the connection owner.
+const (
+	AuthClientTypeRemoteSession    = "remote_session"
+	AuthClientTypeServiceAccount   = "service_account"
+	AuthClientTypeStaticCredential = "static_credential" //nolint:gosec // client type name, not a credential
+	AuthClientTypePassThrough      = "pass_through"
+	AuthClientTypeEMA              = "ema"
+)
+
+var validAuthClientTypes = map[string]bool{
+	AuthClientTypeRemoteSession:    true,
+	AuthClientTypeServiceAccount:   true,
+	AuthClientTypeStaticCredential: true,
+	AuthClientTypePassThrough:      true,
+	AuthClientTypeEMA:              true,
+}
 
 // Matches reports whether this (grant) selector satisfies the given check
 // selector. A nil/empty grant selector matches any check (defensive fallback).
@@ -32,13 +65,17 @@ const (
 // This allows disposition-scoped grants (e.g. {"disposition":"read_only"}) to
 // match connection-level checks that don't yet specify a disposition.
 func (s Selector) Matches(check Selector) bool {
+	return s.matches(check, "")
+}
+
+func (s Selector) matches(check Selector, representedUser string) bool {
 	for k, grantVal := range s {
 		checkVal, ok := check[k]
 		if !ok {
 			// Check doesn't constrain this dimension — skip.
 			continue
 		}
-		if grantVal != "*" && grantVal != checkVal {
+		if !selectorValueMatches(k, grantVal, checkVal, representedUser) {
 			return false
 		}
 	}
@@ -49,22 +86,51 @@ func (s Selector) Matches(check Selector) bool {
 // to be present in the check selector. Exclusion scopes use strict matching so
 // a tool-scoped exclusion does not match a dimensionless server-level check.
 func (s Selector) StrictMatches(check Selector) bool {
+	return s.strictMatches(check, "")
+}
+
+// StrictMatchesFor is StrictMatches with $represented_user bound to
+// representedUser on either side. An empty representedUser binds nothing, so
+// the marker matches only itself.
+func (s Selector) StrictMatchesFor(check Selector, representedUser string) bool {
+	return s.strictMatches(check, representedUser)
+}
+
+func (s Selector) strictMatches(check Selector, representedUser string) bool {
 	for k, grantVal := range s {
 		checkVal, ok := check[k]
 		if !ok {
 			return false
 		}
-		if grantVal != "*" && grantVal != checkVal {
+		if !selectorValueMatches(k, grantVal, checkVal, representedUser) {
 			return false
 		}
 	}
 	return true
 }
 
+// selectorValueMatches compares one grant value with one check value. Without a
+// binding, $represented_user matches only itself, as containment needs. With
+// one, the marker and the bound user are the same owner on either side, so a
+// symbolic candidate is contained by a grant pinned to the represented user.
+func selectorValueMatches(key, grantVal, checkVal, representedUser string) bool {
+	if grantVal == "*" || grantVal == checkVal {
+		return true
+	}
+	if key != SelectorKeyConnectionOwner || representedUser == "" {
+		return false
+	}
+	return (grantVal == SelectorValueRepresentedUser && checkVal == representedUser) ||
+		(checkVal == SelectorValueRepresentedUser && grantVal == representedUser)
+}
+
 // ResourceKindForScope derives the selector resource kind from a scope.
 func ResourceKindForScope(scope Scope) string {
+	if scope == ScopeMCPAuth || scope == ScopeMCPBlockedAuth {
+		return ResourceKindMCPAuthClient
+	}
 	switch scope.Parts().Resource {
-	case "project", "plugin":
+	case "project", "plugin", "log":
 		return ResourceKindProject
 	case "remote-mcp":
 		return ResourceKindMCP
@@ -80,6 +146,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindAssistant
 	case "risk_policy":
 		return ResourceKindRiskPolicy
+	case "inference":
+		return ResourceKindInference
 	case "chat":
 		return ResourceKindChat
 	case "agent":
@@ -109,8 +177,12 @@ var validDispositions = map[string]bool{
 
 // allowedSelectorKeys defines which extra keys (beyond resource_kind and
 // resource_id) are valid for each scope family. Scope families not listed here
-// allow no extra keys.
+// allow no extra keys, except where scopeAllowsSelectorKey admits one for a
+// single scope.
 var allowedSelectorKeys = map[string]map[string]bool{
+	ResourceKindInference: {
+		SelectorKeyProjectID: true,
+	},
 	ResourceKindMCP: {
 		SelectorKeyTool:        true,
 		SelectorKeyDisposition: true,
@@ -126,13 +198,26 @@ var allowedSelectorKeys = map[string]map[string]bool{
 		SelectorKeyServerURL:      true,
 		SelectorKeyServerIdentity: true,
 	},
+	ResourceKindMCPAuthClient: {
+		SelectorKeyClientType:      true,
+		SelectorKeyProjectID:       true,
+		SelectorKeyConnectionOwner: true,
+		SelectorKeyUpstreamClient:  true,
+	},
+}
+
+// scopeAllowsSelectorKey allows project_id on org:hooks_ingest only: it is the
+// one org scope checked per project, and elsewhere the key would restrict nothing.
+func scopeAllowsSelectorKey(scope Scope, key string) bool {
+	return scope == ScopeOrgHooksIngest && key == SelectorKeyProjectID
 }
 
 // ValidateSelector checks that a selector is well-formed for the given scope.
 // Rules:
 //   - resource_kind and resource_id must both be present
 //   - resource_kind must match the scope family (or be "*" for root)
-//   - extra keys must be in the allowed set for the scope family
+//   - extra keys must be in the allowed set for the scope family, or one
+//     scopeAllowsSelectorKey admits for the scope itself
 //   - unknown keys are rejected
 func ValidateSelector(scope Scope, sel Selector) error {
 	kind, hasKind := sel[SelectorKeyResourceKind]
@@ -159,16 +244,41 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		return fmt.Errorf("scope %q requires resource_kind=%q, got %q", scope, expectedKind, kind)
 	}
 
+	if scope == ScopeInferenceExecute {
+		if sel[SelectorKeyResourceID] != WildcardResource {
+			return fmt.Errorf("scope %q requires resource_id=%q", scope, WildcardResource)
+		}
+		if projectID, ok := sel[SelectorKeyProjectID]; ok && projectID == "" {
+			return fmt.Errorf("selector key %q must not be empty", SelectorKeyProjectID)
+		}
+	}
+
 	allowed := allowedSelectorKeys[expectedKind]
 	for k, v := range sel {
+		if v == SelectorValueRepresentedUser && k != SelectorKeyConnectionOwner {
+			return fmt.Errorf("selector value %q is only allowed for %q", SelectorValueRepresentedUser, SelectorKeyConnectionOwner)
+		}
+		// Checked before resource keys are skipped: an empty auth client ID
+		// could never authorize a check.
+		if expectedKind == ResourceKindMCPAuthClient && v == "" {
+			return fmt.Errorf("selector key %q must not be empty", k)
+		}
 		if k == SelectorKeyResourceKind || k == SelectorKeyResourceID {
 			continue
 		}
-		if !allowed[k] {
+		if !allowed[k] && !scopeAllowsSelectorKey(scope, k) {
 			return fmt.Errorf("selector key %q is not allowed for scope %q", k, scope)
 		}
 		if k == SelectorKeyDisposition && !validDispositions[v] {
 			return fmt.Errorf("invalid disposition value %q", v)
+		}
+		if k == SelectorKeyClientType && v != WildcardResource && !validAuthClientTypes[v] {
+			return fmt.Errorf("invalid client_type value %q", v)
+		}
+		if k == SelectorKeyConnectionOwner || k == SelectorKeyUpstreamClient {
+			if clientType, ok := sel[SelectorKeyClientType]; ok && clientType != WildcardResource && clientType != AuthClientTypeRemoteSession {
+				return fmt.Errorf("selector key %q requires client_type %q", k, AuthClientTypeRemoteSession)
+			}
 		}
 		if k == SelectorKeyServerURL {
 			parsed, err := url.Parse(v)
@@ -195,6 +305,7 @@ func NewGrant(scope Scope, resourceID string) Grant {
 		PrincipalUrn: "",
 		Scope:        scope,
 		Selector:     NewSelector(scope, resourceID),
+		Inferred:     false,
 	}
 }
 
@@ -204,6 +315,7 @@ func NewGrantWithSelector(scope Scope, selector Selector) Grant {
 		PrincipalUrn: "",
 		Scope:        scope,
 		Selector:     selector,
+		Inferred:     false,
 	}
 }
 

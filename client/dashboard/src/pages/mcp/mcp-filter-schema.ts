@@ -1,6 +1,6 @@
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
-import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import type { ListedMcpServer } from "@/components/mcp/mcp-server-kind";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import {
   defineFilters,
   type FilterOption,
@@ -40,6 +40,7 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
     { value: "remote", label: "Remote URL" },
     { value: "tunneled", label: "Tunneled" },
     { value: "unproxied", label: "Unproxied" },
+    { value: "built_in", label: "Built-in" },
   ],
   // `plugins` is org data, so its options are supplied at render time via
   // pluginFilterOptions().
@@ -54,27 +55,15 @@ export interface McpFacets {
     | "gateway"
     | "remote"
     | "tunneled"
-    | "unproxied";
+    | "unproxied"
+    | "built_in";
   /** IDs of the plugins this server is a member of. */
   pluginIds: string[];
-  /**
-   * The `mcp_servers` id access.listIdentityAccess would name this row by, when
-   * one exists.
-   *
-   * A hosted MCP reaches this listing as its toolset, which has an id of its
-   * own, so its server id is resolved through the mcp_servers row pointing back
-   * at it. A gateway has no such row at all and therefore cannot be claimed
-   * reachable, so it drops out whenever the filter is on.
-   */
+  /** The mcp_servers id access is recorded against; gateways have none. */
   serverId?: string;
 }
 
-/**
- * Plugin membership is stored on the plugin (`plugin.servers[]`), not on the
- * server, and a plugin server is backed by *either* a toolset (Hosted MCP) or
- * an mcp_server row (Remote/Tunneled). Invert that into per-collection lookups
- * so each listing row can resolve its plugins in O(1).
- */
+/** Plugin entries keyed by mcp_servers id or, for older hosted ones, toolset id, inverted for O(1) lookup. */
 export interface PluginMembership {
   byToolsetId: Map<string, string[]>;
   byMcpServerId: Map<string, string[]>;
@@ -105,67 +94,8 @@ export function pluginFilterOptions(plugins: Plugin[]): FilterOption[] {
   return plugins.map((plugin) => ({ value: plugin.id, label: plugin.name }));
 }
 
-/**
- * The mcp_servers id behind each hosted MCP, keyed by its toolset.
- *
- * Built from the unfiltered mcp_servers list the page already holds: the
- * listing shows hosted MCPs as toolsets, but access is recorded against the
- * mcp_servers row that points at the toolset. `mcpSlug` is NOT that link — it
- * is the server's public MCP slug, which differs from the toolset's own slug
- * and is unset on plenty of rows.
- */
-export function serverIdByToolsetId(servers: McpServer[]): Map<string, string> {
-  const byToolsetId = new Map<string, string>();
-  const ambiguous = new Set<string>();
-  for (const server of servers) {
-    if (!server.toolsetId) continue;
-    const existing = byToolsetId.get(server.toolsetId);
-    if (existing !== undefined && existing !== server.id) {
-      // Two live wrappers for one toolset: picking either would answer for a
-      // server the reader did not ask about, showing the row for someone who
-      // can only reach the other wrapper or hiding it from someone who can.
-      // With no single right answer the toolset gets none, and an active
-      // filter drops it rather than guessing.
-      ambiguous.add(server.toolsetId);
-      continue;
-    }
-    byToolsetId.set(server.toolsetId, server.id);
-  }
-  for (const toolsetId of ambiguous) byToolsetId.delete(toolsetId);
-  return byToolsetId;
-}
-
-export function toolsetFacets(
-  toolset: ToolsetEntry,
-  membership: PluginMembership,
-  serverIds?: ReadonlyMap<string, string>,
-): McpFacets {
-  const status = !toolset.mcpEnabled
-    ? "disabled"
-    : toolset.mcpIsPublic
-      ? "public"
-      : "private";
-  // registrySpecifier is the only list-row signal that a hosted MCP came from catalog.
-  const source = toolset.origin?.registrySpecifier ? "catalog" : "custom";
-  return {
-    status,
-    source,
-    // A hosted entry may be keyed by its canonical mcp_server, which shares the toolset id.
-    pluginIds: [
-      ...new Set([
-        ...(membership.byToolsetId.get(toolset.id) ?? []),
-        ...(membership.byMcpServerId.get(
-          serverIds?.get(toolset.id) ?? toolset.id,
-        ) ?? []),
-        ...(membership.byMcpServerId.get(toolset.id) ?? []),
-      ]),
-    ],
-    serverId: serverIds?.get(toolset.id),
-  };
-}
-
 export function mcpServerFacets(
-  server: McpServer,
+  { server, kind }: ListedMcpServer,
   membership: PluginMembership,
 ): McpFacets {
   const status =
@@ -174,15 +104,23 @@ export function mcpServerFacets(
       : server.visibility === "private"
         ? "private"
         : "disabled";
-  const source = server.unproxiedMcpServerId
-    ? "unproxied"
-    : server.tunneledMcpServerId
-      ? "tunneled"
-      : "remote";
+  // registrySpecifier is the only list-row signal that a hosted MCP came from catalog.
+  const source =
+    kind === "hosted"
+      ? server.toolset?.registrySpecifier
+        ? "catalog"
+        : "custom"
+      : kind;
+  // Older plugin entries name the toolset itself, which its hosting server stands for.
+  const pluginIds = new Set(membership.byMcpServerId.get(server.id) ?? []);
+  if (kind === "hosted" && server.toolsetId && standsInForToolset(server)) {
+    for (const id of membership.byToolsetId.get(server.toolsetId) ?? [])
+      pluginIds.add(id);
+  }
   return {
     status,
     source,
-    pluginIds: membership.byMcpServerId.get(server.id) ?? [],
+    pluginIds: [...pluginIds],
     serverId: server.id,
   };
 }

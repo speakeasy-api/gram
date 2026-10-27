@@ -24,7 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -62,6 +64,11 @@ const recallDigestByteCap = 48 << 10
 // so a truncated document is never mistaken for a complete one.
 const recallDigestTruncationMarker = "\n\n[digest truncated: size cap reached]"
 
+// RecallRiskFindingReader supplies live ClickHouse finding spans for masking.
+type RecallRiskFindingReader interface {
+	ListRiskFindingSpansForRecall(context.Context, chrepo.ListRiskFindingSpansForRecallParams) ([]chrepo.RiskFindingUnmaskRow, error)
+}
+
 // SessionRecallService serves the session-portability recall tools: listing
 // the caller's own captured coding-agent sessions and rendering one as a
 // redacted handoff digest so its work can continue in the current harness.
@@ -75,25 +82,34 @@ type SessionRecallService struct {
 	repo        *platformrepo.Queries
 	auditor     *audit.Logger
 	portability FeatureChecker
+	findings    RecallRiskFindingReader
 	budget      OperationBudget
 }
 
-// NewSessionRecallService composes the recall entry points. A nil dependency
-// leaves the service invalid, which registers the unavailable stubs rather
-// than tools that always fail.
-func NewSessionRecallService(logger *slog.Logger, db *pgxpool.Pool, repo *platformrepo.Queries, auditor *audit.Logger, portability FeatureChecker, budget OperationBudget) *SessionRecallService {
+// NewSessionRecallService composes recall. A nil findings reader leaves recall
+// unavailable, since a digest cannot be masked without it.
+func NewSessionRecallService(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	repo *platformrepo.Queries,
+	auditor *audit.Logger,
+	portability FeatureChecker,
+	findings RecallRiskFindingReader,
+	budget OperationBudget,
+) *SessionRecallService {
 	return &SessionRecallService{
 		logger:      logger,
 		db:          db,
 		repo:        repo,
 		auditor:     auditor,
 		portability: portability,
+		findings:    findings,
 		budget:      budget,
 	}
 }
 
 func (s *SessionRecallService) valid() bool {
-	return s != nil && s.logger != nil && s.db != nil && s.repo != nil && s.auditor != nil && s.portability != nil && s.budget.valid()
+	return s != nil && s.logger != nil && s.db != nil && s.repo != nil && s.auditor != nil && s.portability != nil && s.findings != nil && s.budget.valid()
 }
 
 type ListMySessionsInput struct {
@@ -163,6 +179,35 @@ func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Pri
 	return ListMySessionsOutput{Sessions: sessions}, nil
 }
 
+func (s *SessionRecallService) riskFindingMasks(
+	ctx context.Context,
+	principal Principal,
+	chatID, projectID uuid.UUID,
+	messages []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow,
+) (findingMasks, error) {
+	policies, err := riskrepo.New(s.db).ListEnabledRiskPolicyIDsByOrganizationProject(ctx, riskrepo.ListEnabledRiskPolicyIDsByOrganizationProjectParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return findingMasks{}, fmt.Errorf("list enabled risk policies for recall: %w", err)
+	}
+	policyIDs := make([]string, 0, len(policies))
+	for _, id := range policies {
+		policyIDs = append(policyIDs, id.String())
+	}
+	findings, err := s.findings.ListRiskFindingSpansForRecall(ctx, chrepo.ListRiskFindingSpansForRecallParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      projectID.String(),
+		ChatID:         chatID.String(),
+		PolicyIDs:      policyIDs,
+	})
+	if err != nil {
+		return findingMasks{}, fmt.Errorf("read clickhouse risk findings for recall: %w", err)
+	}
+	return maskFindingSpans(messages, findings), nil
+}
+
 func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Principal, input ContinueSessionInput) (ContinueSessionOutput, error) {
 	empty := ContinueSessionOutput{Digest: "", SourceSessionID: "", ChatID: "", NotCarriedOver: nil, Notes: nil}
 	if !s.valid() {
@@ -208,17 +253,10 @@ func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Pr
 	// tail; everything downstream expects chronological order.
 	cappedRead := len(messages) == recallMessageRowCap
 	slices.Reverse(messages)
-	findings, err := s.repo.ListRiskFindingSpansForRecall(ctx, platformrepo.ListRiskFindingSpansForRecallParams{
-		ChatID:         chatID,
-		ProjectID:      row.ProjectID,
-		OrganizationID: principal.OrganizationID,
-		UserID:         principal.UserID,
-	})
+	masks, err := s.riskFindingMasks(ctx, principal, chatID, row.ProjectID, messages)
 	if err != nil {
-		return empty, fmt.Errorf("read risk findings for recall: %w", err)
+		return empty, err
 	}
-
-	masks := maskFindingSpans(messages, findings)
 	extract := turnsFromRows(messages, masks.content)
 
 	sourceSessionID := sessionIDForChat(row.ExternalChatID, row.ID)
@@ -345,18 +383,6 @@ func valueOrUnknown(s string) string {
 	return s
 }
 
-// findingSpanEntry mirrors one element of the risk_results.spans JSONB column
-// ({match,field,path,start_pos,end_pos} per the schema comment). Declared
-// locally so this package does not depend on the risk-analysis activity
-// package that writes it.
-type findingSpanEntry struct {
-	Match    string `json:"match"`
-	Field    string `json:"field"`
-	Path     string `json:"path"`
-	StartPos int    `json:"start_pos"`
-	EndPos   int    `json:"end_pos"`
-}
-
 // withheldContentPlaceholder replaces a message's entire prose when a finding
 // targeting it cannot be masked precisely — the fail-closed alternative to
 // serving content known to carry an un-applied finding.
@@ -379,6 +405,10 @@ type contentMaskSpan struct {
 	// so applyContentMasks refuses any span whose selected bytes differ.
 	match string
 }
+type recallMessageSpans struct {
+	spans       []contentMaskSpan
+	unappliable int
+}
 
 // findingMasks is maskFindingSpans's result: the substitute content per
 // affected message, the number of finding spans neutralized (masked in place
@@ -391,90 +421,75 @@ type findingMasks struct {
 }
 
 // maskFindingSpans replaces every content-anchored finding span with
-// maskdisplay.Display's partial-mask form — byte-identical with what the
+// maskdisplay.Display's partial-mask form, byte-identical with what the
 // dashboard already shows masked, so the digest never reveals more than
 // existing UI. Fail-closed: a message with any finding that cannot be applied
-// exactly (undecodable or absent span data, offsets that don't fit the
-// content, overlapping spans, spans anchored somewhere other than the content
-// column) has its entire prose replaced by withheldContentPlaceholder rather
-// than served with a known finding unmasked.
-func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, findings []platformrepo.ListRiskFindingSpansForRecallRow) findingMasks {
-	out := findingMasks{content: nil, neutralized: 0, withheld: 0}
+// exactly (offsets that don't fit the content or no longer select the
+// finding's bytes, overlapping spans, spans anchored somewhere other than the
+// content column) has its entire prose replaced by withheldContentPlaceholder
+// rather than served with a known finding unmasked.
+func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, findings []chrepo.RiskFindingUnmaskRow) findingMasks {
 	if len(findings) == 0 {
-		return out
+		return findingMasks{content: nil, neutralized: 0, withheld: 0}
 	}
-	type messageSpans struct {
-		spans       []contentMaskSpan
-		unappliable int
+	messages := make(map[uuid.UUID]string, len(rows))
+	for _, row := range rows {
+		messages[row.ID] = row.Content
 	}
-	byMessage := make(map[uuid.UUID]*messageSpans)
+	byMessage := make(map[uuid.UUID]*recallMessageSpans)
 	for _, finding := range findings {
-		if !finding.ChatMessageID.Valid {
+		messageID, err := uuid.Parse(finding.ChatMessageID)
+		if err != nil {
 			continue
 		}
-		ms := byMessage[finding.ChatMessageID.UUID]
+		content, visible := messages[messageID]
+		if !visible {
+			continue
+		}
+		ms := byMessage[messageID]
 		if ms == nil {
-			ms = &messageSpans{spans: nil, unappliable: 0}
-			byMessage[finding.ChatMessageID.UUID] = ms
+			ms = &recallMessageSpans{spans: nil, unappliable: 0}
+			byMessage[messageID] = ms
 		}
-		ruleID := conv.FromPGTextOrEmpty[string](finding.RuleID)
-		var entries []findingSpanEntry
-		if len(finding.Spans) > 0 && json.Unmarshal(finding.Spans, &entries) != nil {
-			// Span data exists but cannot be read.
-			ms.unappliable++
+		surface := finding.Surface
+		if surface == "" {
+			// Rows written before the surface column default to empty.
+			surface = scanners.FindingSurface(finding.Source, finding.Field, finding.Path)
+		}
+		if strings.HasPrefix(finding.Field, "tool.") || surface == scanners.SurfaceToolArgs {
 			continue
 		}
-		if len(entries) == 0 {
-			if !finding.StartPos.Valid || !finding.EndPos.Valid {
-				// A finding with no span data at all cannot be masked.
+		switch surface {
+		case scanners.SurfaceContent:
+			start, end := int(finding.StartPos), int(finding.EndPos)
+			if start < 0 || end <= start || end > len(content) || finding.MatchLen == 0 || end-start != conv.SafeInt(int64(finding.MatchLen)) {
 				ms.unappliable++
 				continue
 			}
-			// Legacy rows carry only the primary span.
-			entries = []findingSpanEntry{{
-				Match:    conv.FromPGTextOrEmpty[string](finding.Match),
-				Field:    "",
-				Path:     "",
-				StartPos: int(finding.StartPos.Int32),
-				EndPos:   int(finding.EndPos.Int32),
-			}}
-		}
-		for _, entry := range entries {
-			if strings.HasPrefix(entry.Field, "tool.") {
-				// Spans anchored in tool-call structures are never rendered:
-				// tool payloads are redacted unconditionally.
+			match := content[start:end]
+			display := maskdisplay.Display(finding.Source, finding.RuleID, match)
+			// ClickHouse stores no raw match, so the ingest-time display string
+			// is the evidence that these bytes are still the finding's.
+			if display != finding.MatchRedacted {
+				ms.unappliable++
 				continue
 			}
-			switch scanners.FindingSurface(finding.Source, entry.Field, entry.Path) {
-			case scanners.SurfaceContent:
-				expected := entry.Match
-				if expected == "" {
-					// Older span entries omit the per-span match; the
-					// finding's primary match is the same text for them.
-					expected = conv.FromPGTextOrEmpty[string](finding.Match)
-				}
-				ms.spans = append(ms.spans, contentMaskSpan{
-					start: entry.StartPos,
-					end:   entry.EndPos,
-					// The resolved match, not entry.Match: a span entry with
-					// no per-span match would otherwise render an empty
-					// display, deleting the bytes instead of masking them.
-					display: maskdisplay.Display(finding.Source, ruleID, expected),
-					match:   expected,
-				})
-			case scanners.SurfaceDerived, scanners.SurfaceNone:
-				// Derived metadata (a tool name, an account email, a judge
-				// verdict): the offsets index no rendered text, and the
-				// dashboard shows these findings without masking prose.
-			default:
-				// json_path (offsets index a `.get(...)`-extracted sub-value,
-				// not the outer content) or an unrecognized attribution:
-				// cannot be applied precisely.
-				ms.unappliable++
-			}
+			ms.spans = append(ms.spans, contentMaskSpan{
+				start:   start,
+				end:     end,
+				display: display,
+				match:   match,
+			})
+		case scanners.SurfaceDerived, scanners.SurfaceNone:
+		default:
+			ms.unappliable++
 		}
 	}
-	out.content = make(map[uuid.UUID]string, len(byMessage))
+	return applyFindingMasks(rows, byMessage)
+}
+
+func applyFindingMasks(rows []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow, byMessage map[uuid.UUID]*recallMessageSpans) findingMasks {
+	out := findingMasks{content: make(map[uuid.UUID]string, len(byMessage)), neutralized: 0, withheld: 0}
 	for _, row := range rows {
 		ms, ok := byMessage[row.ID]
 		if !ok || (len(ms.spans) == 0 && ms.unappliable == 0) {

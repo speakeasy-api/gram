@@ -205,7 +205,7 @@ func (w *chatAnalysisWriter) execution(authority writeAuthority) ProposalExecuti
 }
 
 func (w *chatAnalysisWriter) registerPrepare(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_set_organization_chat_analysis_settings", Title: "Prepare Chat Analysis Settings", Description: "Prepare one exact organization's judge enabled state and daily evaluation cap. Requires separate same-staff browser approval and admin:write; does not apply settings or run analysis. Enabling or increasing the cap permits background LLM spend, not a currency budget."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareChatAnalysisInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	addProposalTool(server, &mcp.Tool{Name: "prepare_set_organization_chat_analysis_settings", Title: "Prepare Chat Analysis Settings", Description: "Prepare one exact organization's judge enabled state and daily evaluation cap. Requires separate same-staff browser approval and admin:write; does not apply settings or run analysis. Enabling or increasing the cap permits background LLM spend, not a currency budget."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareChatAnalysisInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err
 	})

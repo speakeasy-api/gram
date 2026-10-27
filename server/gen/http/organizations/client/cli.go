@@ -31,6 +31,21 @@ func BuildGetPayload(organizationsGetSessionToken string) (*organizations.GetPay
 	return v, nil
 }
 
+// BuildGetGatewayPayload builds the payload for the organizations getGateway
+// endpoint from CLI flags.
+func BuildGetGatewayPayload(organizationsGetGatewaySessionToken string) (*organizations.GetGatewayPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsGetGatewaySessionToken != "" {
+			sessionToken = &organizationsGetGatewaySessionToken
+		}
+	}
+	v := &organizations.GetGatewayPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildSendInvitePayload builds the payload for the organizations sendInvite
 // endpoint from CLI flags.
 func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSendInviteSessionToken string) (*organizations.SendInvitePayload, error) {
@@ -148,6 +163,31 @@ func BuildRemoveUserPayload(organizationsRemoveUserUserID string, organizationsR
 	}
 	v := &organizations.RemoveUserPayload{}
 	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRevokeMemberSignInsPayload builds the payload for the organizations
+// revokeMemberSignIns endpoint from CLI flags.
+func BuildRevokeMemberSignInsPayload(organizationsRevokeMemberSignInsBody string, organizationsRevokeMemberSignInsSessionToken string) (*organizations.RevokeMemberSignInsPayload, error) {
+	var err error
+	var body RevokeMemberSignInsRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsRevokeMemberSignInsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"user_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsRevokeMemberSignInsSessionToken != "" {
+			sessionToken = &organizationsRevokeMemberSignInsSessionToken
+		}
+	}
+	v := &organizations.RevokeMemberSignInsPayload{
+		UserID: body.UserID,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

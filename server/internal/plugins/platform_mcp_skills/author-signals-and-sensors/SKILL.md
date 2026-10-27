@@ -5,6 +5,8 @@ description: Create or update reusable signals and message sensors in an explici
 
 # Author signals and sensors
 
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. Whether a tool exists for you is decided by `describe_platform_tool` with its exact name, not by `tools/list` or one page of search results: a name returned in `not_found` is unavailable to you, so say so rather than guess. The call itself still checks your access. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
+
 Use this workflow when someone wants the Speakeasy AI Control Plane (AICP) to
 classify conversation messages into reusable labels, exclusive choices, or ordered
 scores. Sensors perform classification; they do not enforce access policies.
@@ -31,10 +33,19 @@ scores. Sensors perform classification; they do not enforce access policies.
    enabled. `proposal.enabled` defaults to true on creation; omission on update
    preserves the current state. Disabled sensors remain visible and editable but
    skip new evaluations; evaluations already in progress may finish.
+   Agree message context separately from classification mode:
+   `proposal.input_strategy` is `single_message` by default, or `sliding_window`.
+   `proposal.window_size` is 2–10 total messages, default 5, including the target.
+   System messages are excluded for every strategy and do not count toward window
+   size. Sliding context includes non-system roles in timestamp order within the
+   target's conversation generation. Only the target is classified; preceding messages
+   provide context. Short histories use available messages. Omitted update fields
+   preserve settings, including window size when switching strategies.
 5. Agree the matching expression. Omission on creation defaults to
    `message.role == "user"`. Only `message.role` is exposed; do not invent actor,
    department, cohort, replay, or tool fields. Conversation ingestion currently
-   evaluates user/assistant creation events, including historical imports.
+   evaluates original user/assistant creation events, including historical imports.
+   Transcript copies, synthetic summaries and unknown rewrites are not new targets.
 6. Optionally call `preview_sensor_match` with bounded, caller-supplied role
    examples. Report matched, not matched, and errors separately. Missing message
    context is unbound, not an empty role. This tests metadata eligibility, not
@@ -49,7 +60,8 @@ scores. Sensors perform classification; they do not enforce access policies.
    fields or ordered membership, and `update_signal` to deliberately change a
    shared definition. Set `proposal.operation` to the tool name.
 8. Call with `confirmed:false`. Show the normalized configuration, matching
-   expression, enabled state, complete signal order, draft reasons, and every affected sensor
+   expression, enabled state, message context and window size, complete signal order,
+   draft reasons, and every affected sensor
    returned for a shared-signal update. Preview creation IDs are provisional and
    are not committed resources. Omitted update fields are preserved; a supplied
    signals list replaces the entire membership, and an empty list clears it.
@@ -66,6 +78,8 @@ scores. Sensors perform classification; they do not enforce access policies.
     signal, call `find_signals` and verify its exact ID and definition. Report
     committed enabled state and configuration readiness separately from active inference
     or observed readings, which these tools cannot prove.
+    For observed measurements, use the `explore-signal-patterns` workflow and the
+    shared analytics tools with an explicit matching rule and time window.
 11. A committed receipt with `snapshot_scope: verification_unavailable` means the
     write succeeded but the fresh read failed. Keep the same retry key and inputs;
     retry verification rather than creating again. A false `target_available` in

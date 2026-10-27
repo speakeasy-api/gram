@@ -12,6 +12,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -350,7 +352,7 @@ func TestServePublic_DisabledPublicLegacyToolset_Returns404(t *testing.T) {
 	// Disable via the same flag the dashboard/API writes, deliberately
 	// leaving mcp_is_public true — the state that kept serving anonymously
 	// before the fix.
-	err = toolsetsRepo.SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
+	err = testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
 		McpEnabled: false,
 		ID:         toolset.ID,
 		ProjectID:  *authCtx.ProjectID,
@@ -385,7 +387,7 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	require.NoError(t, err)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
@@ -430,7 +432,7 @@ func TestServePublic_AttachedNotFoundReturnsMCPErrorWithNullID(t *testing.T) {
 	_, ti := newTestMCPService(t)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/bad-slug", bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
@@ -491,8 +493,12 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	instructions := "You have tools for searching the Test Hub. Use them wisely."
-	_, err = metadataRepo.UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
-		ToolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	_, err = testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID: toolset.ID, ProjectID: toolset.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "public",
+	})
+	require.NoError(t, err)
+	_, err = metadataRepo.UpsertMetadataByMcpServerID(ctx, metadata_repo.UpsertMetadataByMcpServerIDParams{
+		McpServerID:              toolset.ID,
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
 		LogoID:                   uuid.NullUUID{Valid: false},
@@ -1053,7 +1059,7 @@ func TestServePublic_UnsupportedVersionPrecedesPrivateAuthentication(t *testing.
 	toolset := createPrivateMCPToolset(t, ctx, ti, "unsupported-before-auth-"+uuid.NewString()[:8])
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(toolsListBody()))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")

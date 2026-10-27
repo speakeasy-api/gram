@@ -10,7 +10,7 @@ import "strings"
 // list_servers, and disclose members a caller cannot reach. It teaches the
 // drill-down and the two rules agents get wrong; the inventory itself belongs
 // to list_servers alone.
-const Instructions = `This endpoint fronts a set of MCP servers as one, exposing four tools instead of every member's full catalog.
+const Instructions = `This endpoint fronts a set of MCP servers as one, exposing a handful of tools instead of every member's full catalog.
 
 Work from the outside in:
 
@@ -21,7 +21,9 @@ Work from the outside in:
 
 Never execute a name you have not described: arguments guessed from a tool name will fail validation.
 
-If a call fails, re-check list_servers before retrying. "unknown" means unobserved, not broken — such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.`
+If a call fails, re-check list_servers before retrying. "unknown" means unobserved, not broken — such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.
+
+If a member says it needs authentication, call connection_status. Live connections show current sign-in status and, when this gateway has a sign-in page, link to it. Cached connections report verification at consent without a new probe; tool calls check current authorization. If new consent is required, restart authorization in your AI client.`
 
 // ResolveInstructions returns custom instructions verbatim when nonblank,
 // otherwise falling back to the built-in gateway instructions.
@@ -30,4 +32,19 @@ func ResolveInstructions(custom *string) string {
 		return Instructions
 	}
 	return *custom
+}
+
+// ResolveDiscoveryInstructions describes the active catalog unless the owner
+// supplies custom instructions.
+func ResolveDiscoveryInstructions(custom *string, mode DiscoveryMode) string {
+	if custom != nil && strings.TrimSpace(*custom) != "" {
+		return *custom
+	}
+	if mode == DiscoveryModeDirect {
+		return "This gateway exposes the tools from its MCP servers directly. Use tools/list to discover tool definitions, then call each tool by its qualified server--tool name."
+	}
+	if mode == DiscoveryModeCode {
+		return "Code Mode exposes one execute tool for Python. Inside execute, tools is prebound and top-level await works. Discover with tools.search, inspect tools.describe, call tools.call; await each. Use described input schemas and exact server--tool paths. Fresh state per run. Limits, results and retry rules are in the execute description."
+	}
+	return Instructions
 }

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -607,32 +609,33 @@ func setToolsetMcpDisabled(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 }
 
-// A hosted member whose toolset has MCP turned off is not servable through
-// the gateway, matching the toolset's own endpoint.
-func TestServePublic_MetaEndpoint_HostedMember_McpDisabledNotServable(t *testing.T) {
+// An independent hosted server uses its own visibility, not the backing
+// toolset's legacy MCP enablement, just like direct wrapper dispatch.
+func TestServePublic_MetaEndpoint_HostedMember_LegacyMcpDisabledStillServable(t *testing.T) {
 	t.Parallel()
-
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
 	setToolsetMcpDisabled(t, ctx, ti, member.toolsetID, *authCtx.ProjectID)
-
-	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
 	text, isError := metaToolResultText(t, envelope)
-	require.True(t, isError)
-	require.Contains(t, text, "not currently servable")
-
+	require.False(t, isError)
+	require.Contains(t, text, member.slug)
+	envelope = callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	text, isError = metaToolResultText(t, envelope)
+	require.False(t, isError)
+	require.Contains(t, text, "alpha_tool")
 	envelope = callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
 		"name":      member.slug + "--alpha_tool",
 		"arguments": map[string]any{},
 	})
 	text, isError = metaToolResultText(t, envelope)
 	require.True(t, isError)
-	require.Contains(t, text, "not currently servable")
+	// The fixture tool has no upstream, so this error proves dispatch ran.
+	require.Contains(t, text, "no server URL")
 }
 
 // Snapshot RBAC: a private-visibility member is invisible without
@@ -903,6 +906,7 @@ func TestServePublic_MetaEndpoint_ToolSelectionSessionRejected(t *testing.T) {
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		ToolSelection:       selection,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -987,4 +991,42 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedConfigFailureIsMemberScoped(
 	require.True(t, isError, "the member's failure must surface as a tool error result")
 	require.Contains(t, text, fixture.slug, "the failure must name the member")
 	require.Contains(t, text, "no server URL", "the failure must carry the actionable cause")
+}
+
+// TestServePublic_MetaEndpoint_DescribeTools_SharesOneShadowAdmission: a
+// describe_tools request spanning several hosted members admits its caller for
+// the mandatory authz shadow once, failure included, rather than once per
+// member and toolset check, each with its own timeout.
+func TestServePublic_MetaEndpoint_DescribeTools_SharesOneShadowAdmission(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.features.SetFlag(feature.FlagMandatoryAuthzShadow, authCtx.ActiveOrganizationID, true)
+
+	var admissions atomic.Int32
+	ti.service.SetPrepareMandatory(func(ctx context.Context) (authz.MandatoryAuthorization, error) {
+		admissions.Add(1)
+		// A slow admission spends its whole budget and fails.
+		<-ctx.Done()
+		return authz.MandatoryAuthorization{}, ctx.Err()
+	})
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	names := []string{}
+	for i := range 3 {
+		tool := fmt.Sprintf("tool_%d", i)
+		member := seedHostedMetaMember(t, ctx, ti, meta.ID, fmt.Sprintf("hosted member %d", i), int32(i+1), mcpservers.VisibilityPublic, tool)
+		names = append(names, member.slug+"--"+tool)
+	}
+
+	// Each seeded member gets its own deployment and only the latest resolves
+	// tools, but every member is still admitted and connect-checked.
+	envelope := callMetaTool(t, ctx, ti, slug, "describe_tools", map[string]any{"tools": names})
+	result := decodeMetaToolResult(t, envelope)
+	require.False(t, result.IsError, "a failed shadow admission never changes the response")
+	require.Contains(t, string(result.StructuredContent), names[2])
+	require.Equal(t, int32(1), admissions.Load(), "one shadow admission per request")
 }

@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -403,6 +405,52 @@ func (c *linearClient) comment(ctx context.Context, issue flakyIssue, body strin
 	}
 	if !out.CommentCreate.Success {
 		return errors.New("comment on " + issue.Identifier + ": comment not created")
+	}
+	return nil
+}
+
+// canceledStateID returns the team's canceled workflow state, taking the first
+// in board order when the team has more than one.
+func (c *linearClient) canceledStateID(ctx context.Context) (string, error) {
+	type state struct {
+		ID       string  `json:"id"`
+		Position float64 `json:"position"`
+	}
+	var out struct {
+		WorkflowStates struct {
+			Nodes []state `json:"nodes"`
+		} `json:"workflowStates"`
+	}
+	const query = `query($team: String!) {
+  workflowStates(filter: { team: { key: { eq: $team } }, type: { eq: "canceled" } }) { nodes { id position } }
+}`
+	if err := c.do(ctx, query, map[string]any{"team": c.team}, &out); err != nil {
+		return "", fmt.Errorf("find canceled state for team %s: %w", c.team, err)
+	}
+
+	states := out.WorkflowStates.Nodes
+	if len(states) == 0 {
+		return "", fmt.Errorf("team %s has no canceled state", c.team)
+	}
+	first := slices.MinFunc(states, func(a, b state) int { return cmp.Compare(a.Position, b.Position) })
+	return first.ID, nil
+}
+
+// cancel moves the ticket to the given canceled state. Closing a ticket makes
+// its test blocking again.
+func (c *linearClient) cancel(ctx context.Context, issue flakyIssue, stateID string) error {
+	var out struct {
+		IssueUpdate struct {
+			Success bool `json:"success"`
+		} `json:"issueUpdate"`
+	}
+	const mutation = `mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }`
+	input := map[string]any{"stateId": stateID}
+	if err := c.do(ctx, mutation, map[string]any{"id": issue.ID, "input": input}, &out); err != nil {
+		return fmt.Errorf("cancel %s: %w", issue.Identifier, err)
+	}
+	if !out.IssueUpdate.Success {
+		return errors.New("cancel " + issue.Identifier + ": update not applied")
 	}
 	return nil
 }

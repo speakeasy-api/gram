@@ -12,20 +12,20 @@ pin = true
 # file, you can specify more tools or different version of listed ones below as
 # well as overriding environment variables.
 [tools]
-"aqua:ariga/atlas" = "1.3.0"
+"aqua:ariga/atlas" = "1.3.4"
 "github:speakeasy-api/openapi" = "1.24.0"
 # Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
 # installed version and the version generation runs on can mismatch.
 # Installed as speakeasy-sdks, not speakeasy: the AI Control Plane CLI built
 # from cli/ is also called speakeasy, and the repo pin would otherwise shadow
 # it in every worktree. Tasks call speakeasy-sdks.
-"github:speakeasy-api/speakeasy" = { version = "1.796.1", rename_exe = "speakeasy-sdks" }
+"github:speakeasy-api/speakeasy" = { version = "1.803.0", rename_exe = "speakeasy-sdks" }
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
 gh = "2.100.0"
-go = "1.27.1"
-golangci-lint = "2.13.2"
+go = "1.27.3"
+golangci-lint = "2.14.0"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
@@ -34,8 +34,8 @@ melange = "0.56.5"
 # Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
 # aube resolves its own runtime and cannot read this file, so without that
 # mirror it falls through to whatever `node` is first on PATH.
-nodejs = "24.16.0"
-aube = "1.38.1"
+nodejs = "24.22.1"
+aube = "2.8.0"
 # Kept for `changeset publish` only. Changesets v3 asks manypkg for the
 # workspace tool, which answers pnpm because pnpm-workspace.yaml is present.
 # Release versioning uses the custom aube command in the release workflow.
@@ -46,9 +46,10 @@ aube = "1.38.1"
 # npm would ship verbatim.
 "github:pnpm/pnpm" = "11.19.0"
 watchexec = "2.5.1"
-uv = "0.12.1"
+uv = "0.13.4"
 yq = "4.53.3"
 hk = "1.56.1"
+zizmor = "1.30.1"
 pkl = "0.32.1"
 "github:temporalio/cli" = "1.8.2"
 "github:pb33f/openapi-changes" = "0.2.10"
@@ -56,6 +57,8 @@ pkl = "0.32.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
 buf = "1.72.0"
 ruff = "0.16.1"
+# Keep aligned with agents/code-runner/rust-toolchain.toml.
+rust = { version = "1.96.1", profile = "minimal", components = ["clippy", "rustfmt"] }
 "github:ast-grep/ast-grep" = "0.45.0"
 pitchfork = "2.22.0"
 "npm:@playwright/cli" = "0.1.17"
@@ -180,6 +183,9 @@ TUNNEL_GATEWAY_FORWARD_ADDR = ":{{env.TUNNEL_GATEWAY_FORWARD_PORT}}"
 ## signing key pair (GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS) into
 ## mise.local.toml; the local tunnel gateway is the issuer.
 GRAM_AUTHZ_ISSUER_URL = "http://localhost:{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
+## Remapped per worktree; provider and token are written by zero:code-mode.
+GRAM_CODE_RUNNER_PORT = "18081"
+GRAM_CODE_RUNTIME_URL = "http://127.0.0.1:{{env.GRAM_CODE_RUNNER_PORT}}"
 OPENROUTER_DEV_KEY = "unset"
 ## Evaluate local sigint messages when the platform inference key is configured.
 GRAM_SIGINT_ACK_ONLY = "false"
@@ -191,7 +197,7 @@ GRAM_DEVIDP_CONTROL_PORT = "35292"
 GRAM_DEVIDP_DASHBOARD_PORT = "35293"
 GRAM_DEVIDP_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_CONTROL_ADDRESS = "127.0.0.1:{{env.GRAM_DEVIDP_CONTROL_PORT}}"
-GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
+GRAM_DEVIDP_EXTERNAL_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
 GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2-1"
 GRAM_IDP_CLIENT_ID = "gram-local-dev"
@@ -210,6 +216,12 @@ GRAM_DEVIDP_BACKEND = "local"
 ## Points the Speakeasy server at the dev-idp's WorkOS surface. Constant across
 ## backends — the backend flag decides what serves it.
 WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
+# Google hosted-domain lookups for sign-in evidence go to the dev-idp mock.
+GRAM_GOOGLE_USERINFO_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos/google/userinfo"
+## Sign-in tier knobs for the local WorkOS emulator (set in mise.local.toml):
+##   DEVIDP_AUTHENTICATION_METHOD = "SSO" (default) | "GoogleOAuth" | "MicrosoftOAuth" | "MagicAuth" | "Password" | "none"
+##   DEVIDP_IDP_HOSTED_DOMAIN     = managed domain (default: the user's email domain; "none" = personal account)
+##   DEVIDP_IDP_TENANT_ID         = Microsoft tenant (default: a fixed work tenant; "consumer" = personal account)
 ## Real WorkOS API the workos backend proxies to.
 # GRAM_DEVIDP_WORKOS_UPSTREAM_URL = "https://api.workos.com"
 ## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.
@@ -263,6 +275,8 @@ SPEAKEASY_AI_API_URL = "{{env.GRAM_API_URL}}"
 SPEAKEASY_AI_SITE_URL = "{{env.GRAM_SITE_URL}}"
 SPEAKEASY_AI_LOG_PRETTY = { default = "{{env.GRAM_LOG_PRETTY}}" }
 VITE_DEV_HOSTNAMES = "localhost"
+GRAM_AGENTATION_PORT = "4747"
+VITE_AGENTATION_URL = "http://localhost:{{env.GRAM_AGENTATION_PORT}}"
 ## Base URL of the CDN serving the dashboard's static assets (e.g.
 ## https://cdn.dev.getgram.ai). Not a build-time setting: the dashboard
 ## container's nginx reads it at runtime to rewrite /assets/ URLs in
@@ -307,7 +321,8 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ## Speakeasy Assistant runtime settings ##
 ########################################
 ## Where assistant runtimes run.
-## Allowed values: local, flyio, gke.
+## Allowed values: local, gke. The server flag defaults to gke; local setup
+## writes local as described below.
 ## Left unset here so `./zero` / `mise run zero:assistants` can tell "not
 ## configured" from an intentional override in mise.local.toml or the
 ## environment. When unset, that task writes local defaults:

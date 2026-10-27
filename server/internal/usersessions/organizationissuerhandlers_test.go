@@ -90,6 +90,7 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 		TrustedRemoteSessionClientID: &organizationClientID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, "endpoint", created.AuthorizationServerMode)
 	require.Equal(t, organizationTargetID, *created.TrustedRemoteSessionIssuerID)
 	require.Equal(t, organizationClientID, *created.TrustedRemoteSessionClientID)
 	createAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerCreate)
@@ -370,7 +371,7 @@ func TestOrganizationUserSessionIssuersCRUDAndListIsolation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	listed, err := ti.service.ListIssuers(ctx, &orggen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil})
+	listed, err := ti.service.ListIssuers(ctx, &orggen.ListIssuersPayload{Cursor: nil, Limit: nil, Tier: new("organization"), SessionToken: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Items, 2)
 

@@ -116,7 +116,7 @@ var AdminMcpServerHealthRemoteSessionClient = Type("AdminMcpServerHealthRemoteSe
 
 var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessionIssuer", func() {
 	Description("The user session issuer that authenticates the server's users.")
-	Required("id", "slug", "classification", "authn_challenge_mode", "session_duration_hours", "attachment_scope", "use_authentication_host", "other_servers_using_issuer", "created_at", "sessions", "remote_session_clients")
+	Required("id", "slug", "classification", "authn_challenge_mode", "session_duration_hours", "attachment_scope", "use_authentication_host", "authorization_server_mode", "issuer_url_pinned", "other_servers_using_issuer", "created_at", "sessions", "remote_session_clients")
 
 	Attribute("id", String, "The user session issuer ID.")
 	Attribute("slug", String, "The issuer slug.")
@@ -132,6 +132,10 @@ var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessio
 		Enum("disabled", "presets", "reporting", "open")
 	})
 	Attribute("use_authentication_host", Boolean, "Whether the issuer announces the authentication host as its origin.")
+	Attribute("authorization_server_mode", String, "Which OAuth authorization server the issuer's MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).", func() {
+		Enum("endpoint", "shared")
+	})
+	Attribute("issuer_url_pinned", Boolean, "Whether a shared authorization server's issuer URL is pinned, so it stays the same if the deployment's hosts change.")
 	Attribute("trusted_remote_session", AdminMcpServerHealthTrustedRemoteSession, "Set when the issuer trusts an external authorization server's assertions.")
 	Attribute("other_servers_using_issuer", ArrayOf(AdminMcpServerHealthServerRef), "Other live servers in the project that share this issuer.")
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
@@ -140,7 +144,7 @@ var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessio
 })
 
 var AdminMcpServerToolCallOutcomes = Type("AdminMcpServerToolCallOutcomes", func() {
-	Description("Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.")
+	Description("Tool calls inside the window by outcome class. failed counts isError tool errors in 2xx/3xx responses and hook-reported tool errors; hosted rows recorded before 2026-10-15 and remote rows recorded before this change shipped still count as success.")
 	Required("success", "unauthorized", "client_error", "server_error", "blocked", "failed", "unknown")
 
 	Attribute("success", Int64)
@@ -158,7 +162,7 @@ var AdminMcpServerToolCallBucket = Type("AdminMcpServerToolCallBucket", func() {
 
 	Attribute("bucket_start", String, func() { Format(FormatDateTime) })
 	Attribute("total", Int64, "Tool calls in the bucket.")
-	Attribute("failed", Int64, "Failed tool calls in the bucket.")
+	Attribute("failed", Int64, "Tool calls in the bucket that failed with status 400 or above. Tool errors returned inside HTTP 200 (isError) are not counted here.")
 })
 
 var AdminMcpServerToolCalls = Type("AdminMcpServerToolCalls", func() {
@@ -175,6 +179,34 @@ var AdminMcpServerToolCalls = Type("AdminMcpServerToolCalls", func() {
 	Attribute("daily", ArrayOf(AdminMcpServerToolCallBucket), "Tool calls per bucket, oldest first.")
 })
 
+var AdminMcpServerHealthAuthClient = Type("AdminMcpServerHealthAuthClient", func() {
+	Description("One auth client the server offers for reaching its upstream. Never carries its name or header values.")
+	Required("id", "client_type", "source", "enabled", "server_count", "header_count")
+
+	Attribute("id", String, "Auth client id.", func() { Format(FormatUUID) })
+	Attribute("client_type", String, "How the client authenticates upstream.", func() {
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+	})
+	Attribute("source", String, "backfill when created from existing configuration, admin when an administrator created it.", func() {
+		Enum("backfill", "admin")
+	})
+	Attribute("enabled", Boolean, "Whether the client can be used.")
+	Attribute("remote_session_client_id", String, "The OAuth registration behind an OAuth-backed client.", func() { Format(FormatUUID) })
+	Attribute("server_count", Int, "Servers offering the client, this one included.")
+	Attribute("header_count", Int, "Headers the client sends upstream.")
+})
+
+var AdminMcpServerHealthUpstreamAuth = Type("AdminMcpServerHealthUpstreamAuth", func() {
+	Description("Whether the server's upstream needs authentication and the auth clients it offers.")
+	Required("status", "auth_clients")
+
+	Attribute("status", String, "configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.", func() {
+		Enum("configured", "setup_incomplete", "no_auth_required", "undecided")
+	})
+	Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication. Omitted while undecided.")
+	Attribute("auth_clients", ArrayOf(AdminMcpServerHealthAuthClient))
+})
+
 var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
 	Description("Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.")
 	Required("server", "correlation")
@@ -182,9 +214,10 @@ var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
 	Attribute("server", AdminMcpServerHealthServer)
 	Attribute("correlation", AdminMcpServerHealthCorrelation)
 	Attribute("legacy_auth", String, "Legacy authentication in force. Set only when the server has no user session issuer.", func() {
-		Enum("external_oauth", "oauth_proxy", "gram_private")
+		Enum("external_oauth", "gram_private")
 	})
 	Attribute("user_session_issuer", AdminMcpServerHealthUserSessionIssuer)
+	Attribute("upstream_auth", AdminMcpServerHealthUpstreamAuth, "How the server reaches its upstream. Omitted for toolset-only servers.")
 })
 
 // MCP parity: both methods are exposed through Staff Admin MCP (S-1121), the

@@ -11,10 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -39,7 +37,6 @@ func agentCredential() principalcredential.Credential {
 		ProjectID:        project,
 		Principal:        urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()),
 		AuthorizerUserID: "user-test",
-		Grants:           []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, uuid.NewString())},
 	}
 }
 
@@ -51,7 +48,6 @@ func TestMintAndValidate(t *testing.T) {
 		"workload": {
 			OrganizationID: "org-test", ProjectID: uuid.New(), AuthorizerUserID: "",
 			Principal: urn.NewWorkloadPrincipal(uuid.New(), "assistant-trigger:"+uuid.NewString()),
-			Grants:    []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, uuid.NewString())},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -67,15 +63,35 @@ func TestMintAndValidate(t *testing.T) {
 			require.Equal(t, c.Principal, got.Credential.Principal)
 			require.Equal(t, c.AuthorizerUserID, got.Credential.AuthorizerUserID)
 
-			expected, err := runtimepolicy.NewDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, c.Grants)
+			var signed jwt.MapClaims
+			_, _, err = jwt.NewParser().ParseUnverified(raw, &signed)
 			require.NoError(t, err)
-			canonical, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, expected)
-			require.NoError(t, err)
-			require.Equal(t, int32(runtimepolicy.CurrentDelegatedPolicyVersion), got.DelegatedGrantsVersion)
-			require.JSONEq(t, string(canonical), string(got.DelegatedGrants), "the signed grants are the canonical delegated policy")
-			require.Equal(t, expected.RuntimeGrants(), got.Credential.Grants)
+			require.NotContains(t, signed, "delegated_grants", "admission derives the policy, so the token carries no grants")
+			require.NotContains(t, signed, "delegated_grants_version")
 		})
 	}
+}
+
+func TestMintCarriesTheSelectionProfileVersion(t *testing.T) {
+	t.Parallel()
+	issuer := principalcredential.New(newSigner(t), nil)
+	c := agentCredential()
+	c.SelectionProfileVersionID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	raw, _, err := issuer.Mint(c)
+	require.NoError(t, err)
+	got, err := issuer.Validate(raw)
+	require.NoError(t, err)
+	require.Equal(t, c.SelectionProfileVersionID, got.Credential.SelectionProfileVersionID)
+
+	unbound, _, err := issuer.Mint(agentCredential())
+	require.NoError(t, err)
+	got, err = issuer.Validate(unbound)
+	require.NoError(t, err)
+	require.False(t, got.Credential.SelectionProfileVersionID.Valid)
+
+	c.SelectionProfileVersionID = uuid.NullUUID{UUID: uuid.Nil, Valid: true}
+	_, _, err = issuer.Mint(c)
+	require.ErrorIs(t, err, principalcredential.ErrInvalid)
 }
 
 func TestMintRejectsMalformedPrincipals(t *testing.T) {

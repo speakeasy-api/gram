@@ -30,6 +30,9 @@ type MintUserSessionRequestBody struct {
 	// Mutually exclusive with the other targets; exactly one must be set. Must be
 	// issuer-gated and live in the caller's project.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// An explicit discovery mode for a gateway Inspect connection. Valid only with
+	// meta_mcp_server_id. Omit to follow the gateway default.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 }
 
 // ListUserSessionsResponseBody is the type of the "userSessions" service
@@ -55,7 +58,7 @@ type ListFacetsResponseBody struct {
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
 	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
-	// to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
+	// to the bound /mcp/{slug} surface.
 	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
 	// Lifetime of the access token in seconds.
 	ExpiresIn int `form:"expires_in" json:"expires_in" xml:"expires_in"`
@@ -1643,6 +1646,7 @@ func NewMintUserSessionPayload(body *MintUserSessionRequestBody, sessionToken *s
 		ToolsetID:       body.ToolsetID,
 		McpServerID:     body.McpServerID,
 		MetaMcpServerID: body.MetaMcpServerID,
+		DiscoveryMode:   body.DiscoveryMode,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1673,6 +1677,11 @@ func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err e
 	}
 	if body.MetaMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
+		}
 	}
 	return
 }

@@ -106,6 +106,8 @@ vi.mock("@/components/require-scope", () => ({
 }));
 
 vi.mock("@/components/mcp-approvals/DecideAccessSheet", () => ({
+  POLICIES_UNAVAILABLE_REASON:
+    "Policy data could not be loaded — deciding now would not be enforced",
   DecideAccessSheet: ({
     disposition,
     members,

@@ -8,6 +8,8 @@ import (
 	v1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	storage "github.com/speakeasy-api/gram/infra/pkg/storage"
 	proto "google.golang.org/protobuf/proto"
+	maps "maps"
+	slices "slices"
 )
 
 var schemaGramSigintV1LakePrimary = parquet_go.NewSchema("gram.sigint.v1.Reading", parquet_go.Group{
@@ -30,6 +32,7 @@ var schemaGramSigintV1LakePrimary = parquet_go.NewSchema("gram.sigint.v1.Reading
 		"user_id":          parquet_go.Optional(parquet_go.String()),
 	}),
 	"assistant_id":    parquet_go.Optional(parquet_go.String()),
+	"attributes":      parquet_go.Map(parquet_go.String(), parquet_go.String()),
 	"billing_user_id": parquet_go.Optional(parquet_go.String()),
 	"choice": parquet_go.Optional(parquet_go.Group{
 		"__present":  parquet_go.Leaf(parquet_go.BooleanType),
@@ -43,18 +46,23 @@ var schemaGramSigintV1LakePrimary = parquet_go.NewSchema("gram.sigint.v1.Reading
 		"selected_signal_id":   parquet_go.Optional(parquet_go.String()),
 		"selected_signal_slug": parquet_go.Optional(parquet_go.String()),
 	}),
-	"compiler_version":      parquet_go.Optional(parquet_go.String()),
-	"configured_model":      parquet_go.Optional(parquet_go.String()),
-	"definition_hash":       parquet_go.Optional(parquet_go.String()),
-	"evaluated_at":          parquet_go.Optional(parquet_go.String()),
-	"evaluation_attempt_id": parquet_go.Optional(parquet_go.String()),
+	"compiler_version":        parquet_go.Optional(parquet_go.String()),
+	"configured_model":        parquet_go.Optional(parquet_go.String()),
+	"definition_hash":         parquet_go.Optional(parquet_go.String()),
+	"evaluated_at":            parquet_go.Optional(parquet_go.String()),
+	"evaluation_attempt_id":   parquet_go.Optional(parquet_go.String()),
+	"evaluation_requested_at": parquet_go.Optional(parquet_go.String()),
 	"event": parquet_go.Optional(parquet_go.Group{
 		"__oneof_context": parquet_go.Optional(parquet_go.Int(32)),
 		"__present":       parquet_go.Leaf(parquet_go.BooleanType),
 		"conversation_message": parquet_go.Optional(parquet_go.Group{
-			"__present":       parquet_go.Leaf(parquet_go.BooleanType),
-			"conversation_id": parquet_go.Optional(parquet_go.String()),
-			"role":            parquet_go.Optional(parquet_go.Int(32)),
+			"__present":           parquet_go.Leaf(parquet_go.BooleanType),
+			"capture_kind":        parquet_go.Optional(parquet_go.String()),
+			"conversation_id":     parquet_go.Optional(parquet_go.String()),
+			"generation":          parquet_go.Optional(parquet_go.Int(32)),
+			"original_message_id": parquet_go.Optional(parquet_go.String()),
+			"role":                parquet_go.Optional(parquet_go.Int(32)),
+			"sequence":            parquet_go.Optional(parquet_go.Int(64)),
 		}),
 		"id":          parquet_go.Optional(parquet_go.String()),
 		"kind":        parquet_go.Optional(parquet_go.String()),
@@ -66,7 +74,14 @@ var schemaGramSigintV1LakePrimary = parquet_go.NewSchema("gram.sigint.v1.Reading
 			"tool_name":     parquet_go.Optional(parquet_go.String()),
 		}),
 	}),
-	"id":     parquet_go.Optional(parquet_go.String()),
+	"id": parquet_go.Optional(parquet_go.String()),
+	"input": parquet_go.Optional(parquet_go.Group{
+		"__present":               parquet_go.Leaf(parquet_go.BooleanType),
+		"message_count":           parquet_go.Optional(parquet_go.Int(32)),
+		"requested_message_count": parquet_go.Optional(parquet_go.Int(32)),
+		"strategy":                parquet_go.Optional(parquet_go.String()),
+		"truncated":               parquet_go.Optional(parquet_go.Leaf(parquet_go.BooleanType)),
+	}),
 	"models": parquet_go.List(parquet_go.String()),
 	"multi_label": parquet_go.Optional(parquet_go.Group{
 		"__present": parquet_go.Leaf(parquet_go.BooleanType),
@@ -81,6 +96,7 @@ var schemaGramSigintV1LakePrimary = parquet_go.NewSchema("gram.sigint.v1.Reading
 	"project_id":      parquet_go.Optional(parquet_go.String()),
 	"provider":        parquet_go.Optional(parquet_go.String()),
 	"replayed":        parquet_go.Optional(parquet_go.Leaf(parquet_go.BooleanType)),
+	"run_id":          parquet_go.Optional(parquet_go.String()),
 	"score": parquet_go.Optional(parquet_go.Group{
 		"__present":  parquet_go.Leaf(parquet_go.BooleanType),
 		"confidence": parquet_go.Optional(parquet_go.Leaf(parquet_go.DoubleType)),
@@ -92,9 +108,10 @@ var schemaGramSigintV1LakePrimary = parquet_go.NewSchema("gram.sigint.v1.Reading
 		}),
 		"expected_index": parquet_go.Optional(parquet_go.Leaf(parquet_go.DoubleType)),
 	}),
-	"sensor_id":   parquet_go.Optional(parquet_go.String()),
-	"sensor_slug": parquet_go.Optional(parquet_go.String()),
-	"source":      parquet_go.Optional(parquet_go.String()),
+	"sensor_id":    parquet_go.Optional(parquet_go.String()),
+	"sensor_slug":  parquet_go.Optional(parquet_go.String()),
+	"source":       parquet_go.Optional(parquet_go.String()),
+	"trigger_kind": parquet_go.Optional(parquet_go.String()),
 })
 
 // GramSigintV1LakePrimary returns the generated storage binding for gram.sigint.v1.LakePrimary.
@@ -103,7 +120,7 @@ func GramSigintV1LakePrimary() storage.Definition {
 		Marker: &v1.LakePrimary{}, Payload: &v1.Reading{},
 		ProtoName: "gram.sigint.v1.LakePrimary", SubscriptionID: "gram-sigint-v1-lake-primary", TopicID: "gram-sigint-v1-reading", Bucket: "lake",
 		Partitioning:       v11.StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY,
-		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaGramSigintV1LakePrimary, Fingerprint: "e96361f898e72e7392a1eb9e86145ec8a5decb89877809201c5d3cb9006695de",
+		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaGramSigintV1LakePrimary, Fingerprint: "545901af292063a2d2c3997239090cd63415d3fac9757d1ff5525b01ee73a6dc",
 		Decode: func(data []byte, meta storage.Metadata) (parquet_go.Row, error) {
 			m := &v1.Reading{}
 			if err := proto.Unmarshal(data, m); err != nil {
@@ -116,7 +133,7 @@ func GramSigintV1LakePrimary() storage.Definition {
 
 // EncodeGramSigintV1LakePrimary maps typed protobuf accessors to explicit Parquet levels.
 func EncodeGramSigintV1LakePrimary(m *v1.Reading, meta storage.Metadata) parquet_go.Row {
-	var columns [60][]parquet_go.Value
+	var columns [74][]parquet_go.Value
 
 	var choice1 int32
 	if m.HasMultiLabel() {
@@ -200,191 +217,239 @@ func EncodeGramSigintV1LakePrimary(m *v1.Reading, meta storage.Metadata) parquet
 		columns[12] = append(columns[12], parquet_go.NullValue().Level(0, 0, 12))
 	}
 
-	if m.HasBillingUserId() {
-		columns[13] = append(columns[13], parquet_go.ByteArrayValue([]byte(m.GetBillingUserId())).Level(0, 1, 13))
-	} else {
+	values2 := m.GetAttributes()
+	if len(values2) == 0 {
 		columns[13] = append(columns[13], parquet_go.NullValue().Level(0, 0, 13))
+		columns[14] = append(columns[14], parquet_go.NullValue().Level(0, 0, 14))
+	} else {
+		keys5 := slices.Collect(maps.Keys(values2))
+		slices.Sort(keys5)
+		for i3, key6 := range keys5 {
+			rep4 := 0
+			if i3 > 0 {
+				rep4 = 1
+			}
+			columns[13] = append(columns[13], parquet_go.ByteArrayValue([]byte(key6)).Level(rep4, 1, 13))
+			columns[14] = append(columns[14], parquet_go.ByteArrayValue([]byte(values2[key6])).Level(rep4, 1, 14))
+		}
+	}
+
+	if m.HasBillingUserId() {
+		columns[15] = append(columns[15], parquet_go.ByteArrayValue([]byte(m.GetBillingUserId())).Level(0, 1, 15))
+	} else {
+		columns[15] = append(columns[15], parquet_go.NullValue().Level(0, 0, 15))
 	}
 
 	if m.HasChoice() {
-		columns[14] = append(columns[14], parquet_go.BooleanValue(true).Level(0, 1, 14))
+		columns[16] = append(columns[16], parquet_go.BooleanValue(true).Level(0, 1, 16))
 
 		if m.GetChoice().HasConfidence() {
-			columns[15] = append(columns[15], parquet_go.DoubleValue(m.GetChoice().GetConfidence()).Level(0, 2, 15))
+			columns[17] = append(columns[17], parquet_go.DoubleValue(m.GetChoice().GetConfidence()).Level(0, 2, 17))
 		} else {
-			columns[15] = append(columns[15], parquet_go.NullValue().Level(0, 1, 15))
+			columns[17] = append(columns[17], parquet_go.NullValue().Level(0, 1, 17))
 		}
 
-		values2 := m.GetChoice().GetDistribution()
-		if len(values2) == 0 {
-			columns[16] = append(columns[16], parquet_go.NullValue().Level(0, 1, 16))
-			columns[17] = append(columns[17], parquet_go.NullValue().Level(0, 1, 17))
+		values7 := m.GetChoice().GetDistribution()
+		if len(values7) == 0 {
 			columns[18] = append(columns[18], parquet_go.NullValue().Level(0, 1, 18))
 			columns[19] = append(columns[19], parquet_go.NullValue().Level(0, 1, 19))
+			columns[20] = append(columns[20], parquet_go.NullValue().Level(0, 1, 20))
+			columns[21] = append(columns[21], parquet_go.NullValue().Level(0, 1, 21))
 		} else {
-			for i3 := range values2 {
-				rep4 := 0
-				if i3 > 0 {
-					rep4 = 1
+			for i8 := range values7 {
+				rep9 := 0
+				if i8 > 0 {
+					rep9 = 1
 				}
-				columns[16] = append(columns[16], parquet_go.BooleanValue(true).Level(rep4, 2, 16))
+				columns[18] = append(columns[18], parquet_go.BooleanValue(true).Level(rep9, 2, 18))
 
-				if values2[i3].HasProbability() {
-					columns[17] = append(columns[17], parquet_go.DoubleValue(values2[i3].GetProbability()).Level(rep4, 3, 17))
+				if values7[i8].HasProbability() {
+					columns[19] = append(columns[19], parquet_go.DoubleValue(values7[i8].GetProbability()).Level(rep9, 3, 19))
 				} else {
-					columns[17] = append(columns[17], parquet_go.NullValue().Level(rep4, 2, 17))
-				}
-
-				if values2[i3].HasSignalId() {
-					columns[18] = append(columns[18], parquet_go.ByteArrayValue([]byte(values2[i3].GetSignalId())).Level(rep4, 3, 18))
-				} else {
-					columns[18] = append(columns[18], parquet_go.NullValue().Level(rep4, 2, 18))
+					columns[19] = append(columns[19], parquet_go.NullValue().Level(rep9, 2, 19))
 				}
 
-				if values2[i3].HasSignalSlug() {
-					columns[19] = append(columns[19], parquet_go.ByteArrayValue([]byte(values2[i3].GetSignalSlug())).Level(rep4, 3, 19))
+				if values7[i8].HasSignalId() {
+					columns[20] = append(columns[20], parquet_go.ByteArrayValue([]byte(values7[i8].GetSignalId())).Level(rep9, 3, 20))
 				} else {
-					columns[19] = append(columns[19], parquet_go.NullValue().Level(rep4, 2, 19))
+					columns[20] = append(columns[20], parquet_go.NullValue().Level(rep9, 2, 20))
+				}
+
+				if values7[i8].HasSignalSlug() {
+					columns[21] = append(columns[21], parquet_go.ByteArrayValue([]byte(values7[i8].GetSignalSlug())).Level(rep9, 3, 21))
+				} else {
+					columns[21] = append(columns[21], parquet_go.NullValue().Level(rep9, 2, 21))
 				}
 			}
 		}
 
 		if m.GetChoice().HasSelectedSignalId() {
-			columns[20] = append(columns[20], parquet_go.ByteArrayValue([]byte(m.GetChoice().GetSelectedSignalId())).Level(0, 2, 20))
+			columns[22] = append(columns[22], parquet_go.ByteArrayValue([]byte(m.GetChoice().GetSelectedSignalId())).Level(0, 2, 22))
 		} else {
-			columns[20] = append(columns[20], parquet_go.NullValue().Level(0, 1, 20))
+			columns[22] = append(columns[22], parquet_go.NullValue().Level(0, 1, 22))
 		}
 
 		if m.GetChoice().HasSelectedSignalSlug() {
-			columns[21] = append(columns[21], parquet_go.ByteArrayValue([]byte(m.GetChoice().GetSelectedSignalSlug())).Level(0, 2, 21))
+			columns[23] = append(columns[23], parquet_go.ByteArrayValue([]byte(m.GetChoice().GetSelectedSignalSlug())).Level(0, 2, 23))
 		} else {
-			columns[21] = append(columns[21], parquet_go.NullValue().Level(0, 1, 21))
+			columns[23] = append(columns[23], parquet_go.NullValue().Level(0, 1, 23))
 		}
 	} else {
-		columns[14] = append(columns[14], parquet_go.NullValue().Level(0, 0, 14))
-		columns[15] = append(columns[15], parquet_go.NullValue().Level(0, 0, 15))
 		columns[16] = append(columns[16], parquet_go.NullValue().Level(0, 0, 16))
 		columns[17] = append(columns[17], parquet_go.NullValue().Level(0, 0, 17))
 		columns[18] = append(columns[18], parquet_go.NullValue().Level(0, 0, 18))
 		columns[19] = append(columns[19], parquet_go.NullValue().Level(0, 0, 19))
 		columns[20] = append(columns[20], parquet_go.NullValue().Level(0, 0, 20))
 		columns[21] = append(columns[21], parquet_go.NullValue().Level(0, 0, 21))
-	}
-
-	if m.HasCompilerVersion() {
-		columns[22] = append(columns[22], parquet_go.ByteArrayValue([]byte(m.GetCompilerVersion())).Level(0, 1, 22))
-	} else {
 		columns[22] = append(columns[22], parquet_go.NullValue().Level(0, 0, 22))
-	}
-
-	if m.HasConfiguredModel() {
-		columns[23] = append(columns[23], parquet_go.ByteArrayValue([]byte(m.GetConfiguredModel())).Level(0, 1, 23))
-	} else {
 		columns[23] = append(columns[23], parquet_go.NullValue().Level(0, 0, 23))
 	}
 
-	if m.HasDefinitionHash() {
-		columns[24] = append(columns[24], parquet_go.ByteArrayValue([]byte(m.GetDefinitionHash())).Level(0, 1, 24))
+	if m.HasCompilerVersion() {
+		columns[24] = append(columns[24], parquet_go.ByteArrayValue([]byte(m.GetCompilerVersion())).Level(0, 1, 24))
 	} else {
 		columns[24] = append(columns[24], parquet_go.NullValue().Level(0, 0, 24))
 	}
 
-	if m.HasEvaluatedAt() {
-		columns[25] = append(columns[25], parquet_go.ByteArrayValue([]byte(m.GetEvaluatedAt())).Level(0, 1, 25))
+	if m.HasConfiguredModel() {
+		columns[25] = append(columns[25], parquet_go.ByteArrayValue([]byte(m.GetConfiguredModel())).Level(0, 1, 25))
 	} else {
 		columns[25] = append(columns[25], parquet_go.NullValue().Level(0, 0, 25))
 	}
 
-	if m.HasEvaluationAttemptId() {
-		columns[26] = append(columns[26], parquet_go.ByteArrayValue([]byte(m.GetEvaluationAttemptId())).Level(0, 1, 26))
+	if m.HasDefinitionHash() {
+		columns[26] = append(columns[26], parquet_go.ByteArrayValue([]byte(m.GetDefinitionHash())).Level(0, 1, 26))
 	} else {
 		columns[26] = append(columns[26], parquet_go.NullValue().Level(0, 0, 26))
 	}
 
+	if m.HasEvaluatedAt() {
+		columns[27] = append(columns[27], parquet_go.ByteArrayValue([]byte(m.GetEvaluatedAt())).Level(0, 1, 27))
+	} else {
+		columns[27] = append(columns[27], parquet_go.NullValue().Level(0, 0, 27))
+	}
+
+	if m.HasEvaluationAttemptId() {
+		columns[28] = append(columns[28], parquet_go.ByteArrayValue([]byte(m.GetEvaluationAttemptId())).Level(0, 1, 28))
+	} else {
+		columns[28] = append(columns[28], parquet_go.NullValue().Level(0, 0, 28))
+	}
+
+	if m.HasEvaluationRequestedAt() {
+		columns[29] = append(columns[29], parquet_go.ByteArrayValue([]byte(m.GetEvaluationRequestedAt())).Level(0, 1, 29))
+	} else {
+		columns[29] = append(columns[29], parquet_go.NullValue().Level(0, 0, 29))
+	}
+
 	if m.HasEvent() {
-		var choice5 int32
+		var choice10 int32
 		if m.GetEvent().HasConversationMessage() {
-			choice5 = 4
+			choice10 = 4
 		}
 		if m.GetEvent().HasToolCall() {
-			choice5 = 5
+			choice10 = 5
 		}
-		if choice5 != 0 {
-			columns[27] = append(columns[27], parquet_go.Int32Value(int32(choice5)).Level(0, 2, 27))
+		if choice10 != 0 {
+			columns[30] = append(columns[30], parquet_go.Int32Value(int32(choice10)).Level(0, 2, 30))
 		} else {
-			columns[27] = append(columns[27], parquet_go.NullValue().Level(0, 1, 27))
+			columns[30] = append(columns[30], parquet_go.NullValue().Level(0, 1, 30))
 		}
 
-		columns[28] = append(columns[28], parquet_go.BooleanValue(true).Level(0, 1, 28))
+		columns[31] = append(columns[31], parquet_go.BooleanValue(true).Level(0, 1, 31))
 
 		if m.GetEvent().HasConversationMessage() {
-			columns[29] = append(columns[29], parquet_go.BooleanValue(true).Level(0, 2, 29))
+			columns[32] = append(columns[32], parquet_go.BooleanValue(true).Level(0, 2, 32))
+
+			if m.GetEvent().GetConversationMessage().HasCaptureKind() {
+				columns[33] = append(columns[33], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetConversationMessage().GetCaptureKind())).Level(0, 3, 33))
+			} else {
+				columns[33] = append(columns[33], parquet_go.NullValue().Level(0, 2, 33))
+			}
 
 			if m.GetEvent().GetConversationMessage().HasConversationId() {
-				columns[30] = append(columns[30], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetConversationMessage().GetConversationId())).Level(0, 3, 30))
+				columns[34] = append(columns[34], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetConversationMessage().GetConversationId())).Level(0, 3, 34))
 			} else {
-				columns[30] = append(columns[30], parquet_go.NullValue().Level(0, 2, 30))
+				columns[34] = append(columns[34], parquet_go.NullValue().Level(0, 2, 34))
 			}
 
-			if m.GetEvent().GetConversationMessage().HasRole() {
-				columns[31] = append(columns[31], parquet_go.Int32Value(int32(m.GetEvent().GetConversationMessage().GetRole())).Level(0, 3, 31))
+			if m.GetEvent().GetConversationMessage().HasGeneration() {
+				columns[35] = append(columns[35], parquet_go.Int32Value(int32(m.GetEvent().GetConversationMessage().GetGeneration())).Level(0, 3, 35))
 			} else {
-				columns[31] = append(columns[31], parquet_go.NullValue().Level(0, 2, 31))
+				columns[35] = append(columns[35], parquet_go.NullValue().Level(0, 2, 35))
 			}
-		} else {
-			columns[29] = append(columns[29], parquet_go.NullValue().Level(0, 1, 29))
-			columns[30] = append(columns[30], parquet_go.NullValue().Level(0, 1, 30))
-			columns[31] = append(columns[31], parquet_go.NullValue().Level(0, 1, 31))
-		}
 
-		if m.GetEvent().HasId() {
-			columns[32] = append(columns[32], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetId())).Level(0, 2, 32))
-		} else {
-			columns[32] = append(columns[32], parquet_go.NullValue().Level(0, 1, 32))
-		}
-
-		if m.GetEvent().HasKind() {
-			columns[33] = append(columns[33], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetKind())).Level(0, 2, 33))
-		} else {
-			columns[33] = append(columns[33], parquet_go.NullValue().Level(0, 1, 33))
-		}
-
-		if m.GetEvent().HasOccurredAt() {
-			columns[34] = append(columns[34], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetOccurredAt())).Level(0, 2, 34))
-		} else {
-			columns[34] = append(columns[34], parquet_go.NullValue().Level(0, 1, 34))
-		}
-
-		if m.GetEvent().HasToolCall() {
-			columns[35] = append(columns[35], parquet_go.BooleanValue(true).Level(0, 2, 35))
-
-			if m.GetEvent().GetToolCall().HasMcpServerId() {
-				columns[36] = append(columns[36], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetToolCall().GetMcpServerId())).Level(0, 3, 36))
+			if m.GetEvent().GetConversationMessage().HasOriginalMessageId() {
+				columns[36] = append(columns[36], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetConversationMessage().GetOriginalMessageId())).Level(0, 3, 36))
 			} else {
 				columns[36] = append(columns[36], parquet_go.NullValue().Level(0, 2, 36))
 			}
 
-			if m.GetEvent().GetToolCall().HasToolCallId() {
-				columns[37] = append(columns[37], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetToolCall().GetToolCallId())).Level(0, 3, 37))
+			if m.GetEvent().GetConversationMessage().HasRole() {
+				columns[37] = append(columns[37], parquet_go.Int32Value(int32(m.GetEvent().GetConversationMessage().GetRole())).Level(0, 3, 37))
 			} else {
 				columns[37] = append(columns[37], parquet_go.NullValue().Level(0, 2, 37))
 			}
 
-			if m.GetEvent().GetToolCall().HasToolName() {
-				columns[38] = append(columns[38], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetToolCall().GetToolName())).Level(0, 3, 38))
+			if m.GetEvent().GetConversationMessage().HasSequence() {
+				columns[38] = append(columns[38], parquet_go.Int64Value(int64(m.GetEvent().GetConversationMessage().GetSequence())).Level(0, 3, 38))
 			} else {
 				columns[38] = append(columns[38], parquet_go.NullValue().Level(0, 2, 38))
 			}
 		} else {
+			columns[32] = append(columns[32], parquet_go.NullValue().Level(0, 1, 32))
+			columns[33] = append(columns[33], parquet_go.NullValue().Level(0, 1, 33))
+			columns[34] = append(columns[34], parquet_go.NullValue().Level(0, 1, 34))
 			columns[35] = append(columns[35], parquet_go.NullValue().Level(0, 1, 35))
 			columns[36] = append(columns[36], parquet_go.NullValue().Level(0, 1, 36))
 			columns[37] = append(columns[37], parquet_go.NullValue().Level(0, 1, 37))
 			columns[38] = append(columns[38], parquet_go.NullValue().Level(0, 1, 38))
 		}
+
+		if m.GetEvent().HasId() {
+			columns[39] = append(columns[39], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetId())).Level(0, 2, 39))
+		} else {
+			columns[39] = append(columns[39], parquet_go.NullValue().Level(0, 1, 39))
+		}
+
+		if m.GetEvent().HasKind() {
+			columns[40] = append(columns[40], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetKind())).Level(0, 2, 40))
+		} else {
+			columns[40] = append(columns[40], parquet_go.NullValue().Level(0, 1, 40))
+		}
+
+		if m.GetEvent().HasOccurredAt() {
+			columns[41] = append(columns[41], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetOccurredAt())).Level(0, 2, 41))
+		} else {
+			columns[41] = append(columns[41], parquet_go.NullValue().Level(0, 1, 41))
+		}
+
+		if m.GetEvent().HasToolCall() {
+			columns[42] = append(columns[42], parquet_go.BooleanValue(true).Level(0, 2, 42))
+
+			if m.GetEvent().GetToolCall().HasMcpServerId() {
+				columns[43] = append(columns[43], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetToolCall().GetMcpServerId())).Level(0, 3, 43))
+			} else {
+				columns[43] = append(columns[43], parquet_go.NullValue().Level(0, 2, 43))
+			}
+
+			if m.GetEvent().GetToolCall().HasToolCallId() {
+				columns[44] = append(columns[44], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetToolCall().GetToolCallId())).Level(0, 3, 44))
+			} else {
+				columns[44] = append(columns[44], parquet_go.NullValue().Level(0, 2, 44))
+			}
+
+			if m.GetEvent().GetToolCall().HasToolName() {
+				columns[45] = append(columns[45], parquet_go.ByteArrayValue([]byte(m.GetEvent().GetToolCall().GetToolName())).Level(0, 3, 45))
+			} else {
+				columns[45] = append(columns[45], parquet_go.NullValue().Level(0, 2, 45))
+			}
+		} else {
+			columns[42] = append(columns[42], parquet_go.NullValue().Level(0, 1, 42))
+			columns[43] = append(columns[43], parquet_go.NullValue().Level(0, 1, 43))
+			columns[44] = append(columns[44], parquet_go.NullValue().Level(0, 1, 44))
+			columns[45] = append(columns[45], parquet_go.NullValue().Level(0, 1, 45))
+		}
 	} else {
-		columns[27] = append(columns[27], parquet_go.NullValue().Level(0, 0, 27))
-		columns[28] = append(columns[28], parquet_go.NullValue().Level(0, 0, 28))
-		columns[29] = append(columns[29], parquet_go.NullValue().Level(0, 0, 29))
 		columns[30] = append(columns[30], parquet_go.NullValue().Level(0, 0, 30))
 		columns[31] = append(columns[31], parquet_go.NullValue().Level(0, 0, 31))
 		columns[32] = append(columns[32], parquet_go.NullValue().Level(0, 0, 32))
@@ -394,64 +459,8 @@ func EncodeGramSigintV1LakePrimary(m *v1.Reading, meta storage.Metadata) parquet
 		columns[36] = append(columns[36], parquet_go.NullValue().Level(0, 0, 36))
 		columns[37] = append(columns[37], parquet_go.NullValue().Level(0, 0, 37))
 		columns[38] = append(columns[38], parquet_go.NullValue().Level(0, 0, 38))
-	}
-
-	if m.HasId() {
-		columns[39] = append(columns[39], parquet_go.ByteArrayValue([]byte(m.GetId())).Level(0, 1, 39))
-	} else {
 		columns[39] = append(columns[39], parquet_go.NullValue().Level(0, 0, 39))
-	}
-
-	values6 := m.GetModels()
-	if len(values6) == 0 {
 		columns[40] = append(columns[40], parquet_go.NullValue().Level(0, 0, 40))
-	} else {
-		for i7 := range values6 {
-			rep8 := 0
-			if i7 > 0 {
-				rep8 = 1
-			}
-			columns[40] = append(columns[40], parquet_go.ByteArrayValue([]byte(values6[i7])).Level(rep8, 1, 40))
-		}
-	}
-
-	if m.HasMultiLabel() {
-		columns[41] = append(columns[41], parquet_go.BooleanValue(true).Level(0, 1, 41))
-
-		values9 := m.GetMultiLabel().GetSignals()
-		if len(values9) == 0 {
-			columns[42] = append(columns[42], parquet_go.NullValue().Level(0, 1, 42))
-			columns[43] = append(columns[43], parquet_go.NullValue().Level(0, 1, 43))
-			columns[44] = append(columns[44], parquet_go.NullValue().Level(0, 1, 44))
-			columns[45] = append(columns[45], parquet_go.NullValue().Level(0, 1, 45))
-		} else {
-			for i10 := range values9 {
-				rep11 := 0
-				if i10 > 0 {
-					rep11 = 1
-				}
-				columns[42] = append(columns[42], parquet_go.BooleanValue(true).Level(rep11, 2, 42))
-
-				if values9[i10].HasProbability() {
-					columns[43] = append(columns[43], parquet_go.DoubleValue(values9[i10].GetProbability()).Level(rep11, 3, 43))
-				} else {
-					columns[43] = append(columns[43], parquet_go.NullValue().Level(rep11, 2, 43))
-				}
-
-				if values9[i10].HasSignalId() {
-					columns[44] = append(columns[44], parquet_go.ByteArrayValue([]byte(values9[i10].GetSignalId())).Level(rep11, 3, 44))
-				} else {
-					columns[44] = append(columns[44], parquet_go.NullValue().Level(rep11, 2, 44))
-				}
-
-				if values9[i10].HasSignalSlug() {
-					columns[45] = append(columns[45], parquet_go.ByteArrayValue([]byte(values9[i10].GetSignalSlug())).Level(rep11, 3, 45))
-				} else {
-					columns[45] = append(columns[45], parquet_go.NullValue().Level(rep11, 2, 45))
-				}
-			}
-		}
-	} else {
 		columns[41] = append(columns[41], parquet_go.NullValue().Level(0, 0, 41))
 		columns[42] = append(columns[42], parquet_go.NullValue().Level(0, 0, 42))
 		columns[43] = append(columns[43], parquet_go.NullValue().Level(0, 0, 43))
@@ -459,104 +468,213 @@ func EncodeGramSigintV1LakePrimary(m *v1.Reading, meta storage.Metadata) parquet
 		columns[45] = append(columns[45], parquet_go.NullValue().Level(0, 0, 45))
 	}
 
-	if m.HasOrganizationId() {
-		columns[46] = append(columns[46], parquet_go.ByteArrayValue([]byte(m.GetOrganizationId())).Level(0, 1, 46))
+	if m.HasId() {
+		columns[46] = append(columns[46], parquet_go.ByteArrayValue([]byte(m.GetId())).Level(0, 1, 46))
 	} else {
 		columns[46] = append(columns[46], parquet_go.NullValue().Level(0, 0, 46))
 	}
 
-	if m.HasProjectId() {
-		columns[47] = append(columns[47], parquet_go.ByteArrayValue([]byte(m.GetProjectId())).Level(0, 1, 47))
-	} else {
-		columns[47] = append(columns[47], parquet_go.NullValue().Level(0, 0, 47))
-	}
+	if m.HasInput() {
+		columns[47] = append(columns[47], parquet_go.BooleanValue(true).Level(0, 1, 47))
 
-	if m.HasProvider() {
-		columns[48] = append(columns[48], parquet_go.ByteArrayValue([]byte(m.GetProvider())).Level(0, 1, 48))
-	} else {
-		columns[48] = append(columns[48], parquet_go.NullValue().Level(0, 0, 48))
-	}
+		if m.GetInput().HasMessageCount() {
+			columns[48] = append(columns[48], parquet_go.Int32Value(int32(m.GetInput().GetMessageCount())).Level(0, 2, 48))
+		} else {
+			columns[48] = append(columns[48], parquet_go.NullValue().Level(0, 1, 48))
+		}
 
-	if m.HasReplayed() {
-		columns[49] = append(columns[49], parquet_go.BooleanValue(m.GetReplayed()).Level(0, 1, 49))
-	} else {
-		columns[49] = append(columns[49], parquet_go.NullValue().Level(0, 0, 49))
-	}
+		if m.GetInput().HasRequestedMessageCount() {
+			columns[49] = append(columns[49], parquet_go.Int32Value(int32(m.GetInput().GetRequestedMessageCount())).Level(0, 2, 49))
+		} else {
+			columns[49] = append(columns[49], parquet_go.NullValue().Level(0, 1, 49))
+		}
 
-	if m.HasScore() {
-		columns[50] = append(columns[50], parquet_go.BooleanValue(true).Level(0, 1, 50))
+		if m.GetInput().HasStrategy() {
+			columns[50] = append(columns[50], parquet_go.ByteArrayValue([]byte(m.GetInput().GetStrategy())).Level(0, 2, 50))
+		} else {
+			columns[50] = append(columns[50], parquet_go.NullValue().Level(0, 1, 50))
+		}
 
-		if m.GetScore().HasConfidence() {
-			columns[51] = append(columns[51], parquet_go.DoubleValue(m.GetScore().GetConfidence()).Level(0, 2, 51))
+		if m.GetInput().HasTruncated() {
+			columns[51] = append(columns[51], parquet_go.BooleanValue(m.GetInput().GetTruncated()).Level(0, 2, 51))
 		} else {
 			columns[51] = append(columns[51], parquet_go.NullValue().Level(0, 1, 51))
 		}
+	} else {
+		columns[47] = append(columns[47], parquet_go.NullValue().Level(0, 0, 47))
+		columns[48] = append(columns[48], parquet_go.NullValue().Level(0, 0, 48))
+		columns[49] = append(columns[49], parquet_go.NullValue().Level(0, 0, 49))
+		columns[50] = append(columns[50], parquet_go.NullValue().Level(0, 0, 50))
+		columns[51] = append(columns[51], parquet_go.NullValue().Level(0, 0, 51))
+	}
 
-		values12 := m.GetScore().GetDistribution()
-		if len(values12) == 0 {
-			columns[52] = append(columns[52], parquet_go.NullValue().Level(0, 1, 52))
-			columns[53] = append(columns[53], parquet_go.NullValue().Level(0, 1, 53))
+	values11 := m.GetModels()
+	if len(values11) == 0 {
+		columns[52] = append(columns[52], parquet_go.NullValue().Level(0, 0, 52))
+	} else {
+		for i12 := range values11 {
+			rep13 := 0
+			if i12 > 0 {
+				rep13 = 1
+			}
+			columns[52] = append(columns[52], parquet_go.ByteArrayValue([]byte(values11[i12])).Level(rep13, 1, 52))
+		}
+	}
+
+	if m.HasMultiLabel() {
+		columns[53] = append(columns[53], parquet_go.BooleanValue(true).Level(0, 1, 53))
+
+		values14 := m.GetMultiLabel().GetSignals()
+		if len(values14) == 0 {
 			columns[54] = append(columns[54], parquet_go.NullValue().Level(0, 1, 54))
 			columns[55] = append(columns[55], parquet_go.NullValue().Level(0, 1, 55))
+			columns[56] = append(columns[56], parquet_go.NullValue().Level(0, 1, 56))
+			columns[57] = append(columns[57], parquet_go.NullValue().Level(0, 1, 57))
 		} else {
-			for i13 := range values12 {
-				rep14 := 0
-				if i13 > 0 {
-					rep14 = 1
+			for i15 := range values14 {
+				rep16 := 0
+				if i15 > 0 {
+					rep16 = 1
 				}
-				columns[52] = append(columns[52], parquet_go.BooleanValue(true).Level(rep14, 2, 52))
+				columns[54] = append(columns[54], parquet_go.BooleanValue(true).Level(rep16, 2, 54))
 
-				if values12[i13].HasProbability() {
-					columns[53] = append(columns[53], parquet_go.DoubleValue(values12[i13].GetProbability()).Level(rep14, 3, 53))
+				if values14[i15].HasProbability() {
+					columns[55] = append(columns[55], parquet_go.DoubleValue(values14[i15].GetProbability()).Level(rep16, 3, 55))
 				} else {
-					columns[53] = append(columns[53], parquet_go.NullValue().Level(rep14, 2, 53))
-				}
-
-				if values12[i13].HasSignalId() {
-					columns[54] = append(columns[54], parquet_go.ByteArrayValue([]byte(values12[i13].GetSignalId())).Level(rep14, 3, 54))
-				} else {
-					columns[54] = append(columns[54], parquet_go.NullValue().Level(rep14, 2, 54))
+					columns[55] = append(columns[55], parquet_go.NullValue().Level(rep16, 2, 55))
 				}
 
-				if values12[i13].HasSignalSlug() {
-					columns[55] = append(columns[55], parquet_go.ByteArrayValue([]byte(values12[i13].GetSignalSlug())).Level(rep14, 3, 55))
+				if values14[i15].HasSignalId() {
+					columns[56] = append(columns[56], parquet_go.ByteArrayValue([]byte(values14[i15].GetSignalId())).Level(rep16, 3, 56))
 				} else {
-					columns[55] = append(columns[55], parquet_go.NullValue().Level(rep14, 2, 55))
+					columns[56] = append(columns[56], parquet_go.NullValue().Level(rep16, 2, 56))
+				}
+
+				if values14[i15].HasSignalSlug() {
+					columns[57] = append(columns[57], parquet_go.ByteArrayValue([]byte(values14[i15].GetSignalSlug())).Level(rep16, 3, 57))
+				} else {
+					columns[57] = append(columns[57], parquet_go.NullValue().Level(rep16, 2, 57))
+				}
+			}
+		}
+	} else {
+		columns[53] = append(columns[53], parquet_go.NullValue().Level(0, 0, 53))
+		columns[54] = append(columns[54], parquet_go.NullValue().Level(0, 0, 54))
+		columns[55] = append(columns[55], parquet_go.NullValue().Level(0, 0, 55))
+		columns[56] = append(columns[56], parquet_go.NullValue().Level(0, 0, 56))
+		columns[57] = append(columns[57], parquet_go.NullValue().Level(0, 0, 57))
+	}
+
+	if m.HasOrganizationId() {
+		columns[58] = append(columns[58], parquet_go.ByteArrayValue([]byte(m.GetOrganizationId())).Level(0, 1, 58))
+	} else {
+		columns[58] = append(columns[58], parquet_go.NullValue().Level(0, 0, 58))
+	}
+
+	if m.HasProjectId() {
+		columns[59] = append(columns[59], parquet_go.ByteArrayValue([]byte(m.GetProjectId())).Level(0, 1, 59))
+	} else {
+		columns[59] = append(columns[59], parquet_go.NullValue().Level(0, 0, 59))
+	}
+
+	if m.HasProvider() {
+		columns[60] = append(columns[60], parquet_go.ByteArrayValue([]byte(m.GetProvider())).Level(0, 1, 60))
+	} else {
+		columns[60] = append(columns[60], parquet_go.NullValue().Level(0, 0, 60))
+	}
+
+	if m.HasReplayed() {
+		columns[61] = append(columns[61], parquet_go.BooleanValue(m.GetReplayed()).Level(0, 1, 61))
+	} else {
+		columns[61] = append(columns[61], parquet_go.NullValue().Level(0, 0, 61))
+	}
+
+	if m.HasRunId() {
+		columns[62] = append(columns[62], parquet_go.ByteArrayValue([]byte(m.GetRunId())).Level(0, 1, 62))
+	} else {
+		columns[62] = append(columns[62], parquet_go.NullValue().Level(0, 0, 62))
+	}
+
+	if m.HasScore() {
+		columns[63] = append(columns[63], parquet_go.BooleanValue(true).Level(0, 1, 63))
+
+		if m.GetScore().HasConfidence() {
+			columns[64] = append(columns[64], parquet_go.DoubleValue(m.GetScore().GetConfidence()).Level(0, 2, 64))
+		} else {
+			columns[64] = append(columns[64], parquet_go.NullValue().Level(0, 1, 64))
+		}
+
+		values17 := m.GetScore().GetDistribution()
+		if len(values17) == 0 {
+			columns[65] = append(columns[65], parquet_go.NullValue().Level(0, 1, 65))
+			columns[66] = append(columns[66], parquet_go.NullValue().Level(0, 1, 66))
+			columns[67] = append(columns[67], parquet_go.NullValue().Level(0, 1, 67))
+			columns[68] = append(columns[68], parquet_go.NullValue().Level(0, 1, 68))
+		} else {
+			for i18 := range values17 {
+				rep19 := 0
+				if i18 > 0 {
+					rep19 = 1
+				}
+				columns[65] = append(columns[65], parquet_go.BooleanValue(true).Level(rep19, 2, 65))
+
+				if values17[i18].HasProbability() {
+					columns[66] = append(columns[66], parquet_go.DoubleValue(values17[i18].GetProbability()).Level(rep19, 3, 66))
+				} else {
+					columns[66] = append(columns[66], parquet_go.NullValue().Level(rep19, 2, 66))
+				}
+
+				if values17[i18].HasSignalId() {
+					columns[67] = append(columns[67], parquet_go.ByteArrayValue([]byte(values17[i18].GetSignalId())).Level(rep19, 3, 67))
+				} else {
+					columns[67] = append(columns[67], parquet_go.NullValue().Level(rep19, 2, 67))
+				}
+
+				if values17[i18].HasSignalSlug() {
+					columns[68] = append(columns[68], parquet_go.ByteArrayValue([]byte(values17[i18].GetSignalSlug())).Level(rep19, 3, 68))
+				} else {
+					columns[68] = append(columns[68], parquet_go.NullValue().Level(rep19, 2, 68))
 				}
 			}
 		}
 
 		if m.GetScore().HasExpectedIndex() {
-			columns[56] = append(columns[56], parquet_go.DoubleValue(m.GetScore().GetExpectedIndex()).Level(0, 2, 56))
+			columns[69] = append(columns[69], parquet_go.DoubleValue(m.GetScore().GetExpectedIndex()).Level(0, 2, 69))
 		} else {
-			columns[56] = append(columns[56], parquet_go.NullValue().Level(0, 1, 56))
+			columns[69] = append(columns[69], parquet_go.NullValue().Level(0, 1, 69))
 		}
 	} else {
-		columns[50] = append(columns[50], parquet_go.NullValue().Level(0, 0, 50))
-		columns[51] = append(columns[51], parquet_go.NullValue().Level(0, 0, 51))
-		columns[52] = append(columns[52], parquet_go.NullValue().Level(0, 0, 52))
-		columns[53] = append(columns[53], parquet_go.NullValue().Level(0, 0, 53))
-		columns[54] = append(columns[54], parquet_go.NullValue().Level(0, 0, 54))
-		columns[55] = append(columns[55], parquet_go.NullValue().Level(0, 0, 55))
-		columns[56] = append(columns[56], parquet_go.NullValue().Level(0, 0, 56))
+		columns[63] = append(columns[63], parquet_go.NullValue().Level(0, 0, 63))
+		columns[64] = append(columns[64], parquet_go.NullValue().Level(0, 0, 64))
+		columns[65] = append(columns[65], parquet_go.NullValue().Level(0, 0, 65))
+		columns[66] = append(columns[66], parquet_go.NullValue().Level(0, 0, 66))
+		columns[67] = append(columns[67], parquet_go.NullValue().Level(0, 0, 67))
+		columns[68] = append(columns[68], parquet_go.NullValue().Level(0, 0, 68))
+		columns[69] = append(columns[69], parquet_go.NullValue().Level(0, 0, 69))
 	}
 
 	if m.HasSensorId() {
-		columns[57] = append(columns[57], parquet_go.ByteArrayValue([]byte(m.GetSensorId())).Level(0, 1, 57))
+		columns[70] = append(columns[70], parquet_go.ByteArrayValue([]byte(m.GetSensorId())).Level(0, 1, 70))
 	} else {
-		columns[57] = append(columns[57], parquet_go.NullValue().Level(0, 0, 57))
+		columns[70] = append(columns[70], parquet_go.NullValue().Level(0, 0, 70))
 	}
 
 	if m.HasSensorSlug() {
-		columns[58] = append(columns[58], parquet_go.ByteArrayValue([]byte(m.GetSensorSlug())).Level(0, 1, 58))
+		columns[71] = append(columns[71], parquet_go.ByteArrayValue([]byte(m.GetSensorSlug())).Level(0, 1, 71))
 	} else {
-		columns[58] = append(columns[58], parquet_go.NullValue().Level(0, 0, 58))
+		columns[71] = append(columns[71], parquet_go.NullValue().Level(0, 0, 71))
 	}
 
 	if m.HasSource() {
-		columns[59] = append(columns[59], parquet_go.ByteArrayValue([]byte(m.GetSource())).Level(0, 1, 59))
+		columns[72] = append(columns[72], parquet_go.ByteArrayValue([]byte(m.GetSource())).Level(0, 1, 72))
 	} else {
-		columns[59] = append(columns[59], parquet_go.NullValue().Level(0, 0, 59))
+		columns[72] = append(columns[72], parquet_go.NullValue().Level(0, 0, 72))
+	}
+
+	if m.HasTriggerKind() {
+		columns[73] = append(columns[73], parquet_go.ByteArrayValue([]byte(m.GetTriggerKind())).Level(0, 1, 73))
+	} else {
+		columns[73] = append(columns[73], parquet_go.NullValue().Level(0, 0, 73))
 	}
 
 	return parquet_go.MakeRow(columns[:]...)

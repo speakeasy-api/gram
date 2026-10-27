@@ -63,6 +63,10 @@ type signalConfiguration struct {
 }
 
 type sensorConfiguration struct {
+	// InputStrategy selects the context supplied for each target message.
+	InputStrategy string `json:"input_strategy"`
+	// WindowSize includes the target and is bounded from two to ten.
+	WindowSize      int                   `json:"window_size"`
 	Enabled         bool                  `json:"enabled"`
 	ID              string                `json:"id"`
 	Name            string                `json:"name"`
@@ -323,7 +327,7 @@ func signalProjections(state sigint.AuthoringState) map[string]signalConfigurati
 }
 
 func projectSensor(sensor *types.SigintSensor, signals map[string]signalConfiguration) sensorConfiguration {
-	result := sensorConfiguration{ID: sensor.ID, Name: sensor.Name, Slug: string(sensor.Slug), Description: sensor.Description, Instructions: sensor.Instructions, Mode: string(sensor.Mode), MatchExpression: sensor.MatchExpression, Enabled: sensor.Enabled, Signals: []signalConfiguration{}, Ready: true, Issues: []string{}}
+	result := sensorConfiguration{ID: sensor.ID, Name: sensor.Name, Slug: string(sensor.Slug), Description: sensor.Description, Instructions: sensor.Instructions, Mode: string(sensor.Mode), MatchExpression: sensor.MatchExpression, Enabled: sensor.Enabled, InputStrategy: string(sensor.InputStrategy), WindowSize: sensor.WindowSize, Signals: []signalConfiguration{}, Ready: true, Issues: []string{}}
 	for _, id := range sensor.SignalIds {
 		if signal, ok := signals[id]; ok {
 			result.Signals = append(result.Signals, signal)
@@ -400,7 +404,7 @@ func signalToolError(err error) (*mcp.CallToolResult, bool) {
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shareable.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
-			code, message = "invalid_request", "Check the bounded proposal, exact target, signal references, mode and boolean matching expression."
+			code, message = "invalid_request", "Check the bounded proposal, exact target, signal references, mode, message context settings and boolean matching expression."
 		case oops.CodeConflict:
 			code, message = "conflict", "The proposal conflicts with current configuration or the idempotency key. Read and preview again; do not change input when retrying a committed request."
 		case oops.CodeForbidden, oops.CodeUnauthorized:

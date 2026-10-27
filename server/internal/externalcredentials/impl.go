@@ -1023,7 +1023,10 @@ type gcpColumns struct {
 // Identity Federation, impersonation, or ambient) follows from which fields are
 // set.
 func (s *Service) resolveGcpColumns(ctx context.Context, logger *slog.Logger, in gcpCredentialInput) (gcpColumns, error) {
+	// Service account emails are case-insensitive; store one form so IAM
+	// members built from it always match.
 	impersonate := conv.PtrToPGTextTrimmed(in.impersonateServiceAccount)
+	impersonate.String = strings.ToLower(impersonate.String)
 	poolID := conv.PtrToPGTextTrimmed(in.wifPoolID)
 	providerID := conv.PtrToPGTextTrimmed(in.wifProviderID)
 	projectNumber := conv.PtrToPGTextTrimmed(in.wifProjectNumber)

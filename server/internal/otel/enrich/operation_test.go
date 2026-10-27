@@ -236,6 +236,39 @@ func TestOperationForCodex(t *testing.T) {
 	})
 }
 
+func TestAgentAttributesForGateway(t *testing.T) {
+	t.Parallel()
+
+	record := inboundTestLog(dialect.GatewayLogScope, "gram-server", "execute_tool",
+		logStringAttribute("gen_ai.operation.name", "execute_tool"),
+		logStringAttribute("gen_ai.tool.call.id", "call-1"),
+		logStringAttribute("gen_ai.tool.name", "list_repos"),
+		logStringAttribute("gen_ai.conversation.id", "mcp-session-1"),
+		logStringAttribute("user.id", "ext-user-1"),
+		logStringAttribute("user.email", "dev@example.com"),
+		logStringAttribute("gram.toolset.slug", "github"),
+		logStringAttribute("gram.mcp.client.name", "claude-code"),
+		logStringAttribute("error.type", "forbidden"),
+		logStringAttribute("error.message", "blocked by policy"),
+		inboundTestDoubleAttribute("gram.tool_call.duration", 1.25),
+	)
+
+	attrs := agentAttributes(t, record)
+	require.Equal(t, dialect.EventTypeToolCallResult, attrs[AgentEventTypeKey].AsString(), "the one record is the finished call")
+	require.Equal(t, "claude-code", attrs[AgentSurfaceKey].AsString())
+	require.NotContains(t, attrs, AgentProviderKey, "a tool call involves no model provider")
+	require.Equal(t, "call-1", attrs[AgentEventIDKey].AsString())
+	require.Equal(t, "mcp-session-1", attrs[AgentSessionIDKey].AsString())
+	require.Equal(t, "ext-user-1", attrs[AgentExternalUserIDKey].AsString())
+	require.Equal(t, "dev@example.com", attrs[AgentUserEmailKey].AsString())
+	require.Equal(t, "list_repos", attrs[AgentToolNameKey].AsString())
+	require.Equal(t, "list_repos", attrs[AgentMCPToolNameKey].AsString())
+	require.Equal(t, "github", attrs[AgentMCPServerNameKey].AsString())
+	require.Equal(t, dialect.OutcomeError, attrs[AgentOutcomeKey].AsString())
+	require.Equal(t, "blocked by policy", attrs[AgentOutcomeMessageKey].AsString())
+	require.Equal(t, int64(1_250_000_000), attrs[AgentDurationNanoKey].AsInt64())
+}
+
 func TestOperationForSemconv(t *testing.T) {
 	t.Parallel()
 

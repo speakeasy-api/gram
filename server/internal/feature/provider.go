@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 type Provider interface {
@@ -138,6 +139,38 @@ func FlagVariant(ctx context.Context, provider Provider, flag Flag, distinctID s
 	return variant, nil
 }
 
+// LocalVariantProvider is implemented by providers that can resolve a
+// multivariate flag's variant from cached definitions alone, using person
+// properties the caller supplies. Like IsFlagEnabledLocal it never calls out,
+// so it suits hot paths.
+type LocalVariantProvider interface {
+	FlagVariantLocal(ctx context.Context, flag Flag, distinctID string, groups, personProperties map[string]string) (Variant, error)
+}
+
+// FlagVariantLocal resolves a multivariate flag's variant locally, returning
+// "" for providers without local variant evaluation, when no variant matched,
+// or when the definitions cannot decide.
+func FlagVariantLocal(ctx context.Context, provider Provider, flag Flag, distinctID string, groups, personProperties map[string]string) (Variant, error) {
+	if provider == nil {
+		return "", nil
+	}
+	resolver, ok := provider.(LocalVariantProvider)
+	if !ok {
+		return "", nil
+	}
+	variant, err := resolver.FlagVariantLocal(ctx, flag, distinctID, groups, personProperties)
+	if err != nil {
+		return "", fmt.Errorf("resolve local feature flag variant %q: %w", flag, err)
+	}
+	return variant, nil
+}
+
+// FlagVariantLocal ignores person properties: in-memory variants are keyed by
+// distinct ID only.
+func (imp *InMemory) FlagVariantLocal(ctx context.Context, flag Flag, distinctID string, groups, _ map[string]string) (Variant, error) {
+	return imp.FlagVariant(ctx, flag, distinctID, groups)
+}
+
 // Evaluation reports whether a flag provider reached an authoritative decision.
 // It is intentionally separate from Provider so existing feature checks can keep
 // their bool-only contract while safety-sensitive callers can distinguish an
@@ -156,6 +189,14 @@ type EvaluationProvider interface {
 	EvaluateFlag(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (Evaluation, error)
 }
 
+// DefinitionsFreshness is implemented by providers that evaluate flags from
+// periodically refreshed definitions. A provider that keeps serving cached
+// definitions through an outage reports their age here, so callers can stop
+// trusting an old result. ok is false when the definitions were never current.
+type DefinitionsFreshness interface {
+	FlagDefinitionsConfirmedAt() (at time.Time, ok bool)
+}
+
 // EvaluateFlag returns an indeterminate result for providers that only expose
 // the legacy bool contract. Callers that need a fail-safe carry-forward decision
 // must not treat that legacy false as an explicit disable.
@@ -171,6 +212,11 @@ func EvaluateFlag(ctx context.Context, provider Provider, flag Flag, distinctID 
 		return evaluation, nil
 	}
 	return EvaluationIndeterminate, nil
+}
+
+// FlagDefinitionsConfirmedAt reports the in-memory flags as always current.
+func (imp *InMemory) FlagDefinitionsConfirmedAt() (time.Time, bool) {
+	return time.Now(), true
 }
 
 func (imp *InMemory) EvaluateFlag(_ context.Context, flag Flag, distinctID string, _ map[string]string) (Evaluation, error) {

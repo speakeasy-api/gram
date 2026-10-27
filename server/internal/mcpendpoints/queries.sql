@@ -60,8 +60,10 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
--- name: ListAddressableMCPEndpointsByMCPServerID :many
-SELECT sqlc.embed(e), cd.domain AS custom_domain
+-- name: ListMCPEndpointsOnLiveDomainsByMCPServerID :many
+-- Endpoints on a deleted or another organization's domain are skipped; those
+-- on a domain still pending verification or activation are kept.
+SELECT sqlc.embed(e)
 FROM mcp_endpoints e
 LEFT JOIN custom_domains cd
   ON cd.id = e.custom_domain_id
@@ -314,3 +316,32 @@ WHERE mcp_server_id = @mcp_server_id::uuid
   AND is_domain_root IS TRUE
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListAddressableMCPEndpointsByMCPServerIDs :many
+-- Custom-domain endpoints count only on a verified, activated domain, the
+-- same gate the custom-domain middleware applies before serving. Mirrored in
+-- assistants LoadAssistantMcpServers and ResolveMcpServersForWrite.
+SELECT sqlc.embed(e), cd.domain AS custom_domain
+FROM mcp_endpoints e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.organization_id = @organization_id
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = @organization_id
+  AND cd.deleted IS FALSE
+  AND cd.verified IS TRUE
+  AND cd.activated IS TRUE
+WHERE e.project_id = ANY(@project_ids::uuid[])
+  AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
+
+-- name: ListMCPEndpointsByProjectAndSlug :many
+-- Live endpoints with a slug in the project, platform addresses first.
+SELECT *
+FROM mcp_endpoints
+WHERE project_id = @project_id
+  AND slug = @slug
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at, id;

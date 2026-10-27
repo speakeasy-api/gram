@@ -59,7 +59,7 @@ func (s *Service) prepareFederatedBrowserHandoff(w http.ResponseWriter, r *http.
 	state.Browser.CallbackHash = sha256Hex(browser)
 	state.Federation.BrowserHash = state.Browser.CallbackHash
 	state.Federation.StartPhase = "origin"
-	target, err := s.consentURL(endpoint, state.mintOriginOr(s.serverURL.String()), state.ID)
+	target, err := s.challengeConsentURL(endpoint, *state)
 	if err != nil {
 		return err
 	}
@@ -75,17 +75,17 @@ func (s *Service) prepareFederatedBrowserHandoff(w http.ResponseWriter, r *http.
 
 func (s *Service) completeFederatedBrowserHandoff(w http.ResponseWriter, r *http.Request, state AuthnChallengeState) error {
 	if state.Federation.StartPhase != "origin" {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid login handoff")
+		return oops.E(oops.CodeBadRequest, nil, "invalid login handoff")
 	}
 	consumed, err := s.authnChallengeCache.GetAndDelete(r.Context(), "authnChallenge:"+state.ID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "login handoff expired")
+		return oops.E(oops.CodeBadRequest, err, "login handoff expired")
 	}
 	if err := validateChallengeBrowser(r, consumed, false); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "invalid login browser")
+		return oops.E(oops.CodeBadRequest, err, "invalid login browser")
 	}
 	if consumed.Federation == nil || consumed.Federation.StartPhase != "origin" || consumed.Browser.CallbackHash == "" {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid login handoff")
+		return oops.E(oops.CodeBadRequest, nil, "invalid login handoff")
 	}
 	target, err := federatedCallbackURL(consumed.Federation.CallbackURL)
 	if err != nil {

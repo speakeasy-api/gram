@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
@@ -48,7 +49,20 @@ func requestID(body string) string {
 	return string(req.ID)
 }
 
+// requestMethod reads the JSON-RPC method so a tool name or argument that
+// mentions another method cannot select the wrong fake response.
+func requestMethod(body string) string {
+	var req struct {
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return ""
+	}
+	return req.Method
+}
+
 type fakeTunnelGateway struct {
+	toolNames      []string
 	t              *testing.T
 	agentSessionID string
 	// backendSessionID is the Mcp-Session-Id the fake customer backend mints
@@ -138,15 +152,16 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	case http.MethodPost:
-		if strings.Contains(buf.String(), `"server/discover"`) {
+		method := requestMethod(buf.String())
+		if method == "server/discover" {
 			http.Error(w, "method not found", http.StatusNotFound)
 			return
 		}
-		if strings.Contains(buf.String(), `"notifications/initialized"`) {
+		if method == "notifications/initialized" {
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
-		if strings.Contains(buf.String(), `"initialize"`) {
+		if method == "initialize" {
 			if g.backendSessionID != "" {
 				w.Header().Set("Mcp-Session-Id", g.backendSessionID)
 			}
@@ -158,7 +173,16 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unknown session", http.StatusNotFound)
 			return
 		}
-		if strings.Contains(buf.String(), `"tools/call"`) {
+		if g.toolNames != nil && method == "tools/list" {
+			tools := make([]map[string]any, 0, len(g.toolNames))
+			for _, name := range g.toolNames {
+				tools = append(tools, map[string]any{"name": name, "inputSchema": map[string]any{"type": "object"}})
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(requestID(buf.String())), "result": map[string]any{"tools": tools}})
+			return
+		}
+		if method == "tools/call" {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"content":[{"type":"text","text":"pong through the tunnel"}],"isError":false}}`)
 			return
@@ -380,6 +404,43 @@ func TestServePublic_Tunneled_SessionRequestPinsExactTarget(t *testing.T) {
 	require.Equal(t, "backend-secret-session", forwarded.Get("Mcp-Session-Id"), "backend must see its own session id")
 	require.Equal(t, "agent-1", forwarded.Get(wire.HeaderTunnelAgentSession), "session traffic must pin the exact agent session")
 	require.NotEmpty(t, forwarded.Get(wire.HeaderTunnelConsumerSession))
+}
+
+// Node-based clients send a generic User-Agent, so activity metrics attribute
+// the session to the client its initialize reported, on every later request.
+func TestServePublic_Tunneled_MetricsAttributeSessionToReportedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	collector := metrics.New()
+	ti.remoteProxyManager.TunnelMetrics = collector
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-session"}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	serve := func(body []byte, sessionID string) *httptest.ResponseRecorder {
+		req := newTunneledPublicRequest(fixture.endpointSlug, http.MethodPost, body, sessionID)
+		req.Header.Set("User-Agent", "node")
+		w := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServePublic(w, req))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		return w
+	}
+	sid := serve(makeInitializeBodyWithClientInfo(t, "cursor-vscode", "1.0"), "").Header().Get("Mcp-Session-Id")
+	require.NotEmpty(t, sid)
+	serve([]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}`), sid)
+
+	// Flush publishes from concurrent workers, so the callback must lock.
+	var mu sync.Mutex
+	families := map[string]string{}
+	collector.Flush(t.Context(), func(_ context.Context, s metrics.Snapshot) error {
+		if s.Kind == "requests" {
+			mu.Lock()
+			families[s.Method] = s.ClientFamily
+			mu.Unlock()
+		}
+		return nil
+	})
+	require.Equal(t, map[string]string{"initialize": "cursor", "tools/call": "cursor"}, families)
 }
 
 // Session ids that are not Speakeasy-minted, or valid-shaped but unknown, must

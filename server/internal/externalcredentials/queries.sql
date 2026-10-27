@@ -174,6 +174,26 @@ WHERE external_credential_id = @external_credential_id::uuid
   AND identity_provider_connection_id IS NOT NULL
   AND deleted IS FALSE;
 
+-- Issuer keys still holding a signer grant made with this platform
+-- credential's service account: live keys and, with include_pending_cleanup,
+-- revoked keys whose KMS cleanup is pending. Platform credentials sign for
+-- every organization, so the count spans them.
+-- name: CountIssuerKeysGrantedByCredential :one
+SELECT count(*)
+FROM external_credentials AS ec
+JOIN external_keys AS ek
+  ON ek.external_credential_id = ec.id
+JOIN json_web_keys AS k
+  ON k.external_key_id = ek.id
+ AND k.organization_id = ek.organization_id
+JOIN internal_session_issuers AS isi
+  ON isi.organization_id = k.organization_id
+ AND isi.json_web_key_set_id = k.json_web_key_set_id
+WHERE ec.id = @external_credential_id::uuid
+  AND ec.organization_id IS NULL
+  AND ec.project_id IS NULL
+  AND (k.state <> 'revoked' OR (@include_pending_cleanup::boolean AND k.kms_disabled_at IS NULL));
+
 -- name: SoftDeleteExternalCredential :one
 UPDATE external_credentials
 SET deleted_at = clock_timestamp()

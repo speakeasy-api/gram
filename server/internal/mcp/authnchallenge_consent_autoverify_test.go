@@ -3,7 +3,6 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -136,7 +137,7 @@ func TestConsentAutoVerify_PendingUntilProbeFinishes(t *testing.T) {
 		"&verifying_until=" + strconv.FormatInt(deadline.UnixMilli(), 10)
 	page := renderConsentAt(t, fx, target)
 	require.Contains(t, page, `data-validation="pending"`)
-	require.Contains(t, page, `>Connected<span class="text-muted-foreground" data-validation="pending" > · Verifying…</span >`)
+	require.Contains(t, page, `>Service connected<span class="text-muted-foreground" data-validation="pending" > · Verifying…</span >`)
 	require.Contains(t, page, `data-verify-deadline-ms="`+strconv.FormatInt(deadline.UnixMilli(), 10)+`"`)
 	require.NotContains(t, page, "Not yet verified")
 	require.NotContains(t, page, "data-auto-close", "a first-party tab stays open while a verdict is pending")

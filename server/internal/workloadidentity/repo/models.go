@@ -28,6 +28,11 @@ type WorkloadIssuer struct {
 	JwksUri string
 	// @access: confidential
 	AllowWildcardAdmission bool
+	// Whether assertions carrying a jti or uti may be exchanged repeatedly until expiry. NULL is false.
+	// @access: confidential
+	AllowAssertionReuse pgtype.Bool
+	// @access: confidential
+	KeySource pgtype.Text
 	// @access: opaque-restricted
 	Metadata []byte
 	// @access: confidential

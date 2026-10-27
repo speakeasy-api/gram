@@ -72,11 +72,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
-	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
@@ -98,6 +95,8 @@ type Publishers struct {
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	LLMAnalysis             gcp.Publisher[*riskv1.LLMAnalysis]
+	ToolCallAnalysis        gcp.Publisher[*riskv1.ToolCallAnalysis]
+	AccountIdentityAnalysis gcp.Publisher[*riskv1.AccountIdentityAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	MeterReadings           gcp.Publisher[*meteringv1.MeterReading]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
@@ -141,6 +140,7 @@ type Activities struct {
 	deployFunctionRunners            *activities.DeployFunctionRunners
 	reapFlyApps                      *activities.ReapFlyApps
 	weeklyUsageSummary               *activities.WeeklyUsageSummary
+	directoryReviewEmails            *activities.DirectoryReviewEmails
 	refreshOpenRouterKey             *activities.RefreshOpenRouterKey
 	setOpenRouterSpendCap            *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey   *activities.ReconcilePaygOpenRouterChatKey
@@ -232,10 +232,7 @@ func NewActivities(
 	cacheAdapter cache.Cache,
 	emailService *email.Service,
 	assistantsCore *assistants.ServiceCore,
-	piiScanner risk_analysis.PIIScanner,
 	piScanner *promptinjection.Scanner,
-	customRuleScanner *customruleanalyzer.Scanner,
-	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	workosClient activities.WorkOSClient,
 	productFeatures *productfeatures.Client,
@@ -244,7 +241,6 @@ func NewActivities(
 	publishers *Publishers,
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
-	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
 	trialFixtureHandler activities.TrialFixtureHandler,
 	githubEvidenceToken string,
@@ -256,6 +252,7 @@ func NewActivities(
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
 	startupSeeds []activities.StartupSeed,
+	signInEpochs signins.EpochRaiser,
 ) *Activities {
 	spendRulesCH := spendrulesch.New(chConn)
 	riskFindingsCH := riskchrepo.New(chConn)
@@ -268,11 +265,6 @@ func NewActivities(
 		meterProvider,
 		db,
 		assetStorage,
-		piiScanner,
-		piScanner,
-		shadowMCPClient,
-		telemetryRepo,
-		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
 		features,
 		publishers.PresidioAnalysis,
 		publishers.GitleaksAnalysis,
@@ -280,14 +272,9 @@ func NewActivities(
 		publishers.PromptPolicyAnalysis,
 		publishers.CustomRulesAnalysis,
 		publishers.LLMAnalysis,
-		publishers.RiskFindings,
-		customRuleScanner,
+		publishers.ToolCallAnalysis,
+		publishers.AccountIdentityAnalysis,
 		celEng,
-		builtinPresets,
-		&shadowMCPPolicyBypassChecker{
-			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
-		},
-		riskRecorder,
 		llmAnalyzerEnabled,
 	)
 	if err != nil {
@@ -391,6 +378,7 @@ func NewActivities(
 
 	processWorkOSOrganizationEvents := activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, identityMapRefresh)
 	processWorkOSOrganizationEvents.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
+	processWorkOSOrganizationEvents.SetSignInEnforcement(features, meterProvider, signInEpochs)
 
 	// Built here rather than threaded in: this constructor already holds every
 	// dependency the emitter needs, and only the device sync reports growth
@@ -433,6 +421,7 @@ func NewActivities(
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, orgHosts),
+		directoryReviewEmails:            activities.NewDirectoryReviewEmails(logger, db, emailService, orgHosts),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:   activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
@@ -601,6 +590,10 @@ func (a *Activities) SendPaygActivatedEmail(ctx context.Context, input billingno
 	return nil
 }
 
+func (a *Activities) SweepSignInRevocations(ctx context.Context) (int, error) {
+	return a.processWorkOSOrganizationEvents.SweepSignInRevocations(ctx) //nolint:wrapcheck // wrapped by the activity
+}
+
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
 }
@@ -615,6 +608,14 @@ func (a *Activities) ProcessWorkOSUserEvents(ctx context.Context, params activit
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {
 	return a.transitionDeployment.Do(ctx, projectID, deploymentID, status)
+}
+
+func (a *Activities) CompleteDeploymentWithExpectedActive(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, expectedActive uuid.UUID) (*activities.TransitionDeploymentResult, error) {
+	result, err := a.transitionDeployment.CompleteWithExpectedActive(ctx, projectID, deploymentID, expectedActive)
+	if err != nil {
+		return nil, fmt.Errorf("complete deployment with active snapshot guard: %w", err)
+	}
+	return result, nil
 }
 
 func (a *Activities) ProcessDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {

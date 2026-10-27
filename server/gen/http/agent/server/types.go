@@ -112,9 +112,10 @@ type CreateSessionHandoffRequestBody struct {
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
-	// Opaque revision identifier covering the marketplace, plugin, and
-	// remote-configuration set. The agent stores this to detect changes between
-	// polls.
+	// Opaque revision identifier covering the marketplace, plugin, MCP server
+	// (including each server's token endpoint, audience and resource),
+	// remote-configuration, and organization-gateway set. The agent stores this to
+	// detect changes between polls.
 	Etag string `form:"etag" json:"etag" xml:"etag"`
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -129,9 +130,29 @@ type GetPluginsResponseBody struct {
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfigurationResponseBody `form:"configuration,omitempty" json:"configuration,omitempty" xml:"configuration,omitempty"`
+	// URL of the active organization's gateway. Absent when the organization
+	// gateway is unavailable.
+	OrganizationGatewayURL *string `form:"organization_gateway_url,omitempty" json:"organization_gateway_url,omitempty" xml:"organization_gateway_url,omitempty"`
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipalResponseBody `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
+	// Speakeasy-hosted MCP servers the agent registers directly in each managed
+	// tool's configuration, authorized by the device's own mcp:connect credential.
+	// Populated only when the caller polls as an agent (an agent API key, or a
+	// workload acting for its assigned agent), from the MCP servers in the plugins
+	// assigned to that agent; always empty for people, who reach these servers
+	// through their plugins. Always present: an empty list tells the agent to
+	// remove the entries it wrote earlier.
+	McpServers []*AgentMCPServerResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
+}
+
+// GetMyConnectionsResponseBody is the type of the "agent" service
+// "getMyConnections" endpoint HTTP response body.
+type GetMyConnectionsResponseBody struct {
+	// One entry per distinct MCP server in the plugins delivered to the user, in
+	// plugin order. Servers the user can neither read nor connect to are omitted;
+	// a server the user can read but not connect to is reported as no_access.
+	Servers []*AgentServerConnectionResponseBody `form:"servers" json:"servers" xml:"servers"`
 }
 
 // ListSyncedUsersResponseBody is the type of the "agent" service
@@ -389,6 +410,188 @@ type GetPluginsUnexpectedResponseBody struct {
 // GetPluginsGatewayErrorResponseBody is the type of the "agent" service
 // "getPlugins" endpoint HTTP response body for the "gateway_error" error.
 type GetPluginsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsUnauthorizedResponseBody is the type of the "agent" service
+// "getMyConnections" endpoint HTTP response body for the "unauthorized" error.
+type GetMyConnectionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsForbiddenResponseBody is the type of the "agent" service
+// "getMyConnections" endpoint HTTP response body for the "forbidden" error.
+type GetMyConnectionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsBadRequestResponseBody is the type of the "agent" service
+// "getMyConnections" endpoint HTTP response body for the "bad_request" error.
+type GetMyConnectionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsNotFoundResponseBody is the type of the "agent" service
+// "getMyConnections" endpoint HTTP response body for the "not_found" error.
+type GetMyConnectionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsConflictResponseBody is the type of the "agent" service
+// "getMyConnections" endpoint HTTP response body for the "conflict" error.
+type GetMyConnectionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsUnsupportedMediaResponseBody is the type of the "agent"
+// service "getMyConnections" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetMyConnectionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsInvalidResponseBody is the type of the "agent" service
+// "getMyConnections" endpoint HTTP response body for the "invalid" error.
+type GetMyConnectionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsInvariantViolationResponseBody is the type of the "agent"
+// service "getMyConnections" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMyConnectionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsUnexpectedResponseBody is the type of the "agent" service
+// "getMyConnections" endpoint HTTP response body for the "unexpected" error.
+type GetMyConnectionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMyConnectionsGatewayErrorResponseBody is the type of the "agent" service
+// "getMyConnections" endpoint HTTP response body for the "gateway_error" error.
+type GetMyConnectionsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2266,6 +2469,26 @@ type AgentPluginResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Short description of the plugin, when one is set.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// MCP servers the plugin contains, in display order, possibly none.
+	// Display-only: the agent installs the plugin, not these entries. Absent for
+	// the synthesized observability plugin, which carries hooks rather than
+	// servers.
+	Servers []*AgentPluginServerResponseBody `json:"servers,omitzero"`
+}
+
+// AgentPluginServerResponseBody is used to define fields on response body
+// types.
+type AgentPluginServerResponseBody struct {
+	// Stable identifier of the server, the same in every plugin that contains it.
+	// Matches the id getMyConnections reports the server's sign-in state under.
+	// Absent from servers predating the field.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Display name of the server within its plugin.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Link to the server's page in the Speakeasy dashboard. Present only when the
+	// enrolled user holds mcp:read on the server; the agent tells the user that
+	// links need that scope when it is absent.
+	DashboardURL *string `form:"dashboard_url,omitempty" json:"dashboard_url,omitempty" xml:"dashboard_url,omitempty"`
 }
 
 // DeviceAgentConfigurationResponseBody is used to define fields on response
@@ -2293,6 +2516,53 @@ type AgentPollingPrincipalResponseBody struct {
 	Urn string `form:"urn" json:"urn" xml:"urn"`
 	// Human-readable name of the agent identity.
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+}
+
+// AgentMCPServerResponseBody is used to define fields on response body types.
+type AgentMCPServerResponseBody struct {
+	// Stable key the agent writes the server under in each tool's MCP
+	// configuration: `speakeasy-` followed by the server's slug, using only
+	// lowercase letters, digits and `-`. Unique within the response; a second
+	// server with the same name gets a numeric suffix such as `speakeasy-linear-2`.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The server's streamable-HTTP URL.
+	URL string `form:"url" json:"url" xml:"url"`
+	// Stable IDs of the managed tools this server applies to. Absent or empty
+	// means every managed tool.
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Token endpoint where a workload exchanges an identity assertion (RFC 7523
+	// JWT bearer grant) for a session that reaches this server. Absent when the
+	// server's authorization server offers no workload grant, so the server cannot
+	// be reached without a person.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// The exact `aud` the identity assertion must carry for token_endpoint.
+	// Present exactly when token_endpoint is.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Resource indicator (RFC 8707) to send with the grant. Present only when
+	// token_endpoint mints sessions for this one server; absent when it mints one
+	// session for every server of its issuer.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
+}
+
+// AgentServerConnectionResponseBody is used to define fields on response body
+// types.
+type AgentServerConnectionResponseBody struct {
+	// The server's id, as getPlugins reports it on each plugin server.
+	ID string `form:"id" json:"id" xml:"id"`
+	// `connected`: the user is signed in. `not_connected`: the user has not signed
+	// in. `reauthorization_required`: a sign-in exists but must be renewed.
+	// `not_required`: the server needs no sign-in from the user. `setup_required`:
+	// an administrator must finish the server's sign-in setup first. `no_access`:
+	// the user lacks permission to connect to the server. `unknown`: the state
+	// can't be determined, for example for a gateway.
+	State string `form:"state" json:"state" xml:"state"`
+	// Page that signs the user in to this server in the browser. Present when
+	// state is not_connected or reauthorization_required.
+	ConnectURL *string `form:"connect_url,omitempty" json:"connect_url,omitempty" xml:"connect_url,omitempty"`
+	// Page where the user can ask an administrator for access to this server.
+	// Present only when state is no_access and the organization accepts access
+	// requests.
+	RequestAccessURL *string `form:"request_access_url,omitempty" json:"request_access_url,omitempty" xml:"request_access_url,omitempty"`
 }
 
 // SyncedAgentUserResponseBody is used to define fields on response body types.
@@ -2328,6 +2598,11 @@ type AiScanTargetResponseBody struct {
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
 	Customized bool `form:"customized" json:"customized" xml:"customized"`
+	// The organization's access decision for the target, computed with the same
+	// rules the AI detections carry: unreviewed when nothing is recorded, and
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
+	Access *AIToolAccessSummaryResponseBody `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the organization's row last changed; absent for an untouched default.
@@ -2367,6 +2642,32 @@ type AiScanTargetGatewayClientResponseBody struct {
 	// Names an MCP client reports at initialize. Detection only, never
 	// authorization: the value is self-reported and any client can claim any name.
 	ClientInfoNames []string `form:"client_info_names" json:"client_info_names" xml:"client_info_names"`
+}
+
+// AIToolAccessSummaryResponseBody is used to define fields on response body
+// types.
+type AIToolAccessSummaryResponseBody struct {
+	// The effective decision as a table renders it: allowed and blocked mean an
+	// organization decision is recorded and in force, unreviewed means nothing is
+	// enforced — either because nobody has decided or because the tool is not
+	// enforceable, in which case a stored decision is projected as unreviewed.
+	// Read enforceable to tell the two apart.
+	State string `form:"state" json:"state" xml:"state"`
+	// The effective organization decision behind state, which is not always the
+	// stored one. Absent rows read as unreviewed, so every tool has a value, and a
+	// tool that is not enforceable reads as unreviewed however it was decided —
+	// the stored decision is left untouched and takes effect again if the tool
+	// gains a verifiable gateway matcher.
+	Decision string `form:"decision" json:"decision" xml:"decision"`
+	// Whether a block on this tool would actually reach the gateway. False when
+	// the tool is linked only by a self-reported client name, or by nothing at
+	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
+	// admin is never told a tool is blocked when it is not.
+	Enforceable bool `form:"enforceable" json:"enforceable" xml:"enforceable"`
+	// Why the decision was made, when an admin gave a reason. Who recorded it and
+	// when are in the audit log rather than here, so there is one record of that
+	// and not two.
+	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 }
 
 // AgentSessionMetaResponseBody is used to define fields on response body types.
@@ -2439,7 +2740,8 @@ type AIScanMatchRequestBody struct {
 // the "getPlugins" endpoint of the "agent" service.
 func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseBody {
 	body := &GetPluginsResponseBody{
-		Etag: res.Etag,
+		Etag:                   res.Etag,
+		OrganizationGatewayURL: res.OrganizationGatewayURL,
 	}
 	if res.Marketplaces != nil {
 		body.Marketplaces = make([]*AgentMarketplaceResponseBody, len(res.Marketplaces))
@@ -2470,6 +2772,37 @@ func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseB
 	}
 	if res.Principal != nil {
 		body.Principal = marshalAgentAgentPollingPrincipalToAgentPollingPrincipalResponseBody(res.Principal)
+	}
+	if res.McpServers != nil {
+		body.McpServers = make([]*AgentMCPServerResponseBody, len(res.McpServers))
+		for i, val := range res.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalAgentAgentMCPServerToAgentMCPServerResponseBody(val)
+		}
+	} else {
+		body.McpServers = []*AgentMCPServerResponseBody{}
+	}
+	return body
+}
+
+// NewGetMyConnectionsResponseBody builds the HTTP response body from the
+// result of the "getMyConnections" endpoint of the "agent" service.
+func NewGetMyConnectionsResponseBody(res *agent.GetMyConnectionsResult) *GetMyConnectionsResponseBody {
+	body := &GetMyConnectionsResponseBody{}
+	if res.Servers != nil {
+		body.Servers = make([]*AgentServerConnectionResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalAgentAgentServerConnectionToAgentServerConnectionResponseBody(val)
+		}
+	} else {
+		body.Servers = []*AgentServerConnectionResponseBody{}
 	}
 	return body
 }
@@ -2735,6 +3068,148 @@ func NewGetPluginsUnexpectedResponseBody(res *goa.ServiceError) *GetPluginsUnexp
 // result of the "getPlugins" endpoint of the "agent" service.
 func NewGetPluginsGatewayErrorResponseBody(res *goa.ServiceError) *GetPluginsGatewayErrorResponseBody {
 	body := &GetPluginsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getMyConnections" endpoint of the "agent" service.
+func NewGetMyConnectionsUnauthorizedResponseBody(res *goa.ServiceError) *GetMyConnectionsUnauthorizedResponseBody {
+	body := &GetMyConnectionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsForbiddenResponseBody builds the HTTP response body from
+// the result of the "getMyConnections" endpoint of the "agent" service.
+func NewGetMyConnectionsForbiddenResponseBody(res *goa.ServiceError) *GetMyConnectionsForbiddenResponseBody {
+	body := &GetMyConnectionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsBadRequestResponseBody builds the HTTP response body from
+// the result of the "getMyConnections" endpoint of the "agent" service.
+func NewGetMyConnectionsBadRequestResponseBody(res *goa.ServiceError) *GetMyConnectionsBadRequestResponseBody {
+	body := &GetMyConnectionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsNotFoundResponseBody builds the HTTP response body from
+// the result of the "getMyConnections" endpoint of the "agent" service.
+func NewGetMyConnectionsNotFoundResponseBody(res *goa.ServiceError) *GetMyConnectionsNotFoundResponseBody {
+	body := &GetMyConnectionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsConflictResponseBody builds the HTTP response body from
+// the result of the "getMyConnections" endpoint of the "agent" service.
+func NewGetMyConnectionsConflictResponseBody(res *goa.ServiceError) *GetMyConnectionsConflictResponseBody {
+	body := &GetMyConnectionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getMyConnections" endpoint of the "agent"
+// service.
+func NewGetMyConnectionsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMyConnectionsUnsupportedMediaResponseBody {
+	body := &GetMyConnectionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsInvalidResponseBody builds the HTTP response body from
+// the result of the "getMyConnections" endpoint of the "agent" service.
+func NewGetMyConnectionsInvalidResponseBody(res *goa.ServiceError) *GetMyConnectionsInvalidResponseBody {
+	body := &GetMyConnectionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getMyConnections" endpoint of the "agent"
+// service.
+func NewGetMyConnectionsInvariantViolationResponseBody(res *goa.ServiceError) *GetMyConnectionsInvariantViolationResponseBody {
+	body := &GetMyConnectionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getMyConnections" endpoint of the "agent" service.
+func NewGetMyConnectionsUnexpectedResponseBody(res *goa.ServiceError) *GetMyConnectionsUnexpectedResponseBody {
+	body := &GetMyConnectionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMyConnectionsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getMyConnections" endpoint of the "agent" service.
+func NewGetMyConnectionsGatewayErrorResponseBody(res *goa.ServiceError) *GetMyConnectionsGatewayErrorResponseBody {
+	body := &GetMyConnectionsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4169,14 +4644,25 @@ func NewCreateSessionHandoffGatewayErrorResponseBody(res *goa.ServiceError) *Cre
 }
 
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
-func NewGetPluginsPayload(legacyEmail *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string) *agent.GetPluginsPayload {
+func NewGetPluginsPayload(legacyEmail *string, deviceAgentToken *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
 	v.LegacyEmail = legacyEmail
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
 	v.Environment = environment
+
+	return v
+}
+
+// NewGetMyConnectionsPayload builds a agent service getMyConnections endpoint
+// payload.
+func NewGetMyConnectionsPayload(apikeyToken *string, email *string) *agent.GetMyConnectionsPayload {
+	v := &agent.GetMyConnectionsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
 
 	return v
 }

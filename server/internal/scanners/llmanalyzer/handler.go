@@ -2,6 +2,7 @@ package llmanalyzer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -93,7 +94,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		h.disabledOnce.Do(func() {
 			h.logger.WarnContext(ctx, "LLM analyzer disabled: GRAM_RISK_LLM_URL empty; acking analysis requests without findings; batch routing falls back to the legacy engines under this config, so this ack is only a safety net for in-flight requests")
 		})
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomeDisabled, scanners.AsyncShadowGateReasonNotGated)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomeDisabled)
 		return nil
 	}
 
@@ -113,7 +114,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 			attr.SlogRiskScanRequestID(m.GetRequestId()),
 			attr.SlogOrganizationID(m.GetOrganizationId()),
 		)
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomeScanError, scanners.AsyncShadowGateReasonNotGated)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomeScanError)
 		return nil
 	}
 	result := analysis.Result
@@ -122,12 +123,12 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	if sources := m.GetSources(); len(sources) > 0 {
 		result.Findings = FindingsForSources(result.Findings, sources)
 	}
-
 	// A shadow request publishes exactly like an enforcing one; the marker on
 	// each finding is what keeps the rows out of every user-facing read path
 	// while the comparison query can still join them with the legacy
-	// engines' rows for the same message.
-	_, _, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
+	// engines' rows for the same message. Compared-source findings carry the
+	// marker in every mode: their legacy engine enforces.
+	meta := scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
 		ChatMessageID:     m.GetChatMessageId(),
 		ContentPartID:     m.GetContentPartId(),
@@ -136,7 +137,18 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
 		Shadow:            m.GetShadow(),
-	}, result.Findings, "llm analyzer")
+	}
+	enforced, compared := splitEnforcedFindings(result.Findings)
+	var err error
+	if len(enforced) > 0 || len(compared) == 0 {
+		_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, meta, enforced, "llm analyzer")
+	}
+	if len(compared) > 0 {
+		comparedMeta := meta
+		comparedMeta.Shadow = true
+		_, _, comparedErr := scanners.PublishFindings(ctx, h.logger, h.findingsPub, comparedMeta, compared, "llm analyzer compared")
+		err = errors.Join(err, comparedErr)
+	}
 	if err != nil {
 		err = fmt.Errorf("publish llm analyzer findings: %w", err)
 	}
@@ -154,7 +166,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		}
 	}
 	if err != nil {
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomePublishError, scanners.AsyncShadowGateReasonNotGated)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanOutcomePublishError)
 		return err
 	}
 
@@ -162,8 +174,22 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	if m.GetShadow() {
 		outcome = scanners.AsyncScanOutcomeShadowPublished
 	}
-	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, outcome, scanners.AsyncShadowGateReasonNotGated)
+	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, outcome)
 	return nil
+}
+
+// splitEnforcedFindings separates enforceable findings (enforced sources and
+// the sentinel) from compared-source findings, which are always shadow.
+func splitEnforcedFindings(findings []scanners.Finding) (enforced, compared []scanners.Finding) {
+	enforced = make([]scanners.Finding, 0, len(findings))
+	for _, f := range findings {
+		if EnforcedRuleID(f.RuleID) {
+			enforced = append(enforced, f)
+			continue
+		}
+		compared = append(compared, f)
+	}
+	return enforced, compared
 }
 
 // judgeMessage maps the request onto the judge message the analyzer renders,

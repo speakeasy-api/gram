@@ -43,6 +43,15 @@ type authenticatedIngestOptionsKey struct{}
 
 // AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
 type AuthenticatedIngestOptions struct {
+	// contentBoundary applies the quarantine gate and boundaryScans instead of
+	// the policies for the event type. It applies also when boundaryScans is empty.
+	contentBoundary bool
+	boundaryScans   []ahpBoundaryScan
+	// promptPolicyText overrides prompt evidence without changing transcript capture.
+	promptPolicyText *string
+	// ObserveOnly records the event without evaluating enforcement, for
+	// events the sender cannot block.
+	ObserveOnly                  bool
 	AllowWarnAcknowledgement     bool
 	AllowSessionIdentityFallback bool
 	SourceAttributes             map[attr.Key]any
@@ -65,6 +74,10 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
+		contentBoundary:              false,
+		boundaryScans:                nil,
+		promptPolicyText:             nil,
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
@@ -129,6 +142,7 @@ func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *cont
 	authCopy.ProjectID = &projectID
 	payloadCopy := *payload
 	payloadCopy.ApikeyToken = nil
+	payloadCopy.DeviceAgentToken = nil
 	payloadCopy.ProjectSlugInput = nil
 	options.SourceAttributes = maps.Clone(options.SourceAttributes)
 	options.OutputToolCalls = append([]any(nil), options.OutputToolCalls...)
@@ -173,7 +187,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		if res != nil && res.Result != nil {
 			decision = res.Result.Decision
 		}
-		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	if err := validateCanonicalIngestPayload(payload); err != nil {
@@ -181,7 +195,14 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 	source = strings.TrimSpace(payload.Source.Adapter)
 	eventType = strings.TrimSpace(payload.Event.Type)
-	if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
+	if token := pluginDeviceAgentToken(payload.DeviceAgentToken); token != "" {
+		authedCtx, err := s.authorizeWorkloadPluginRequest(ctx, token, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
+		if err != nil {
+			outcome = hookMetricOutcomeUnauthorized
+			return nil, workloadHookAuthError(err)
+		}
+		ctx = authedCtx
+	} else if apikey := strings.TrimSpace(conv.PtrValOr(payload.ApikeyToken, "")); apikey != "" {
 		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
 		if err != nil {
 			outcome = hookMetricOutcomeUnauthorized
@@ -235,6 +256,20 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 
 	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), replayed) {
 		ctx = withHookDuplicate(ctx)
+	}
+
+	if isDeliveryFailureReport(payload) {
+		// A sender's report on its own delivery is not agent activity: no
+		// enforcement, skill, MCP, or transcript state is touched. The org
+		// settings still ride on the response so a reconnecting sender's
+		// cached copy refreshes on this exchange like any other.
+		if !s.isHookDuplicate(ctx) {
+			s.recordDeliveryFailure(context.WithoutCancel(ctx), payload, authCtx, actor, replayed)
+		}
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor(actor),
+		}, nil
 	}
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
@@ -558,7 +593,7 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if strings.TrimSpace(payload.SchemaVersion) != hookIngestSchemaV1 {
 		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
 	}
-	return nil
+	return validateDeliveryFailurePayload(payload)
 }
 
 func isReservedAssistantAdapter(adapter string) bool {
@@ -574,10 +609,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
 	defer span.End()
 
+	opts := authenticatedIngestOptions(ctx)
+	if opts.ObserveOnly {
+		return "", ""
+	}
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
-	if eventType == "prompt.submitted" || eventType == "tool.requested" {
+	if eventType == "prompt.submitted" || eventType == "tool.requested" || opts.contentBoundary {
 		if quarantine := s.checkQuarantineGate(ctx, event); quarantine != nil {
 			reason := sessionquarantine.DenyReason(quarantine)
 			return reason, reason
@@ -612,10 +651,16 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		}
 	}
 
+	// AHP content boundaries scan their content directly. They do not create
+	// transcript messages from the model context.
+	if opts.contentBoundary {
+		return s.evaluateAHPBoundary(ctx, event, opts.boundaryScans)
+	}
+
 	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
-			Prompt: canonicalPromptText(payload),
+			Prompt: conv.PtrValOr(opts.promptPolicyText, canonicalPromptText(payload)),
 		})
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			if scanResult.Action == "quarantine" {
@@ -623,7 +668,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
 				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 			}
-			if scanResult.IsWarnChallenge() && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
+			if scanResult.IsWarnChallenge() && opts.AllowWarnAcknowledgement {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}
@@ -1074,7 +1119,15 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 			)
 		}
 	}
-	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
+	rows := s.canonicalTelemetryRows(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
+	// The tee gets its own copies before the writer scrubs what it stores.
+	teeRows := cloneHookTelemetryRows(rows)
+	if s.telemetryLogger != nil {
+		for _, row := range rows {
+			s.logHookTelemetry(ctx, authCtx, &metadata, row.timestamp, row.toolName, row.attrs)
+		}
+	}
+	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 	if err != nil {
 		event := "hooks_ingest_chat_persist_failed"
@@ -1250,10 +1303,13 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	return metadata
 }
 
-func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) {
-	if s.telemetryLogger == nil {
-		return
-	}
+// canonicalTelemetryRows builds the rows recorded for one hook event, in the
+// order they are written: the event's own row and, when a skill was
+// inferred on it, the derived activation row. The telemetry writer stores
+// them and the event feed tee republishes them, so both see the same
+// attributes.
+func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) []hookTelemetryRow {
+	rows := make([]hookTelemetryRow, 0, 2)
 
 	hookEventName := telemetryHookEventName(payload)
 	toolName := canonicalTelemetryToolName(payload)
@@ -1327,7 +1383,7 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 	// split by personal vs team account, matching the legacy per-provider paths.
 	stampAccountAttribution(attrs, *metadata)
 
-	s.logHookTelemetry(ctx, authCtx, metadata, timestamp, toolName, attrs)
+	rows = append(rows, hookTelemetryRow{timestamp: timestamp, toolName: toolName, attrs: attrs})
 
 	// A skill name on an ordinary tool/prompt event is an inferred activation
 	// (Codex has no dedicated Skill tool): the underlying event was recorded
@@ -1348,8 +1404,9 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
 		mergeSourceAttributes(attrs, authenticatedIngestOptions(ctx).SourceAttributes)
 		stampAccountAttribution(attrs, *metadata)
-		s.logHookTelemetry(ctx, authCtx, metadata, timestamp, "Skill", attrs)
+		rows = append(rows, hookTelemetryRow{timestamp: timestamp, toolName: "Skill", attrs: attrs})
 	}
+	return rows
 }
 
 func mergeSourceAttributes(base, source map[attr.Key]any) {
@@ -1863,7 +1920,12 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		if err != nil {
 			return fmt.Errorf("marshal prompt attachment metadata: %w", err)
 		}
-		parentID := parentResolver.resolve(promptSHA256)
+		parentID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		// AHP attachment-only messages have no prompt parent. The latest user
+		// row belongs to an earlier event, unlike transcript attachment fallback.
+		if promptSHA256 != "" || !strings.HasPrefix(attachment.EntryUUID, "ahp-attachment:") {
+			parentID = parentResolver.resolve(promptSHA256)
+		}
 		pending = append(pending, pendingPromptAttachment{
 			attachment: attachment,
 			content:    []byte(attachment.Content),
@@ -2080,21 +2142,31 @@ const maxEventBackdate = 14 * 24 * time.Hour
 // enforcement evaluation) agrees on one time for one event; a skewed device
 // clock must never make the stores diverge.
 func canonicalEventTime(payload *gen.IngestPayload) time.Time {
-	now := time.Now()
+	raw := ""
 	if payload != nil && payload.Event != nil {
-		if raw := strings.TrimSpace(conv.PtrValOr(payload.Event.OccurredAt, "")); raw != "" {
-			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-				if t.After(now) {
-					return now
-				}
-				if floor := now.Add(-maxEventBackdate); t.Before(floor) {
-					return floor
-				}
-				return t
-			}
-		}
+		raw = conv.PtrValOr(payload.Event.OccurredAt, "")
 	}
-	return now
+	return clampEventTime(raw, time.Now())
+}
+
+// clampEventTime parses a sender-supplied RFC3339 time and clamps it to
+// [now-maxEventBackdate, now]; an empty or unparseable value is now.
+func clampEventTime(raw string, now time.Time) time.Time {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return now
+	}
+	t, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return now
+	}
+	if t.After(now) {
+		return now
+	}
+	if floor := now.Add(-maxEventBackdate); t.Before(floor) {
+		return floor
+	}
+	return t
 }
 
 func canonicalSessionID(payload *gen.IngestPayload) string {

@@ -41,6 +41,10 @@ func (a fixedHookAuthorizer) Authorize(ctx context.Context, _ string, _ *goasecu
 	return contextvalues.SetAuthContext(ctx, a.authCtx), nil
 }
 
+func (a fixedHookAuthorizer) AuthorizeWithHandlerProjectAccess(ctx context.Context, _ string, _ *goasecurity.APIKeyScheme) (context.Context, error) {
+	return contextvalues.SetAuthContext(ctx, a.authCtx), nil
+}
+
 func (s captureFeatureStub) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
 	if feature == s.fail {
 		return false, errors.New("feature lookup failed")

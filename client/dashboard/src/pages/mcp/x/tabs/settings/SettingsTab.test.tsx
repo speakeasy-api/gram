@@ -4,6 +4,15 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsTab } from "./SettingsTab";
 
+vi.mock("@/hooks/useToolsetUrl", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useToolsetUrl")>()),
+  useResolvedMcpServerUrl: () => ({
+    mcpUrl: undefined,
+    installPageUrl: undefined,
+    loading: false,
+  }),
+}));
+
 vi.mock("./sections/GeneralSection", () => ({
   GeneralSection: () => <h2>General</h2>,
 }));
@@ -12,6 +21,14 @@ vi.mock("./sections/authentication/AuthenticationSection", () => ({
   AuthenticationSection: ({ mcpServer }: { mcpServer: McpServer }) => (
     <h2>{mcpServer.remoteMcpServerId ? "Identity" : "Authentication"}</h2>
   ),
+}));
+vi.mock("./sections/authentication/UpstreamCredentialsSection", () => ({
+  UPSTREAM_CREDENTIALS_SECTION_ID: "upstream-credentials",
+  UpstreamCredentialsSection: () => <h2>Upstream credentials</h2>,
+}));
+vi.mock("./sections/authentication/IdentityChainingSection", () => ({
+  IDENTITY_CHAINING_SECTION_ID: "identity-chaining",
+  IdentityChainingSection: () => <h2>Identity chaining</h2>,
 }));
 vi.mock("./sections/DangerZoneSection", () => ({
   DangerZoneSection: () => <h2>Danger Zone</h2>,
@@ -23,6 +40,7 @@ vi.mock("./sections/PublicRateLimitsSection", () => ({
   PublicRateLimitsSection: () => <h2>Public Rate Limits</h2>,
 }));
 vi.mock("./sections/RemoteMcpSessionsSection", () => ({
+  MCP_SESSIONS_SECTION_ID: "sessions",
   RemoteMcpSessionsSection: () => <h2>Sessions</h2>,
 }));
 vi.mock("./sections/ServerUrlSection", () => ({
@@ -53,7 +71,7 @@ vi.mock("./sections/TunnelKeySection", () => ({
 }));
 vi.mock("./sections/AgentSetupSection", () => ({
   MCP_AGENT_SETUP_SECTION_ID: "agent-setup",
-  AgentSetupSection: () => <h2>Agent Setup</h2>,
+  AgentSetupSection: () => <h2>Tunnel agent setup</h2>,
 }));
 
 // The source rows the tab fetches for the sections that edit them. Only the
@@ -122,6 +140,8 @@ describe("SettingsTab", () => {
       // Upstream headers are the Identity panel's Custom Headers disclosure
       // not a section of their own.
       "Identity",
+      "Upstream credentials",
+      "Identity chaining",
       "Server URL",
       "Network Access",
       "Sessions",
@@ -138,12 +158,13 @@ describe("SettingsTab", () => {
       "Server URL",
       "Network Access",
       "Authentication",
+      "Upstream credentials",
       "Resource Identifier",
       "Caller Identity",
       "Public Access",
       "Public Rate Limits",
       "Tunnel Key",
-      "Agent Setup",
+      "Tunnel agent setup",
       "Tool Filtering",
       "Danger Zone",
     ]);

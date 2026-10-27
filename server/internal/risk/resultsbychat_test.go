@@ -2,6 +2,7 @@ package risk_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -11,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -45,80 +47,45 @@ func seedChatWithUser(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID
 func TestListRiskResultsByChat_GroupsFindings(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
-
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
+	projectID := *authCtx.ProjectID
+	organizationID := authCtx.ActiveOrganizationID
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat Test")})
 	require.NoError(t, err)
 
-	policyID, _ := uuid.Parse(policy.ID)
-
-	// Create two chats, seed findings in both
-	_, msg1 := seedChatWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alice@example.com")
-	_, msg2 := seedChatWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "bob@example.com")
-
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msg1, true)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msg1, true)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msg2, true)
+	// One chat holds a message-anchored and an attachment-anchored finding;
+	// a second chat holds only an attachment-anchored one. Both anchors must
+	// resolve the chat, so the rollup sees two chats and three findings.
+	mixedChat, mixedMsg := seedChatWithUser(t, ti, projectID, organizationID, "alice@example.com")
+	attachmentChat, attachmentMsg := seedChatWithUser(t, ti, projectID, organizationID, "bob@example.com")
+	at := time.Now().UTC()
+	finding := func(chatID, messageID uuid.UUID) chrepo.RiskFindingRow {
+		return chListFinding(t, projectID, organizationID, chatID, messageID, policy.ID, at, at, "gitleaks", "secret.generic", "", "", "", "")
+	}
+	attachment := func(chatID, messageID uuid.UUID) chrepo.RiskFindingRow {
+		row := finding(chatID, messageID)
+		row.ChatMessageID = ""
+		row.ContentPartID = uuid.NewString()
+		return row
+	}
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+		finding(mixedChat, mixedMsg),
+		attachment(mixedChat, mixedMsg),
+		attachment(attachmentChat, attachmentMsg),
+	}))
 
 	result, err := ti.service.ListRiskResultsByChat(ctx, &gen.ListRiskResultsByChatPayload{})
 	require.NoError(t, err)
 	require.Len(t, result.Chats, 2)
-
-	// Results are ordered by latest_detected DESC; both have same time so order may vary.
-	// Just verify the counts sum to 3.
-	totalFindings := result.Chats[0].FindingsCount + result.Chats[1].FindingsCount
-	require.Equal(t, int64(3), totalFindings)
-}
-
-func TestListRiskResultsByChat_ExcludesNotFound(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat NotFound")})
-	require.NoError(t, err)
-
-	policyID, _ := uuid.Parse(policy.ID)
-	_, msgID := seedChatWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "")
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, false)
-
-	result, err := ti.service.ListRiskResultsByChat(ctx, &gen.ListRiskResultsByChatPayload{})
-	require.NoError(t, err)
-	require.Empty(t, result.Chats)
-}
-
-func TestListRiskResultsByChat_CursorPagination(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat Cursor")})
-	require.NoError(t, err)
-
-	policyID, _ := uuid.Parse(policy.ID)
-
-	// Create 3 chats with findings
-	for range 3 {
-		_, msgID := seedChatWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "")
-		seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+	counts := map[string]int64{}
+	for _, chat := range result.Chats {
+		counts[chat.ChatID] = chat.FindingsCount
 	}
-
-	// First page without cursor returns all 3 (< page size of 50)
-	result, err := ti.service.ListRiskResultsByChat(ctx, &gen.ListRiskResultsByChatPayload{})
-	require.NoError(t, err)
-	require.Len(t, result.Chats, 3)
+	require.Equal(t, map[string]int64{mixedChat.String(): 2, attachmentChat.String(): 1}, counts)
 	require.Nil(t, result.NextCursor)
 }
 
@@ -131,57 +98,59 @@ func TestListRiskResultsByChat_Unauthorized(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestListRiskResultsByChat_IncludesExternalUserID(t *testing.T) {
+func TestListRiskResultsByChat_CountsOnlyLiveEnabledPolicyFindings(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
-
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
+	projectID := *authCtx.ProjectID
+	organizationID := authCtx.ActiveOrganizationID
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat User")})
+	enabled, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat ClickHouse Enabled")})
 	require.NoError(t, err)
+	disabled, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat ClickHouse Disabled"), Enabled: new(false)})
+	require.NoError(t, err)
+	deleted, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat ClickHouse Deleted")})
+	require.NoError(t, err)
+	require.NoError(t, ti.service.DeleteRiskPolicy(ctx, &gen.DeleteRiskPolicyPayload{ID: deleted.ID}))
 
-	policyID, _ := uuid.Parse(policy.ID)
-	_, msgID := seedChatWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alice@example.com")
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+	chatID, messageID := seedChatWithUser(t, ti, projectID, organizationID, "alice@example.com")
+
+	at := time.Now().UTC()
+	finding := func(policyID string) chrepo.RiskFindingRow {
+		return chListFinding(t, projectID, organizationID, chatID, messageID, policyID, at, at, "gitleaks", "secret.generic", "alice@example.com", "", "", "")
+	}
+	liveOne := finding(enabled.ID)
+	liveTwo := finding(enabled.ID)
+	dismissed := finding(enabled.ID)
+	dismissed.FalsePositiveAt = new(at)
+	excluded := finding(enabled.ID)
+	excluded.ExcludedAt = new(at)
+	shadow := finding(enabled.ID)
+	shadow.Shadow = true
+	deadLetter := finding(enabled.ID)
+	deadLetter.DeadLetterReason = "scanner failed"
+	disabledFinding := finding(disabled.ID)
+	deletedFinding := finding(deleted.ID)
+
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+		liveOne,
+		liveTwo,
+		dismissed,
+		excluded,
+		shadow,
+		deadLetter,
+		disabledFinding,
+		deletedFinding,
+	}))
 
 	result, err := ti.service.ListRiskResultsByChat(ctx, &gen.ListRiskResultsByChatPayload{})
 	require.NoError(t, err)
 	require.Len(t, result.Chats, 1)
-	require.NotNil(t, result.Chats[0].UserID)
+	require.Equal(t, chatID.String(), result.Chats[0].ChatID)
+	require.Equal(t, int64(2), result.Chats[0].FindingsCount)
+	require.Equal(t, "test chat", *result.Chats[0].ChatTitle)
 	require.Equal(t, "alice@example.com", *result.Chats[0].UserID)
-}
-
-func TestListRiskResultsByChat_IncludesContentPartFindings(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat Content Part")})
-	require.NoError(t, err)
-	policyID, _ := uuid.Parse(policy.ID)
-
-	// One chat holds a message-anchored and an attachment-anchored finding;
-	// a second chat holds only an attachment-anchored one. Both anchors must
-	// resolve the chat, so the rollup sees two chats and three findings.
-	mixedChat, mixedMsg := seedChatWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alice@example.com")
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, mixedMsg, true)
-	seedContentPartFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, mixedChat, mixedMsg)
-	attachmentChat, attachmentMsg := seedChatWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "bob@example.com")
-	seedContentPartFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, attachmentChat, attachmentMsg)
-
-	result, err := ti.service.ListRiskResultsByChat(ctx, &gen.ListRiskResultsByChatPayload{})
-	require.NoError(t, err)
-	require.Len(t, result.Chats, 2)
-	counts := map[string]int64{}
-	for _, chat := range result.Chats {
-		counts[chat.ChatID] = chat.FindingsCount
-	}
-	require.Equal(t, map[string]int64{mixedChat.String(): 2, attachmentChat.String(): 1}, counts)
 }

@@ -13,13 +13,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
@@ -187,6 +190,15 @@ func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Querie
 		Correlation:       healthCorrelation(server),
 		LegacyAuth:        nil,
 		UserSessionIssuer: nil,
+		UpstreamAuth:      nil,
+	}
+
+	if !server.ToolsetOnly {
+		upstream, err := authclients.ReadServerAuthentication(ctx, s.db, organizationID, server.ID)
+		if err != nil {
+			return nil, fmt.Errorf("read upstream authentication: %w", err)
+		}
+		result.UpstreamAuth = healthUpstreamAuth(upstream)
 	}
 
 	if server.UserSessionIssuerID.Valid {
@@ -245,8 +257,6 @@ func legacyAuth(server repo.AdminGetMcpServerAuthRow) *string {
 	switch {
 	case server.ExternalOauthServerID.Valid:
 		mode = "external_oauth"
-	case server.OauthProxyServerID.Valid:
-		mode = "oauth_proxy"
 	case server.Visibility == "private":
 		mode = "gram_private"
 	default:
@@ -293,6 +303,12 @@ func (s *Service) readUserSessionIssuer(ctx context.Context, queries *repo.Queri
 		stored := string(mode)
 		admissionMode = &stored
 	}
+	// The column is not constrained; any value but 'shared' serves
+	// per-endpoint authorization servers.
+	authorizationServerMode := authserver.ModeEndpoint
+	if authserver.Mode(row.AuthorizationServerMode) == authserver.ModeShared {
+		authorizationServerMode = authserver.ModeShared
+	}
 	var trusted *gen.AdminMcpServerHealthTrustedRemoteSession
 	if row.TrustedRemoteSessionIssuerID.Valid && row.TrustedRemoteSessionClientID.Valid {
 		trusted = &gen.AdminMcpServerHealthTrustedRemoteSession{
@@ -336,6 +352,8 @@ func (s *Service) readUserSessionIssuer(ctx context.Context, queries *repo.Queri
 		AttachmentScope:               scope,
 		ClientIDMetadataAdmissionMode: admissionMode,
 		UseAuthenticationHost:         row.UseAuthenticationHost,
+		AuthorizationServerMode:       string(authorizationServerMode),
+		IssuerURLPinned:               row.IssuerUrlPinned,
 		TrustedRemoteSession:          trusted,
 		OtherServersUsingIssuer:       otherServers,
 		CreatedAt:                     row.CreatedAt.Time.UTC().Format(time.RFC3339),
@@ -568,4 +586,24 @@ func nonNilStrings(values []string) []string {
 		return []string{}
 	}
 	return values
+}
+
+func healthUpstreamAuth(view *types.McpServerAuthentication) *gen.AdminMcpServerHealthUpstreamAuth {
+	clients := make([]*gen.AdminMcpServerHealthAuthClient, 0, len(view.Clients))
+	for _, client := range view.Clients {
+		clients = append(clients, &gen.AdminMcpServerHealthAuthClient{
+			ID:                    client.ID,
+			ClientType:            client.ClientType,
+			Source:                string(client.Source),
+			Enabled:               client.Enabled,
+			RemoteSessionClientID: client.RemoteSessionClientID,
+			ServerCount:           len(client.Servers),
+			HeaderCount:           len(client.Headers),
+		})
+	}
+	return &gen.AdminMcpServerHealthUpstreamAuth{
+		Status:               view.Status,
+		RequiresUpstreamAuth: view.RequiresUpstreamAuth,
+		AuthClients:          clients,
+	}
 }

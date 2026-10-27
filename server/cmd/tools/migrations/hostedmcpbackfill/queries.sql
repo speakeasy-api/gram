@@ -63,8 +63,6 @@ SELECT EXISTS (
     AND id <> @id
 );
 
--- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
-
 -- name: SeedOrganizationFixture :exec
 INSERT INTO organization_metadata (id, name, slug)
 VALUES (@id, @name, @slug);
@@ -113,3 +111,4 @@ SELECT actor_id, actor_type, action
 FROM audit_logs
 WHERE organization_id = @organization_id
 ORDER BY seq;
+

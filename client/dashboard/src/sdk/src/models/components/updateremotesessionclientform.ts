@@ -46,9 +46,17 @@ export type UpdateRemoteSessionClientForm = {
    */
   audience?: string | undefined;
   /**
+   * Correct the client_id registered with the issuer. Refused for Client ID Metadata Document (CIMD) clients and clients managed by an identity provider connection. A changed value revokes every remote session obtained through the client, so each user must reconnect. Omit to leave unchanged.
+   */
+  clientId?: string | undefined;
+  /**
    * Rotate the client secret. Speakeasy re-encrypts before persisting.
    */
   clientSecret?: string | undefined;
+  /**
+   * Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
+   */
+  displayName?: string | undefined;
   /**
    * The remote_session_client id.
    */
@@ -89,7 +97,9 @@ export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema
 /** @internal */
 export type UpdateRemoteSessionClientForm$Outbound = {
   audience?: string | undefined;
+  client_id?: string | undefined;
   client_secret?: string | undefined;
+  display_name?: string | undefined;
   id: string;
   legacy_callback_url?: boolean | undefined;
   scope?: Array<string> | undefined;
@@ -104,7 +114,9 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     audience: z.optional(z.string()),
+    clientId: z.optional(z.string()),
     clientSecret: z.optional(z.string()),
+    displayName: z.optional(z.string()),
     id: z.string(),
     legacyCallbackUrl: z.optional(z.boolean()),
     scope: z.optional(z.array(z.string())),
@@ -117,7 +129,9 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      clientId: "client_id",
       clientSecret: "client_secret",
+      displayName: "display_name",
       legacyCallbackUrl: "legacy_callback_url",
       tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",

@@ -18,9 +18,11 @@ const (
 	subjectTypeAssistant                   subjectType = "assistant"
 	subjectTypeAssistantMemory             subjectType = "assistant_memory"
 	subjectTypeAsset                       subjectType = "asset"
+	subjectTypeAuthClient                  subjectType = "auth_client"
 	subjectTypeAwsIamCredential            subjectType = "aws_iam_credential"
 	subjectTypeAwsKmsKey                   subjectType = "aws_kms_key"
 	subjectTypeBillingMetadata             subjectType = "billing_metadata"
+	subjectTypeCatalogPromotion            subjectType = "catalog_promotion"
 	subjectTypeChatAnalysisSettings        subjectType = "chat_analysis_settings"
 	subjectTypeChatSession                 subjectType = "chat_session"
 	subjectTypeCustomDomain                subjectType = "custom_domain"
@@ -29,6 +31,8 @@ const (
 	subjectTypeAiScanTarget                subjectType = "device_agent_ai_scan_target"
 	subjectTypeAIToolDecision              subjectType = "ai_tool_decision"
 	subjectTypeDeviceIntegration           subjectType = "device_integration_config"
+	subjectTypeDirectoryReviewItem         subjectType = "directory_review_item"
+	subjectTypeDirectoryReviewSettings     subjectType = "directory_review_settings"
 	subjectTypeDirectoryRoleMapping        subjectType = "directory_role_mapping"
 	subjectTypeEnvironment                 subjectType = "environment"
 	subjectTypeGcpIamCredential            subjectType = "gcp_iam_credential"
@@ -36,6 +40,7 @@ const (
 	subjectTypeIdentityProviderConnection  subjectType = "identity_provider_connection"
 	subjectTypeJsonWebKey                  subjectType = "json_web_key"
 	subjectTypeJsonWebKeySet               subjectType = "json_web_key_set"
+	subjectTypeInternalSessionIssuer       subjectType = "internal_session_issuer"
 	subjectTypeKillswitchPrescription      subjectType = "killswitch_prescription"
 	subjectTypeLiteLLMInstance             subjectType = "litellm_instance"
 	subjectTypeMcpApprovalRequest          subjectType = "mcp_approval_request"
@@ -83,8 +88,9 @@ const (
 	subjectTypeVariation                   subjectType = "variation"
 	// The admitted subject, not the machine it admits: the row is the grant, so
 	// it is audited under its own subject rather than under the issuer's.
-	subjectTypeWorkloadAdmission subjectType = "workload_admission"
-	subjectTypeWorkloadIssuer    subjectType = "workload_issuer"
+	subjectTypeWorkloadAdmission       subjectType = "workload_admission"
+	subjectTypeWorkloadDeviceJoinToken subjectType = "workload_device_join_token"
+	subjectTypeWorkloadIssuer          subjectType = "workload_issuer"
 )
 
 type Action string

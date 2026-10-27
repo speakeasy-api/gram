@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // observeTimeout bounds an observer call so readiness bookkeeping never
@@ -18,6 +19,9 @@ const observeTimeout = 2 * time.Second
 // or provider response content.
 type Observation struct {
 	OrganizationID string
+
+	// Provider is the identity provider kind that served the attempt.
+	Provider remotesessions.EMAProviderKind
 
 	// TrustedIssuerID is the identity provider the exchange was sent to.
 	TrustedIssuerID uuid.UUID

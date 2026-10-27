@@ -132,7 +132,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	allSessions := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	allSessions := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "total_cost",
@@ -157,7 +157,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.NotNil(t, allSessions.Sessions[2].Title)
 	require.Equal(t, "Fix flaky test", *allSessions.Sessions[2].Title)
 
-	filtered := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	filtered := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: from,
 		To:   to,
 		Filters: []*gen.QueryFilter{
@@ -198,7 +198,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.NotNil(t, session.Title)
 	require.Equal(t, "Fix flaky test", *session.Title)
 
-	byToolCalls := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	byToolCalls := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "tool_call_count",
@@ -210,7 +210,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	})
 	require.Equal(t, chatID1, byToolCalls.Sessions[0].GramChatID)
 
-	byMessages := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	byMessages := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "message_count",
@@ -222,7 +222,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	})
 	require.Equal(t, chatID1, byMessages.Sessions[0].GramChatID)
 
-	byDuration := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	byDuration := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "duration_seconds",
@@ -288,7 +288,7 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 
 	// department_name lives on one row, hook_source on another. A per-row AND
 	// would return nothing; the per-chat HAVING must still match the chat.
-	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	res := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: from,
 		To:   to,
 		Filters: []*gen.QueryFilter{
@@ -381,7 +381,7 @@ func TestListSessions_CoLocatesAttributionFilters(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	res := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: from,
 		To:   to,
 		Filters: []*gen.QueryFilter{
@@ -454,7 +454,7 @@ func TestListSessions_ExcludesAssistantChatCompletions(t *testing.T) {
 
 	// Once the Claude session is visible, the assistants chat must not be:
 	// its rows fail sessionSourceRowPredicate regardless of insert timing.
-	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	res := requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "total_cost",
@@ -504,7 +504,7 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+	requireListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "total_cost",
@@ -552,7 +552,7 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	require.Equal(t, chatIDs[2], page3.Sessions[0].GramChatID)
 }
 
-func waitForListSessions(
+func requireListSessions(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
@@ -561,13 +561,10 @@ func waitForListSessions(
 ) *gen.ListSessionsResult {
 	t.Helper()
 
-	var result *gen.ListSessionsResult
-	var err error
-	require.Eventually(t, func() bool {
-		result, err = ti.service.ListSessions(ctx, payload)
-		return err == nil && result != nil && ready(result)
-	}, 10*time.Second, 200*time.Millisecond, "expected list sessions result to become query-ready, err: %v", errors.Unwrap(err))
+	result, err := ti.service.ListSessions(ctx, payload)
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, result)
+	require.True(t, ready(result), "list sessions result did not match")
 	return result
 }
 

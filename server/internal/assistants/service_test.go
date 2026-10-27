@@ -57,7 +57,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestServiceCoreAdmitPendingThreadsUsesFlyBackend(t *testing.T) {
+func TestServiceCoreAdmitPendingThreadsUsesGKEBackend(t *testing.T) {
 	t.Parallel()
 
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants")
@@ -65,7 +65,7 @@ func TestServiceCoreAdmitPendingThreadsUsesFlyBackend(t *testing.T) {
 
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestServiceCoreAdmitPendingThreadsUsesFlyBackend(t *testing.T) {
 		ProjectID:         projectID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, runtimeBackendFlyIO, runtime.Backend)
+	require.Equal(t, runtimeBackendGKE, runtime.Backend)
 }
 
 func TestServiceCoreAdmitPendingThreadsCapsFanOut(t *testing.T) {
@@ -90,7 +90,7 @@ func TestServiceCoreAdmitPendingThreadsCapsFanOut(t *testing.T) {
 	assistantID, pending := seedAssistantWithPendingThreads(t, conn, "assistants-cap", 2, 3)
 	preActivateV2Runtime(t, conn, assistantID, pending[0])
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestServiceCoreAdmitPendingThreadsBlocksWhenActiveAtCap(t *testing.T) {
 	require.NotEmpty(t, pending)
 	preActivateV2Runtime(t, conn, assistantID, active[0])
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
 	require.NoError(t, err)
@@ -126,7 +126,7 @@ func TestServiceCoreAdmitPendingThreadsReleasesPartialHeadroom(t *testing.T) {
 	assistantID, active, _ := seedAssistantWithActiveAndPending(t, conn, "assistants-partial", 2, 1, 2)
 	preActivateV2Runtime(t, conn, assistantID, active[0])
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
 	require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestServiceCoreAdmitPendingThreadsBypassesCapForReservedStarter(t *testing.
 	assistantID, _, pending := seedAssistantWithActiveAndPending(t, conn, "assistants-cold-bypass", 1, 1, 1)
 	require.NotEmpty(t, pending)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
 	require.NoError(t, err)
@@ -162,8 +162,8 @@ func TestServiceCoreEnsureWarmupThreadBootsRuntimeViaTurnMachinery(t *testing.T)
 	ctx := t.Context()
 	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup", 2)
 
-	metadata := []byte(`{"app_name":"gram-asst-warm"}`)
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: metadata}}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	metadata := []byte(`{"claim_name":"gram-asst-warm"}`)
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: metadata}}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.EnsureWarmupThread(ctx, assistantID)
 	require.NoError(t, err)
@@ -204,7 +204,7 @@ func TestServiceCoreEnsureWarmupThreadIsIdempotent(t *testing.T) {
 	ctx := t.Context()
 	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-idem", 2)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	first, err := core.EnsureWarmupThread(ctx, assistantID)
 	require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestServiceCoreWarmupThreadDoesNotConsumeConcurrencySlot(t *testing.T) {
 	ctx := t.Context()
 	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-cap", 1)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	warmup, err := core.EnsureWarmupThread(ctx, assistantID)
 	require.NoError(t, err)
@@ -260,7 +260,7 @@ func TestServiceCoreEnsureWarmupThreadSkipsWhenTrafficOwnsRuntime(t *testing.T) 
 	assistantID, pending := seedAssistantWithPendingThreads(t, conn, "assistants-warmup-noop", 2, 1)
 	preActivateV2Runtime(t, conn, assistantID, pending[0])
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.EnsureWarmupThread(ctx, assistantID)
 	require.NoError(t, err)
@@ -287,7 +287,7 @@ func TestServiceCoreEnsureWarmupThreadSkipsInactiveAssistant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.EnsureWarmupThread(ctx, assistantID)
 	require.NoError(t, err)
@@ -394,7 +394,7 @@ func preActivateV2Runtime(t *testing.T, conn *pgxpool.Pool, assistantID, anchor 
 		AssistantThreadID: anchor,
 		AssistantID:       assistantID,
 		ProjectID:         row.ProjectID,
-		Backend:           runtimeBackendFlyIO,
+		Backend:           runtimeBackendGKE,
 		State:             runtimeStateStarting,
 	}))
 	runtime, err := assistantsrepo.New(conn).LookupActiveAssistantRuntimeV2(ctx, assistantsrepo.LookupActiveAssistantRuntimeV2Params{
@@ -420,6 +420,7 @@ func TestWarmRemainingSecondsKeepsBusyRunnerAlive(t *testing.T) {
 	zero := uint64(0)
 	require.Positive(t, warmRemainingSeconds(&zero, 300), "busy runner (idle=&0) must keep a positive warm window")
 	require.Zero(t, warmRemainingSeconds(nil, 300), "no live threads must collapse to a Stop decision")
+	require.Positive(t, warmRemainingSeconds(&zero, 0), "a turn in flight must never expire, even with a zero TTL")
 }
 
 func TestServiceCoreExpireThreadRuntimeRevertsWhenTurnInFlight(t *testing.T) {
@@ -438,7 +439,7 @@ func TestServiceCoreExpireThreadRuntimeRevertsWhenTurnInFlight(t *testing.T) {
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateActive,
 		WarmUntil:           pgtype.Timestamptz{Time: warmUntil, Valid: true},
@@ -453,7 +454,7 @@ func TestServiceCoreExpireThreadRuntimeRevertsWhenTurnInFlight(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	busyIdle := uint64(0)
 	backend := testRuntimeBackend{
-		backend:      runtimeBackendFlyIO,
+		backend:      runtimeBackendGKE,
 		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: &busyIdle},
 		stopCalls:    &stopCalls,
 	}
@@ -497,7 +498,7 @@ func TestServiceCoreExpireThreadRuntimeRetryAfterStopFailureIsIdempotent(t *test
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateActive,
 		WarmUntil:           pgtype.Timestamptz{Time: warmUntil, Valid: true},
@@ -511,9 +512,9 @@ func TestServiceCoreExpireThreadRuntimeRetryAfterStopFailureIsIdempotent(t *test
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
 	failingBackend := testRuntimeBackend{
-		backend:      runtimeBackendFlyIO,
+		backend:      runtimeBackendGKE,
 		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(DefaultWarmTTLSeconds + 60))},
-		stopErr:      errors.New("fly delete app blew up"),
+		stopErr:      errors.New("delete sandbox claim blew up"),
 		stopCalls:    &stopCalls,
 	}
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, failingBackend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
@@ -530,7 +531,7 @@ func TestServiceCoreExpireThreadRuntimeRetryAfterStopFailureIsIdempotent(t *test
 	require.Equal(t, runtimeStateExpiring, runtime.State, "row must remain in expiring after Stop failure")
 
 	healingBackend := testRuntimeBackend{
-		backend:      runtimeBackendFlyIO,
+		backend:      runtimeBackendGKE,
 		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(DefaultWarmTTLSeconds + 60))},
 		stopCalls:    &stopCalls,
 	}
@@ -571,7 +572,7 @@ func TestServiceCoreReapStuckRuntimesCleansUpStuckExpiring(t *testing.T) {
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateExpiring,
 		WarmUntil:           pgtype.Timestamptz{},
@@ -582,7 +583,7 @@ func TestServiceCoreReapStuckRuntimesCleansUpStuckExpiring(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapStuckRuntimes(t.Context())
 	require.NoError(t, err)
@@ -616,7 +617,7 @@ func TestServiceCoreReapStuckRuntimesLeavesFreshExpiring(t *testing.T) {
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateExpiring,
 		WarmUntil:           pgtype.Timestamptz{},
@@ -627,7 +628,7 @@ func TestServiceCoreReapStuckRuntimesLeavesFreshExpiring(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapStuckRuntimes(t.Context())
 	require.NoError(t, err)
@@ -660,7 +661,7 @@ func TestServiceCoreReapStuckRuntimesSkipsLiveProcessingLease(t *testing.T) {
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateActive,
 		WarmUntil:           pgtype.Timestamptz{Time: time.Now().UTC().Add(-2 * time.Minute), Valid: true},
@@ -679,7 +680,7 @@ func TestServiceCoreReapStuckRuntimesSkipsLiveProcessingLease(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapStuckRuntimes(ctx)
 	require.NoError(t, err)
@@ -711,15 +712,15 @@ func TestServiceCoreReapStuckRuntimesLeavesIdleActiveRuntime(t *testing.T) {
 	require.NoError(t, err)
 
 	// Long-idle active runtime: warm window long passed, no heartbeat in
-	// ages. Idle runtimes keep their VM — only the stale processing lease
-	// on the event gets requeued.
+	// ages. The stuck-runtime sweep only requeues the stale event lease;
+	// idle expiry is handled separately.
 	idleSince := time.Now().UTC().Add(-30 * time.Minute)
 	err = assistantsrepo.New(conn).CreateAssistantRuntime(ctx, assistantsrepo.CreateAssistantRuntimeParams{
 		ID:                  uuid.New(),
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateActive,
 		WarmUntil:           pgtype.Timestamptz{Time: idleSince, Valid: true},
@@ -738,11 +739,12 @@ func TestServiceCoreReapStuckRuntimesLeavesIdleActiveRuntime(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapStuckRuntimes(ctx)
 	require.NoError(t, err)
-	require.EqualValues(t, 0, result.StaleRuntimesStopped, "idle active runtimes must never be reaped")
+	require.EqualValues(t, 0, result.StaleRuntimesStopped, "the stuck-runtime sweep must not reap idle active runtimes")
+	require.EqualValues(t, 0, result.IdleRuntimesStopped)
 	require.EqualValues(t, 1, result.StaleEventsRequeued)
 
 	runtime, err := assistantsrepo.New(conn).GetLatestAssistantRuntimeByThreadID(ctx, runtimeKey)
@@ -753,6 +755,305 @@ func TestServiceCoreReapStuckRuntimesLeavesIdleActiveRuntime(t *testing.T) {
 	event, err = assistantsrepo.New(conn).GetLatestAssistantThreadEventByThreadID(ctx, threadKey)
 	require.NoError(t, err)
 	require.Equal(t, eventStatusPending, event.Status)
+}
+
+func TestServiceCoreExpireThreadRuntimeStopsIdleV2Runtime(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_expire_v2")
+	require.NoError(t, err)
+
+	projectID, assistantID, admittingThreadID := insertReapableProject(t, conn, "expire-v2")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, admittingThreadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-idle","pod_ip":"10.0.0.1"}`)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendGKE,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(DefaultWarmTTLSeconds))},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ExpireThreadRuntime(t.Context(), projectID, admittingThreadID, DefaultWarmTTLSeconds)
+	require.NoError(t, err)
+	require.True(t, result.Stopped)
+	require.EqualValues(t, 1, stopCalls.Load())
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
+		ID:        runtimeID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, runtime.State)
+	require.True(t, runtime.Deleted)
+}
+
+func TestServiceCoreReapStuckRuntimesExpiresUnwatchedIdleRuntime(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_runtime")
+	require.NoError(t, err)
+
+	lapsedWarmUntil := time.Now().UTC().Add(-(runtimeIdleSweepGrace + time.Minute))
+
+	idleProjectID, idleAssistantID, idleThreadID := insertReapableProject(t, conn, "reap-idle-gke")
+	idleRuntimeID := insertActiveV2RuntimeRow(t, conn, idleProjectID, idleAssistantID, idleThreadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-idle","pod_ip":"10.0.0.1"}`)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeActive(t.Context(), assistantsrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive,
+		WarmUntil:   pgtype.Timestamptz{Time: lapsedWarmUntil, Valid: true},
+		RuntimeID:   idleRuntimeID,
+		ProjectID:   idleProjectID,
+	}))
+
+	freshProjectID, freshAssistantID, freshThreadID := insertReapableProject(t, conn, "reap-idle-fresh")
+	freshRuntimeID := insertActiveV2RuntimeRow(t, conn, freshProjectID, freshAssistantID, freshThreadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-fresh","pod_ip":"10.0.0.2"}`)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeActive(t.Context(), assistantsrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive,
+		WarmUntil:   pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Minute), Valid: true},
+		RuntimeID:   freshRuntimeID,
+		ProjectID:   freshProjectID,
+	}))
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendGKE,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.IdleRuntimesStopped)
+	require.EqualValues(t, 1, stopCalls.Load())
+	require.Equal(t, []uuid.UUID{idleAssistantID}, result.AffectedAssistantIDs, "the coordinator must re-admit any pending work left on a swept runtime")
+
+	idle, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
+		ID:        idleRuntimeID,
+		ProjectID: idleProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, idle.State)
+
+	fresh, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
+		ID:        freshRuntimeID,
+		ProjectID: freshProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, fresh.State, "a runtime inside the sweep grace belongs to its thread workflow")
+}
+
+func TestServiceCoreReapStuckRuntimesKeepsBusyIdleSweepCandidate(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_busy_runtime")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "reap-idle-busy")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-busy","pod_ip":"10.0.0.1"}`)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeActive(t.Context(), assistantsrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive,
+		WarmUntil:   pgtype.Timestamptz{Time: time.Now().UTC().Add(-(runtimeIdleSweepGrace + time.Minute)), Valid: true},
+		RuntimeID:   runtimeID,
+		ProjectID:   projectID,
+	}))
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendGKE,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(0))},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, result.IdleRuntimesStopped)
+	require.Zero(t, stopCalls.Load(), "a runtime with a turn in flight must not be stopped")
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
+		ID:        runtimeID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, runtime.State)
+	require.True(t, runtime.WarmUntil.Time.After(time.Now().UTC()), "revert must re-arm the warm window")
+}
+
+// lapseRuntimeWarmWindow moves a runtime's warm_until past the idle sweep's
+// grace so the sweep treats it as a candidate.
+func lapseRuntimeWarmWindow(t *testing.T, conn *pgxpool.Pool, projectID, runtimeID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeActive(t.Context(), assistantsrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive,
+		WarmUntil:   pgtype.Timestamptz{Time: time.Now().UTC().Add(-(runtimeIdleSweepGrace + time.Minute)), Valid: true},
+		RuntimeID:   runtimeID,
+		ProjectID:   projectID,
+	}))
+}
+
+func TestServiceCoreReapStuckRuntimesRetriesFailedIdleExpire(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_retry")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "reap-idle-retry")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-retry","pod_ip":"10.0.0.1"}`)
+	lapseRuntimeWarmWindow(t, conn, projectID, runtimeID)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	failing := testRuntimeBackend{
+		backend:      runtimeBackendGKE,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopErr:      errors.New("delete sandbox claim blew up"),
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, failing, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, result.IdleRuntimesStopped)
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, runtime.State, "a failed expire must hand the row back for the next tick")
+
+	healing := failing
+	healing.stopErr = nil
+	core = NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, healing, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err = core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.IdleRuntimesStopped)
+	require.EqualValues(t, 2, stopCalls.Load())
+}
+
+func TestServiceCoreReapStuckRuntimesStopsHungRunner(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_hung_runner")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "reap-idle-hung")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-hung","pod_ip":"10.0.0.1"}`)
+	lapseRuntimeWarmWindow(t, conn, projectID, runtimeID)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:     runtimeBackendGKE,
+		statusHangs: true,
+		stopCalls:   &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.IdleRuntimesStopped, "a runner whose /state hangs must still be torn down")
+	require.EqualValues(t, 1, stopCalls.Load())
+}
+
+func TestServiceCoreReapStuckRuntimesStopsBackendOfStalledExpire(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_stalled_expire")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "reap-idle-stalled")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-stalled","pod_ip":"10.0.0.1"}`)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeStateForTest(t.Context(), assistantsrepo.SetAssistantRuntimeStateForTestParams{
+		State:     runtimeStateExpiring,
+		UpdatedAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(-(runtimeExpiringReapGrace + time.Minute)), Valid: true},
+		RuntimeID: runtimeID,
+		ProjectID: projectID,
+	}))
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendGKE,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, result.StaleRuntimesStopped, "a stalled GKE expire must not be retired in SQL alone")
+	require.EqualValues(t, 1, result.IdleRuntimesStopped)
+	require.EqualValues(t, 1, stopCalls.Load(), "the sandbox claim must be deleted before the row is retired")
+}
+
+func TestServiceCoreReapStuckRuntimesSkipsIdleSweepWithTurnInFlight(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_turn_in_flight")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-long-turn","pod_ip":"10.0.0.1"}`)
+	lapseRuntimeWarmWindow(t, conn, projectID, runtimeID)
+
+	event, err := assistantsrepo.New(conn).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantThreadEventStatus(t.Context(), assistantsrepo.SetAssistantThreadEventStatusParams{
+		Status:    eventStatusProcessing,
+		UpdatedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		ID:        event.ID,
+		ProjectID: projectID,
+	}))
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:   runtimeBackendGKE,
+		statusErr: errors.New("runner /state blipped"),
+		stopCalls: &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, result.IdleRuntimesStopped)
+	require.Zero(t, stopCalls.Load(), "a runtime running a turn past its warm window must not be stopped")
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, runtime.State)
+}
+
+func TestServiceCoreReapStuckRuntimesSkipsIdleSweepOnUnconfiguredBackend(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_unconfigured")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "reap-idle-unconfigured")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-elsewhere","pod_ip":"10.0.0.1"}`)
+	lapseRuntimeWarmWindow(t, conn, projectID, runtimeID)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendLocal,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, result.IdleRuntimesStopped)
+	require.Zero(t, stopCalls.Load())
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, runtime.State, "a process that cannot reach the backend must not claim the row")
 }
 
 func TestServiceCoreReapStuckRuntimesStopsLocalRowsWithMissingContainers(t *testing.T) {
@@ -933,7 +1234,7 @@ func TestServiceCoreLoadChatHistoryReplaysToolTurns(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	history, err := core.loadChatHistory(t.Context(), chatID, projectID)
 	require.NoError(t, err)
@@ -1015,7 +1316,7 @@ func TestServiceCoreLoadChatHistoryReturnsOnlyLatestGeneration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	history, err := core.loadChatHistory(t.Context(), chatID, projectID)
 	require.NoError(t, err)
@@ -1060,7 +1361,7 @@ func TestServiceCoreLoadChatHistoryFailsWhenToolRowMissingCallID(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	_, err = core.loadChatHistory(ctx, chatID, projectID)
 	require.ErrorContains(t, err, "tool chat row missing tool_call_id")
@@ -1078,7 +1379,7 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	runTurnMCP := &atomic.Pointer[[]runtimeMCPServer]{}
 	runTurnPrompt := &atomic.Pointer[string]{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil, runTurnMCPServers: runTurnMCP, runTurnPrompt: runTurnPrompt}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil, runTurnMCPServers: runTurnMCP, runTurnPrompt: runTurnPrompt}
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
@@ -1265,12 +1566,12 @@ func TestProcessEventTurnNestsSkillNoticeForRegularAndMCPAuthPrompts(t *testing.
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 	logger := testenv.NewLogger(t)
 	prompt := &atomic.Pointer[string]{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnPrompt: prompt}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, runTurnPrompt: prompt}
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, assistanttokens.New("test-jwt-secret", conn, nil, nil, nil), nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	assistant, err := core.GetAssistant(t.Context(), projectID, assistantID)
 	require.NoError(t, err)
 	thread := assistantThreadRecord{ID: threadID, AssistantID: assistantID, ProjectID: projectID, CorrelationID: "corr-1", SourceKind: sourceKindSlack}
-	runtime := assistantRuntimeRecord{ID: uuid.New(), AssistantID: assistantID, ProjectID: projectID, Backend: runtimeBackendFlyIO}
+	runtime := assistantRuntimeRecord{ID: uuid.New(), AssistantID: assistantID, ProjectID: projectID, Backend: runtimeBackendGKE}
 	baseline, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "removed", ResolvedVersionID: uuid.New(), Description: "old"}}))
 	require.NoError(t, err)
 
@@ -1314,7 +1615,7 @@ func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
 
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: errors.New("runtime RunTurn blew up")}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: errors.New("runtime RunTurn blew up")}
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
@@ -1352,7 +1653,7 @@ func TestServiceCoreProcessThreadEventsMarksRuntimeFailedOnUnhealthyTurn(t *test
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	backend := testRuntimeBackend{
-		backend:    runtimeBackendFlyIO,
+		backend:    runtimeBackendGKE,
 		runTurnErr: ErrRuntimeUnhealthy,
 		stopCalls:  &stopCalls,
 	}
@@ -1394,7 +1695,7 @@ func TestServiceCoreProcessThreadEventsCapsRuntimeTeardowns(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	backend := testRuntimeBackend{
-		backend:    runtimeBackendFlyIO,
+		backend:    runtimeBackendGKE,
 		runTurnErr: ErrRuntimeUnhealthy,
 		stopCalls:  &stopCalls,
 	}
@@ -1497,15 +1798,15 @@ func insertReapableRuntimeRow(
 	conn *pgxpool.Pool,
 	projectID, assistantID, threadID uuid.UUID,
 	state string,
-	appName string,
+	claimName string,
 	updatedAt time.Time,
 ) uuid.UUID {
 	t.Helper()
-	return insertReapableRuntimeRowWithMetadata(t, conn, projectID, assistantID, threadID, state, fmt.Sprintf(`{"app_name":%q}`, appName), updatedAt)
+	return insertReapableRuntimeRowWithMetadata(t, conn, projectID, assistantID, threadID, state, fmt.Sprintf(`{"claim_name":%q}`, claimName), updatedAt)
 }
 
 // insertReapableRuntimeRowWithMetadata variant lets a test seed a full
-// flyRuntimeMetadata blob so per-thread reap assertions can verify which
+// backend metadata blob so per-thread reap assertions can verify which
 // fields survive.
 func insertReapableRuntimeRowWithMetadata(
 	t *testing.T,
@@ -1523,7 +1824,7 @@ func insertReapableRuntimeRowWithMetadata(
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(metadataJSON),
 		State:               state,
 		WarmUntil:           pgtype.Timestamptz{},
@@ -1556,7 +1857,7 @@ func TestServiceCoreDeleteAssistantReapsRuntimes(t *testing.T) {
 	runtimeID := insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-delete-target", time.Now().UTC().Add(-time.Hour))
 
 	reapCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	require.NoError(t, core.DeleteAssistant(t.Context(), projectID, assistantID, urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"), nil))
@@ -1612,7 +1913,7 @@ func TestServiceCoreDeleteAssistantDeletesTriggersWithoutDeletingWakes(t *testin
 	})
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	wakeCancellationCalled := false
 	core.SetWakeCanceller(wakeCancellerFunc(func(ctx context.Context, gotProjectID, gotAssistantID uuid.UUID) error {
 		wakeCancellationCalled = true
@@ -1659,9 +1960,9 @@ func TestServiceCoreDeleteAssistantSucceedsEvenWhenReapErrors(t *testing.T) {
 
 	reapCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
-		backend:   runtimeBackendFlyIO,
+		backend:   runtimeBackendGKE,
 		reapCalls: reapCalls,
-		reapErr:   errors.New("fly api 503"),
+		reapErr:   errors.New("kubernetes api 503"),
 	}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
@@ -1688,7 +1989,7 @@ func TestServiceCoreReapAssistantRuntimesCallsBackendAndClearsMetadata(t *testin
 	runtimeID := insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-orphan", time.Now().UTC().Add(-time.Hour))
 
 	reapCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapAssistantRuntimes(t.Context(), projectID, assistantID)
@@ -1719,7 +2020,7 @@ func TestServiceCoreReapAssistantRuntimesSkipsRowsWithoutMetadata(t *testing.T) 
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateStopped,
 		WarmUntil:           pgtype.Timestamptz{},
@@ -1731,7 +2032,7 @@ func TestServiceCoreReapAssistantRuntimesSkipsRowsWithoutMetadata(t *testing.T) 
 	require.NoError(t, err)
 
 	reapCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapAssistantRuntimes(t.Context(), projectID, assistantID)
@@ -1782,12 +2083,12 @@ func TestServiceCoreRecycleActiveRuntimeImagesRecyclesAndPersists(t *testing.T) 
 	// insertReapableProject seeds no thread events, so the runtime reads as
 	// fully idle to the sweep's in-flight guard.
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-persist")
-	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-stale","machine_id":"m-1"}`)
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"gram-asst-stale","sandbox_name":"m-1"}`)
 
-	recycledMetadata := `{"app_name":"gram-asst-stale","machine_id":"m-1","last_boot_id":"boot-2"}`
+	recycledMetadata := `{"claim_name":"gram-asst-stale","sandbox_name":"m-1","image":"boot-2"}`
 	recycleCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
-		backend:      runtimeBackendFlyIO,
+		backend:      runtimeBackendGKE,
 		recycleCalls: recycleCalls,
 		recycleResult: RuntimeBackendRecycleResult{
 			Recycled:            true,
@@ -1817,18 +2118,18 @@ func TestServiceCoreRecycleActiveRuntimeImagesSweepsOnlyActiveV2Rows(t *testing.
 	// Candidate: active v2 row with metadata. The fake reports no recycle
 	// (image already current), so it must count as skipped.
 	activeProj, activeAssistant, activeThread := insertReapableProject(t, conn, "recycle-active")
-	insertActiveV2RuntimeRow(t, conn, activeProj, activeAssistant, activeThread, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-current","machine_id":"m-1"}`)
+	insertActiveV2RuntimeRow(t, conn, activeProj, activeAssistant, activeThread, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"gram-asst-current","sandbox_name":"m-1"}`)
 
 	// Non-candidates: a starting v2 row (mid-boot, already on the new
 	// image) and a v1 row (per-thread runtimes recycle on admission).
 	startingProj, startingAssistant, startingThread := insertReapableProject(t, conn, "recycle-starting")
-	insertActiveV2RuntimeRow(t, conn, startingProj, startingAssistant, startingThread, runtimeBackendFlyIO, runtimeStateStarting, `{"app_name":"gram-asst-booting","machine_id":"m-2"}`)
+	insertActiveV2RuntimeRow(t, conn, startingProj, startingAssistant, startingThread, runtimeBackendGKE, runtimeStateStarting, `{"claim_name":"gram-asst-booting","sandbox_name":"m-2"}`)
 	v1Proj, v1Assistant, v1Thread := insertReapableProject(t, conn, "recycle-v1")
 	insertReapableRuntimeRow(t, conn, v1Proj, v1Assistant, v1Thread, runtimeStateActive, "gram-asst-v1", time.Now().UTC())
 
 	recycleCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
-		backend:       runtimeBackendFlyIO,
+		backend:       runtimeBackendGKE,
 		recycleCalls:  recycleCalls,
 		recycleResult: RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil},
 	}
@@ -1851,11 +2152,11 @@ func TestServiceCoreRecycleActiveRuntimeImagesSkipsAssistantsWithInFlightEvents(
 	// insertAssistantFixture seeds a pending thread event, which is exactly
 	// the in-flight signal the sweep must respect.
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
-	insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-busy","machine_id":"m-1"}`)
+	insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"gram-asst-busy","sandbox_name":"m-1"}`)
 
 	recycleCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
-		backend:       runtimeBackendFlyIO,
+		backend:       runtimeBackendGKE,
 		recycleCalls:  recycleCalls,
 		recycleResult: RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: []byte(`{}`)},
 	}
@@ -1879,7 +2180,7 @@ func TestServiceCoreRecycleActiveRuntimeImagesIgnoresDeletedAssistants(t *testin
 	// delete belongs to the janitor; recycling it would bump updated_at and
 	// postpone the inactivity-based collection.
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-deleted-assistant")
-	insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-orphan","machine_id":"m-1"}`)
+	insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"gram-asst-orphan","sandbox_name":"m-1"}`)
 	require.NoError(t, assistantsrepo.New(conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
 		AssistantID: assistantID,
 		ProjectID:   projectID,
@@ -1887,7 +2188,7 @@ func TestServiceCoreRecycleActiveRuntimeImagesIgnoresDeletedAssistants(t *testin
 
 	recycleCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
-		backend:       runtimeBackendFlyIO,
+		backend:       runtimeBackendGKE,
 		recycleCalls:  recycleCalls,
 		recycleResult: RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: []byte(`{}`)},
 	}
@@ -1908,14 +2209,14 @@ func TestServiceCoreRecycleActiveRuntimeImagesUndoesRecycleWhenRowExpiresMidSwee
 	require.NoError(t, err)
 
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-raced")
-	originalMetadata := `{"app_name":"gram-asst-raced","machine_id":"m-1"}`
-	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, originalMetadata)
+	originalMetadata := `{"claim_name":"gram-asst-raced","sandbox_name":"m-1"}`
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, originalMetadata)
 
 	// The fake recycles "successfully" but expires the row first, simulating
 	// the warm timer winning the race while the machine update was in flight.
 	stopCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
-		backend:   runtimeBackendFlyIO,
+		backend:   runtimeBackendGKE,
 		stopCalls: stopCalls,
 		recycleFn: func(ctx context.Context, record assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 			require.NoError(t, assistantsrepo.New(conn).StopAssistantRuntime(ctx, assistantsrepo.StopAssistantRuntimeParams{
@@ -1928,7 +2229,7 @@ func TestServiceCoreRecycleActiveRuntimeImagesUndoesRecycleWhenRowExpiresMidSwee
 			}))
 			return RuntimeBackendRecycleResult{
 				Recycled:            true,
-				BackendMetadataJSON: []byte(`{"app_name":"gram-asst-raced","machine_id":"m-1","last_boot_id":"boot-2"}`),
+				BackendMetadataJSON: []byte(`{"claim_name":"gram-asst-raced","sandbox_name":"m-1","image":"boot-2"}`),
 			}, nil
 		},
 	}
@@ -1954,11 +2255,11 @@ func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) 
 	require.NoError(t, err)
 
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-errors")
-	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`)
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"gram-asst-flaky","sandbox_name":"m-1"}`)
 
 	backend := testRuntimeBackend{
-		backend:    runtimeBackendFlyIO,
-		recycleErr: errors.New("fly api 503"),
+		backend:    runtimeBackendGKE,
+		recycleErr: errors.New("kubernetes api 503"),
 	}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
@@ -1970,7 +2271,7 @@ func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) 
 	// Metadata is untouched on failure.
 	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`, string(runtime.BackendMetadataJson))
+	require.JSONEq(t, `{"claim_name":"gram-asst-flaky","sandbox_name":"m-1"}`, string(runtime.BackendMetadataJson))
 }
 
 // The deploy sweep covers GKE rows like any other backend: RecycleImage rolls
@@ -2024,7 +2325,7 @@ func TestServiceCoreReapInactiveAssistantRuntimesCollectsOnlyInactive(t *testing
 	freshRuntimeID := insertReapableRuntimeRow(t, conn, fresh, freshAssistantID, freshThreadID, runtimeStateStopped, "gram-asst-fresh", time.Now().UTC().Add(-time.Hour))
 
 	reapCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
@@ -2059,7 +2360,7 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsAssistantWithRecentActivit
 	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-recent", time.Now().UTC().Add(-time.Hour))
 
 	reapCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
@@ -2110,7 +2411,7 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *te
 	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadB, runtimeStateStopped, "gram-asst-sibling-b", time.Now().UTC().Add(-30*24*time.Hour))
 
 	reapCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	first, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
@@ -2139,7 +2440,7 @@ func TestServiceCoreReapStoppedAssistantRuntimesCollectsOnlyAged(t *testing.T) {
 
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "stopped-aged")
 	staleID := insertReapableRuntimeRowWithMetadata(t, conn, projectID, assistantID, threadID, runtimeStateStopped,
-		`{"app_name":"gram-asst-stale","app_id":"app-1","app_url":"https://gram-asst-stale.fly.dev","app_ip":"1.2.3.4","machine_id":"machine-stale","last_boot_id":"boot-1"}`,
+		`{"claim_name":"gram-asst-stale","namespace":"runners","pod_ip":"10.0.0.1","sandbox_name":"machine-stale","image":"boot-1"}`,
 		time.Now().UTC().Add(-30*24*time.Hour),
 	)
 
@@ -2147,7 +2448,7 @@ func TestServiceCoreReapStoppedAssistantRuntimesCollectsOnlyAged(t *testing.T) {
 	freshID := insertReapableRuntimeRow(t, conn, freshProject, freshAssistantID, freshThreadID, runtimeStateStopped, "gram-asst-fresh", time.Now().UTC().Add(-time.Hour))
 
 	reapMachineCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapMachineCalls: reapMachineCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
@@ -2165,11 +2466,8 @@ func TestServiceCoreReapStoppedAssistantRuntimesCollectsOnlyAged(t *testing.T) {
 
 	var staleMeta map[string]any
 	require.NoError(t, json.Unmarshal(stale.BackendMetadataJson, &staleMeta))
-	require.Equal(t, "gram-asst-stale", staleMeta["app_name"], "app fields must survive per-thread reap")
-	require.Equal(t, "app-1", staleMeta["app_id"])
-	require.Equal(t, "1.2.3.4", staleMeta["app_ip"])
-	require.NotContains(t, staleMeta, "machine_id", "machine slot must be cleared")
-	require.NotContains(t, staleMeta, "last_boot_id", "boot id must be cleared")
+	require.Equal(t, "gram-asst-stale", staleMeta["claim_name"], "backend metadata remains available for full cleanup")
+	require.Equal(t, "runners", staleMeta["namespace"])
 
 	fresh, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: freshID, ProjectID: freshProject})
 	require.NoError(t, err)
@@ -2207,7 +2505,7 @@ func TestServiceCoreReapStoppedAssistantRuntimesIgnoresSiblingActivity(t *testin
 	stoppedID := insertReapableRuntimeRow(t, conn, projectID, assistantID, stoppedThread, runtimeStateStopped, "gram-asst-stuck", time.Now().UTC().Add(-30*24*time.Hour))
 
 	reapMachineCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapMachineCalls: reapMachineCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
@@ -2230,7 +2528,7 @@ func TestServiceCoreReapStoppedAssistantRuntimesSkipsHistoricalRowWithFresherSto
 	require.NoError(t, err)
 
 	// `ReserveAssistantRuntime` carries the prior row's `backend_metadata_json`
-	// forward, so an old stopped row can share `machine_id` with a much
+	// forward, so an old stopped row can share `sandbox_name` with a much
 	// newer stopped row. Reaping the old one would destroy the machine the
 	// fresh sibling still references — well inside its own TTL.
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "historical-shared-machine")
@@ -2238,7 +2536,7 @@ func TestServiceCoreReapStoppedAssistantRuntimesSkipsHistoricalRowWithFresherSto
 	freshID := insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-shared", time.Now().UTC().Add(-time.Hour))
 
 	reapMachineCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapMachineCalls: reapMachineCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
@@ -2274,8 +2572,8 @@ func TestServiceCoreReapStoppedAssistantRuntimesSkipsThreadWithFresherStartingRo
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
-		BackendMetadataJson: []byte(`{"app_name":"gram-asst-race","machine_id":"machine-race"}`),
+		Backend:             runtimeBackendGKE,
+		BackendMetadataJson: []byte(`{"claim_name":"gram-asst-race","sandbox_name":"machine-race"}`),
 		State:               runtimeStateStarting,
 		WarmUntil:           pgtype.Timestamptz{},
 		LastHeartbeatAt:     pgtype.Timestamptz{},
@@ -2285,7 +2583,7 @@ func TestServiceCoreReapStoppedAssistantRuntimesSkipsThreadWithFresherStartingRo
 	}))
 
 	reapMachineCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapMachineCalls: reapMachineCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
@@ -2314,7 +2612,7 @@ func TestServiceCoreReapStoppedAssistantRuntimesIgnoresActiveAndStarting(t *test
 	insertReapableRuntimeRow(t, conn, startingProject, startingAssistantID, startingThreadID, runtimeStateStarting, "gram-asst-starting", time.Now().UTC().Add(-30*24*time.Hour))
 
 	reapMachineCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapMachineCalls: reapMachineCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
@@ -2370,7 +2668,7 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsLiveRowsCollectsFinalized(
 	require.NoError(t, err)
 
 	reapCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	rowProcessed := &atomic.Int64{}
@@ -2411,16 +2709,19 @@ type testRuntimeBackend struct {
 	interruptThreadID *atomic.Pointer[uuid.UUID]
 	statusResult      RuntimeBackendStatus
 	statusErr         error
-	stopErr           error
-	stopCalls         *atomic.Int64
-	reapCalls         *atomic.Int64
-	reapErr           error
-	reapMachineCalls  *atomic.Int64
-	reapMachineErr    error
-	imageRef          string
-	recycleResult     RuntimeBackendRecycleResult
-	recycleErr        error
-	recycleCalls      *atomic.Int64
+	// statusHangs makes Status block until its context ends, like a runner
+	// whose /state never answers.
+	statusHangs      bool
+	stopErr          error
+	stopCalls        *atomic.Int64
+	reapCalls        *atomic.Int64
+	reapErr          error
+	reapMachineCalls *atomic.Int64
+	reapMachineErr   error
+	imageRef         string
+	recycleResult    RuntimeBackendRecycleResult
+	recycleErr       error
+	recycleCalls     *atomic.Int64
 	// recycleFn, when set, replaces the canned recycleResult/recycleErr so a
 	// test can mutate DB state mid-sweep (e.g. expire the row) before the
 	// service persists the outcome.
@@ -2490,16 +2791,23 @@ func (t testRuntimeBackend) InterruptTurn(_ context.Context, _ assistantRuntimeR
 	return t.interruptResult, nil
 }
 
-func (t testRuntimeBackend) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+func (t testRuntimeBackend) Status(ctx context.Context, _ assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	if t.statusHangs {
+		<-ctx.Done()
+		return RuntimeBackendStatus{}, fmt.Errorf("runner state: %w", ctx.Err())
+	}
 	if t.statusErr != nil {
 		return RuntimeBackendStatus{}, t.statusErr
 	}
 	return t.statusResult, nil
 }
 
-func (t testRuntimeBackend) Stop(context.Context, assistantRuntimeRecord) error {
+func (t testRuntimeBackend) Stop(ctx context.Context, _ assistantRuntimeRecord) error {
 	if t.stopCalls != nil {
 		t.stopCalls.Add(1)
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("stop runtime: %w", err)
 	}
 	return t.stopErr
 }
@@ -2533,7 +2841,7 @@ func TestServiceCoreEnqueueTriggerTaskSkipsMissingAssistant(t *testing.T) {
 
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, tokens, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, tokens, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	missing := uuid.New()
 	result, err := core.EnqueueTriggerTask(t.Context(), bgtriggers.Task{

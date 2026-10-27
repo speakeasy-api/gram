@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,6 +14,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 
 	"github.com/go-chi/chi/v5"
 	redisCache "github.com/go-redis/cache/v9"
@@ -32,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -293,7 +296,7 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
 		OrganizationID:      fx.orgID,
 		ProjectID:           fx.target.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                fx.toolset.McpSlug.String,
 		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,
@@ -557,6 +560,32 @@ func TestHandleToken_RefreshRotationRevokesOldAccessToken(t *testing.T) {
 	revoked, err := ti.chatSessionsManager.IsTokenRevoked(ctx, oldJTI)
 	require.NoError(t, err)
 	require.True(t, revoked)
+}
+
+func TestHandleToken_RefreshRotationKeepsTheCredential(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, _, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+
+	for range 2 {
+		result := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+		require.NoError(t, result.err)
+		require.Equal(t, http.StatusOK, result.code, result.body)
+		var response tokenResponseFixture
+		require.NoError(t, json.Unmarshal([]byte(result.body), &response))
+		refreshToken = response.RefreshToken
+	}
+
+	rows, err := testrepo.New(ti.conn).ListUserSessionCredentialsForSubjectFixture(ctx, urn.NewUserSubject("refresh-replay-user"))
+	require.NoError(t, err)
+	require.Len(t, rows, 3, "two rotations mint two rows after the original")
+	original := rows[0]
+	require.Equal(t, original.ID, original.CredentialID, "a row minted before credential identities is its own credential")
+	for _, row := range rows[1:] {
+		require.NotEqual(t, original.ID, row.ID)
+		require.Equal(t, original.ID, row.CredentialID, "rotation continues the original credential, so its upstream client choices carry over")
+	}
 }
 
 func TestHandleToken_ExpiredRefreshRevokesOldAccessToken(t *testing.T) {
@@ -898,6 +927,7 @@ func seedAgentRefreshSession(
 		RefreshTokenHash:       conv.ToPGText(base64.RawURLEncoding.EncodeToString(refreshHash[:])),
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
+		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 	return fx, agent, refreshToken, session
@@ -933,6 +963,7 @@ func seedRefreshReplaySessionDetails(
 		RefreshTokenHash:    conv.ToPGText(base64.RawURLEncoding.EncodeToString(refreshHash[:])),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: refreshExpiresAt, Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true},
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 

@@ -1,6 +1,6 @@
 ---
 name: postgresql
-description: Rules when working with PostgreSQL database in Speakeasy
+description: Use when working with the Speakeasy PostgreSQL database: schema design, server/database/schema.sql, migrations, atlas.sum, sqlc queries, indexes, foreign keys, CHECK constraints, or reviewer suggestions to add constraints
 ---
 
 # PostgreSQL Best Practices
@@ -35,7 +35,7 @@ Reference these guidelines when:
 - **Data Integrity and Data Types:**
   - Use appropriate data types for columns to ensure data integrity (e.g., `INTEGER`, `VARCHAR`, `TIMESTAMP`).
   - Use constraints (e.g., `NOT NULL`, `FOREIGN KEY`) to enforce data integrity but not for UNIQUE-ness — that is enforced with unique indexes.
-  - Do not use `CHECK` constraints for pure enumeration / value validation (e.g. `CHECK (status IN ('active', 'inactive'))`). Validate allowed values in application code, where they can evolve without a migration. **Exception:** keep `CHECK`s that are structural to the Class Table Inheritance (CTI) pattern, e.g. pinning a subtype's discriminator (`CHECK (provider = 'aws_kms')`) so the composite foreign key back to the supertype enforces 1:1 semantics.
+  - Keep `CHECK` constraints to simple single-column shape checks: a non-empty string (`CHECK (name <> '')`) or a length bound (`CHECK (char_length(slug) <= 64)`). Do not encode enums (`CHECK (status IN ('active', 'inactive'))`), numeric ranges, or rules that relate columns. Features are still being shaped, and every rule held in the schema turns each change into a migration that locks the table while it validates. Validate those rules in application code, where rows are built or parsed, and test them there. Decline review suggestions, including from review bots, to add or rely on such constraints, and do not describe their absence as a gap. **Exception:** keep `CHECK`s that are structural to the Class Table Inheritance (CTI) pattern, e.g. pinning a subtype's discriminator (`CHECK (provider = 'aws_kms')`) so the composite foreign key back to the supertype enforces 1:1 semantics.
   - Define primary keys for all tables.
   - Use foreign keys to establish relationships between tables.
   - Utilize domains to enforce data type constraints reusable across multiple columns.
@@ -170,6 +170,7 @@ Rules:
 - **Migration files and `atlas.sum` are produced only by the Atlas CLI (`mise run db:diff`).** Never hand-edit, rename, or rehash them. There is exactly one sanctioned exception: the `NOT VALID` constraint pattern in the last rule below.
 - **Migration files contain only DDL — never DML.** Backfills and other data manipulation (`INSERT` / `UPDATE` / `DELETE`) do not belong in a migration file. Data migrations live in application code, not migrations.
 - **Follow expand-contract.** Never drop a column or table in the same migration that adds others. If a column is unwanted, mark it nullable with a comment and leave it for a later contract migration; sticking around for a few days is fine.
+- **Dropping a column that `SELECT *` or `RETURNING *` reads.** sqlc expands `*` when it generates code, so every pod built before the drop names the column and fails once it is gone. In the code PR that stops using the column, add `ALTER TABLE <table> DROP COLUMN <column>;` to `server/database/sqlc_retired_columns.sql` (create it if missing) and list that file after `schema.sql` in the `schema:` of each `sqlc.yaml` package that queries the table. The regenerated code then never names the column. Deploy that PR before the drop migration, and do not ship the drop until no image built before that PR is still a rollback target. Remove the statement (and the file and `sqlc.yaml` entries once empty) in the drop PR.
 - **Never run agents (or any tooling) against dev or prod databases.** Local databases only.
 - **Out-of-order timestamps:** if `mise lint:migrations` (or CI) reports a migration timestamp at or before the latest on `main`, do NOT rename the file. Delete the offending migration on your branch, rebase/merge `main`, then re-run `mise db:diff <name>` so the migration is regenerated on top with a fresh timestamp.
 - **Migration merge conflicts:** never resolve them by hand. Delete your migrations, rebase/merge `main`, then re-run `mise db:diff` so your changes are recreated on top.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,7 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -27,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -53,7 +56,8 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 
 	toolset, ok := s.platformToolsets[slug]
 	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		return rejectMissingMCPTarget(w, r, s.logger, mcpversions.SupportedPlatformToolset(),
+			oops.E(oops.CodeNotFound, nil, "platform toolset not found"))
 	}
 
 	prepared, handled, err := s.prepareTerminatedMCPRequest(
@@ -87,6 +91,9 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypePlatformToolset, slug, slug)
 
 	if err := s.authorizePlatformToolset(ctx, slug, authCtx); err != nil {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeNotFound {
+			return rejectPreparedMCPTarget(w, r, s.logger, prepared, mcpversions.SupportedPlatformToolset(), err)
+		}
 		return err
 	}
 	if prepared.empty() {
@@ -283,12 +290,17 @@ func (s *Service) listPlatformToolsetTools(
 		return s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, feature, featureCache)
 	}
 
+	grantedScopes := s.grantedPlatformToolScopes(ctx, authCtx, toolset.Tools)
+
 	tools := make([]*toolListEntry, 0, len(toolset.Tools))
 	for _, extra := range toolset.Tools {
 		if extra.Executor == nil {
 			continue
 		}
 		if !available(extra.RequiredFeature) {
+			continue
+		}
+		if extra.RequiredScope != "" && !grantedScopes[extra.RequiredScope] {
 			continue
 		}
 		entry := toolToListEntry(extra.Executor.Descriptor().ToTool(*authCtx.ProjectID))
@@ -344,6 +356,9 @@ func (s *Service) callPlatformToolsetTool(
 	if !s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, matched.RequiredFeature, nil) {
 		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogError(ctx, s.logger)
 	}
+	if matched.RequiredScope != "" && !s.grantedPlatformToolScopes(ctx, authCtx, []platformtools.ExternalTool{matched})[matched.RequiredScope] {
+		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogWarn(ctx, s.logger)
+	}
 
 	desc := matched.Executor.Descriptor()
 	descriptor := &gateway.ToolDescriptor{
@@ -371,9 +386,11 @@ func (s *Service) callPlatformToolsetTool(
 	ctx, logger := o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	rw := &toolCallResponseWriter{
-		headers:    make(http.Header),
-		body:       new(bytes.Buffer),
-		statusCode: http.StatusOK,
+		headers:       make(http.Header),
+		body:          new(bytes.Buffer),
+		statusCode:    http.StatusOK,
+		failure:       nil,
+		resultIsError: false,
 	}
 
 	gramEmail := conv.PtrValOrEmpty(authCtx.Email, "")
@@ -452,6 +469,7 @@ func (s *Service) callPlatformToolsetTool(
 		})
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
+		logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(rw.statusCode, rw.resultIsError)
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
@@ -496,6 +514,12 @@ func (s *Service) callPlatformToolsetTool(
 		ToolAnnotations: desc.Annotations,
 	}, mcpriskscan.BorrowPayload(requestBodyBytes))
 	decision := s.scanEvaluator.Scan(ctx, requestSubject)
+	if decision.HeldForApproval() {
+		// A held call is an instruction, not a refusal: the agent reads the
+		// tool result, requests approval and retries.
+		rw.resultIsError = true
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, serverInfoPlatformToolset)
+	}
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)
@@ -508,11 +532,10 @@ func (s *Service) callPlatformToolsetTool(
 	}
 	outputBytes = int64(rw.body.Len())
 
-	chunk, structured, err := formatResult(*rw, plan.Kind)
+	responseContent, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to format platform tool call result").LogError(ctx, logger)
 	}
-	responseContent := []json.RawMessage{chunk}
 	responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
 	if parseErr != nil {
 		responsePayload = mcpriskscan.Payload{}
@@ -551,6 +574,39 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 	}
 
 	return oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, args...)
+}
+
+// grantedPlatformToolScopes reports which of the tools' required scopes the
+// caller holds on the active project. One FindMatched call covers the batch,
+// so a hidden tool leaves a filter record for diagnosis without recording a
+// denied requirement: a tool the caller cannot use is simply not offered.
+// Any failure hides every scope-gated tool.
+func (s *Service) grantedPlatformToolScopes(ctx context.Context, authCtx *contextvalues.AuthContext, tools []platformtools.ExternalTool) map[string]bool {
+	granted := map[string]bool{}
+	if authCtx.ProjectID == nil {
+		return granted
+	}
+	scopes := make([]string, 0, len(tools))
+	checks := make([]authz.Check, 0, len(tools))
+	for _, tool := range tools {
+		if tool.RequiredScope == "" || slices.Contains(scopes, tool.RequiredScope) {
+			continue
+		}
+		scopes = append(scopes, tool.RequiredScope)
+		checks = append(checks, authz.Check{Scope: authz.Scope(tool.RequiredScope), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	}
+	if len(checks) == 0 {
+		return granted
+	}
+	matched, err := s.authz.FindMatched(ctx, checks)
+	if err != nil {
+		s.logger.WarnContext(ctx, "match platform tool scopes; hiding scope-gated tools", attr.SlogError(err))
+		return granted
+	}
+	for i, scope := range scopes {
+		granted[scope] = matched[i]
+	}
+	return granted
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on

@@ -33,6 +33,10 @@ type Client struct {
 	// getUserSessionIssuer endpoint.
 	GetUserSessionIssuerDoer goahttp.Doer
 
+	// GetAttachImpact Doer is the HTTP client used to make requests to the
+	// getAttachImpact endpoint.
+	GetAttachImpactDoer goahttp.Doer
+
 	// DeleteUserSessionIssuer Doer is the HTTP client used to make requests to the
 	// deleteUserSessionIssuer endpoint.
 	DeleteUserSessionIssuerDoer goahttp.Doer
@@ -62,6 +66,7 @@ func NewClient(
 		UpdateUserSessionIssuerDoer: doer,
 		ListUserSessionIssuersDoer:  doer,
 		GetUserSessionIssuerDoer:    doer,
+		GetAttachImpactDoer:         doer,
 		DeleteUserSessionIssuerDoer: doer,
 		RestoreResponseBody:         restoreBody,
 		scheme:                      scheme,
@@ -162,6 +167,30 @@ func (c *Client) GetUserSessionIssuer() goa.Endpoint {
 		resp, err := c.GetUserSessionIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessionIssuers", "getUserSessionIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetAttachImpact returns an endpoint that makes HTTP requests to the
+// userSessionIssuers service getAttachImpact server.
+func (c *Client) GetAttachImpact() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetAttachImpactRequest(c.encoder)
+		decodeResponse = DecodeGetAttachImpactResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetAttachImpactRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetAttachImpactDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessionIssuers", "getAttachImpact", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -128,9 +128,13 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 
 	// Staff-managed entitlements (SSO, SCIM, ...) must not be self-granted by
 	// organization admins; org-settable operational toggles need org:admin only.
-	// Retired rollout flags cannot be changed, including by staff.
+	// Retired rollout flags and upstream auth enforcement, which has readiness
+	// checks of its own, cannot be changed here, including by staff.
 	if feature == Feature("automatic-role-distribution") {
 		return oops.E(oops.CodeInvalid, nil, "unknown product feature")
+	}
+	if feature == FeatureUpstreamAuthEnforced {
+		return oops.E(oops.CodeInvalid, nil, "upstream auth enforcement is changed through the admin enforcement endpoint")
 	}
 	if feature.RequiresPlatformAdmin() {
 		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
@@ -250,10 +254,11 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		CustomerManagedEncryptionKeysEnabled:    snapshot.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         snapshot.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             snapshot.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               snapshot.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              snapshot.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         snapshot.CodeModeEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
 	}, nil
 }

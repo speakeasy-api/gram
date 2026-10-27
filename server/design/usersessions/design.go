@@ -95,12 +95,14 @@ var _ = Service("userSessions", func() {
 			Attribute("meta_mcp_server_id", String, "Bind the JWT to this meta MCP server's user_session_issuer audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("discovery_mode", String, "An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.", func() { Enum("progressive", "direct", "code_mode") })
+
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
 
 		Result(func() {
-			Attribute("access_token", String, "The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.")
+			Attribute("access_token", String, "The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} surface.")
 			Attribute("expires_in", Int, "Lifetime of the access token in seconds.")
 			Required("access_token", "expires_in")
 		})

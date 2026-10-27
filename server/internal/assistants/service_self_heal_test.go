@@ -104,9 +104,9 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
-	corruption := fmt.Errorf("%w: execute fly turn request: status=400 body=provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
+	corruption := fmt.Errorf("%w: execute gke turn request: status=400 body=provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
-		backend:    runtimeBackendFlyIO,
+		backend:    runtimeBackendGKE,
 		runTurnErr: corruption,
 		stopCalls:  &stopCalls,
 	}
@@ -172,6 +172,18 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 		require.Equal(t, assistantID.String(), reading.GetAttributes()[metering.AttributeAssistantID])
 		require.Equal(t, string(metering.WorkloadSourceAssistant), reading.GetAttributes()[metering.AttributeWorkloadSource])
 	}
+	before, err := q.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.NoError(t, core.selfHealCorruptHistory(ctx, chatID, projectID, assistantID))
+	after, err := q.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Len(t, after, len(before))
+	for i := 1; i < len(after); i++ {
+		require.True(t, before[i].OriginalMessageID.Valid)
+		require.Equal(t, before[i].OriginalMessageID, after[i].OriginalMessageID)
+		require.Equal(t, chat.CaptureSynthetic, before[i].CaptureKind.String)
+		require.Equal(t, chat.CaptureSynthetic, after[i].CaptureKind.String)
+	}
 }
 
 func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
@@ -219,7 +231,7 @@ func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	corruption := fmt.Errorf("%w: provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
-		backend:    runtimeBackendFlyIO,
+		backend:    runtimeBackendGKE,
 		runTurnErr: corruption,
 		stopCalls:  &stopCalls,
 	}

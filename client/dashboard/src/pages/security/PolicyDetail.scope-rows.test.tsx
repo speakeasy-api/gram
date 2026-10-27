@@ -108,7 +108,7 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     policyCenter: { goTo: vi.fn() },
     mcp: {
-      x: { inspect: { href: (slug: string) => `/mcp/x/${slug}/inspect` } },
+      details: { inspect: { href: (slug: string) => `/mcp/${slug}/inspect` } },
     },
   }),
 }));
@@ -364,7 +364,7 @@ const CATEGORIES: RiskCategoryDefinition[] = [
   category("secrets", "Secrets", {
     recommendedScopeInclude: 'kind == "tool_response"',
   }),
-  category("shadow_mcp", "Shadow MCP"),
+  category("shadow_mcp", "Shadow AI"),
   category("custom", "Custom rules"),
   category("account_identity", "Account identity", {
     recommendedScopeApplicable: false,
@@ -408,14 +408,20 @@ function renderEditor(p: RiskPolicy | null) {
   );
 }
 
-function ScopePickerHarness(): JSX.Element {
+function ScopePickerHarness({
+  initial,
+}: {
+  initial?: PolicyMCPScopeValue;
+}): JSX.Element {
   const [queryClient] = useState(testQueryClient);
-  const [value, setValue] = useState<PolicyMCPScopeValue>({
-    mode: "mcp",
-    allServers: false,
-    toolAnnotations: [],
-    servers: [],
-  });
+  const [value, setValue] = useState<PolicyMCPScopeValue>(
+    initial ?? {
+      mode: "mcp",
+      allServers: false,
+      toolAnnotations: [],
+      servers: [],
+    },
+  );
 
   return (
     <MemoryRouter>
@@ -543,7 +549,7 @@ describe("StandardPolicyEditor scope rows", () => {
     renderEditor(policy());
 
     expect(screen.getByText("Secrets")).toBeTruthy();
-    expect(screen.getByText("Shadow MCP")).toBeTruthy();
+    expect(screen.getByText("Shadow AI")).toBeTruthy();
     expect(screen.getByText("Custom rules")).toBeTruthy();
     expect(screen.getAllByText("Tool", { selector: "span" })).toHaveLength(2);
     expect(screen.getByText("Response", { selector: "span" })).toBeTruthy();
@@ -1174,7 +1180,33 @@ describe("PolicyMCPScopePicker all-server selection", () => {
       screen
         .getByRole("link", { name: "Discover tools on Docs MCP" })
         .getAttribute("href"),
-    ).toBe("/mcp/x/docs-mcp/inspect");
+    ).toBe("/mcp/docs-mcp/inspect");
+  });
+
+  it("says when a policy names tools the server has not discovered yet", async () => {
+    render(
+      <ScopePickerHarness
+        initial={{
+          mode: "mcp",
+          allServers: false,
+          toolAnnotations: [],
+          servers: [
+            {
+              mcpServerId: "44444444-4444-4444-8444-444444444444",
+              tools: ["send_message"],
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Docs MCP/ }));
+
+    expect(
+      await screen.findByText("Custom · 1 tool, not discovered yet"),
+    ).toBeTruthy();
+    expect(screen.getByText("0 tools discovered")).toBeTruthy();
+    expect(screen.queryByText(/^Custom · 1 of 0/)).toBeNull();
   });
 
   it("counts a selected server with no discovered tools as all tools in scope", async () => {

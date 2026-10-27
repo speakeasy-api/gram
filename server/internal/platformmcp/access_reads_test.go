@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	accessservice "github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
@@ -19,31 +20,51 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 	roles := ListAccessRolesOutput{Roles: []AccessRole{{
 		Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7),
 		MCPAccess: MCPConnectSummary{AllServers: false, ProjectRules: 1, ServerRules: 1, ToolRules: 1, DispositionRules: []string{"read_only"}, BlockedServers: false, BlockedProjectRules: 1, BlockedServerRules: 1, BlockedToolRules: 0, BlockedDispositionRules: []string{}},
+		DirectorySources: []AccessRoleDirectorySource{
+			{Kind: "group", Group: "Data Analytics", AttributeKey: "", AttributeValue: "", Removed: false, MatchedUsers: NewSubjectCount(6)},
+			{Kind: "attribute", Group: "", AttributeKey: "department_name", AttributeValue: "Research", Removed: false, MatchedUsers: NewSubjectCount(2)},
+			{Kind: "group", Group: "", AttributeKey: "", AttributeValue: "", Removed: true, MatchedUsers: NewSubjectCount(0)},
+		},
 		Reference: "opaque-role", Version: "opaque-version",
 	}}, ExpiresAt: "2026-09-04T12:10:00Z"}
-	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "reference", "version", "expires_at"}, decodeKeys(t, roles))
+	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "directory_sources", "kind", "kind", "kind", "group", "attribute_key", "attribute_value", "removed", "matched_users", "matched_users", "matched_users", "reference", "version", "expires_at"}, decodeKeys(t, roles))
 
 	members := ListAccessMembersOutput{
 		Members:      []AccessMember{{MaskedIdentity: "a***@e***", Roles: []string{"Operators"}, Reference: "opaque-member", Version: "opaque-version"}},
 		TotalMatches: NewSubjectCount(7), Suppressed: false, Truncated: false, ExpiresAt: "2026-09-04T12:10:00Z",
 	}
-	require.ElementsMatch(t, []string{"members", "masked_identity", "roles", "reference", "version", "total_matches", "suppressed", "truncated", "expires_at"}, decodeKeys(t, members))
+	require.ElementsMatch(t, []string{"members", "masked_identity", "roles", "reference", "version", "total_matches", "suppressed", "truncated", "exact_email_match", "expires_at"}, decodeKeys(t, members))
+
+	memberAccess := GetMemberMCPAccessOutput{Servers: []MemberMCPAccessRow{{
+		ProjectID: uuid.NewString(), ProjectName: "Default", MCPID: uuid.NewString(), MCPName: "Tasks",
+		Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", ConnectionAccess: "some_tools",
+		CanConnect: true, ToolAccess: "some", CanView: true, CanManage: false,
+		Rules: []accessservice.MCPAccessRuleSummary{{AccessLevel: "use", SourceKind: "role", SourceName: "Operators", Effect: "limits", AppliesTo: "resource", Tools: []string{"delete_tasks"}, Dispositions: []string{"destructive"}, Reason: new("blocked")}},
+	}}}
+	require.ElementsMatch(t, []string{
+		"servers", "project_id", "project_name", "mcp_id", "mcp_name", "backend", "visibility", "authorization_mode",
+		"connection_access", "can_connect", "tool_access", "can_view", "can_manage", "rules", "access_level", "source_kind", "source_name", "effect", "applies_to", "tools", "dispositions", "reason", "truncated",
+	}, decodeKeys(t, memberAccess))
 
 	access := GetMCPAccessOutput{
-		ProjectID: uuid.NewString(),
-		MCP:       MCPAccessTarget{ID: uuid.NewString(), Name: "Tasks", Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", AuthorizationSurface: "configured_endpoint", AccessSummary: "by_role", ToolCatalog: "stored_metadata", Tools: []MCPAccessTool{{Name: "list_tasks", Disposition: "read_only"}}},
-		Roles:     []MCPRoleCoverage{{MatchingPlugins: []MCPMatchingPlugin{{PluginID: uuid.NewString(), Name: "Tasks plugin", Slug: "tasks-plugin"}}, Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7), Reference: "opaque-role", Version: "opaque-version", CanEnterServer: true, KnownToolAccess: "all", AllowedKnownTools: []string{"list_tasks"}, DispositionRules: []string{"read_only"}, BlockedDispositions: []string{}, UnevaluatedGrants: false}},
-		ExpiresAt: "2026-09-04T12:10:00Z",
+		ProjectID:             uuid.NewString(),
+		MCP:                   MCPAccessTarget{ID: uuid.NewString(), Name: "Tasks", Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", AuthorizationSurface: "configured_endpoint", AccessSummary: "by_role", ToolCatalog: "stored_metadata", Tools: []MCPAccessTool{{Name: "list_tasks", Disposition: "read_only"}}},
+		Roles:                 []MCPRoleCoverage{{MatchingPlugins: []MCPMatchingPlugin{{PluginID: uuid.NewString(), Name: "Tasks plugin", Slug: "tasks-plugin"}}, Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7), Reference: "opaque-role", Version: "opaque-version", CanEnterServer: true, KnownToolAccess: "all", AllowedKnownTools: []string{"list_tasks"}, DispositionRules: []string{"read_only"}, BlockedDispositions: []string{}, UnevaluatedGrants: false}},
+		SharedAuthClientRoles: []MCPRoleSharedAuthClients{{Name: "Operators", Reference: "opaque-role", AuthClients: []MCPRoleAuthClientAccess{{AuthClientID: uuid.NewString(), Name: "Token", ClientType: "static_credential", Access: "allowed"}}, UnevaluatedGrants: false}},
+		ExpiresAt:             "2026-09-04T12:10:00Z",
 	}
 	keys := decodeKeys(t, access)
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp", "id", "name", "backend", "visibility", "authorization_mode", "authorization_surface", "access_summary", "tool_catalog", "tools", "name", "tools_truncated", "disposition",
 		"roles", "name", "type", "member_count", "reference", "version", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "assignment_eligible", "expires_at", "matching_plugins", "plugin_id", "name", "slug",
+		"shared_auth_client_roles", "name", "reference", "auth_clients", "auth_client_id", "name", "client_type", "access", "unevaluated_grants",
 	}, keys)
-	encoded, err := json.Marshal(access)
-	require.NoError(t, err)
-	for _, forbidden := range []string{"principal_urn", "user_id", "role_id", "email", "selector", "resource_id"} {
-		require.NotContains(t, string(encoded), forbidden)
+	for _, output := range []any{access, memberAccess} {
+		encoded, err := json.Marshal(output)
+		require.NoError(t, err)
+		for _, forbidden := range []string{"principal_urn", "user_id", "role_id", "email", "selector", "resource_id"} {
+			require.NotContains(t, string(encoded), forbidden)
+		}
 	}
 }
 

@@ -20,6 +20,10 @@ const (
 type WriteOperation string
 
 const (
+	// OperationCurateRegistryPromotionCandidate changes staff review status for an unpublished candidate.
+	OperationCurateRegistryPromotionCandidate     WriteOperation = "curate_registry_promotion_candidate"
+	OperationRetryRegistryPromotionDocs           WriteOperation = "retry_registry_promotion_docs"
+	OperationPromoteRegistryCandidate             WriteOperation = "promote_registry_candidate"
 	OperationSetOrganizationFeature               WriteOperation = "set_organization_feature"
 	OperationSetOrganizationWhitelist             WriteOperation = "set_organization_whitelist"
 	OperationAssignOrganizationOnboardingPlaybook WriteOperation = "assign_organization_onboarding_playbook"
@@ -30,10 +34,15 @@ const (
 	OperationCreateGlobalIssuer                   WriteOperation = "create_global_issuer"
 	OperationUpdateGlobalIssuer                   WriteOperation = "update_global_issuer"
 	OperationUpdateSupportMatrix                  WriteOperation = "update_support_matrix"
+	OperationCreateRegistryEntry                  WriteOperation = "create_registry_entry"
+	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
 )
 
 // AllWriteOperations is the complete allowlist, in a stable order.
 var AllWriteOperations = []WriteOperation{
+	OperationCurateRegistryPromotionCandidate,
+	OperationRetryRegistryPromotionDocs,
+	OperationPromoteRegistryCandidate,
 	OperationSetOrganizationFeature,
 	OperationSetOrganizationWhitelist,
 	OperationAssignOrganizationOnboardingPlaybook,
@@ -44,6 +53,8 @@ var AllWriteOperations = []WriteOperation{
 	OperationCreateGlobalIssuer,
 	OperationUpdateGlobalIssuer,
 	OperationUpdateSupportMatrix,
+	OperationCreateRegistryEntry,
+	OperationUploadPlatformImage,
 }
 
 // PlatformGlobal reports whether an operation has no tenant target. Global
@@ -51,7 +62,7 @@ var AllWriteOperations = []WriteOperation{
 // only durable record.
 func (op WriteOperation) PlatformGlobal() bool {
 	switch op {
-	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix:
+	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
 		return true
 	default:
 		return false
@@ -92,15 +103,22 @@ func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
 // keep this consent allowlist aligned with the operation registry.
 func (op WriteOperation) implemented() bool {
 	switch op {
-	case OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
+	case OperationCurateRegistryPromotionCandidate, OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate, OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
 		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
-		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix:
+		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
 		return true
 	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
 		return false
 	default:
 		return false
 	}
+}
+
+// direct reports whether an operation applies immediately instead of through a
+// stored proposal and browser approval. Only changes no customer sees until an
+// approved change references them qualify.
+func (op WriteOperation) direct() bool {
+	return op == OperationUploadPlatformImage
 }
 
 // WritesAvailable reports whether consent may offer admin:write at all.

@@ -1,24 +1,36 @@
 name: "CLA Assistant"
-on:
+# Both triggers run with this repository's token: pull_request_target so the
+# bot can comment on and set statuses for PRs from forks, and issue_comment so
+# a contributor's signing comment is recorded. That is safe here because no
+# step checks out or runs PR code: the only step is the CLA action, which
+# reads PR metadata through the API, and it runs only for pull_request_target
+# events and the two exact comment bodies in its `if:`.
+# No concurrency group: every PR comment triggers this workflow, and GitHub
+# replaces a group's pending run with the next one, so an unrelated comment
+# could drop a queued signature.
+on: # zizmor: ignore[dangerous-triggers,concurrency-limits]
   issue_comment:
     types: [created]
   pull_request_target:
     types: [opened, closed, synchronize]
 
-# explicitly configure permissions, in case your GITHUB_TOKEN workflow permissions are set to read-only in repository settings
-permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
+permissions: {}
 
 jobs:
   CLAAssistant:
+    name: CLAAssistant
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      actions: write # the action re-runs this workflow after a signature
+      contents: write # commits signatures to the cla-signatures branch
+      pull-requests: write # comments on and locks pull requests
+      statuses: write # sets the CLA commit status
     steps:
       - name: "CLA Assistant"
         if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
-        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
+        # Archived upstream with no maintained successor; it is SHA-pinned, so
+        # it cannot change under us. Replace it if we move CLA tooling.
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1 # zizmor: ignore[archived-uses]
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # the below token should have repo scope and must be manually added by you in the repository's secret

@@ -28,6 +28,9 @@ var _ = Service("chat", func() {
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
 				Format(FormatUUID)
 			})
+			Attribute("agent_id", String, "Filter to chats produced by this agent (the agent principal recorded on the session at capture)", func() {
+				Format(FormatUUID)
+			})
 			Attribute("source_kind", String, "When set with assistant_id, list only that assistant's threads whose source_kind matches this value (e.g. 'setup' for onboarding threads). Empty for no filter.")
 			Attribute("exclude_source_kind", String, "When set with assistant_id, exclude that assistant's threads whose source_kind matches this value (e.g. 'setup' to hide onboarding threads from runtime views). Empty for no filter.")
 			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
@@ -76,6 +79,7 @@ var _ = Service("chat", func() {
 			Param("user_id")
 			Param("source")
 			Param("assistant_id")
+			Param("agent_id")
 			Param("source_kind")
 			Param("exclude_source_kind")
 			Param("has_risk")
@@ -616,6 +620,8 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("assistant_id", String, "The ID of the assistant that produced this chat, if any")
 	Attribute("assistant_name", String, "The name of the assistant that produced this chat, if any")
 	Attribute("assistant_agent_id", String, "The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity")
+	Attribute("agent_id", String, "The ID of the agent that produced this session, recorded from the authenticated actor at capture. Set for sessions an agent drove directly, such as a channel session, which has no assistant record.")
+	Attribute("agent_name", String, "The current name of the agent that produced this session. Absent when the agent has since been deleted, in which case agent_id is still reported.")
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
 	Attribute("originating_client", String, "The supported client that originated a chat routed through the source, when known")

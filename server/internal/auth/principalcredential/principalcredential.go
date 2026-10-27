@@ -1,15 +1,17 @@
 // Package principalcredential issues and authenticates short-lived bearer
 // tokens for an agent or a workload principal. A token carries the principal,
-// the organization and project it acts in, an optional authorizing user for an
-// agent, and the delegated grants it is bounded by. Authenticating one yields
-// the same principal credential context an agent API key produces, so every
-// surface authorizes it through the ordinary credential and workload admission
-// paths.
+// the organization and project it acts in, an optional authorizing user for
+// an agent, and, for an assistant turn, the optional execution-selection
+// profile version it binds. It carries no grants: admission derives the policy that bounds it
+// on every request from the live policies of the agent, its owner, and the
+// authorizing user, so the token's size does not grow with the principal's
+// grants and a revoked grant takes effect immediately. Authenticating one
+// yields a principal credential context, so every surface authorizes it
+// through the ordinary credential and workload admission paths.
 package principalcredential
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -53,32 +55,39 @@ var (
 
 // Credential is what a principal credential asserts.
 type Credential struct {
+	// OrganizationID is the organization the credential acts in.
 	OrganizationID string
-	ProjectID      uuid.UUID
+
+	// ProjectID is the project the credential acts in.
+	ProjectID uuid.UUID
+
 	// Principal is an agent or a workload principal.
 	Principal urn.Principal
+
 	// AuthorizerUserID is the user an agent acts for. Agents require one;
 	// workloads never carry one.
 	AuthorizerUserID string
-	// Grants bound everything the credential can authorize.
-	Grants []authz.Grant
+
+	// SelectionProfileVersionID is the execution-selection profile version an
+	// assistant turn's credential binds, whose choices name the auth client
+	// each MCP server is served with. Absent on credentials no profile binds.
+	SelectionProfileVersionID uuid.NullUUID
 }
 
-// Authenticated is a verified credential, its token ID, and its delegated
-// policy as signed.
+// Authenticated is a verified credential and its token ID.
 type Authenticated struct {
-	ID                     string
-	Credential             Credential
-	DelegatedGrants        json.RawMessage
-	DelegatedGrantsVersion int32
+	// ID is the token's jti.
+	ID string
+
+	// Credential is what the token asserts.
+	Credential Credential
 }
 
 type claims struct {
-	OrganizationID         string          `json:"org_id"`
-	ProjectID              uuid.UUID       `json:"project_id"`
-	AuthorizerUserID       string          `json:"authorizer_user_id,omitempty"`
-	DelegatedGrants        json.RawMessage `json:"delegated_grants"`
-	DelegatedGrantsVersion int32           `json:"delegated_grants_version"`
+	OrganizationID            string     `json:"org_id"`
+	ProjectID                 uuid.UUID  `json:"project_id"`
+	AuthorizerUserID          string     `json:"authorizer_user_id,omitempty"`
+	SelectionProfileVersionID *uuid.UUID `json:"selection_profile_version_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -97,6 +106,9 @@ func checkShape(c Credential) error {
 	if c.OrganizationID == "" || c.ProjectID == uuid.Nil {
 		return ErrInvalid
 	}
+	if c.SelectionProfileVersionID.Valid && c.SelectionProfileVersionID.UUID == uuid.Nil {
+		return ErrInvalid
+	}
 	switch c.Principal.Type {
 	case urn.PrincipalTypeAgent:
 		if _, err := uuid.Parse(c.Principal.ID); err != nil || c.AuthorizerUserID == "" {
@@ -112,26 +124,20 @@ func checkShape(c Credential) error {
 	return nil
 }
 
-// Mint signs c, encoding its grants with the current delegated policy version.
-// It returns the token and its ID.
+// Mint signs c and returns the token and its ID.
 func (i *Issuer) Mint(c Credential) (string, string, error) {
 	if err := checkShape(c); err != nil {
 		return "", "", err
 	}
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
-	policy, err := runtimepolicy.NewDelegatedPolicy(version, c.Grants)
-	if err != nil {
-		return "", "", fmt.Errorf("build principal credential policy: %w", err)
-	}
-	encoded, err := runtimepolicy.EncodeDelegatedPolicy(version, policy)
-	if err != nil {
-		return "", "", fmt.Errorf("encode principal credential policy: %w", err)
-	}
 	now := time.Now()
 	id := uuid.NewString()
+	var profileVersion *uuid.UUID
+	if c.SelectionProfileVersionID.Valid {
+		profileVersion = &c.SelectionProfileVersionID.UUID
+	}
 	raw, err := i.signer.SignRS256(claims{
 		OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, AuthorizerUserID: c.AuthorizerUserID,
-		DelegatedGrants: encoded, DelegatedGrantsVersion: int32(version),
+		SelectionProfileVersionID: profileVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer: i.signer.URL(), Subject: c.Principal.String(), Audience: jwt.ClaimStrings{Audience},
 			ExpiresAt: jwt.NewNumericDate(now.Add(Lifetime)), NotBefore: nil, IssuedAt: jwt.NewNumericDate(now), ID: id,
@@ -173,16 +179,15 @@ func (i *Issuer) Validate(raw string) (Authenticated, error) {
 	if err != nil {
 		return Authenticated{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	version := runtimepolicy.DelegatedPolicyVersion(c.DelegatedGrantsVersion)
-	policy, err := runtimepolicy.DecodeDelegatedPolicy(version, c.DelegatedGrants)
-	if err != nil {
-		return Authenticated{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	profileVersion := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if c.SelectionProfileVersionID != nil {
+		profileVersion = uuid.NullUUID{UUID: *c.SelectionProfileVersionID, Valid: true}
 	}
-	credential := Credential{OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, Principal: principal, AuthorizerUserID: c.AuthorizerUserID, Grants: policy.RuntimeGrants()}
+	credential := Credential{OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, Principal: principal, AuthorizerUserID: c.AuthorizerUserID, SelectionProfileVersionID: profileVersion}
 	if err := checkShape(credential); err != nil {
 		return Authenticated{}, err
 	}
-	return Authenticated{ID: c.ID, Credential: credential, DelegatedGrants: c.DelegatedGrants, DelegatedGrantsVersion: c.DelegatedGrantsVersion}, nil
+	return Authenticated{ID: c.ID, Credential: credential}, nil
 }
 
 type authenticatedKey struct{}
@@ -238,14 +243,14 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 		APIKeyScopes: nil, IsAdmin: false, SupportOrganizationID: "",
 	}
 	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, c.Principal, contextvalues.PrincipalCredential{
-		AuthorizerUserID: c.AuthorizerUserID, DelegatedGrants: authenticated.DelegatedGrants, DelegatedGrantsVersion: authenticated.DelegatedGrantsVersion,
+		AuthorizerUserID: c.AuthorizerUserID, DelegatedGrants: nil, DelegatedGrantsVersion: 0, DerivesPolicyAtAdmission: true,
 	})
 	return context.WithValue(ctx, authenticatedKey{}, authenticated), nil
 }
 
 // checkAuthorizer re-checks, on every use, that the user an agent credential
 // acts for is still an eligible member who can read the credential's project.
-// The credential's grants were narrowed by that user's grants at mint.
+// Admission narrows the credential by that user's live grants.
 func (i *Issuer) checkAuthorizer(ctx context.Context, c Credential) error {
 	principals, eligible, err := runtimepolicy.ResolveEligibleUser(ctx, i.db, c.OrganizationID, c.AuthorizerUserID)
 	if err != nil {

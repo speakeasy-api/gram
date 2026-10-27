@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 )
 
 // recordSpanForRequest runs the middleware inside a recorded span, mimicking
@@ -58,13 +58,6 @@ func TestMCPProtocolVersionTelemetryRecordsHeaderOnHostedEndpoint(t *testing.T) 
 	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)])
 }
 
-func TestMCPProtocolVersionTelemetryRecordsHeaderOnXMCPEndpoint(t *testing.T) {
-	t.Parallel()
-
-	got := recordSpanForRequest(t, http.MethodPost, "/x/mcp/my-server", mcpversions.Version20260728)
-	require.Equal(t, mcpversions.Version20260728, got[string(attr.McpNegotiatedProtocolVersionKey)])
-}
-
 func TestMCPProtocolVersionTelemetryRecordsHeaderOnPlatformEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -78,7 +71,7 @@ func TestMCPProtocolVersionTelemetryCoversGetAndDelete(t *testing.T) {
 	// Streamable HTTP uses GET to open an SSE stream and DELETE to terminate a
 	// session; both carry the header and both reach the remote MCP proxy.
 	for _, method := range []string{http.MethodGet, http.MethodDelete} {
-		got := recordSpanForRequest(t, method, "/x/mcp/my-server", mcpversions.Version20250618)
+		got := recordSpanForRequest(t, method, "/mcp/my-server", mcpversions.Version20250618)
 		require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)], "method %s", method)
 	}
 }
@@ -109,7 +102,7 @@ func routePathForSlug(t *testing.T, pattern, slug string) string {
 func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
 	t.Parallel()
 
-	patterns := []string{mcp.PublicServerRoute, mcp.PlatformToolsetRoute, xmcp.RuntimePath}
+	patterns := []string{mcp.PublicServerRoute, mcp.PlatformToolsetRoute}
 	methods := []string{http.MethodPost, http.MethodGet, http.MethodDelete}
 
 	for _, pattern := range patterns {
@@ -129,6 +122,12 @@ func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
 	got := recordSpanForRequest(t, http.MethodPost, "/platform-mcp", mcpversions.Version20250618)
 	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
 		"/platform-mcp is an MCP JSON-RPC endpoint and must be matched")
+
+	// The Approvals MCP server also carries no slug. It is registered for POST
+	// only.
+	got = recordSpanForRequest(t, http.MethodPost, approval.MCPPath, mcpversions.Version20250618)
+	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
+		"%s is an MCP JSON-RPC endpoint and must be matched", approval.MCPPath)
 
 	// The per-agent gateway is addressed by agent id rather than slug and is
 	// registered for POST only, hence no verb cross-product.
@@ -153,6 +152,7 @@ func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
 		"/platform-mcp/token",
 		"/platform-mcp/provider-setup",
 		"/platform-mcp/local-fixture/mcp",
+		approval.MCPPath + "/extra",
 	} {
 		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
 		require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey), "path %s", path)
@@ -161,13 +161,13 @@ func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
 
 // TestMCPProtocolVersionTelemetryIgnoresSlugSiblingRoutes is the inverse of
 // TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes: these static routes
-// are registered directly beside /mcp/{mcpSlug} and /x/mcp/{mcpSlug}, so they
+// are registered directly beside /mcp/{mcpSlug}, so they
 // occupy the slug position without being MCP endpoints and chi resolves them
 // first. Shape alone cannot tell them apart from a slug, so they are excluded
 // by name.
 //
 // Keep this list in lockstep with the one-segment routes registered in
-// internal/mcp/impl.go and internal/xmcp/service.go. MCPSecurity shares this
+// internal/mcp/impl.go. MCPSecurity shares this
 // predicate, so a route that regresses back into it is answered with 403
 // rather than merely losing an attribute.
 func TestMCPProtocolVersionTelemetryIgnoresSlugSiblingRoutes(t *testing.T) {
@@ -180,8 +180,6 @@ func TestMCPProtocolVersionTelemetryIgnoresSlugSiblingRoutes(t *testing.T) {
 		"/mcp/install-page-9f86d081.js",
 		"/mcp/consent-page-9f86d081.js",
 		"/mcp/consent-tools-9f86d081.js",
-		"/x/mcp/idp_callback",
-		"/x/mcp/remote_login_callback",
 		"/mcp/idp_callback/0190a6f8-5b2c-7d3e-8f41-2a6b9c0d1e2f",
 	} {
 		for _, method := range []string{http.MethodGet, http.MethodPost} {
@@ -202,8 +200,6 @@ func TestMCPProtocolVersionTelemetryMatchesSlugsResemblingSiblingRoutes(t *testi
 		"/mcp/my-remote_login_callback",
 		"/platform/mcp/idp_callback",
 		"/platform/mcp/remote_login_callback",
-		// The bind hop is registered under /mcp/ only.
-		"/x/mcp/remote_login_bind",
 	} {
 		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
 		require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)], "path %s", path)
@@ -213,7 +209,7 @@ func TestMCPProtocolVersionTelemetryMatchesSlugsResemblingSiblingRoutes(t *testi
 func TestMCPProtocolVersionTelemetryIgnoresNonMCPRoutes(t *testing.T) {
 	t.Parallel()
 
-	for _, path := range []string{"/rpc/toolsets.list", "/healthz", "/", "/mcp", "/x/mcp", "/x/other/slug", "/agent-mcp"} {
+	for _, path := range []string{"/rpc/toolsets.list", "/healthz", "/", "/mcp", "/x/mcp", "/x/mcp/my-server", "/x/other/slug", "/agent-mcp"} {
 		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
 		require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey), "path %s", path)
 	}

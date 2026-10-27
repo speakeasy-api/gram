@@ -192,6 +192,14 @@ type GetUsageTiersResponseBody struct {
 // GetStripeSubscriptionResponseBody is the type of the "usage" service
 // "getStripeSubscription" endpoint HTTP response body.
 type GetStripeSubscriptionResponseBody struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string `form:"discount_description,omitempty" json:"discount_description,omitempty" xml:"discount_description,omitempty"`
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string `form:"discount_ends_at,omitempty" json:"discount_ends_at,omitempty" xml:"discount_ends_at,omitempty"`
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool `form:"gateway_promotion_applied,omitempty" json:"gateway_promotion_applied,omitempty" xml:"gateway_promotion_applied,omitempty"`
 	// The live Stripe subscription status
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Start of the current Stripe service period
@@ -238,6 +246,14 @@ type GetPaygBillingSummaryResponseBody struct {
 // CancelStripeSubscriptionResponseBody is the type of the "usage" service
 // "cancelStripeSubscription" endpoint HTTP response body.
 type CancelStripeSubscriptionResponseBody struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string `form:"discount_description,omitempty" json:"discount_description,omitempty" xml:"discount_description,omitempty"`
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string `form:"discount_ends_at,omitempty" json:"discount_ends_at,omitempty" xml:"discount_ends_at,omitempty"`
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool `form:"gateway_promotion_applied,omitempty" json:"gateway_promotion_applied,omitempty" xml:"gateway_promotion_applied,omitempty"`
 	// The live Stripe subscription status
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Start of the current Stripe service period
@@ -262,6 +278,14 @@ type CancelStripeSubscriptionResponseBody struct {
 // ResumeStripeSubscriptionResponseBody is the type of the "usage" service
 // "resumeStripeSubscription" endpoint HTTP response body.
 type ResumeStripeSubscriptionResponseBody struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string `form:"discount_description,omitempty" json:"discount_description,omitempty" xml:"discount_description,omitempty"`
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string `form:"discount_ends_at,omitempty" json:"discount_ends_at,omitempty" xml:"discount_ends_at,omitempty"`
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool `form:"gateway_promotion_applied,omitempty" json:"gateway_promotion_applied,omitempty" xml:"gateway_promotion_applied,omitempty"`
 	// The live Stripe subscription status
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Start of the current Stripe service period
@@ -6109,15 +6133,18 @@ func NewCreateStripeCheckoutGatewayError(body *CreateStripeCheckoutGatewayErrorR
 // "getStripeSubscription" endpoint result from a HTTP "OK" response.
 func NewGetStripeSubscriptionStripeSubscriptionOK(body *GetStripeSubscriptionResponseBody) *usage.StripeSubscription {
 	v := &usage.StripeSubscription{
-		Status:             *body.Status,
-		CurrentPeriodStart: *body.CurrentPeriodStart,
-		CurrentPeriodEnd:   *body.CurrentPeriodEnd,
-		TrialStart:         body.TrialStart,
-		TrialEnd:           body.TrialEnd,
-		CancelAtPeriodEnd:  *body.CancelAtPeriodEnd,
-		CancelAt:           body.CancelAt,
-		CanceledAt:         body.CanceledAt,
-		PaymentFailed:      *body.PaymentFailed,
+		DiscountDescription:     body.DiscountDescription,
+		DiscountEndsAt:          body.DiscountEndsAt,
+		GatewayPromotionApplied: body.GatewayPromotionApplied,
+		Status:                  *body.Status,
+		CurrentPeriodStart:      *body.CurrentPeriodStart,
+		CurrentPeriodEnd:        *body.CurrentPeriodEnd,
+		TrialStart:              body.TrialStart,
+		TrialEnd:                body.TrialEnd,
+		CancelAtPeriodEnd:       *body.CancelAtPeriodEnd,
+		CancelAt:                body.CancelAt,
+		CanceledAt:              body.CanceledAt,
+		PaymentFailed:           *body.PaymentFailed,
 	}
 
 	return v
@@ -6594,15 +6621,18 @@ func NewCreateStripePortalSessionGatewayError(body *CreateStripePortalSessionGat
 // "cancelStripeSubscription" endpoint result from a HTTP "OK" response.
 func NewCancelStripeSubscriptionStripeSubscriptionOK(body *CancelStripeSubscriptionResponseBody) *usage.StripeSubscription {
 	v := &usage.StripeSubscription{
-		Status:             *body.Status,
-		CurrentPeriodStart: *body.CurrentPeriodStart,
-		CurrentPeriodEnd:   *body.CurrentPeriodEnd,
-		TrialStart:         body.TrialStart,
-		TrialEnd:           body.TrialEnd,
-		CancelAtPeriodEnd:  *body.CancelAtPeriodEnd,
-		CancelAt:           body.CancelAt,
-		CanceledAt:         body.CanceledAt,
-		PaymentFailed:      *body.PaymentFailed,
+		DiscountDescription:     body.DiscountDescription,
+		DiscountEndsAt:          body.DiscountEndsAt,
+		GatewayPromotionApplied: body.GatewayPromotionApplied,
+		Status:                  *body.Status,
+		CurrentPeriodStart:      *body.CurrentPeriodStart,
+		CurrentPeriodEnd:        *body.CurrentPeriodEnd,
+		TrialStart:              body.TrialStart,
+		TrialEnd:                body.TrialEnd,
+		CancelAtPeriodEnd:       *body.CancelAtPeriodEnd,
+		CancelAt:                body.CancelAt,
+		CanceledAt:              body.CanceledAt,
+		PaymentFailed:           *body.PaymentFailed,
 	}
 
 	return v
@@ -6762,15 +6792,18 @@ func NewCancelStripeSubscriptionGatewayError(body *CancelStripeSubscriptionGatew
 // "resumeStripeSubscription" endpoint result from a HTTP "OK" response.
 func NewResumeStripeSubscriptionStripeSubscriptionOK(body *ResumeStripeSubscriptionResponseBody) *usage.StripeSubscription {
 	v := &usage.StripeSubscription{
-		Status:             *body.Status,
-		CurrentPeriodStart: *body.CurrentPeriodStart,
-		CurrentPeriodEnd:   *body.CurrentPeriodEnd,
-		TrialStart:         body.TrialStart,
-		TrialEnd:           body.TrialEnd,
-		CancelAtPeriodEnd:  *body.CancelAtPeriodEnd,
-		CancelAt:           body.CancelAt,
-		CanceledAt:         body.CanceledAt,
-		PaymentFailed:      *body.PaymentFailed,
+		DiscountDescription:     body.DiscountDescription,
+		DiscountEndsAt:          body.DiscountEndsAt,
+		GatewayPromotionApplied: body.GatewayPromotionApplied,
+		Status:                  *body.Status,
+		CurrentPeriodStart:      *body.CurrentPeriodStart,
+		CurrentPeriodEnd:        *body.CurrentPeriodEnd,
+		TrialStart:              body.TrialStart,
+		TrialEnd:                body.TrialEnd,
+		CancelAtPeriodEnd:       *body.CancelAtPeriodEnd,
+		CancelAt:                body.CancelAt,
+		CanceledAt:              body.CanceledAt,
+		PaymentFailed:           *body.PaymentFailed,
 	}
 
 	return v
@@ -7406,6 +7439,9 @@ func ValidateGetStripeSubscriptionResponseBody(body *GetStripeSubscriptionRespon
 	if body.PaymentFailed == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("payment_failed", "body"))
 	}
+	if body.DiscountEndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.discount_ends_at", *body.DiscountEndsAt, goa.FormatDateTime))
+	}
 	if body.Status != nil {
 		if !(*body.Status == "incomplete" || *body.Status == "incomplete_expired" || *body.Status == "trialing" || *body.Status == "active" || *body.Status == "past_due" || *body.Status == "canceled" || *body.Status == "unpaid" || *body.Status == "paused") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused"}))
@@ -7486,6 +7522,9 @@ func ValidateCancelStripeSubscriptionResponseBody(body *CancelStripeSubscription
 	if body.PaymentFailed == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("payment_failed", "body"))
 	}
+	if body.DiscountEndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.discount_ends_at", *body.DiscountEndsAt, goa.FormatDateTime))
+	}
 	if body.Status != nil {
 		if !(*body.Status == "incomplete" || *body.Status == "incomplete_expired" || *body.Status == "trialing" || *body.Status == "active" || *body.Status == "past_due" || *body.Status == "canceled" || *body.Status == "unpaid" || *body.Status == "paused") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused"}))
@@ -7529,6 +7568,9 @@ func ValidateResumeStripeSubscriptionResponseBody(body *ResumeStripeSubscription
 	}
 	if body.PaymentFailed == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("payment_failed", "body"))
+	}
+	if body.DiscountEndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.discount_ends_at", *body.DiscountEndsAt, goa.FormatDateTime))
 	}
 	if body.Status != nil {
 		if !(*body.Status == "incomplete" || *body.Status == "incomplete_expired" || *body.Status == "trialing" || *body.Status == "active" || *body.Status == "past_due" || *body.Status == "canceled" || *body.Status == "unpaid" || *body.Status == "paused") {

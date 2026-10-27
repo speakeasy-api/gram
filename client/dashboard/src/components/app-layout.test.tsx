@@ -165,6 +165,23 @@ describe("LoginCheck", () => {
     },
   );
 
+  it("lifts signin_error out of the destination onto the login page", () => {
+    mocks.useSession.mockReturnValue({ ...baseSession, session: "" });
+    render(
+      <MemoryRouter initialEntries={["/?signin_error=sign_in_revoked"]}>
+        <Routes>
+          <Route element={<LoginCheck />}>
+            <Route path="/" element={<div>home</div>} />
+          </Route>
+          <Route path="/login" element={<CurrentLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/login?redirect=%2F&signin_error=sign_in_revoked",
+    );
+  });
+
   it("sends authenticated zero-org sessions to sign-up with their destination", () => {
     mocks.useSession.mockReturnValue({
       ...baseSession,

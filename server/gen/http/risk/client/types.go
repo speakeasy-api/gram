@@ -46,8 +46,10 @@ type CreateRiskPolicyRequestBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session). MCP-scoped policies support flag and block only.
+	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action string `form:"action" json:"action" xml:"action"`
 	// Policy audience type: everyone or targeted.
 	AudienceType string `form:"audience_type" json:"audience_type" xml:"audience_type"`
@@ -56,7 +58,7 @@ type CreateRiskPolicyRequestBody struct {
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Omit or send an empty server list
 	// to apply the policy to every MCP server. When a non-empty scope is set, the
-	// action must be flag or block.
+	// action must be flag, block or require_approval; require_approval needs one.
 	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
@@ -80,6 +82,9 @@ type CreateRiskPolicyRequestBody struct {
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
 	// For prompt_based policies: per-policy LLM-judge model configuration.
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Required when
+	// action is require_approval, rejected otherwise.
+	ApprovalConfig *RiskPolicyApprovalConfigRequestBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to apply the default (5).
 	Score float64 `form:"score" json:"score" xml:"score"`
@@ -117,8 +122,10 @@ type UpdateRiskPolicyRequestBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session). MCP-scoped policies support flag and block only.
+	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -128,7 +135,8 @@ type UpdateRiskPolicyRequestBody struct {
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Omit to preserve; send an empty
 	// server list to clear and apply the policy to every MCP server. When the
-	// resulting policy keeps an MCP scope, the action must be flag or block.
+	// resulting policy keeps an MCP scope, the action must be flag, block or
+	// require_approval; require_approval needs one.
 	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
@@ -156,6 +164,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
 	// preserve the current value.
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Omit to preserve
+	// the current value.
+	ApprovalConfig *RiskPolicyApprovalConfigRequestBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to preserve the current value.
 	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
@@ -268,6 +279,17 @@ type DenyRiskPolicyBypassRequestRequestBody struct {
 type RevokeRiskPolicyBypassRequestRequestBody struct {
 	// The resource ID.
 	ID string `form:"id" json:"id" xml:"id"`
+}
+
+// DecideRiskPolicyApprovalRequestBody is the type of the "risk" service
+// "decideRiskPolicyApproval" endpoint HTTP request body.
+type DecideRiskPolicyApprovalRequestBody struct {
+	// The approval request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The decision.
+	Decision string `form:"decision" json:"decision" xml:"decision"`
+	// Optional message for the agent.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
 }
 
 // TriggerRiskAnalysisRequestBody is the type of the "risk" service
@@ -479,9 +501,10 @@ type CreateRiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session). MCP-scoped policies support flag and block
-	// only.
+	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
+	// freeze the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -489,7 +512,8 @@ type CreateRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -509,6 +533,13 @@ type CreateRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Null for every
+	// other action.
+	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
+	// Set only on the create or update response that turned on the project's first
+	// approval policy: the approvals server Speakeasy created and whether it
+	// joined the Default plugin.
+	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -592,9 +623,10 @@ type GetRiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session). MCP-scoped policies support flag and block
-	// only.
+	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
+	// freeze the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -602,7 +634,8 @@ type GetRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -622,6 +655,13 @@ type GetRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Null for every
+	// other action.
+	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
+	// Set only on the create or update response that turned on the project's first
+	// approval policy: the approvals server Speakeasy created and whether it
+	// joined the Default plugin.
+	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -675,9 +715,10 @@ type UpdateRiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session). MCP-scoped policies support flag and block
-	// only.
+	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
+	// freeze the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -685,7 +726,8 @@ type UpdateRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -705,6 +747,13 @@ type UpdateRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Null for every
+	// other action.
+	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
+	// Set only on the create or update response that turned on the project's first
+	// approval policy: the approvals server Speakeasy created and whether it
+	// joined the Default plugin.
+	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -836,14 +885,10 @@ type GetRiskOverviewResponseBody struct {
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// Exclusive end of the overview window.
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
-	// Messages analyzed by risk policies in the window.
-	MessagesScanned *int64 `form:"messages_scanned,omitempty" json:"messages_scanned,omitempty" xml:"messages_scanned,omitempty"`
 	// Policy findings in the window.
 	Findings *int64 `form:"findings,omitempty" json:"findings,omitempty" xml:"findings,omitempty"`
 	// Chat sessions with at least one finding in the window.
 	FlaggedSessions *int64 `form:"flagged_sessions,omitempty" json:"flagged_sessions,omitempty" xml:"flagged_sessions,omitempty"`
-	// Enabled risk policies for the current project.
-	ActivePolicies *int64 `form:"active_policies,omitempty" json:"active_policies,omitempty" xml:"active_policies,omitempty"`
 	// Top policy categories by finding count.
 	TopCategories []*RiskOverviewCategoryResponseBody `form:"top_categories,omitempty" json:"top_categories,omitempty" xml:"top_categories,omitempty"`
 	// Top users by finding count.
@@ -927,21 +972,6 @@ type GetRiskUserBreakdownResponseBody struct {
 	Categories []*RiskOverviewCategoryResponseBody `form:"categories,omitempty" json:"categories,omitempty" xml:"categories,omitempty"`
 	// Rule_id breakdown for this user, ordered by finding count descending.
 	Rules []*RiskRuleBreakdownEntryResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
-}
-
-// GetRiskRuleBreakdownResponseBody is the type of the "risk" service
-// "getRiskRuleBreakdown" endpoint HTTP response body.
-type GetRiskRuleBreakdownResponseBody struct {
-	// Inclusive start of the window used.
-	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
-	// Exclusive end of the window used.
-	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
-	// Category the breakdown is scoped to.
-	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
-	// Rules in this category, ordered by finding count descending.
-	Rules []*RiskRuleBreakdownEntryResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
-	// Total findings across all rules in this category and window.
-	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
 }
 
 // GetRiskSignalsResponseBody is the type of the "risk" service
@@ -1203,6 +1233,125 @@ type RevokeRiskPolicyBypassRequestResponseBody struct {
 	// Decision timestamp.
 	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
 	// Creation timestamp.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Last update timestamp.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListRiskPolicyApprovalsResponseBody is the type of the "risk" service
+// "listRiskPolicyApprovals" endpoint HTTP response body.
+type ListRiskPolicyApprovalsResponseBody struct {
+	// Approval requests, newest first.
+	Approvals []*RiskPolicyApprovalResponseBody `form:"approvals,omitempty" json:"approvals,omitempty" xml:"approvals,omitempty"`
+	// Pass as cursor to fetch the next page. Absent on the last page.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetRiskPolicyApprovalResponseBody is the type of the "risk" service
+// "getRiskPolicyApproval" endpoint HTTP response body.
+type GetRiskPolicyApprovalResponseBody struct {
+	// The approval request ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The require_approval risk policy that held the call.
+	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
+	// The policy's name.
+	PolicyName *string `form:"policy_name,omitempty" json:"policy_name,omitempty" xml:"policy_name,omitempty"`
+	// The policy version when the call was held.
+	PolicyVersion *int64 `form:"policy_version,omitempty" json:"policy_version,omitempty" xml:"policy_version,omitempty"`
+	// The request's status. An open request past its window is expired.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// The principal that made the call: agent:<id> or user:<id>.
+	RequesterUrn *string `form:"requester_urn,omitempty" json:"requester_urn,omitempty" xml:"requester_urn,omitempty"`
+	// The MCP surface that received the call.
+	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
+	// The hosted toolset that served the call, when known.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The chat the call belongs to, when known.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
+	// The tool that was called.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// A shortened preview of the call's arguments: long strings are cut and only
+	// the first keys are kept.
+	ArgumentsPreview map[string]any `form:"arguments_preview,omitempty" json:"arguments_preview,omitempty" xml:"arguments_preview,omitempty"`
+	// The agent's reason, once it requested approval.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// What the agent asked to be approved, such as exact_once.
+	RequestedScope *string `form:"requested_scope,omitempty" json:"requested_scope,omitempty" xml:"requested_scope,omitempty"`
+	// What the approver granted, once approved.
+	GrantedScope *string `form:"granted_scope,omitempty" json:"granted_scope,omitempty" xml:"granted_scope,omitempty"`
+	// The approver who decided.
+	DecidedByUrn *string `form:"decided_by_urn,omitempty" json:"decided_by_urn,omitempty" xml:"decided_by_urn,omitempty"`
+	// Where the decision came from.
+	DecidedVia *string `form:"decided_via,omitempty" json:"decided_via,omitempty" xml:"decided_via,omitempty"`
+	// The approver's message for the agent.
+	DecisionNote *string `form:"decision_note,omitempty" json:"decision_note,omitempty" xml:"decision_note,omitempty"`
+	// Whether the caller can decide this request now.
+	CanDecide *bool `form:"can_decide,omitempty" json:"can_decide,omitempty" xml:"can_decide,omitempty"`
+	// When the agent requested approval.
+	RequestedAt *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
+	// When an approver decided.
+	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// When the request stops waiting for a decision, or the approval stops
+	// covering a retry.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	// When a retry used the approval.
+	ConsumedAt *string `form:"consumed_at,omitempty" json:"consumed_at,omitempty" xml:"consumed_at,omitempty"`
+	// When the call was first held.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Last update timestamp.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// DecideRiskPolicyApprovalResponseBody is the type of the "risk" service
+// "decideRiskPolicyApproval" endpoint HTTP response body.
+type DecideRiskPolicyApprovalResponseBody struct {
+	// The approval request ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The require_approval risk policy that held the call.
+	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
+	// The policy's name.
+	PolicyName *string `form:"policy_name,omitempty" json:"policy_name,omitempty" xml:"policy_name,omitempty"`
+	// The policy version when the call was held.
+	PolicyVersion *int64 `form:"policy_version,omitempty" json:"policy_version,omitempty" xml:"policy_version,omitempty"`
+	// The request's status. An open request past its window is expired.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// The principal that made the call: agent:<id> or user:<id>.
+	RequesterUrn *string `form:"requester_urn,omitempty" json:"requester_urn,omitempty" xml:"requester_urn,omitempty"`
+	// The MCP surface that received the call.
+	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
+	// The hosted toolset that served the call, when known.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The chat the call belongs to, when known.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
+	// The tool that was called.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// A shortened preview of the call's arguments: long strings are cut and only
+	// the first keys are kept.
+	ArgumentsPreview map[string]any `form:"arguments_preview,omitempty" json:"arguments_preview,omitempty" xml:"arguments_preview,omitempty"`
+	// The agent's reason, once it requested approval.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// What the agent asked to be approved, such as exact_once.
+	RequestedScope *string `form:"requested_scope,omitempty" json:"requested_scope,omitempty" xml:"requested_scope,omitempty"`
+	// What the approver granted, once approved.
+	GrantedScope *string `form:"granted_scope,omitempty" json:"granted_scope,omitempty" xml:"granted_scope,omitempty"`
+	// The approver who decided.
+	DecidedByUrn *string `form:"decided_by_urn,omitempty" json:"decided_by_urn,omitempty" xml:"decided_by_urn,omitempty"`
+	// Where the decision came from.
+	DecidedVia *string `form:"decided_via,omitempty" json:"decided_via,omitempty" xml:"decided_via,omitempty"`
+	// The approver's message for the agent.
+	DecisionNote *string `form:"decision_note,omitempty" json:"decision_note,omitempty" xml:"decision_note,omitempty"`
+	// Whether the caller can decide this request now.
+	CanDecide *bool `form:"can_decide,omitempty" json:"can_decide,omitempty" xml:"can_decide,omitempty"`
+	// When the agent requested approval.
+	RequestedAt *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
+	// When an approver decided.
+	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// When the request stops waiting for a decision, or the approval stops
+	// covering a retry.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	// When a retry used the approval.
+	ConsumedAt *string `form:"consumed_at,omitempty" json:"consumed_at,omitempty" xml:"consumed_at,omitempty"`
+	// When the call was first held.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Last update timestamp.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -5911,192 +6060,6 @@ type GetRiskUserBreakdownGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetRiskRuleBreakdownUnauthorizedResponseBody is the type of the "risk"
-// service "getRiskRuleBreakdown" endpoint HTTP response body for the
-// "unauthorized" error.
-type GetRiskRuleBreakdownUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetRiskRuleBreakdownForbiddenResponseBody is the type of the "risk" service
-// "getRiskRuleBreakdown" endpoint HTTP response body for the "forbidden" error.
-type GetRiskRuleBreakdownForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetRiskRuleBreakdownBadRequestResponseBody is the type of the "risk" service
-// "getRiskRuleBreakdown" endpoint HTTP response body for the "bad_request"
-// error.
-type GetRiskRuleBreakdownBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetRiskRuleBreakdownNotFoundResponseBody is the type of the "risk" service
-// "getRiskRuleBreakdown" endpoint HTTP response body for the "not_found" error.
-type GetRiskRuleBreakdownNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetRiskRuleBreakdownConflictResponseBody is the type of the "risk" service
-// "getRiskRuleBreakdown" endpoint HTTP response body for the "conflict" error.
-type GetRiskRuleBreakdownConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetRiskRuleBreakdownUnsupportedMediaResponseBody is the type of the "risk"
-// service "getRiskRuleBreakdown" endpoint HTTP response body for the
-// "unsupported_media" error.
-type GetRiskRuleBreakdownUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetRiskRuleBreakdownInvalidResponseBody is the type of the "risk" service
-// "getRiskRuleBreakdown" endpoint HTTP response body for the "invalid" error.
-type GetRiskRuleBreakdownInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetRiskRuleBreakdownInvariantViolationResponseBody is the type of the "risk"
-// service "getRiskRuleBreakdown" endpoint HTTP response body for the
-// "invariant_violation" error.
-type GetRiskRuleBreakdownInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetRiskRuleBreakdownUnexpectedResponseBody is the type of the "risk" service
-// "getRiskRuleBreakdown" endpoint HTTP response body for the "unexpected"
-// error.
-type GetRiskRuleBreakdownUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetRiskRuleBreakdownGatewayErrorResponseBody is the type of the "risk"
-// service "getRiskRuleBreakdown" endpoint HTTP response body for the
-// "gateway_error" error.
-type GetRiskRuleBreakdownGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // GetRiskSignalsUnauthorizedResponseBody is the type of the "risk" service
 // "getRiskSignals" endpoint HTTP response body for the "unauthorized" error.
 type GetRiskSignalsUnauthorizedResponseBody struct {
@@ -8531,6 +8494,574 @@ type RevokeRiskPolicyBypassRequestUnexpectedResponseBody struct {
 // "risk" service "revokeRiskPolicyBypassRequest" endpoint HTTP response body
 // for the "gateway_error" error.
 type RevokeRiskPolicyBypassRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsUnauthorizedResponseBody is the type of the "risk"
+// service "listRiskPolicyApprovals" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListRiskPolicyApprovalsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsForbiddenResponseBody is the type of the "risk"
+// service "listRiskPolicyApprovals" endpoint HTTP response body for the
+// "forbidden" error.
+type ListRiskPolicyApprovalsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsBadRequestResponseBody is the type of the "risk"
+// service "listRiskPolicyApprovals" endpoint HTTP response body for the
+// "bad_request" error.
+type ListRiskPolicyApprovalsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsNotFoundResponseBody is the type of the "risk"
+// service "listRiskPolicyApprovals" endpoint HTTP response body for the
+// "not_found" error.
+type ListRiskPolicyApprovalsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsConflictResponseBody is the type of the "risk"
+// service "listRiskPolicyApprovals" endpoint HTTP response body for the
+// "conflict" error.
+type ListRiskPolicyApprovalsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsUnsupportedMediaResponseBody is the type of the
+// "risk" service "listRiskPolicyApprovals" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListRiskPolicyApprovalsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsInvalidResponseBody is the type of the "risk" service
+// "listRiskPolicyApprovals" endpoint HTTP response body for the "invalid"
+// error.
+type ListRiskPolicyApprovalsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsInvariantViolationResponseBody is the type of the
+// "risk" service "listRiskPolicyApprovals" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListRiskPolicyApprovalsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsUnexpectedResponseBody is the type of the "risk"
+// service "listRiskPolicyApprovals" endpoint HTTP response body for the
+// "unexpected" error.
+type ListRiskPolicyApprovalsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPolicyApprovalsGatewayErrorResponseBody is the type of the "risk"
+// service "listRiskPolicyApprovals" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListRiskPolicyApprovalsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalUnauthorizedResponseBody is the type of the "risk"
+// service "getRiskPolicyApproval" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetRiskPolicyApprovalUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalForbiddenResponseBody is the type of the "risk" service
+// "getRiskPolicyApproval" endpoint HTTP response body for the "forbidden"
+// error.
+type GetRiskPolicyApprovalForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalBadRequestResponseBody is the type of the "risk"
+// service "getRiskPolicyApproval" endpoint HTTP response body for the
+// "bad_request" error.
+type GetRiskPolicyApprovalBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalNotFoundResponseBody is the type of the "risk" service
+// "getRiskPolicyApproval" endpoint HTTP response body for the "not_found"
+// error.
+type GetRiskPolicyApprovalNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalConflictResponseBody is the type of the "risk" service
+// "getRiskPolicyApproval" endpoint HTTP response body for the "conflict" error.
+type GetRiskPolicyApprovalConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalUnsupportedMediaResponseBody is the type of the "risk"
+// service "getRiskPolicyApproval" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetRiskPolicyApprovalUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalInvalidResponseBody is the type of the "risk" service
+// "getRiskPolicyApproval" endpoint HTTP response body for the "invalid" error.
+type GetRiskPolicyApprovalInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalInvariantViolationResponseBody is the type of the
+// "risk" service "getRiskPolicyApproval" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRiskPolicyApprovalInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalUnexpectedResponseBody is the type of the "risk"
+// service "getRiskPolicyApproval" endpoint HTTP response body for the
+// "unexpected" error.
+type GetRiskPolicyApprovalUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRiskPolicyApprovalGatewayErrorResponseBody is the type of the "risk"
+// service "getRiskPolicyApproval" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetRiskPolicyApprovalGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalUnauthorizedResponseBody is the type of the "risk"
+// service "decideRiskPolicyApproval" endpoint HTTP response body for the
+// "unauthorized" error.
+type DecideRiskPolicyApprovalUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalForbiddenResponseBody is the type of the "risk"
+// service "decideRiskPolicyApproval" endpoint HTTP response body for the
+// "forbidden" error.
+type DecideRiskPolicyApprovalForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalBadRequestResponseBody is the type of the "risk"
+// service "decideRiskPolicyApproval" endpoint HTTP response body for the
+// "bad_request" error.
+type DecideRiskPolicyApprovalBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalNotFoundResponseBody is the type of the "risk"
+// service "decideRiskPolicyApproval" endpoint HTTP response body for the
+// "not_found" error.
+type DecideRiskPolicyApprovalNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalConflictResponseBody is the type of the "risk"
+// service "decideRiskPolicyApproval" endpoint HTTP response body for the
+// "conflict" error.
+type DecideRiskPolicyApprovalConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalUnsupportedMediaResponseBody is the type of the
+// "risk" service "decideRiskPolicyApproval" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DecideRiskPolicyApprovalUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalInvalidResponseBody is the type of the "risk"
+// service "decideRiskPolicyApproval" endpoint HTTP response body for the
+// "invalid" error.
+type DecideRiskPolicyApprovalInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalInvariantViolationResponseBody is the type of the
+// "risk" service "decideRiskPolicyApproval" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DecideRiskPolicyApprovalInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalUnexpectedResponseBody is the type of the "risk"
+// service "decideRiskPolicyApproval" endpoint HTTP response body for the
+// "unexpected" error.
+type DecideRiskPolicyApprovalUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DecideRiskPolicyApprovalGatewayErrorResponseBody is the type of the "risk"
+// service "decideRiskPolicyApproval" endpoint HTTP response body for the
+// "gateway_error" error.
+type DecideRiskPolicyApprovalGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -11763,6 +12294,14 @@ type RiskPolicyModelConfigRequestBody struct {
 	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
 }
 
+// RiskPolicyApprovalConfigRequestBody is used to define fields on request body
+// types.
+type RiskPolicyApprovalConfigRequestBody struct {
+	// Principal URNs that may approve held calls: specific users (user:...) or
+	// roles (role:...). Everyone is not allowed.
+	Approvers []string `form:"approvers" json:"approvers" xml:"approvers"`
+}
+
 // RiskDetectionScopeResponseBody is used to define fields on response body
 // types.
 type RiskDetectionScopeResponseBody struct {
@@ -11809,6 +12348,28 @@ type RiskPolicyModelConfigResponseBody struct {
 	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
 }
 
+// RiskPolicyApprovalConfigResponseBody is used to define fields on response
+// body types.
+type RiskPolicyApprovalConfigResponseBody struct {
+	// Principal URNs that may approve held calls: specific users (user:...) or
+	// roles (role:...). Everyone is not allowed.
+	Approvers []string `form:"approvers,omitempty" json:"approvers,omitempty" xml:"approvers,omitempty"`
+}
+
+// RiskPolicyApprovalsServerSetupResponseBody is used to define fields on
+// response body types.
+type RiskPolicyApprovalsServerSetupResponseBody struct {
+	// The approvals server Speakeasy created in the project.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The approvals server's slug.
+	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
+	// How plugins name the server, and how held calls refer to it.
+	PluginServerName *string `form:"plugin_server_name,omitempty" json:"plugin_server_name,omitempty" xml:"plugin_server_name,omitempty"`
+	// Whether the server joined the project's Default plugin, which republishes so
+	// agents that use the plugin get it.
+	AddedToDefaultPlugin *bool `form:"added_to_default_plugin,omitempty" json:"added_to_default_plugin,omitempty" xml:"added_to_default_plugin,omitempty"`
+}
+
 // RiskPolicyResponseBody is used to define fields on response body types.
 type RiskPolicyResponseBody struct {
 	// The risk policy ID.
@@ -11849,9 +12410,10 @@ type RiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session). MCP-scoped policies support flag and block
-	// only.
+	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
+	// freeze the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -11859,7 +12421,8 @@ type RiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -11879,6 +12442,13 @@ type RiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Null for every
+	// other action.
+	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
+	// Set only on the create or update response that turned on the project's first
+	// approval policy: the approvals server Speakeasy created and whether it
+	// joined the Default plugin.
+	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -12423,6 +12993,61 @@ type RiskPolicyBypassRequestResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// RiskPolicyApprovalResponseBody is used to define fields on response body
+// types.
+type RiskPolicyApprovalResponseBody struct {
+	// The approval request ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The require_approval risk policy that held the call.
+	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
+	// The policy's name.
+	PolicyName *string `form:"policy_name,omitempty" json:"policy_name,omitempty" xml:"policy_name,omitempty"`
+	// The policy version when the call was held.
+	PolicyVersion *int64 `form:"policy_version,omitempty" json:"policy_version,omitempty" xml:"policy_version,omitempty"`
+	// The request's status. An open request past its window is expired.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// The principal that made the call: agent:<id> or user:<id>.
+	RequesterUrn *string `form:"requester_urn,omitempty" json:"requester_urn,omitempty" xml:"requester_urn,omitempty"`
+	// The MCP surface that received the call.
+	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
+	// The hosted toolset that served the call, when known.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The chat the call belongs to, when known.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
+	// The tool that was called.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// A shortened preview of the call's arguments: long strings are cut and only
+	// the first keys are kept.
+	ArgumentsPreview map[string]any `form:"arguments_preview,omitempty" json:"arguments_preview,omitempty" xml:"arguments_preview,omitempty"`
+	// The agent's reason, once it requested approval.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// What the agent asked to be approved, such as exact_once.
+	RequestedScope *string `form:"requested_scope,omitempty" json:"requested_scope,omitempty" xml:"requested_scope,omitempty"`
+	// What the approver granted, once approved.
+	GrantedScope *string `form:"granted_scope,omitempty" json:"granted_scope,omitempty" xml:"granted_scope,omitempty"`
+	// The approver who decided.
+	DecidedByUrn *string `form:"decided_by_urn,omitempty" json:"decided_by_urn,omitempty" xml:"decided_by_urn,omitempty"`
+	// Where the decision came from.
+	DecidedVia *string `form:"decided_via,omitempty" json:"decided_via,omitempty" xml:"decided_via,omitempty"`
+	// The approver's message for the agent.
+	DecisionNote *string `form:"decision_note,omitempty" json:"decision_note,omitempty" xml:"decision_note,omitempty"`
+	// Whether the caller can decide this request now.
+	CanDecide *bool `form:"can_decide,omitempty" json:"can_decide,omitempty" xml:"can_decide,omitempty"`
+	// When the agent requested approval.
+	RequestedAt *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
+	// When an approver decided.
+	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// When the request stops waiting for a decision, or the approval stops
+	// covering a retry.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	// When a retry used the approval.
+	ConsumedAt *string `form:"consumed_at,omitempty" json:"consumed_at,omitempty" xml:"consumed_at,omitempty"`
+	// When the call was first held.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Last update timestamp.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // RiskCustomDetectionRuleResponseBody is used to define fields on response
 // body types.
 type RiskCustomDetectionRuleResponseBody struct {
@@ -12656,6 +13281,9 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
 	}
+	if p.ApprovalConfig != nil {
+		body.ApprovalConfig = marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigRequestBody(p.ApprovalConfig)
+	}
 	{
 		var zero float64
 		if body.Score == zero {
@@ -12751,6 +13379,9 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 	}
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
+	}
+	if p.ApprovalConfig != nil {
+		body.ApprovalConfig = marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigRequestBody(p.ApprovalConfig)
 	}
 	return body
 }
@@ -12907,6 +13538,17 @@ func NewDenyRiskPolicyBypassRequestRequestBody(p *risk.DenyRiskPolicyBypassReque
 func NewRevokeRiskPolicyBypassRequestRequestBody(p *risk.RevokeRiskPolicyBypassRequestPayload) *RevokeRiskPolicyBypassRequestRequestBody {
 	body := &RevokeRiskPolicyBypassRequestRequestBody{
 		ID: p.ID,
+	}
+	return body
+}
+
+// NewDecideRiskPolicyApprovalRequestBody builds the HTTP request body from the
+// payload of the "decideRiskPolicyApproval" endpoint of the "risk" service.
+func NewDecideRiskPolicyApprovalRequestBody(p *risk.DecideRiskPolicyApprovalPayload) *DecideRiskPolicyApprovalRequestBody {
+	body := &DecideRiskPolicyApprovalRequestBody{
+		ID:       p.ID,
+		Decision: p.Decision,
+		Note:     p.Note,
 	}
 	return body
 }
@@ -13186,6 +13828,12 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
+	}
+	if body.ApprovalConfig != nil {
+		v.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(body.ApprovalConfig)
+	}
+	if body.ApprovalsServerSetup != nil {
+		v.ApprovalsServerSetup = unmarshalRiskPolicyApprovalsServerSetupResponseBodyToTypesRiskPolicyApprovalsServerSetup(body.ApprovalsServerSetup)
 	}
 
 	return v
@@ -14083,6 +14731,12 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
+	if body.ApprovalConfig != nil {
+		v.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(body.ApprovalConfig)
+	}
+	if body.ApprovalsServerSetup != nil {
+		v.ApprovalsServerSetup = unmarshalRiskPolicyApprovalsServerSetupResponseBodyToTypesRiskPolicyApprovalsServerSetup(body.ApprovalsServerSetup)
+	}
 
 	return v
 }
@@ -14311,6 +14965,12 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
+	}
+	if body.ApprovalConfig != nil {
+		v.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(body.ApprovalConfig)
+	}
+	if body.ApprovalsServerSetup != nil {
+		v.ApprovalsServerSetup = unmarshalRiskPolicyApprovalsServerSetupResponseBodyToTypesRiskPolicyApprovalsServerSetup(body.ApprovalsServerSetup)
 	}
 
 	return v
@@ -16260,10 +16920,8 @@ func NewGetRiskOverviewRiskOverviewResultOK(body *GetRiskOverviewResponseBody) *
 	v := &risk.RiskOverviewResult{
 		From:            *body.From,
 		To:              *body.To,
-		MessagesScanned: *body.MessagesScanned,
 		Findings:        *body.Findings,
 		FlaggedSessions: *body.FlaggedSessions,
-		ActivePolicies:  *body.ActivePolicies,
 	}
 	v.TopCategories = make([]*risk.RiskOverviewCategory, len(body.TopCategories))
 	for i, val := range body.TopCategories {
@@ -17297,177 +17955,6 @@ func NewGetRiskUserBreakdownUnexpected(body *GetRiskUserBreakdownUnexpectedRespo
 // NewGetRiskUserBreakdownGatewayError builds a risk service
 // getRiskUserBreakdown endpoint gateway_error error.
 func NewGetRiskUserBreakdownGatewayError(body *GetRiskUserBreakdownGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownRiskRuleBreakdownResultOK builds a "risk" service
-// "getRiskRuleBreakdown" endpoint result from a HTTP "OK" response.
-func NewGetRiskRuleBreakdownRiskRuleBreakdownResultOK(body *GetRiskRuleBreakdownResponseBody) *risk.RiskRuleBreakdownResult {
-	v := &risk.RiskRuleBreakdownResult{
-		From:     *body.From,
-		To:       *body.To,
-		Category: *body.Category,
-		Total:    *body.Total,
-	}
-	v.Rules = make([]*risk.RiskRuleBreakdownEntry, len(body.Rules))
-	for i, val := range body.Rules {
-		if val == nil {
-			v.Rules[i] = nil
-			continue
-		}
-		v.Rules[i] = unmarshalRiskRuleBreakdownEntryResponseBodyToRiskRiskRuleBreakdownEntry(val)
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownUnauthorized builds a risk service
-// getRiskRuleBreakdown endpoint unauthorized error.
-func NewGetRiskRuleBreakdownUnauthorized(body *GetRiskRuleBreakdownUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownForbidden builds a risk service getRiskRuleBreakdown
-// endpoint forbidden error.
-func NewGetRiskRuleBreakdownForbidden(body *GetRiskRuleBreakdownForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownBadRequest builds a risk service getRiskRuleBreakdown
-// endpoint bad_request error.
-func NewGetRiskRuleBreakdownBadRequest(body *GetRiskRuleBreakdownBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownNotFound builds a risk service getRiskRuleBreakdown
-// endpoint not_found error.
-func NewGetRiskRuleBreakdownNotFound(body *GetRiskRuleBreakdownNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownConflict builds a risk service getRiskRuleBreakdown
-// endpoint conflict error.
-func NewGetRiskRuleBreakdownConflict(body *GetRiskRuleBreakdownConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownUnsupportedMedia builds a risk service
-// getRiskRuleBreakdown endpoint unsupported_media error.
-func NewGetRiskRuleBreakdownUnsupportedMedia(body *GetRiskRuleBreakdownUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownInvalid builds a risk service getRiskRuleBreakdown
-// endpoint invalid error.
-func NewGetRiskRuleBreakdownInvalid(body *GetRiskRuleBreakdownInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownInvariantViolation builds a risk service
-// getRiskRuleBreakdown endpoint invariant_violation error.
-func NewGetRiskRuleBreakdownInvariantViolation(body *GetRiskRuleBreakdownInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownUnexpected builds a risk service getRiskRuleBreakdown
-// endpoint unexpected error.
-func NewGetRiskRuleBreakdownUnexpected(body *GetRiskRuleBreakdownUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetRiskRuleBreakdownGatewayError builds a risk service
-// getRiskRuleBreakdown endpoint gateway_error error.
-func NewGetRiskRuleBreakdownGatewayError(body *GetRiskRuleBreakdownGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -19681,6 +20168,550 @@ func NewRevokeRiskPolicyBypassRequestUnexpected(body *RevokeRiskPolicyBypassRequ
 // NewRevokeRiskPolicyBypassRequestGatewayError builds a risk service
 // revokeRiskPolicyBypassRequest endpoint gateway_error error.
 func NewRevokeRiskPolicyBypassRequestGatewayError(body *RevokeRiskPolicyBypassRequestGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsResultOK builds a "risk" service
+// "listRiskPolicyApprovals" endpoint result from a HTTP "OK" response.
+func NewListRiskPolicyApprovalsResultOK(body *ListRiskPolicyApprovalsResponseBody) *risk.ListRiskPolicyApprovalsResult {
+	v := &risk.ListRiskPolicyApprovalsResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Approvals = make([]*risk.RiskPolicyApproval, len(body.Approvals))
+	for i, val := range body.Approvals {
+		if val == nil {
+			v.Approvals[i] = nil
+			continue
+		}
+		v.Approvals[i] = unmarshalRiskPolicyApprovalResponseBodyToRiskRiskPolicyApproval(val)
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsUnauthorized builds a risk service
+// listRiskPolicyApprovals endpoint unauthorized error.
+func NewListRiskPolicyApprovalsUnauthorized(body *ListRiskPolicyApprovalsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsForbidden builds a risk service
+// listRiskPolicyApprovals endpoint forbidden error.
+func NewListRiskPolicyApprovalsForbidden(body *ListRiskPolicyApprovalsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsBadRequest builds a risk service
+// listRiskPolicyApprovals endpoint bad_request error.
+func NewListRiskPolicyApprovalsBadRequest(body *ListRiskPolicyApprovalsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsNotFound builds a risk service
+// listRiskPolicyApprovals endpoint not_found error.
+func NewListRiskPolicyApprovalsNotFound(body *ListRiskPolicyApprovalsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsConflict builds a risk service
+// listRiskPolicyApprovals endpoint conflict error.
+func NewListRiskPolicyApprovalsConflict(body *ListRiskPolicyApprovalsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsUnsupportedMedia builds a risk service
+// listRiskPolicyApprovals endpoint unsupported_media error.
+func NewListRiskPolicyApprovalsUnsupportedMedia(body *ListRiskPolicyApprovalsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsInvalid builds a risk service
+// listRiskPolicyApprovals endpoint invalid error.
+func NewListRiskPolicyApprovalsInvalid(body *ListRiskPolicyApprovalsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsInvariantViolation builds a risk service
+// listRiskPolicyApprovals endpoint invariant_violation error.
+func NewListRiskPolicyApprovalsInvariantViolation(body *ListRiskPolicyApprovalsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsUnexpected builds a risk service
+// listRiskPolicyApprovals endpoint unexpected error.
+func NewListRiskPolicyApprovalsUnexpected(body *ListRiskPolicyApprovalsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPolicyApprovalsGatewayError builds a risk service
+// listRiskPolicyApprovals endpoint gateway_error error.
+func NewListRiskPolicyApprovalsGatewayError(body *ListRiskPolicyApprovalsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalRiskPolicyApprovalOK builds a "risk" service
+// "getRiskPolicyApproval" endpoint result from a HTTP "OK" response.
+func NewGetRiskPolicyApprovalRiskPolicyApprovalOK(body *GetRiskPolicyApprovalResponseBody) *risk.RiskPolicyApproval {
+	v := &risk.RiskPolicyApproval{
+		ID:             *body.ID,
+		PolicyID:       *body.PolicyID,
+		PolicyName:     *body.PolicyName,
+		PolicyVersion:  *body.PolicyVersion,
+		Status:         *body.Status,
+		RequesterUrn:   *body.RequesterUrn,
+		Surface:        *body.Surface,
+		ToolsetID:      body.ToolsetID,
+		ChatID:         body.ChatID,
+		ToolName:       *body.ToolName,
+		Reason:         body.Reason,
+		RequestedScope: body.RequestedScope,
+		GrantedScope:   body.GrantedScope,
+		DecidedByUrn:   body.DecidedByUrn,
+		DecidedVia:     body.DecidedVia,
+		DecisionNote:   body.DecisionNote,
+		CanDecide:      *body.CanDecide,
+		RequestedAt:    body.RequestedAt,
+		DecidedAt:      body.DecidedAt,
+		ExpiresAt:      body.ExpiresAt,
+		ConsumedAt:     body.ConsumedAt,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+	}
+	v.ArgumentsPreview = make(map[string]any, len(body.ArgumentsPreview))
+	for key, val := range body.ArgumentsPreview {
+		tk := key
+		tv := val
+		v.ArgumentsPreview[tk] = tv
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalUnauthorized builds a risk service
+// getRiskPolicyApproval endpoint unauthorized error.
+func NewGetRiskPolicyApprovalUnauthorized(body *GetRiskPolicyApprovalUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalForbidden builds a risk service
+// getRiskPolicyApproval endpoint forbidden error.
+func NewGetRiskPolicyApprovalForbidden(body *GetRiskPolicyApprovalForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalBadRequest builds a risk service
+// getRiskPolicyApproval endpoint bad_request error.
+func NewGetRiskPolicyApprovalBadRequest(body *GetRiskPolicyApprovalBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalNotFound builds a risk service getRiskPolicyApproval
+// endpoint not_found error.
+func NewGetRiskPolicyApprovalNotFound(body *GetRiskPolicyApprovalNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalConflict builds a risk service getRiskPolicyApproval
+// endpoint conflict error.
+func NewGetRiskPolicyApprovalConflict(body *GetRiskPolicyApprovalConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalUnsupportedMedia builds a risk service
+// getRiskPolicyApproval endpoint unsupported_media error.
+func NewGetRiskPolicyApprovalUnsupportedMedia(body *GetRiskPolicyApprovalUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalInvalid builds a risk service getRiskPolicyApproval
+// endpoint invalid error.
+func NewGetRiskPolicyApprovalInvalid(body *GetRiskPolicyApprovalInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalInvariantViolation builds a risk service
+// getRiskPolicyApproval endpoint invariant_violation error.
+func NewGetRiskPolicyApprovalInvariantViolation(body *GetRiskPolicyApprovalInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalUnexpected builds a risk service
+// getRiskPolicyApproval endpoint unexpected error.
+func NewGetRiskPolicyApprovalUnexpected(body *GetRiskPolicyApprovalUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRiskPolicyApprovalGatewayError builds a risk service
+// getRiskPolicyApproval endpoint gateway_error error.
+func NewGetRiskPolicyApprovalGatewayError(body *GetRiskPolicyApprovalGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalRiskPolicyApprovalOK builds a "risk" service
+// "decideRiskPolicyApproval" endpoint result from a HTTP "OK" response.
+func NewDecideRiskPolicyApprovalRiskPolicyApprovalOK(body *DecideRiskPolicyApprovalResponseBody) *risk.RiskPolicyApproval {
+	v := &risk.RiskPolicyApproval{
+		ID:             *body.ID,
+		PolicyID:       *body.PolicyID,
+		PolicyName:     *body.PolicyName,
+		PolicyVersion:  *body.PolicyVersion,
+		Status:         *body.Status,
+		RequesterUrn:   *body.RequesterUrn,
+		Surface:        *body.Surface,
+		ToolsetID:      body.ToolsetID,
+		ChatID:         body.ChatID,
+		ToolName:       *body.ToolName,
+		Reason:         body.Reason,
+		RequestedScope: body.RequestedScope,
+		GrantedScope:   body.GrantedScope,
+		DecidedByUrn:   body.DecidedByUrn,
+		DecidedVia:     body.DecidedVia,
+		DecisionNote:   body.DecisionNote,
+		CanDecide:      *body.CanDecide,
+		RequestedAt:    body.RequestedAt,
+		DecidedAt:      body.DecidedAt,
+		ExpiresAt:      body.ExpiresAt,
+		ConsumedAt:     body.ConsumedAt,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+	}
+	v.ArgumentsPreview = make(map[string]any, len(body.ArgumentsPreview))
+	for key, val := range body.ArgumentsPreview {
+		tk := key
+		tv := val
+		v.ArgumentsPreview[tk] = tv
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalUnauthorized builds a risk service
+// decideRiskPolicyApproval endpoint unauthorized error.
+func NewDecideRiskPolicyApprovalUnauthorized(body *DecideRiskPolicyApprovalUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalForbidden builds a risk service
+// decideRiskPolicyApproval endpoint forbidden error.
+func NewDecideRiskPolicyApprovalForbidden(body *DecideRiskPolicyApprovalForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalBadRequest builds a risk service
+// decideRiskPolicyApproval endpoint bad_request error.
+func NewDecideRiskPolicyApprovalBadRequest(body *DecideRiskPolicyApprovalBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalNotFound builds a risk service
+// decideRiskPolicyApproval endpoint not_found error.
+func NewDecideRiskPolicyApprovalNotFound(body *DecideRiskPolicyApprovalNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalConflict builds a risk service
+// decideRiskPolicyApproval endpoint conflict error.
+func NewDecideRiskPolicyApprovalConflict(body *DecideRiskPolicyApprovalConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalUnsupportedMedia builds a risk service
+// decideRiskPolicyApproval endpoint unsupported_media error.
+func NewDecideRiskPolicyApprovalUnsupportedMedia(body *DecideRiskPolicyApprovalUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalInvalid builds a risk service
+// decideRiskPolicyApproval endpoint invalid error.
+func NewDecideRiskPolicyApprovalInvalid(body *DecideRiskPolicyApprovalInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalInvariantViolation builds a risk service
+// decideRiskPolicyApproval endpoint invariant_violation error.
+func NewDecideRiskPolicyApprovalInvariantViolation(body *DecideRiskPolicyApprovalInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalUnexpected builds a risk service
+// decideRiskPolicyApproval endpoint unexpected error.
+func NewDecideRiskPolicyApprovalUnexpected(body *DecideRiskPolicyApprovalUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDecideRiskPolicyApprovalGatewayError builds a risk service
+// decideRiskPolicyApproval endpoint gateway_error error.
+func NewDecideRiskPolicyApprovalGatewayError(body *DecideRiskPolicyApprovalGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -22547,8 +23578,8 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -22564,6 +23595,16 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
+		}
+	}
+	if body.ApprovalConfig != nil {
+		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ApprovalsServerSetup != nil {
+		if err2 := ValidateRiskPolicyApprovalsServerSetupResponseBody(body.ApprovalsServerSetup); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Score != nil {
@@ -22726,8 +23767,8 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -22743,6 +23784,16 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
+		}
+	}
+	if body.ApprovalConfig != nil {
+		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ApprovalsServerSetup != nil {
+		if err2 := ValidateRiskPolicyApprovalsServerSetupResponseBody(body.ApprovalsServerSetup); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Score != nil {
@@ -22838,8 +23889,8 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -22855,6 +23906,16 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
+		}
+	}
+	if body.ApprovalConfig != nil {
+		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ApprovalsServerSetup != nil {
+		if err2 := ValidateRiskPolicyApprovalsServerSetupResponseBody(body.ApprovalsServerSetup); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Score != nil {
@@ -23068,17 +24129,11 @@ func ValidateGetRiskOverviewResponseBody(body *GetRiskOverviewResponseBody) (err
 	if body.To == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
 	}
-	if body.MessagesScanned == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("messages_scanned", "body"))
-	}
 	if body.Findings == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("findings", "body"))
 	}
 	if body.FlaggedSessions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("flagged_sessions", "body"))
-	}
-	if body.ActivePolicies == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("active_policies", "body"))
 	}
 	if body.TopCategories == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("top_categories", "body"))
@@ -23268,40 +24323,6 @@ func ValidateGetRiskUserBreakdownResponseBody(body *GetRiskUserBreakdownResponse
 				err = goa.MergeErrors(err, err2)
 			}
 		}
-	}
-	for _, e := range body.Rules {
-		if e != nil {
-			if err2 := ValidateRiskRuleBreakdownEntryResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownResponseBody runs the validations defined on
-// GetRiskRuleBreakdownResponseBody
-func ValidateGetRiskRuleBreakdownResponseBody(body *GetRiskRuleBreakdownResponseBody) (err error) {
-	if body.From == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
-	}
-	if body.To == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
-	}
-	if body.Category == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("category", "body"))
-	}
-	if body.Rules == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("rules", "body"))
-	}
-	if body.Total == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
-	}
-	if body.From != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
-	}
-	if body.To != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.Rules {
 		if e != nil {
@@ -23696,6 +24717,186 @@ func ValidateRevokeRiskPolicyBypassRequestResponseBody(body *RevokeRiskPolicyByp
 	}
 	if body.DecidedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsResponseBody runs the validations defined on
+// ListRiskPolicyApprovalsResponseBody
+func ValidateListRiskPolicyApprovalsResponseBody(body *ListRiskPolicyApprovalsResponseBody) (err error) {
+	if body.Approvals == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approvals", "body"))
+	}
+	for _, e := range body.Approvals {
+		if e != nil {
+			if err2 := ValidateRiskPolicyApprovalResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalResponseBody runs the validations defined on
+// GetRiskPolicyApprovalResponseBody
+func ValidateGetRiskPolicyApprovalResponseBody(body *GetRiskPolicyApprovalResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PolicyID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_id", "body"))
+	}
+	if body.PolicyName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_name", "body"))
+	}
+	if body.PolicyVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_version", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.RequesterUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requester_urn", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	}
+	if body.ArgumentsPreview == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("arguments_preview", "body"))
+	}
+	if body.CanDecide == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_decide", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.PolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "blocked" || *body.Status == "pending" || *body.Status == "approved" || *body.Status == "denied" || *body.Status == "consumed" || *body.Status == "expired") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"blocked", "pending", "approved", "denied", "consumed", "expired"}))
+		}
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.ChatID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
+	}
+	if body.DecidedVia != nil {
+		if !(*body.DecidedVia == "slack" || *body.DecidedVia == "dashboard" || *body.DecidedVia == "api") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decided_via", *body.DecidedVia, []any{"slack", "dashboard", "api"}))
+		}
+	}
+	if body.RequestedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_at", *body.RequestedAt, goa.FormatDateTime))
+	}
+	if body.DecidedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	if body.ConsumedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.consumed_at", *body.ConsumedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalResponseBody runs the validations defined on
+// DecideRiskPolicyApprovalResponseBody
+func ValidateDecideRiskPolicyApprovalResponseBody(body *DecideRiskPolicyApprovalResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PolicyID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_id", "body"))
+	}
+	if body.PolicyName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_name", "body"))
+	}
+	if body.PolicyVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_version", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.RequesterUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requester_urn", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	}
+	if body.ArgumentsPreview == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("arguments_preview", "body"))
+	}
+	if body.CanDecide == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_decide", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.PolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "blocked" || *body.Status == "pending" || *body.Status == "approved" || *body.Status == "denied" || *body.Status == "consumed" || *body.Status == "expired") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"blocked", "pending", "approved", "denied", "consumed", "expired"}))
+		}
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.ChatID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
+	}
+	if body.DecidedVia != nil {
+		if !(*body.DecidedVia == "slack" || *body.DecidedVia == "dashboard" || *body.DecidedVia == "api") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decided_via", *body.DecidedVia, []any{"slack", "dashboard", "api"}))
+		}
+	}
+	if body.RequestedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_at", *body.RequestedAt, goa.FormatDateTime))
+	}
+	if body.DecidedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	if body.ConsumedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.consumed_at", *body.ConsumedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -29926,246 +31127,6 @@ func ValidateGetRiskUserBreakdownGatewayErrorResponseBody(body *GetRiskUserBreak
 	return
 }
 
-// ValidateGetRiskRuleBreakdownUnauthorizedResponseBody runs the validations
-// defined on getRiskRuleBreakdown_unauthorized_response_body
-func ValidateGetRiskRuleBreakdownUnauthorizedResponseBody(body *GetRiskRuleBreakdownUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownForbiddenResponseBody runs the validations
-// defined on getRiskRuleBreakdown_forbidden_response_body
-func ValidateGetRiskRuleBreakdownForbiddenResponseBody(body *GetRiskRuleBreakdownForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownBadRequestResponseBody runs the validations
-// defined on getRiskRuleBreakdown_bad_request_response_body
-func ValidateGetRiskRuleBreakdownBadRequestResponseBody(body *GetRiskRuleBreakdownBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownNotFoundResponseBody runs the validations
-// defined on getRiskRuleBreakdown_not_found_response_body
-func ValidateGetRiskRuleBreakdownNotFoundResponseBody(body *GetRiskRuleBreakdownNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownConflictResponseBody runs the validations
-// defined on getRiskRuleBreakdown_conflict_response_body
-func ValidateGetRiskRuleBreakdownConflictResponseBody(body *GetRiskRuleBreakdownConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownUnsupportedMediaResponseBody runs the
-// validations defined on getRiskRuleBreakdown_unsupported_media_response_body
-func ValidateGetRiskRuleBreakdownUnsupportedMediaResponseBody(body *GetRiskRuleBreakdownUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownInvalidResponseBody runs the validations defined
-// on getRiskRuleBreakdown_invalid_response_body
-func ValidateGetRiskRuleBreakdownInvalidResponseBody(body *GetRiskRuleBreakdownInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownInvariantViolationResponseBody runs the
-// validations defined on getRiskRuleBreakdown_invariant_violation_response_body
-func ValidateGetRiskRuleBreakdownInvariantViolationResponseBody(body *GetRiskRuleBreakdownInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownUnexpectedResponseBody runs the validations
-// defined on getRiskRuleBreakdown_unexpected_response_body
-func ValidateGetRiskRuleBreakdownUnexpectedResponseBody(body *GetRiskRuleBreakdownUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetRiskRuleBreakdownGatewayErrorResponseBody runs the validations
-// defined on getRiskRuleBreakdown_gateway_error_response_body
-func ValidateGetRiskRuleBreakdownGatewayErrorResponseBody(body *GetRiskRuleBreakdownGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateGetRiskSignalsUnauthorizedResponseBody runs the validations defined
 // on getRiskSignals_unauthorized_response_body
 func ValidateGetRiskSignalsUnauthorizedResponseBody(body *GetRiskSignalsUnauthorizedResponseBody) (err error) {
@@ -33301,6 +34262,731 @@ func ValidateRevokeRiskPolicyBypassRequestUnexpectedResponseBody(body *RevokeRis
 // validations defined on
 // revokeRiskPolicyBypassRequest_gateway_error_response_body
 func ValidateRevokeRiskPolicyBypassRequestGatewayErrorResponseBody(body *RevokeRiskPolicyBypassRequestGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsUnauthorizedResponseBody runs the validations
+// defined on listRiskPolicyApprovals_unauthorized_response_body
+func ValidateListRiskPolicyApprovalsUnauthorizedResponseBody(body *ListRiskPolicyApprovalsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsForbiddenResponseBody runs the validations
+// defined on listRiskPolicyApprovals_forbidden_response_body
+func ValidateListRiskPolicyApprovalsForbiddenResponseBody(body *ListRiskPolicyApprovalsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsBadRequestResponseBody runs the validations
+// defined on listRiskPolicyApprovals_bad_request_response_body
+func ValidateListRiskPolicyApprovalsBadRequestResponseBody(body *ListRiskPolicyApprovalsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsNotFoundResponseBody runs the validations
+// defined on listRiskPolicyApprovals_not_found_response_body
+func ValidateListRiskPolicyApprovalsNotFoundResponseBody(body *ListRiskPolicyApprovalsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsConflictResponseBody runs the validations
+// defined on listRiskPolicyApprovals_conflict_response_body
+func ValidateListRiskPolicyApprovalsConflictResponseBody(body *ListRiskPolicyApprovalsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsUnsupportedMediaResponseBody runs the
+// validations defined on
+// listRiskPolicyApprovals_unsupported_media_response_body
+func ValidateListRiskPolicyApprovalsUnsupportedMediaResponseBody(body *ListRiskPolicyApprovalsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsInvalidResponseBody runs the validations
+// defined on listRiskPolicyApprovals_invalid_response_body
+func ValidateListRiskPolicyApprovalsInvalidResponseBody(body *ListRiskPolicyApprovalsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsInvariantViolationResponseBody runs the
+// validations defined on
+// listRiskPolicyApprovals_invariant_violation_response_body
+func ValidateListRiskPolicyApprovalsInvariantViolationResponseBody(body *ListRiskPolicyApprovalsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsUnexpectedResponseBody runs the validations
+// defined on listRiskPolicyApprovals_unexpected_response_body
+func ValidateListRiskPolicyApprovalsUnexpectedResponseBody(body *ListRiskPolicyApprovalsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPolicyApprovalsGatewayErrorResponseBody runs the validations
+// defined on listRiskPolicyApprovals_gateway_error_response_body
+func ValidateListRiskPolicyApprovalsGatewayErrorResponseBody(body *ListRiskPolicyApprovalsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalUnauthorizedResponseBody runs the validations
+// defined on getRiskPolicyApproval_unauthorized_response_body
+func ValidateGetRiskPolicyApprovalUnauthorizedResponseBody(body *GetRiskPolicyApprovalUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalForbiddenResponseBody runs the validations
+// defined on getRiskPolicyApproval_forbidden_response_body
+func ValidateGetRiskPolicyApprovalForbiddenResponseBody(body *GetRiskPolicyApprovalForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalBadRequestResponseBody runs the validations
+// defined on getRiskPolicyApproval_bad_request_response_body
+func ValidateGetRiskPolicyApprovalBadRequestResponseBody(body *GetRiskPolicyApprovalBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalNotFoundResponseBody runs the validations
+// defined on getRiskPolicyApproval_not_found_response_body
+func ValidateGetRiskPolicyApprovalNotFoundResponseBody(body *GetRiskPolicyApprovalNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalConflictResponseBody runs the validations
+// defined on getRiskPolicyApproval_conflict_response_body
+func ValidateGetRiskPolicyApprovalConflictResponseBody(body *GetRiskPolicyApprovalConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalUnsupportedMediaResponseBody runs the
+// validations defined on getRiskPolicyApproval_unsupported_media_response_body
+func ValidateGetRiskPolicyApprovalUnsupportedMediaResponseBody(body *GetRiskPolicyApprovalUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalInvalidResponseBody runs the validations
+// defined on getRiskPolicyApproval_invalid_response_body
+func ValidateGetRiskPolicyApprovalInvalidResponseBody(body *GetRiskPolicyApprovalInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalInvariantViolationResponseBody runs the
+// validations defined on
+// getRiskPolicyApproval_invariant_violation_response_body
+func ValidateGetRiskPolicyApprovalInvariantViolationResponseBody(body *GetRiskPolicyApprovalInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalUnexpectedResponseBody runs the validations
+// defined on getRiskPolicyApproval_unexpected_response_body
+func ValidateGetRiskPolicyApprovalUnexpectedResponseBody(body *GetRiskPolicyApprovalUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRiskPolicyApprovalGatewayErrorResponseBody runs the validations
+// defined on getRiskPolicyApproval_gateway_error_response_body
+func ValidateGetRiskPolicyApprovalGatewayErrorResponseBody(body *GetRiskPolicyApprovalGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalUnauthorizedResponseBody runs the
+// validations defined on decideRiskPolicyApproval_unauthorized_response_body
+func ValidateDecideRiskPolicyApprovalUnauthorizedResponseBody(body *DecideRiskPolicyApprovalUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalForbiddenResponseBody runs the validations
+// defined on decideRiskPolicyApproval_forbidden_response_body
+func ValidateDecideRiskPolicyApprovalForbiddenResponseBody(body *DecideRiskPolicyApprovalForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalBadRequestResponseBody runs the validations
+// defined on decideRiskPolicyApproval_bad_request_response_body
+func ValidateDecideRiskPolicyApprovalBadRequestResponseBody(body *DecideRiskPolicyApprovalBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalNotFoundResponseBody runs the validations
+// defined on decideRiskPolicyApproval_not_found_response_body
+func ValidateDecideRiskPolicyApprovalNotFoundResponseBody(body *DecideRiskPolicyApprovalNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalConflictResponseBody runs the validations
+// defined on decideRiskPolicyApproval_conflict_response_body
+func ValidateDecideRiskPolicyApprovalConflictResponseBody(body *DecideRiskPolicyApprovalConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalUnsupportedMediaResponseBody runs the
+// validations defined on
+// decideRiskPolicyApproval_unsupported_media_response_body
+func ValidateDecideRiskPolicyApprovalUnsupportedMediaResponseBody(body *DecideRiskPolicyApprovalUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalInvalidResponseBody runs the validations
+// defined on decideRiskPolicyApproval_invalid_response_body
+func ValidateDecideRiskPolicyApprovalInvalidResponseBody(body *DecideRiskPolicyApprovalInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalInvariantViolationResponseBody runs the
+// validations defined on
+// decideRiskPolicyApproval_invariant_violation_response_body
+func ValidateDecideRiskPolicyApprovalInvariantViolationResponseBody(body *DecideRiskPolicyApprovalInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalUnexpectedResponseBody runs the validations
+// defined on decideRiskPolicyApproval_unexpected_response_body
+func ValidateDecideRiskPolicyApprovalUnexpectedResponseBody(body *DecideRiskPolicyApprovalUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDecideRiskPolicyApprovalGatewayErrorResponseBody runs the
+// validations defined on decideRiskPolicyApproval_gateway_error_response_body
+func ValidateDecideRiskPolicyApprovalGatewayErrorResponseBody(body *DecideRiskPolicyApprovalGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -37443,6 +39129,18 @@ func ValidateRiskMCPServerScopeRequestBody(body *RiskMCPServerScopeRequestBody) 
 	return
 }
 
+// ValidateRiskPolicyApprovalConfigRequestBody runs the validations defined on
+// RiskPolicyApprovalConfigRequestBody
+func ValidateRiskPolicyApprovalConfigRequestBody(body *RiskPolicyApprovalConfigRequestBody) (err error) {
+	if body.Approvers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approvers", "body"))
+	}
+	if len(body.Approvers) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.approvers", body.Approvers, len(body.Approvers), 1, true))
+	}
+	return
+}
+
 // ValidateRiskDetectionScopeResponseBody runs the validations defined on
 // RiskDetectionScopeResponseBody
 func ValidateRiskDetectionScopeResponseBody(body *RiskDetectionScopeResponseBody) (err error) {
@@ -37478,6 +39176,39 @@ func ValidateRiskMCPScopeResponseBody(body *RiskMCPScopeResponseBody) (err error
 func ValidateRiskMCPServerScopeResponseBody(body *RiskMCPServerScopeResponseBody) (err error) {
 	if body.McpServerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRiskPolicyApprovalConfigResponseBody runs the validations defined on
+// RiskPolicyApprovalConfigResponseBody
+func ValidateRiskPolicyApprovalConfigResponseBody(body *RiskPolicyApprovalConfigResponseBody) (err error) {
+	if body.Approvers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approvers", "body"))
+	}
+	if len(body.Approvers) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.approvers", body.Approvers, len(body.Approvers), 1, true))
+	}
+	return
+}
+
+// ValidateRiskPolicyApprovalsServerSetupResponseBody runs the validations
+// defined on RiskPolicyApprovalsServerSetupResponseBody
+func ValidateRiskPolicyApprovalsServerSetupResponseBody(body *RiskPolicyApprovalsServerSetupResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_slug", "body"))
+	}
+	if body.PluginServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_server_name", "body"))
+	}
+	if body.AddedToDefaultPlugin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("added_to_default_plugin", "body"))
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
@@ -37559,8 +39290,8 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -37576,6 +39307,16 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
+		}
+	}
+	if body.ApprovalConfig != nil {
+		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ApprovalsServerSetup != nil {
+		if err2 := ValidateRiskPolicyApprovalsServerSetupResponseBody(body.ApprovalsServerSetup); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Score != nil {
@@ -38206,6 +39947,88 @@ func ValidateRiskPolicyBypassRequestResponseBody(body *RiskPolicyBypassRequestRe
 	}
 	if body.DecidedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRiskPolicyApprovalResponseBody runs the validations defined on
+// RiskPolicyApprovalResponseBody
+func ValidateRiskPolicyApprovalResponseBody(body *RiskPolicyApprovalResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PolicyID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_id", "body"))
+	}
+	if body.PolicyName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_name", "body"))
+	}
+	if body.PolicyVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_version", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.RequesterUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requester_urn", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	}
+	if body.ArgumentsPreview == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("arguments_preview", "body"))
+	}
+	if body.CanDecide == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_decide", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.PolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "blocked" || *body.Status == "pending" || *body.Status == "approved" || *body.Status == "denied" || *body.Status == "consumed" || *body.Status == "expired") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"blocked", "pending", "approved", "denied", "consumed", "expired"}))
+		}
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.ChatID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
+	}
+	if body.DecidedVia != nil {
+		if !(*body.DecidedVia == "slack" || *body.DecidedVia == "dashboard" || *body.DecidedVia == "api") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decided_via", *body.DecidedVia, []any{"slack", "dashboard", "api"}))
+		}
+	}
+	if body.RequestedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_at", *body.RequestedAt, goa.FormatDateTime))
+	}
+	if body.DecidedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	if body.ConsumedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.consumed_at", *body.ConsumedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

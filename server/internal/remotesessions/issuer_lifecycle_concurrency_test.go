@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/stretchr/testify/require"
 )
 
@@ -97,7 +98,7 @@ func TestIssuerLifecycle_ProjectUserIssuerMutationHidesSiblingBindings(t *testin
 	require.NoError(t, err)
 	service := usersessions.NewService(logger, tracer, testenv.NewMeterProvider(t), ti.conn, ti.sessionManager, nil,
 		authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
-		audit.NewLogger(), policy, nil, testenv.NewEncryptionClient(t), nil, "", nil)
+		audit.NewLogger(), policy, nil, testenv.NewEncryptionClient(t), nil, "", authserver.Hosts{}, nil, nil)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	sibling := createProject(t, ctx, ti.conn, "issuer-review-sibling")

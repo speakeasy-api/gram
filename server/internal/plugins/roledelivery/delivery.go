@@ -41,11 +41,8 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 	for i := range candidates {
 		s := &candidates[i]
 		// Keep the row for removals; only automatic additions use eligibility.
-		for _, tool := range s.ToolUrns {
-			if tool.Kind == urn.ToolKindPlatform {
-				s.Eligible = false
-				break
-			}
+		if HasPlatformTool(s.ToolUrns) {
+			s.Eligible = false
 		}
 	}
 	return candidates, nil
@@ -102,9 +99,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 		changed := false
 		for _, membership := range memberships {
-			matches := s.BackendKind == "mcp_server" && membership.McpServerID.Valid && membership.McpServerID.UUID == s.ID
-			matches = matches || (s.LegacyToolsetID.Valid && membership.ToolsetID.Valid && membership.ToolsetID.UUID == s.LegacyToolsetID.UUID)
-			if !matches {
+			if !membership.McpServerID.Valid || membership.McpServerID.UUID != s.ID {
 				continue
 			}
 			removed, err := pluginsrepo.New(tx).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: membership.ID, PluginID: pluginID})
@@ -124,27 +119,19 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 	if !s.Eligible {
 		return false, nil
 	}
-	toolsetID, mcpServerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if s.BackendKind == "mcp_server" {
-		mcpServerID = uuid.NullUUID{UUID: s.ID, Valid: true}
-	} else {
-		toolsetID = uuid.NullUUID{UUID: s.ID, Valid: true}
-	}
-	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, ToolsetID: toolsetID, McpServerID: mcpServerID, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})
+	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})
 	if err != nil {
 		return false, fmt.Errorf("check existing role delivery membership: %w", err)
 	}
 	if exists {
 		return false, nil
 	}
-	if s.BackendKind == "mcp_server" {
-		// CheckAttachment applies only to provenance-bound remotes; other
-		// backends pass untouched. For those remotes it fails closed: it refuses
-		// when the project's Shadow MCP policy does not permit the audience, and
-		// also when provenance or the policy cannot be evaluated.
-		if err := checkAttachment(ctx, tx, guard, org, s.ProjectID, pluginID, s.ID); err != nil {
-			return false, err
-		}
+	// CheckAttachment applies only to provenance-bound remotes; other
+	// backends pass untouched. For those remotes it fails closed: it refuses
+	// when the project's Shadow MCP policy does not permit the audience, and
+	// also when provenance or the policy cannot be evaluated.
+	if err := checkAttachment(ctx, tx, guard, org, s.ProjectID, pluginID, s.ID); err != nil {
+		return false, err
 	}
 	// Choose an unused display name from the current inventory, including when
 	// another entry already occupies the stable backend suffix.
@@ -164,17 +151,12 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 			name = fmt.Sprintf("%s %d", base, suffix)
 		}
 	}
-	params := pluginsrepo.AddPluginServerParams{PluginID: pluginID, DisplayName: name, Policy: "required", SortOrder: 0, ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	if s.BackendKind == "mcp_server" {
-		params.McpServerID = uuid.NullUUID{UUID: s.ID, Valid: true}
-	} else {
-		params.ToolsetID = uuid.NullUUID{UUID: s.ID, Valid: true}
-	}
-	membership, err := pluginsrepo.New(tx).AddPluginServer(ctx, params)
+	params := pluginsrepo.AddPluginServerParams{PluginID: pluginID, DisplayName: name, Policy: "required", SortOrder: 0, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}}
+	added, err := pluginsrepo.New(tx).AddPluginServer(ctx, params)
 	if err != nil {
 		return false, fmt.Errorf("add role-delivered membership: %w", err)
 	}
-	if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, membership, true); err != nil {
+	if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, added, true); err != nil {
 		return false, err
 	}
 	return true, nil

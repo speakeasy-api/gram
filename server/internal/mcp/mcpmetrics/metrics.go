@@ -89,7 +89,7 @@ type Metrics struct {
 
 	// requestCensus is the unsampled per-request census (mcp.request) emitted
 	// at the JSON-RPC dispatch sites for the hosted and platform surfaces. The
-	// remote/tunnel /x/mcp backends publish the same instrument from the
+	// remote/tunnel /mcp backends publish the same instrument from the
 	// proxy's request interceptor, which constructs its own [RequestCounter].
 	requestCensus *RequestCounter
 
@@ -106,6 +106,13 @@ type Metrics struct {
 	// request URL so an unauthenticated caller cannot mint series through the
 	// query string.
 	mcpRequestRejectedCounter metric.Int64Counter
+
+	// authClientParityCounter counts shadow comparisons of the typed auth
+	// client resolver against the upstream client choice, by whether they
+	// agreed and each side's outcome.
+	authClientParityCounter metric.Int64Counter
+	// mandatoryAuthzShadowCounter counts shadowed mandatory checks.
+	mandatoryAuthzShadowCounter metric.Int64Counter
 
 	// mcpProtocolVersionRejectedCounter partitions terminating-surface traffic
 	// with requestCensus: rejected declarations land here before authentication,
@@ -279,6 +286,24 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPProtocolVersionRejected), attr.SlogError(err))
 	}
 
+	authClientParityCounter, err := meter.Int64Counter(
+		"mcp.auth_client.parity",
+		metric.WithDescription("Shadow comparisons of the typed auth client resolver against the upstream client choice, by agreement and each side's outcome"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create auth client parity counter", attr.SlogError(err))
+	}
+
+	mandatoryAuthzShadowCounter, err := meter.Int64Counter(
+		"mcp.authz.mandatory_shadow",
+		metric.WithDescription("Shadowed mandatory server and auth client checks beside today's decision, by organization, surface, caller, both outcomes, policy source and deny reason"),
+		metric.WithUnit("{check}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create mandatory authz shadow counter", attr.SlogError(err))
+	}
+
 	tunnelPublicRejectedCounter, err := meter.Int64Counter(
 		"mcp.tunnel_public.rejected",
 		metric.WithDescription("Anonymous public tunnel requests rejected before proxying, by MCP server and reason"),
@@ -294,6 +319,8 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		mcpInitializeCounter:                 mcpInitializeCounter,
 		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
+		authClientParityCounter:              authClientParityCounter,
+		mandatoryAuthzShadowCounter:          mandatoryAuthzShadowCounter,
 		mcpProtocolVersionRejectedCounter:    mcpProtocolVersionRejectedCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
 		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
@@ -377,14 +404,14 @@ func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Lo
 	counter.RecordToolsetSlugFallback(ctx, logger, hit)
 }
 
-// RecordLegacyAudienceAccepted counts one bearer accepted via the legacy
-// toolset-URN audience. Semantics on
+// RecordLegacyAudienceAccepted logs and counts one bearer accepted via the
+// legacy toolset-URN audience. Semantics on
 // [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
-func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, issuerID string) {
+func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, logger *slog.Logger, hit LegacyAudienceAccepted) {
 	if m == nil {
 		return
 	}
-	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, issuerID)
+	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, logger, hit)
 }
 
 // RecordMCPInitialize counts one observed MCP handshake, dimensioned by the
@@ -419,7 +446,7 @@ func (m *Metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated
 // surface. The census semantics — what counts, what the version dimension
 // means, and how this relates to `mcp.initialize` and `mcp.request.duration` —
 // are documented on [RequestCounter.Record], which the remote proxy's
-// interceptor invokes directly for the /x/mcp traffic that never reaches the
+// interceptor invokes directly for the proxied traffic that never reaches the
 // mcp dispatch.
 func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method string, surface Surface) {
 	if m == nil {
@@ -444,6 +471,57 @@ func (m *Metrics) RecordMCPProtocolVersionRejected(ctx context.Context, protocol
 		attr.McpMethod(mcprequests.ClampMethod(method)),
 		attr.McpSurface(string(surface)),
 		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	))
+}
+
+// RecordAuthClientParity counts one shadow comparison of the typed auth client
+// resolver against the upstream client choice. Outcomes and reasons are closed
+// sets, so the series stay bounded; a resolver that failed counts as outcome
+// "error".
+func (m *Metrics) RecordAuthClientParity(ctx context.Context, agreed bool, outcome, legacyOutcome, reason string) {
+	if m == nil || m.authClientParityCounter == nil {
+		return
+	}
+	m.authClientParityCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.AuthClientParityAgreed(agreed),
+		attr.AuthClientOutcome(outcome),
+		attr.AuthClientLegacyOutcome(legacyOutcome),
+		attr.AuthClientReason(reason),
+	))
+}
+
+// MandatoryAuthzShadow is one shadowed mandatory check. Every field but
+// OrganizationID is a closed set, and organizations only report while the
+// shadow flag targets them, so the series stay bounded.
+type MandatoryAuthzShadow struct {
+	OrganizationID string
+	Surface        string
+	Caller         string
+	Principal      string
+	LegacyAllowed  bool
+	// LegacyAuthCeiling separates coverage resting on a pre-version-5
+	// credential's derived auth client ceiling from explicit grants.
+	LegacyAuthCeiling bool
+	Outcome           string
+	Source            string
+	Reason            string
+}
+
+// RecordMandatoryAuthzShadow counts one shadowed mandatory check.
+func (m *Metrics) RecordMandatoryAuthzShadow(ctx context.Context, shadow MandatoryAuthzShadow) {
+	if m == nil || m.mandatoryAuthzShadowCounter == nil {
+		return
+	}
+	m.mandatoryAuthzShadowCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(shadow.OrganizationID),
+		attr.MandatoryAuthzSurface(shadow.Surface),
+		attr.MandatoryAuthzCaller(shadow.Caller),
+		attr.MandatoryAuthzPrincipal(shadow.Principal),
+		attr.MandatoryAuthzLegacyAllowed(shadow.LegacyAllowed),
+		attr.MandatoryAuthzLegacyAuthCeiling(shadow.LegacyAuthCeiling),
+		attr.MandatoryAuthzOutcome(shadow.Outcome),
+		attr.MandatoryAuthzSource(shadow.Source),
+		attr.MandatoryAuthzReason(shadow.Reason),
 	))
 }
 

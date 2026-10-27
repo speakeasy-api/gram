@@ -71,6 +71,8 @@ const ISSUER = {
   session_duration_hours: 720,
   attachment_scope: "project",
   use_authentication_host: false,
+  authorization_server_mode: "shared",
+  issuer_url_pinned: false,
   other_servers_using_issuer: [],
   created_at: "2026-08-12T00:00:00Z",
   sessions: {
@@ -235,6 +237,9 @@ describe("McpServerHealth", () => {
     expect(card("User session issuer").textContent).toContain(
       "30 days sessions · 1 upstream client",
     );
+    expect(
+      screen.getByText("Shared by the issuer · issuer URL not pinned"),
+    ).toBeTruthy();
     expect(card("People signed in").textContent).toContain("12 ever");
     expect(card("People signed in").textContent).toContain(
       "4 in window · 3 live sessions",
@@ -249,7 +254,7 @@ describe("McpServerHealth", () => {
     expect(
       screen.getByRole("heading", { name: "Tool calls per day" }),
     ).toBeTruthy();
-    expect(screen.getByText(/Failed means status 400 or above/)).toBeTruthy();
+    expect(screen.getByText(/failed means status 400 or above/)).toBeTruthy();
     // The chart and the card count different calls, and the page says so.
     expect(
       screen.getByText(/The chart counts calls that reach the server directly/),
@@ -291,9 +296,12 @@ describe("McpServerHealth", () => {
     expect(login.searchParams.get("from_ts")).toBeTruthy();
   });
 
-  it("copies the Platform MCP prompt", async () => {
+  it("copies the Admin MCP prompt", async () => {
     await open();
     const copy = await screen.findByRole("button", { name: "Copy prompt" });
+    expect(
+      screen.getByText("Investigate with the Speakeasy Admin MCP server"),
+    ).toBeTruthy();
     await act(async () => {
       fireEvent.click(copy);
       await Promise.resolve();
@@ -301,6 +309,8 @@ describe("McpServerHealth", () => {
 
     expect(writeText).toHaveBeenCalledTimes(1);
     const [prompt] = writeText.mock.calls[0] as unknown as [string];
+    expect(prompt).toContain("Using the Speakeasy Admin MCP server");
+    expect(prompt).not.toContain("Platform MCP");
     expect(prompt).toContain(`MCP server with mcp_id ${SERVER_ID}.`);
     expect(prompt).toContain('named "crm" in the project "default"');
   });
@@ -563,7 +573,7 @@ describe("McpServerHealth", () => {
     respond = () => ({
       server: SERVER,
       correlation: { url_slug: "crm-9c1e" },
-      legacy_auth: "oauth_proxy",
+      legacy_auth: "gram_private",
       tool_calls: { type: "logging:disabled" },
     });
     await open();

@@ -1,13 +1,17 @@
 -- name: AdminGetEnterpriseTrialRetryOperationIDs :one
--- The arm audit id is the immutable generation token. Every production trial
--- creation writes exactly one arm audit in the creation transaction; extension
--- writes neither. seq orders generations; id breaks any equal-seq tie.
+-- The creation audit id is the immutable generation token. Self-service trial
+-- creation records an armed action, while an admin grant records a started
+-- action. Extension writes neither. seq orders generations; id breaks any
+-- equal-seq tie.
 WITH latest_arm AS (
     SELECT armed.id, armed.seq
     FROM audit_logs AS armed
     WHERE armed.organization_id = @target_organization_id
       AND armed.project_id IS NULL
-      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.action IN (
+          'organization:enterprise_trial_armed',
+          'organization:enterprise_trial_started'
+      )
       AND armed.subject_id = @target_organization_id
       AND armed.subject_type = 'organization'
     ORDER BY armed.seq DESC, armed.id DESC
@@ -504,10 +508,17 @@ SELECT EXISTS (
     WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE
 );
 
+-- name: AdminAuditProjectBelongsToOrganization :one
+-- Audit history remains readable after a project is soft-deleted.
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = @project_id AND organization_id = @organization_id
+);
+
 -- name: AdminListProjectMcpServerRows :many
 -- One row per live endpoint, and one with no endpoint columns for a server that
 -- has none. custom_domain is null for an endpoint whose domain cannot serve it;
--- the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
+-- the caller skips those and picks the address with endpointaddr.PrimaryEndpoint.
 SELECT
     m.id,
     m.name,
@@ -668,6 +679,12 @@ WHERE billing_metadata.organization_id = organization_metadata.id
   AND billing_metadata.stripe_customer_id = sqlc.arg('stripe_customer_id')::text
   AND billing_metadata.stripe_subscription_id IS NULL
   AND organization_metadata.gram_account_type = 'payg'
+  -- A redeemed partner's retained anchor is immutable accounting provenance.
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_promotion_applications application
+    WHERE application.organization_id = billing_metadata.organization_id
+      AND application.redeemed_at IS NOT NULL
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM billing_metadata AS other
@@ -945,7 +962,7 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
 -- outright: it counts as one, and any other wrapper of that toolset as two.
 -- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
--- endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+-- endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
 -- a domain root has no such path), else the server's own slug, else the
 -- toolset's mcp_slug when no other wrapper shares that toolset.
 SELECT
@@ -959,7 +976,6 @@ SELECT
     m.created_at,
     m.user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     COALESCE((
         SELECT e.slug FROM mcp_endpoints e
         WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
@@ -998,7 +1014,6 @@ SELECT
     t.created_at,
     t.user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     COALESCE(t.mcp_slug, '')::text AS url_slug,
     t.slug AS toolset_slug,
     0::bigint AS toolset_wrapper_count
@@ -1023,6 +1038,9 @@ SELECT
     i.attachment_scope,
     i.client_id_metadata_admission_mode,
     i.use_authentication_host,
+    i.authorization_server_mode,
+    -- Matches authserver.IssuerURLPinned: a pin only counts in shared mode.
+    (i.authorization_server_mode = 'shared' AND i.pinned_issuer_url IS NOT NULL AND i.pinned_issuer_url <> '')::boolean AS issuer_url_pinned,
     i.trusted_remote_session_issuer_id,
     i.trusted_remote_session_client_id,
     i.created_at
@@ -1162,3 +1180,80 @@ FROM organizations
 WHERE (account_type = 'enterprise' AND trial_state NOT IN ('running', 'ending_soon'))
    OR (account_type IN ('pro', 'payg') AND trial_state = 'none')
 ORDER BY lower(name) ASC, id ASC;
+
+-- name: ListSignupOffers :many
+SELECT * FROM signup_offers ORDER BY created_at DESC, id DESC;
+
+-- name: CreateSignupOffer :one
+INSERT INTO signup_offers (name, stripe_promotion_code_id, signup_flow)
+VALUES (@name, @stripe_promotion_code_id, @signup_flow)
+RETURNING *;
+
+-- name: UpdateSignupOffer :one
+UPDATE signup_offers SET name = @name, stripe_promotion_code_id = @stripe_promotion_code_id,
+ signup_flow = @signup_flow, enabled = @enabled, updated_at = clock_timestamp()
+WHERE id = @id RETURNING *;
+
+-- name: AdminListUpstreamOAuthMigrationOrganizations :many
+-- The organizations the upstream OAuth migration writes for: those with a
+-- live MCP server on a live user session issuer of its own tenant, or a live
+-- proxied server fronted by a gateway issuer. servers counts those servers.
+WITH reached AS (
+    SELECT p.organization_id, s.id AS server_id
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = s.user_session_issuer_id
+     AND usi.deleted IS FALSE
+     AND (usi.project_id = p.id
+          OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+    WHERE s.deleted IS FALSE
+    UNION
+    SELECT g.organization_id, m.mcp_server_id AS server_id
+    FROM meta_mcp_servers AS g
+    JOIN projects AS gp
+      ON gp.id = g.project_id
+     AND gp.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = g.user_session_issuer_id
+     AND usi.deleted IS FALSE
+    JOIN meta_mcp_server_members AS m
+      ON m.meta_mcp_server_id = g.id
+     AND m.project_id = g.project_id
+     AND m.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = m.mcp_server_id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE g.deleted IS FALSE
+    UNION
+    SELECT oi.organization_id, s.id AS server_id
+    FROM user_session_issuers AS oi
+    JOIN projects AS p
+      ON p.organization_id = oi.organization_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.project_id = p.id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE oi.project_id IS NULL
+      AND oi.deleted IS FALSE
+)
+SELECT
+    om.id,
+    om.name,
+    om.slug,
+    count(DISTINCT reached.server_id)::bigint AS servers
+FROM organization_metadata AS om
+JOIN reached
+  ON reached.organization_id = om.id
+GROUP BY om.id, om.name, om.slug
+ORDER BY om.name, om.id;
+
+-- name: AdminListOrganizationNamesByIDs :many
+-- Labels the hook client grids, whose rows carry only organization ids.
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY(@ids::text[]);

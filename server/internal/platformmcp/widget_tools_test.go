@@ -118,7 +118,7 @@ func (f *widgetToolsFixture) createDirectly(t *testing.T, ctx context.Context, n
 	require.NoError(t, err)
 	tx, err := f.db.Begin(scoped) //nolint:glint // notestingrawsql: transaction boundary only; the widget is written by the widgets service's create core.
 	require.NoError(t, err)
-	created, err := f.management.CreateInTx(scoped, tx, caller, widgets.Input{Name: name, Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart()})
+	created, err := f.management.CreateInTx(scoped, tx, caller, widgets.Input{Name: name, Description: nil, Dataset: "tool_calls", Query: widgetTestQuery(), Visualization: widgetTestChart()})
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(scoped))
 	return created
@@ -149,7 +149,7 @@ func requireWidgetRefusal(t *testing.T, err error) widgetRefusal {
 }
 
 func saveArguments(projectID string, name string) map[string]any {
-	return map[string]any{"project_id": projectID, "name": name, "dataset": "sessions", "query": widgetTestQuery(), "visualization": widgetTestChart(), "confirmed": false}
+	return map[string]any{"project_id": projectID, "name": name, "dataset": "tool_calls", "query": widgetTestQuery(), "visualization": widgetTestChart(), "confirmed": false}
 }
 
 // previewOutput is a write preview as its confirmation carries it: the
@@ -224,7 +224,7 @@ func TestWidgetToolsRefuseWhenExploreIsOff(t *testing.T) {
 	require.Equal(t, analyticsNotEnabledCode, refusal.Code)
 	require.Contains(t, refusal.Message, "not switched on")
 
-	_, err = f.invoke(t, ctx, saveWidgetToolName, saveArguments(f.project.ID.String(), "Sessions by user"))
+	_, err = f.invoke(t, ctx, saveWidgetToolName, saveArguments(f.project.ID.String(), "Tool calls by user"))
 	require.Equal(t, analyticsNotEnabledCode, requireWidgetRefusal(t, err).Code)
 }
 
@@ -284,7 +284,7 @@ func TestAMemberCreatesDuplicatesAndChangesTheirOwnWidgetsWithReadAccess(t *test
 func TestSaveWidgetPreviewsThenCreatesOnceAndReplays(t *testing.T) {
 	t.Parallel()
 	ctx, f := newWidgetToolsFixture(t)
-	arguments := saveArguments(f.project.ID.String(), "Sessions by user")
+	arguments := saveArguments(f.project.ID.String(), "Tool calls by user")
 
 	preview := f.write(t, ctx, saveWidgetToolName, arguments)
 	require.True(t, preview.Preview)
@@ -292,12 +292,12 @@ func TestSaveWidgetPreviewsThenCreatesOnceAndReplays(t *testing.T) {
 	require.Equal(t, newWidgetVersion, preview.Version)
 	require.NotEmpty(t, preview.PreviewToken)
 	require.Equal(t, widgetSnapshotPreview, preview.SnapshotScope)
-	require.Equal(t, "Sessions by user", preview.Widget.Name)
+	require.Equal(t, "Tool calls by user", preview.Widget.Name)
 
 	listed := widgetCall[listWidgetsOutput](t, f, ctx, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
 	require.Empty(t, listed.Widgets, "a preview saves nothing")
 
-	request := confirmed(arguments, preview, "create-sessions-by-user")
+	request := confirmed(arguments, preview, "create-tool-calls-by-user")
 	created := f.write(t, ctx, saveWidgetToolName, request)
 	require.False(t, created.Preview)
 	require.False(t, created.Replayed)
@@ -307,8 +307,8 @@ func TestSaveWidgetPreviewsThenCreatesOnceAndReplays(t *testing.T) {
 	require.Equal(t, created.Widget.Version, created.Version)
 
 	got := widgetCall[getWidgetOutput](t, f, ctx, getWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID}).Widget
-	require.Equal(t, "Sessions by user", got.Name)
-	require.Equal(t, "sessions", got.Dataset)
+	require.Equal(t, "Tool calls by user", got.Name)
+	require.Equal(t, "tool_calls", got.Dataset)
 	require.Equal(t, "bar", got.Visualization["type"])
 	require.Nil(t, got.InvalidReason)
 	require.Equal(t, created.Version, got.Version)
@@ -329,7 +329,7 @@ func TestSaveWidgetPreviewsThenCreatesOnceAndReplays(t *testing.T) {
 	// The same key for a different request is a conflict, not a replay.
 	other := saveArguments(f.project.ID.String(), "Something else")
 	otherPreview := f.write(t, ctx, saveWidgetToolName, other)
-	_, err = f.invoke(t, ctx, saveWidgetToolName, confirmed(other, otherPreview, "create-sessions-by-user"))
+	_, err = f.invoke(t, ctx, saveWidgetToolName, confirmed(other, otherPreview, "create-tool-calls-by-user"))
 	require.Equal(t, "conflict", requireWidgetRefusal(t, err).Code)
 }
 
@@ -378,7 +378,7 @@ func TestAWidgetPreviewExpiresWithItsReceipt(t *testing.T) {
 func TestSaveWidgetConfirmationNeedsItsPreview(t *testing.T) {
 	t.Parallel()
 	ctx, f := newWidgetToolsFixture(t)
-	arguments := saveArguments(f.project.ID.String(), "Sessions by user")
+	arguments := saveArguments(f.project.ID.String(), "Tool calls by user")
 	preview := f.write(t, ctx, saveWidgetToolName, arguments)
 	request := confirmed(arguments, preview, "a-key")
 
@@ -436,7 +436,7 @@ func TestSaveWidgetRefusesAStaleVersion(t *testing.T) {
 
 	// Someone edits the widget in the dashboard between preview and confirm.
 	scoped := f.scopedContext(t, ctx)
-	_, err := f.management.UpdateWidget(scoped, &genwidgets.UpdateWidgetPayload{ID: existing.Widget.ID, Name: "Renamed in the dashboard", Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart(), SessionToken: nil, ProjectSlugInput: nil})
+	_, err := f.management.UpdateWidget(scoped, &genwidgets.UpdateWidgetPayload{ID: existing.Widget.ID, Name: "Renamed in the dashboard", Description: nil, Dataset: "tool_calls", Query: widgetTestQuery(), Visualization: widgetTestChart(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 
 	_, err = f.invoke(t, ctx, saveWidgetToolName, confirmed(arguments, preview, "rename"))
@@ -483,7 +483,7 @@ func TestWidgetWritesRefuseANonCreatorWithoutProjectWrite(t *testing.T) {
 		operation widgetOperation
 		proposal  widgetTokenProposal
 	}{
-		saveWidgetToolName:   {update, operationUpdateWidget, widgetTokenProposal{WidgetID: existing.Widget.ID, Widget: &widgets.Input{Name: "Hijacked", Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart()}}},
+		saveWidgetToolName:   {update, operationUpdateWidget, widgetTokenProposal{WidgetID: existing.Widget.ID, Widget: &widgets.Input{Name: "Hijacked", Description: nil, Dataset: "tool_calls", Query: widgetTestQuery(), Visualization: widgetTestChart()}}},
 		deleteWidgetToolName: {remove, operationDeleteWidget, widgetTokenProposal{WidgetID: existing.Widget.ID, Widget: nil}},
 	} {
 		token, err := f.service.previewToken(strconv.FormatInt(time.Now().Unix(), 10)+"-test", other, project, request.operation, existing.Version, request.proposal)
@@ -501,6 +501,40 @@ func TestWidgetWritesRefuseANonCreatorWithoutProjectWrite(t *testing.T) {
 	duplicate := map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": false}
 	copied := f.write(t, member, duplicateWidgetToolName, confirmed(duplicate, f.write(t, member, duplicateWidgetToolName, duplicate), "member-copy"))
 	require.Equal(t, &other.UserID, copied.Widget.CreatedByUserID)
+}
+
+// TestRiskFindingsWidgetsAreRefusedToNonAdmins: a save over a dataset only
+// organization administrators may read is refused by name, not as the
+// creator-or-write rule, and an admin saves it.
+func TestRiskFindingsWidgetsAreRefusedToNonAdmins(t *testing.T) {
+	t.Parallel()
+	ctx, f := newWidgetToolsFixture(t)
+
+	arguments := saveArguments(f.project.ID.String(), "Findings by category")
+	arguments["dataset"] = "risk_findings"
+	arguments["query"] = map[string]any{"window": "7d", "grain": "none", "dimensions": []any{"category"}, "measures": []any{map[string]any{"op": "count"}}}
+	arguments["visualization"] = map[string]any{"type": "ranked", "options": map[string]any{}}
+
+	_, err := f.invoke(t, ctx, saveWidgetToolName, arguments)
+	refusal := requireWidgetRefusal(t, err)
+	require.Equal(t, widgetDatasetRestricted, refusal.Code)
+	require.Equal(t, "dataset", refusal.Field)
+	require.Contains(t, refusal.Message, "organization administrators")
+
+	admin := authz.GrantsToContext(ctx, []authz.Grant{
+		authz.NewGrant(authz.ScopeProjectRead, f.project.ID.String()),
+		authz.NewGrant(authz.ScopeProjectWrite, f.project.ID.String()),
+		authz.NewGrant(authz.ScopeOrgAdmin, f.principal.OrganizationID),
+	})
+	preview := f.write(t, admin, saveWidgetToolName, arguments)
+	require.Equal(t, operationCreateWidget, preview.Operation)
+	created := f.write(t, admin, saveWidgetToolName, confirmed(arguments, preview, "admin-risk-widget"))
+
+	// Copying the admin's widget is refused at the preview, as its
+	// confirmation would be.
+	duplicate := map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID, "confirmed": false}
+	_, err = f.invoke(t, ctx, duplicateWidgetToolName, duplicate)
+	require.Equal(t, widgetDatasetRestricted, requireWidgetRefusal(t, err).Code)
 }
 
 func TestDeleteWidgetReportsTheDashboardsThatLostIt(t *testing.T) {
@@ -544,7 +578,7 @@ func TestDeleteWidgetRefusesAStaleVersion(t *testing.T) {
 	preview := f.write(t, ctx, deleteWidgetToolName, arguments)
 
 	scoped := f.scopedContext(t, ctx)
-	_, err := f.management.UpdateWidget(scoped, &genwidgets.UpdateWidgetPayload{ID: existing.Widget.ID, Name: "Edited meanwhile", Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart(), SessionToken: nil, ProjectSlugInput: nil})
+	_, err := f.management.UpdateWidget(scoped, &genwidgets.UpdateWidgetPayload{ID: existing.Widget.ID, Name: "Edited meanwhile", Description: nil, Dataset: "tool_calls", Query: widgetTestQuery(), Visualization: widgetTestChart(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 
 	_, err = f.invoke(t, ctx, deleteWidgetToolName, confirmed(arguments, preview, "delete-stale"))

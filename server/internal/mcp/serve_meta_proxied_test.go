@@ -495,9 +495,10 @@ func TestServePublic_MetaEndpoint_ExecuteTool_DropsCallerMetaUpstream(t *testing
 	require.Positive(t, seen, "the upstream recorder must have observed requests")
 }
 
-// An ambiguous credential map — two stored tokens claiming one member's
-// resource — must fail member-scoped with the upstream never contacted.
-func TestServePublic_MetaEndpoint_ExecuteTool_AmbiguousCredentialMakesNoCall(t *testing.T) {
+// Two of the gateway's clients hold tokens for one member's resource, so the
+// backfill associates neither and the member uses no client: it is called
+// without a bearer, never with either token.
+func TestServePublic_MetaEndpoint_ExecuteTool_UnresolvedMemberCarriesNoToken(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -524,9 +525,10 @@ func TestServePublic_MetaEndpoint_ExecuteTool_AmbiguousCredentialMakesNoCall(t *
 
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member--ping")
 	text, isError := metaToolResultText(t, rpc)
-	require.True(t, isError, "an ambiguous credential map must fail the member call")
-	require.Contains(t, text, "recorded for the same upstream", "the message must name the duplication, not just report misconfiguration")
-	require.Zero(t, upstream.requestCount(), "no call may be made when the credential is ambiguous")
+	require.False(t, isError, "a member with no associated client is served without one: %s", text)
+	upstream.requireToolCallAuth(t, "", "no client is associated with the member, so no bearer is forwarded")
+	upstream.requireNeverCarried(t, "Bearer token-one", "an unresolved member must never borrow either client's token")
+	upstream.requireNeverCarried(t, "Bearer token-two", "an unresolved member must never borrow either client's token")
 }
 
 // A member with no matching credential is called anonymously — no bearer at
@@ -694,9 +696,50 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *
 	require.True(t, isError)
 	require.Contains(t, text, "holds no credential that routes to it")
 
-	// A grant qualified to the member is forwarded, and the member refuses it.
+	// A grant qualified to the member ties the client to it, and migrating
+	// again replaces the credential's no-auth choice with that client. The
+	// gateway forwards the grant, and the member refuses it.
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
 	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	require.Contains(t, text, "rejected the stored credential")
+	require.Contains(t, text, "rejected the user's credential")
+}
+
+// A member that signs in through a service the caller has not connected
+// answers with the URL of its connect page on the gateway, for the agent to
+// hand the person, rather than pointing them at the gateway's sign-in.
+func TestServePublic_MetaEndpoint_ExecuteTool_UnconnectedMemberLinksItsConnectPage(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-connect-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(deny.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-connect", "", []uuid.UUID{sharedIssuerID})
+	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	subject := createTestUser(t, ctx, ti, "meta-connect-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, `server "member" is not connected for this user`)
+	require.Contains(t, text, "/mcp/"+metaSlug+"/connect/first-party?server=member")
+
+	// A refused credential links the same page, to reconnect it.
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
+	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "rejected the user's credential")
+	require.Contains(t, text, "/mcp/"+metaSlug+"/connect/first-party?server=member")
 }

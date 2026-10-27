@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -30,6 +31,7 @@ const classic: AiScanTarget = {
   },
   origin: "default",
   customized: false,
+  access: { state: "unreviewed", decision: "unreviewed", enforceable: false },
   createdAt: new Date("2026-09-08T00:00:00Z"),
   updatedAt: new Date("2026-09-08T00:00:00Z"),
 };
@@ -308,4 +310,13 @@ describe("categoryLabel", () => {
   it("falls back to the raw value for an unknown category", () => {
     expect(categoryLabel("something-new")).toBe("something-new");
   });
+});
+
+it("refuses to save a target with an unknown category", () => {
+  const draft = draftFromTarget({
+    ...classic,
+    category: unrecognized("future_category"),
+  });
+  expect(validateDraft(draft).category).toContain("unsupported category");
+  expect(() => draftToUpsertBody(draft)).toThrow("not supported");
 });

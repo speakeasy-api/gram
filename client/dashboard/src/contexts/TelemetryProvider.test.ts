@@ -51,15 +51,15 @@ describe("failOpenMissingFlags", () => {
   }
 
   it("treats a missing flag as enabled", () => {
-    expect(wrap(undefined).isFeatureEnabled("gram-risk-watchdog")).toBe(true);
+    expect(wrap(undefined).isFeatureEnabled("gram-explore")).toBe(true);
   });
 
   it("preserves an explicit off so rollouts can be tested", () => {
-    expect(wrap(false).isFeatureEnabled("gram-risk-watchdog")).toBe(false);
+    expect(wrap(false).isFeatureEnabled("gram-explore")).toBe(false);
   });
 
   it("preserves an explicit on", () => {
-    expect(wrap(true).isFeatureEnabled("gram-risk-watchdog")).toBe(true);
+    expect(wrap(true).isFeatureEnabled("gram-explore")).toBe(true);
   });
 
   it("passes variants through without failing open", () => {

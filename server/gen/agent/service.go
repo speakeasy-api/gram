@@ -10,6 +10,7 @@ package agent
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -18,15 +19,23 @@ import (
 // machines. Authenticates via an API key carrying the 'agent_user' scope — the
 // per-user credential minted by token-exchange. An org key with the broader
 // 'agent' scope also satisfies most of these endpoints (it implies
-// 'agent_user'), so existing installs keep working during the transition. The
-// content-bearing session-portability endpoints — getSessionMeta and
-// createSessionHandoff — refuse it and require a per-user key.
+// 'agent_user'), so existing installs keep working during the transition. A
+// headless device enrolled as a workload may call getPlugins with a
+// device-agent token instead. The content-bearing session-portability
+// endpoints — getSessionMeta and createSessionHandoff — refuse it and require
+// a per-user key.
 type Service interface {
 	// Resolve the marketplaces, plugins, and optional organization configuration
 	// assigned to the enrolled user. The device agent reconciles these into the AI
 	// developer tools it manages. Organization configuration is delivered on this
 	// existing poll so agents do not need a second control-plane request.
 	GetPlugins(context.Context, *GetPluginsPayload) (res *GetPluginsResult, err error)
+	// Report the enrolled user's sign-in state for each MCP server in the plugins
+	// delivered to them, with the page that signs in to each. Sign-in belongs to
+	// the server, so one sign-in covers every plugin that contains it. Accepts a
+	// per-user key, or an org install key with the user's email vouched in the
+	// Gram-User-Email header, the same way getPlugins resolves the polling user.
+	GetMyConnections(context.Context, *GetMyConnectionsPayload) (res *GetMyConnectionsResult, err error)
 	// List users in the current organization who are actively running the
 	// Speakeasy device agent, attributed by the email each agent reports on sync.
 	// Dashboard-only; requires an org admin session.
@@ -106,6 +115,8 @@ type Service interface {
 
 // Auther defines the authorization functions to be implemented by the service.
 type Auther interface {
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
@@ -124,7 +135,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
+var MethodNames = [12]string{"getPlugins", "getMyConnections", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -141,6 +152,31 @@ type AIScanMatch struct {
 	// Installed version, when the scan could read one statically (e.g. from the
 	// app bundle's Info.plist).
 	Version *string
+}
+
+type AgentMCPServer struct {
+	// Stable key the agent writes the server under in each tool's MCP
+	// configuration: `speakeasy-` followed by the server's slug, using only
+	// lowercase letters, digits and `-`. Unique within the response; a second
+	// server with the same name gets a numeric suffix such as `speakeasy-linear-2`.
+	Name string
+	// The server's streamable-HTTP URL.
+	URL string
+	// Stable IDs of the managed tools this server applies to. Absent or empty
+	// means every managed tool.
+	Tools []string
+	// Token endpoint where a workload exchanges an identity assertion (RFC 7523
+	// JWT bearer grant) for a session that reaches this server. Absent when the
+	// server's authorization server offers no workload grant, so the server cannot
+	// be reached without a person.
+	TokenEndpoint *string
+	// The exact `aud` the identity assertion must carry for token_endpoint.
+	// Present exactly when token_endpoint is.
+	Audience *string
+	// Resource indicator (RFC 8707) to send with the grant. Present only when
+	// token_endpoint mints sessions for this one server; absent when it mints one
+	// session for every server of its issuer.
+	Resource *string
 }
 
 type AgentMarketplace struct {
@@ -170,6 +206,24 @@ type AgentPlugin struct {
 	Name *string
 	// Short description of the plugin, when one is set.
 	Description *string
+	// MCP servers the plugin contains, in display order, possibly none.
+	// Display-only: the agent installs the plugin, not these entries. Absent for
+	// the synthesized observability plugin, which carries hooks rather than
+	// servers.
+	Servers []*AgentPluginServer `json:"servers,omitzero"`
+}
+
+type AgentPluginServer struct {
+	// Stable identifier of the server, the same in every plugin that contains it.
+	// Matches the id getMyConnections reports the server's sign-in state under.
+	// Absent from servers predating the field.
+	ID *string
+	// Display name of the server within its plugin.
+	Name string
+	// Link to the server's page in the Speakeasy dashboard. Present only when the
+	// enrolled user holds mcp:read on the server; the agent tells the user that
+	// links need that scope when it is absent.
+	DashboardURL *string
 }
 
 type AgentPollingPrincipal struct {
@@ -177,6 +231,25 @@ type AgentPollingPrincipal struct {
 	Urn string
 	// Human-readable name of the agent identity.
 	DisplayName string
+}
+
+type AgentServerConnection struct {
+	// The server's id, as getPlugins reports it on each plugin server.
+	ID string
+	// `connected`: the user is signed in. `not_connected`: the user has not signed
+	// in. `reauthorization_required`: a sign-in exists but must be renewed.
+	// `not_required`: the server needs no sign-in from the user. `setup_required`:
+	// an administrator must finish the server's sign-in setup first. `no_access`:
+	// the user lacks permission to connect to the server. `unknown`: the state
+	// can't be determined, for example for a gateway.
+	State string
+	// Page that signs the user in to this server in the browser. Present when
+	// state is not_connected or reauthorization_required.
+	ConnectURL *string
+	// Page where the user can ask an administrator for access to this server.
+	// Present only when state is no_access and the organization accepts access
+	// requests.
+	RequestAccessURL *string
 }
 
 type AgentSessionMeta struct {
@@ -215,6 +288,11 @@ type AiScanTarget struct {
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
 	Customized bool
+	// The organization's access decision for the target, computed with the same
+	// rules the AI detections carry: unreviewed when nothing is recorded, and
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
+	Access *types.AIToolAccessSummary
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string
 	// When the organization's row last changed; absent for an untouched default.
@@ -341,9 +419,29 @@ type GetConfigurationPayload struct {
 	SessionToken *string
 }
 
+// GetMyConnectionsPayload is the payload type of the agent service
+// getMyConnections method.
+type GetMyConnectionsPayload struct {
+	ApikeyToken *string
+	// Email address of the enrolled user, sent in the Gram-User-Email header.
+	// Required when authenticating with an org-scoped agent install key; ignored
+	// for a per-user key, whose owner is the enrolled user.
+	Email *string
+}
+
+// GetMyConnectionsResult is the result type of the agent service
+// getMyConnections method.
+type GetMyConnectionsResult struct {
+	// One entry per distinct MCP server in the plugins delivered to the user, in
+	// plugin order. Servers the user can neither read nor connect to are omitted;
+	// a server the user can read but not connect to is reported as no_access.
+	Servers []*AgentServerConnection
+}
+
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
-	ApikeyToken *string
+	DeviceAgentToken *string
+	ApikeyToken      *string
 	// Email address of the enrolled user, sent in the Gram-User-Email header.
 	// Required when authenticating with an org-scoped agent install key (the MDM
 	// zero-touch path); ignored for a per-user key, whose owner is the enrolled
@@ -370,9 +468,10 @@ type GetPluginsPayload struct {
 
 // GetPluginsResult is the result type of the agent service getPlugins method.
 type GetPluginsResult struct {
-	// Opaque revision identifier covering the marketplace, plugin, and
-	// remote-configuration set. The agent stores this to detect changes between
-	// polls.
+	// Opaque revision identifier covering the marketplace, plugin, MCP server
+	// (including each server's token endpoint, audience and resource),
+	// remote-configuration, and organization-gateway set. The agent stores this to
+	// detect changes between polls.
 	Etag string
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -387,9 +486,20 @@ type GetPluginsResult struct {
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfiguration
+	// URL of the active organization's gateway. Absent when the organization
+	// gateway is unavailable.
+	OrganizationGatewayURL *string
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipal
+	// Speakeasy-hosted MCP servers the agent registers directly in each managed
+	// tool's configuration, authorized by the device's own mcp:connect credential.
+	// Populated only when the caller polls as an agent (an agent API key, or a
+	// workload acting for its assigned agent), from the MCP servers in the plugins
+	// assigned to that agent; always empty for people, who reach these servers
+	// through their plugins. Always present: an empty list tells the agent to
+	// remove the entries it wrote earlier.
+	McpServers []*AgentMCPServer
 }
 
 // GetSessionMetaPayload is the payload type of the agent service

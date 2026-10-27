@@ -879,11 +879,28 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = @organization_id
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || @query_text::text || '%'
+      )
   )
 ORDER BY
     CASE
         WHEN @query_text::text <> ''
-         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = @organization_id
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER(@query_text::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -909,6 +926,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
+    m.builtin_backend,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -969,6 +987,15 @@ WHERE m.deleted IS FALSE
       OR m.id::text ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.name, '') ILIKE '%' || @query_text::text || '%'
       OR COALESCE(m.slug, '') ILIKE '%' || @query_text::text || '%'
+      OR EXISTS (
+          SELECT 1
+          FROM platform_mcp_catalog_registrations AS source
+          WHERE source.organization_id = @organization_id
+            AND source.project_id = m.project_id
+            AND source.mcp_server_id = m.id
+            AND source.deleted IS FALSE
+            AND source.catalog_reference ILIKE '%' || @query_text::text || '%'
+      )
   )
   AND (
       sqlc.narg(readiness_state)::text IS NULL
@@ -983,7 +1010,15 @@ WHERE m.deleted IS FALSE
 ORDER BY
     CASE
         WHEN @query_text::text <> ''
-         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text))
+         AND (m.id::text = @query_text::text OR LOWER(COALESCE(m.name, '')) = LOWER(@query_text::text) OR LOWER(COALESCE(m.slug, '')) = LOWER(@query_text::text) OR EXISTS (
+             SELECT 1
+             FROM platform_mcp_catalog_registrations AS source
+             WHERE source.organization_id = @organization_id
+               AND source.project_id = m.project_id
+               AND source.mcp_server_id = m.id
+               AND source.deleted IS FALSE
+               AND LOWER(source.catalog_reference) = LOWER(@query_text::text)
+         ))
         THEN 0
         ELSE 1
     END,
@@ -1005,6 +1040,7 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
+        m.builtin_backend,
         COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
@@ -1152,6 +1188,18 @@ INSERT INTO platform_mcp_catalog_registrations (
     @acting_surface
 )
 RETURNING *;
+
+-- name: RetirePlatformMCPCatalogRegistration :exec
+-- Retires a registration whose MCP server was deleted outside Platform MCP, so
+-- adding the same catalogue server again creates a fresh registration instead
+-- of reusing one that points at a deleted server.
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
 
 -- name: UpdatePlatformMCPCatalogRegistrationComponents :one
 UPDATE platform_mcp_catalog_registrations
@@ -2743,13 +2791,9 @@ LIMIT @result_limit;
 -- slug, name, hosted toolset slug, and each plugin membership's plugin slug and
 -- display name (the key the plugin's mcp.json ships it under). One row per
 -- (server, membership); a server with no membership yields one row with empty
--- plugin columns. Hosted servers are also reached through memberships attached
--- by toolset, so those memberships, and the toolset slug, belong to the
--- toolset's hosting server: its canonical row (id = toolset id), or every
--- server fronting it when it has none. Memberships are gathered from the
--- project's live plugins through the (plugin_id, backend) indexes, one arm per
--- backend kind: a live membership has exactly one backend, so the arms never
--- repeat a row. toolset_shared marks a hosting server whose toolset other live
+-- plugin columns. The toolset slug belongs to the toolset's hosting server: its
+-- canonical row (id = toolset id), or every server fronting it when it has
+-- none. toolset_shared marks a hosting server whose toolset other live
 -- servers also front, since their calls carry the same toolset slug.
 WITH server AS (
     SELECT
@@ -2783,7 +2827,6 @@ membership AS (
     SELECT
         plugin_server.id AS membership_id,
         plugin_server.mcp_server_id,
-        plugin_server.toolset_id,
         plugin.slug AS plugin_slug,
         plugin_server.display_name
     FROM plugins AS plugin
@@ -2801,16 +2844,6 @@ server_membership AS (
         membership.display_name
     FROM membership
     WHERE membership.mcp_server_id IS NOT NULL
-    UNION ALL
-    SELECT
-        server.id AS server_id,
-        membership.membership_id,
-        membership.plugin_slug,
-        membership.display_name
-    FROM server
-    JOIN membership
-      ON membership.toolset_id = server.toolset_id
-    WHERE server.hosts_toolset
 )
 SELECT
     server.id AS mcp_server_id,
@@ -2889,34 +2922,6 @@ WHERE cm.chat_id = @chat_id
   )
 ORDER BY cm.created_at DESC, cm.seq DESC
 LIMIT @row_limit;
-
--- name: ListRiskFindingSpansForRecall :many
--- Findings that drive inline masking of the recall digest. Message-anchored
--- rows only (the digest does not render content parts): found, not excluded,
--- not swept as false positive, policy still enabled and not deleted.
--- Latest generation only, matching the transcript read: findings on
--- superseded generations mask nothing the digest renders, so loading them
--- would only let long, repeatedly compacted sessions inflate the scan.
-SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN chats c ON c.id = cm.chat_id
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE cm.chat_id = @chat_id
-  AND rr.project_id = @project_id
-  AND c.organization_id = @organization_id
-  AND c.user_id = @user_id::text
-  AND c.deleted IS FALSE
-  AND (ua.id IS NULL OR ua.account_type <> 'personal')
-  AND cm.generation = (
-    SELECT COALESCE(MAX(generation), 0)
-    FROM chat_messages
-    WHERE chat_id = @chat_id
-      AND project_id = @project_id
-  )
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC;
 
 -- name: InsertChatSessionRecallLink :exec
 -- Sibling of agent's InsertChatSessionLink with kind='recall'. A v1 recall
@@ -3142,6 +3147,8 @@ WHERE m.id = @mcp_server_id
 -- One exact organization/project-scoped target and its connection dependencies.
 -- Deliberately returns no upstream URL, credentials, or provider resource data.
 SELECT
+    CASE WHEN @target_kind::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
+    (@target_kind::text = 'gateway' AND gateway.user_session_issuer_id IS NOT NULL)::boolean AS gateway_requires_sign_in,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(
@@ -3212,8 +3219,7 @@ LEFT JOIN LATERAL (
      AND plugin.organization_id = @organization_id
      AND plugin.deleted IS FALSE
     WHERE membership.deleted IS FALSE
-      AND ((@target_kind::text = 'mcp_server' AND (membership.mcp_server_id = server.id
-          OR (membership.toolset_id = server.id AND server.toolset_id = membership.toolset_id)))
+      AND ((@target_kind::text = 'mcp_server' AND membership.mcp_server_id = server.id)
         OR (@target_kind::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
 ) memberships ON TRUE
 WHERE project.id = @project_id
@@ -3315,13 +3321,12 @@ WHERE p.id = @plugin_id
 -- name: ListPlatformMCPPluginServers :many
 -- Member-facing compatibility projection. It deliberately omits membership and
 -- backend IDs, which are administrative identity and must not cross this path.
--- A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists.
+-- A canonical wrapper with no endpoint falls back to its toolset's MCP slug.
 SELECT
     ps.id,
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    (ps.toolset_id IS NOT NULL AND s.id IS NULL)::boolean AS toolset_backed,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
@@ -3330,12 +3335,11 @@ JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
+  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
@@ -3365,7 +3369,8 @@ LIMIT @result_limit;
 
 -- name: GetPlatformMCPPluginMembershipVersion :one
 SELECT md5(COALESCE(jsonb_agg(
-  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+  -- NULL holds the retired toolset_id slot so versions stay stable.
+  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
   ORDER BY ps.sort_order, ps.display_name, ps.id
 )::text, '[]'))::text AS membership_version
 FROM plugin_servers ps
@@ -3382,7 +3387,8 @@ WHERE ps.plugin_id = @plugin_id
 -- backend references before exposing them as actionable targets.
 WITH membership_version AS (
   SELECT md5(COALESCE(jsonb_agg(
-    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+    -- NULL holds the retired toolset_id slot so versions stay stable.
+    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, NULL::uuid, ps.mcp_server_id, ps.meta_mcp_server_id)
     ORDER BY ps.sort_order, ps.display_name, ps.id
   )::text, '[]'))::text AS value
   FROM plugin_servers ps
@@ -3394,12 +3400,8 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    CASE
-      WHEN ps.mcp_server_id IS NOT NULL OR s.id IS NOT NULL THEN 'mcp_server'
-      WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
-      WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
-    END::text AS target_kind,
-    COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
+    CASE WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server' ELSE 'gateway' END::text AS target_kind,
+    COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
@@ -3410,12 +3412,11 @@ JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
+  ON t.id = (CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
@@ -3479,6 +3480,25 @@ LIMIT @result_limit;
 -- required for the optimistic-concurrency version; no principal leaves this
 -- internal query boundary.
 SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id
+ORDER BY pa.principal_urn;
+
+-- name: ListPlatformMCPPluginAssignmentsWithModes :many
+-- The same exact-plugin assignment set as ListPlatformMCPPluginAssignments,
+-- with each assignment's install mode, which the optimistic-concurrency version
+-- also covers.
+SELECT pa.principal_urn, pa.install_mode
 FROM plugin_assignments pa
 JOIN plugins p
   ON p.id = pa.plugin_id
@@ -3623,39 +3643,6 @@ WHERE p.project_id = @project_id
   )
 ORDER BY p.id ASC
 LIMIT 2;
-
--- name: SearchPlatformMCPAccessMembers :many
--- Count distinct members and return only a bounded page from the same snapshot.
--- Active local role assignments follow the access roster's WorkOS identity join.
-WITH member_roles AS (
-  SELECT ora.workos_user_id,
-    array_agg(DISTINCT COALESCE(r.id::text, g.id::text)) AS role_ids,
-    array_agg(DISTINCT COALESCE(r.workos_name, g.workos_name)) AS role_names
-  FROM organization_role_assignments ora
-  LEFT JOIN organization_roles r ON ora.role_urn = 'role:organization:' || r.id::text
-    AND r.organization_id = @organization_id AND r.deleted IS FALSE AND r.workos_deleted IS FALSE
-  LEFT JOIN global_roles g ON ora.role_urn = 'role:global:' || g.id::text
-    AND g.deleted IS FALSE AND g.workos_deleted IS FALSE
-  WHERE ora.organization_id = @organization_id AND ora.deleted_at IS NULL
-    AND COALESCE(r.id, g.id) IS NOT NULL
-  GROUP BY ora.workos_user_id
-), matching AS (
-  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
-  FROM organization_user_relationships rel
-  JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
-  LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
-  WHERE rel.organization_id = @organization_id AND rel.deleted IS FALSE
-    AND (@role_id::text = '' OR @role_id::text = ANY(m.role_ids))
-    AND (@query::text = ''
-      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), @query::text) > 0
-      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), @query::text) > 0
-      OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
-        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), @query::text) > 0))
-)
-SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
-FROM matching
-ORDER BY email, id
-LIMIT @result_limit;
 
 -- name: GetPlatformMCPPluginForUpdate :one
 -- Serializes an MCP distribution write against concurrent deletion of the
@@ -3909,3 +3896,137 @@ WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
   AND m.toolset_id IS NOT NULL;
+
+-- name: ListPlatformMCPRoleDirectorySources :many
+-- Each live directory role mapping in the organization, with how many active
+-- directory users its group or attribute value matches today, counted by
+-- distinct email as the dashboard counts them. Mappings whose group is gone
+-- still list, matching nobody.
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value,
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_user_group_memberships AS m
+        JOIN directory_users AS du
+          ON du.id = m.directory_user_id
+          AND du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+        WHERE m.directory_group_id = dg.id
+          AND m.deleted IS FALSE
+      )
+      ELSE (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::bigint AS member_count
+FROM directory_role_mappings AS drm
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+ORDER BY drm.role_urn, drm.source_kind DESC, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
+
+-- name: SearchPlatformChatMessages :many
+-- Literal substring search over captured messages in one project and interval,
+-- newest or oldest first by (created_at, id). Fields over 128 KiB are neither
+-- matched nor returned. The caller requests one extra row to detect more pages.
+SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
+       COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       COALESCE(c.user_id, '')::text AS owner_user_id,
+       CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(m.content_raw::text) <= 131072 THEN m.content_raw END::jsonb AS content_raw,
+       (octet_length(m.content) > 131072 OR COALESCE(octet_length(m.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS oversized
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = c.project_id
+WHERE m.project_id = @project_id::uuid
+  AND c.organization_id = @organization_id AND p.organization_id = @organization_id
+  AND c.deleted IS FALSE AND p.deleted IS FALSE
+  AND m.created_at >= @from_time AND m.created_at < @to_time
+  AND (cardinality(@chat_ids::uuid[]) = 0 OR m.chat_id = ANY(@chat_ids::uuid[]))
+  AND (@owner_user_id::text = '' OR c.user_id = @owner_user_id)
+  AND (@source::text = '' OR m.source = @source)
+  AND (@pattern::text = ''
+       OR (octet_length(m.content) <= 131072 AND m.content ILIKE @pattern ESCAPE '\')
+       OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE @pattern ESCAPE '\')
+       OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE @pattern ESCAPE '\')
+       OR c.title ILIKE @pattern ESCAPE '\')
+  AND (@participant_id::text = ''
+       OR (@participant_provider::text = '' AND m.user_id = @participant_id)
+       OR EXISTS (
+         SELECT 1 FROM chat_message_participants cp
+         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id AND cp.message_id = m.id
+           AND (cp.user_id = @participant_id OR cp.provider_user_id = @participant_id)
+           AND (@participant_provider = '' OR cp.provider = @participant_provider)))
+  AND (NOT @has_cursor::boolean
+       OR (@oldest_first::boolean AND (m.created_at, m.id) > (@cursor_at::timestamptz, @cursor_id::uuid))
+       OR (NOT @oldest_first AND (m.created_at, m.id) < (@cursor_at, @cursor_id)))
+ORDER BY CASE WHEN @oldest_first THEN m.created_at END ASC,
+         CASE WHEN @oldest_first THEN m.id END ASC,
+         CASE WHEN NOT @oldest_first THEN m.created_at END DESC,
+         CASE WHEN NOT @oldest_first THEN m.id END DESC
+LIMIT @row_limit::integer;
+
+-- name: GetPlatformChatSearchChat :one
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title
+FROM chats c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+WHERE c.id = @chat_id AND c.project_id = @project_id AND c.organization_id = @organization_id
+  AND c.deleted IS FALSE;
+
+-- name: ReadPlatformChatMessages :many
+-- Capture-sequence window around one message of this chat, or its latest one,
+-- with up to five recorded participants per message.
+WITH anchor AS (
+    SELECT cm.seq FROM chat_messages cm
+    JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id AND c.deleted IS FALSE
+    JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+    WHERE c.organization_id = @organization_id AND p.organization_id = @organization_id
+      AND (sqlc.narg('message_id')::uuid IS NULL OR cm.id = sqlc.narg('message_id'))
+      AND cm.chat_id = @chat_id AND cm.project_id = @project_id
+    ORDER BY cm.seq DESC LIMIT 1
+), preceding AS (
+    SELECT cm.* FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = @chat_id AND cm.project_id = @project_id AND cm.seq < a.seq
+     ORDER BY cm.seq DESC LIMIT @context_size::integer
+), following AS (
+    SELECT cm.* FROM chat_messages cm, anchor a
+     WHERE cm.chat_id = @chat_id AND cm.project_id = @project_id AND cm.seq >= a.seq
+     ORDER BY cm.seq ASC LIMIT @following_limit::integer
+), neighbors AS (SELECT * FROM preceding UNION ALL SELECT * FROM following)
+SELECT n.id, n.seq, n.created_at, n.role, n.generation,
+       COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
+       CASE WHEN octet_length(n.content) <= 131072 THEN n.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(n.tool_calls::text) <= 131072 THEN n.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(n.content_raw::text) <= 131072 THEN n.content_raw END::jsonb AS content_raw,
+       (octet_length(n.content) > 131072 OR COALESCE(octet_length(n.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS oversized,
+       COALESCE((
+         SELECT jsonb_agg(jsonb_build_object(
+                  'provider', CASE WHEN octet_length(cp.provider) <= 512 THEN cp.provider END, 'provider_user_id', CASE WHEN octet_length(cp.provider_user_id) <= 512 THEN cp.provider_user_id END,
+                  'user_id', COALESCE(CASE WHEN octet_length(cp.user_id) <= 512 THEN cp.user_id END, ''), 'display_name', COALESCE(CASE WHEN octet_length(cp.display_name) <= 1024 THEN cp.display_name END, '')))
+         FROM (SELECT * FROM chat_message_participants cp
+               WHERE cp.project_id = @project_id AND cp.chat_id = n.chat_id AND cp.message_id = n.id
+               ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
+       ), '[]')::jsonb AS participants
+FROM neighbors n ORDER BY n.seq;

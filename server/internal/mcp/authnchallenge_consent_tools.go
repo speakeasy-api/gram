@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -36,8 +37,8 @@ const consentToolNameLimit = consentInventoryMaxTools
 // plus manually picked tool names. Snapshot expansions are omitted — the
 // island re-previews annotation grants against the inventory it fetches.
 // Empty when there is no restrictive prefill.
-func consentPrefillAttr(prefill *toolfilter.SessionSelection) string {
-	if prefill == nil {
+func consentPrefillAttr(prefill *toolfilter.SessionSelection, catalog *toolfilter.CatalogReference) string {
+	if prefill == nil && catalog == nil {
 		return ""
 	}
 	type prefillAnnotation struct {
@@ -46,7 +47,11 @@ func consentPrefillAttr(prefill *toolfilter.SessionSelection) string {
 	}
 	annotations := []prefillAnnotation{}
 	tools := []string{}
-	for _, entry := range prefill.Allow {
+	var allow []toolfilter.AllowEntry
+	if prefill != nil {
+		allow = prefill.Allow
+	}
+	for _, entry := range allow {
 		switch entry.Type {
 		case toolfilter.AllowTypeAnnotation:
 			if entry.Mode != nil {
@@ -56,7 +61,21 @@ func consentPrefillAttr(prefill *toolfilter.SessionSelection) string {
 			tools = append(tools, entry.Name)
 		}
 	}
-	encoded, err := json.Marshal(map[string]any{"annotations": annotations, "tools": tools})
+	accessMode := ""
+	if catalog != nil {
+		accessMode = "specific"
+		if catalog.AllTools {
+			accessMode = "all"
+			if catalog.Mode == toolfilter.CatalogModeCached {
+				accessMode = "cached"
+			}
+		}
+	}
+	encoded, err := json.Marshal(struct {
+		Annotations []prefillAnnotation `json:"annotations"`
+		Tools       []string            `json:"tools"`
+		AccessMode  string              `json:"accessMode,omitempty"`
+	}{Annotations: annotations, Tools: tools, AccessMode: accessMode})
 	if err != nil {
 		return ""
 	}
@@ -111,6 +130,9 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 }
 
 func (s *Service) consentToolPickerEligible(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	if endpoint.MetaMcpServerID.Valid {
+		return true, nil
+	}
 	if !endpoint.McpServerID.Valid {
 		return false, nil
 	}
@@ -153,10 +175,31 @@ func trueAnnotationValues(annotations *types.ToolAnnotations) []string {
 
 // consentToolSelectionPrefill loads the stored selection from the subject's
 // newest live session for the same issuer + client, returning nil unless it
-// is restrictive AND bound to this endpoint's resource. Anonymous subjects
-// never prefill: each authorization mints a fresh random subject, and
-// matching by issuer/client alone would leak another user's preference.
+// is restrictive AND bound to this endpoint's resource.
 func (s *Service) consentToolSelectionPrefill(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, clientRowID uuid.UUID) *toolfilter.SessionSelection {
+	policy := s.consentStoredSessionPolicy(ctx, endpoint, subject, clientRowID)
+	if policy == nil || policy.Selection == nil || policy.Selection.Resource != policy.Resource {
+		return nil
+	}
+	return policy.Selection
+}
+
+// consentDiscoveryModePrefill returns the discovery mode stored on the
+// subject's newest live session for this gateway, or "" for the default.
+func (s *Service) consentDiscoveryModePrefill(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, clientRowID uuid.UUID) metamcp.DiscoveryMode {
+	policy := s.consentStoredSessionPolicy(ctx, endpoint, subject, clientRowID)
+	if policy == nil || policy.Gateway == nil || policy.Gateway.DiscoveryMode == nil {
+		return ""
+	}
+	return *policy.Gateway.DiscoveryMode
+}
+
+// consentStoredSessionPolicy loads the policy from the subject's newest live
+// session for the same issuer + client, bound to this endpoint's resource.
+// Anonymous subjects never prefill: each authorization mints a fresh random
+// subject, and matching by issuer/client alone would leak another user's
+// preference.
+func (s *Service) consentStoredSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, clientRowID uuid.UUID) *toolfilter.SessionPolicy {
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
 		return nil
 	}
@@ -175,15 +218,15 @@ func (s *Service) consentToolSelectionPrefill(ctx context.Context, endpoint *Res
 	if err != nil {
 		return nil
 	}
-	sel, err := toolfilter.ParseSessionSelection(raw)
+	policy, err := toolfilter.ParseSessionPolicy(raw)
 	if err != nil {
 		s.logger.WarnContext(ctx, "ignore malformed stored tool selection for consent prefill", attr.SlogError(err))
 		return nil
 	}
-	if sel == nil || sel.Resource != resource {
+	if policy == nil || policy.Resource != resource {
 		return nil
 	}
-	return sel
+	return policy
 }
 
 // chosenToolSelection parses the approve form's tool picker against the

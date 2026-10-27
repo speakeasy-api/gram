@@ -864,8 +864,8 @@ func TestGenerateCodexMarketplaceDescriptions(t *testing.T) {
 		require.LessOrEqual(t, len([]rune(manifest.Interface.ShortDescription)), 240, name)
 		require.Equal(t, manifest.Description, manifest.Interface.LongDescription, name)
 	}
-	// Native, shared Agent Plugins overlay, and observability manifests.
-	require.GreaterOrEqual(t, count, 3)
+	// Only the native and observability packages carry Codex manifests.
+	require.Equal(t, 2, count)
 }
 
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
@@ -1615,6 +1615,150 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 		require.NoError(t, err, string(out))
 		require.Equal(t, "args:\nstill-warm", string(out))
 	}
+}
+
+// TestHooksBootstrapFallsBackToPython3WithoutUnzip checks that a machine with
+// neither unzip nor busybox, like the official OpenClaw image, still installs
+// the binary through python3's zipfile module.
+func TestHooksBootstrapFallsBackToPython3WithoutUnzip(t *testing.T) {
+	t.Parallel()
+	path := hooksBootstrapToolPath(t)
+	require.NoError(t, os.Symlink(workingTool(t, "python3", "-c", "import sys, zipfile; print(sys.executable)"), filepath.Join(path, "python3")))
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + path,
+	}, "", "--first")
+	require.NoError(t, err, string(out))
+	require.Equal(t, "args:--first\n", string(out))
+}
+
+// TestHooksBootstrapNamesUnpackToolsWhenNoneInstalled checks that a machine
+// with no way to unpack the archive fails with a message naming the tools that
+// would work, without running anything.
+func TestHooksBootstrapNamesUnpackToolsWhenNoneInstalled(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\necho ran\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + hooksBootstrapToolPath(t),
+	}, "")
+	require.Error(t, err)
+	require.Contains(t, string(out), "unzip, busybox, python3, bsdtar or node is required for first install")
+	require.NotContains(t, string(out), "ran")
+}
+
+// TestHooksBootstrapFallsBackToBsdtarWithoutPython3 checks that a machine with
+// bsdtar as its only unpack tool still installs the binary. The bsdtar here is
+// a stub that checks the arguments and prints the archived binary, because CI
+// runners do not all ship libarchive's bsdtar.
+func TestHooksBootstrapFallsBackToBsdtarWithoutPython3(t *testing.T) {
+	t.Parallel()
+	binary := "#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"
+	path := hooksBootstrapToolPath(t)
+	cat, err := exec.LookPath("cat")
+	require.NoError(t, err)
+	require.NoError(t, os.Symlink(cat, filepath.Join(path, "cat")))
+	stub := "#!/bin/sh\n[ \"$1\" = -xOf ] && [ \"$3\" = speakeasy-hooks ] || exit 2\ncat <<'EOF'\n" + binary + "EOF\n"
+	require.NoError(t, os.WriteFile(filepath.Join(path, "bsdtar"), []byte(stub), 0o755))
+
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte(binary))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + path,
+	}, "", "--first")
+	require.NoError(t, err, string(out))
+	require.Equal(t, "args:--first\n", string(out))
+}
+
+// TestHooksBootstrapFallsBackToNodeWithoutBsdtar checks that a machine whose
+// only unpack tool is node, like a slim image built to run a Node app, still
+// installs the binary by reading a real deflated ZIP with node's zlib. The
+// payload on stdin checks that node leaves it for the hooks binary.
+func TestHooksBootstrapFallsBackToNodeWithoutBsdtar(t *testing.T) {
+	t.Parallel()
+	path := hooksBootstrapToolPath(t)
+	require.NoError(t, os.Symlink(workingTool(t, "node", "-p", "process.execPath"), filepath.Join(path, "node")))
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nIFS= read -r input\nprintf 'args:%s stdin:%s\\n' \"$*\" \"$input\"\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + path,
+	}, "payload\n", "--first")
+	require.NoError(t, err, string(out))
+	require.Equal(t, "args:--first stdin:payload\n", string(out))
+}
+
+// workingTool returns the real executable behind the first name on PATH whose
+// probe arguments make it print its own path. Version-manager shims such as
+// mise's resolve their version from the environment, which the bootstrap's
+// restricted PATH lacks, so tests link the real executable rather than the shim.
+func workingTool(t *testing.T, name string, probe ...string) string {
+	t.Helper()
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		out, err := exec.Command(filepath.Join(dir, name), probe...).Output()
+		if exe := strings.TrimSpace(string(out)); err == nil && exe != "" {
+			return exe
+		}
+	}
+	require.FailNow(t, "no working "+name+" on PATH; it is needed to test the unpack fallbacks")
+	return ""
+}
+
+// hooksBootstrapToolPath returns a PATH directory holding only the tools the
+// bootstrap needs to download and verify an archive, so a test can simulate a
+// machine without any unpack tool.
+func hooksBootstrapToolPath(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, tool := range []string{"uname", "dirname", "mkdir", "mktemp", "curl", "sha256sum", "shasum", "cut", "chmod", "mv", "rm"} {
+		resolved, err := exec.LookPath(tool)
+		if err != nil {
+			// sha256sum and shasum are alternatives: each platform has one.
+			continue
+		}
+		require.NoError(t, os.Symlink(resolved, filepath.Join(dir, tool)))
+	}
+	return dir
 }
 
 // TestHooksBootstrapHonorsHooksHomeNames checks the bootstrap caches the
@@ -3469,7 +3613,7 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 		"`model: dashboard_managed`", "Do not require or invent a registration record",
 		"pending or incomplete registration", "must not be reported as already present or complete",
 		"Skip provider attachment for anonymous servers",
-		"inspection reports an authentication requirement and advertises a supported identity provider",
+		"inspection reports an authentication requirement and advertises a supported authorization server",
 		"`authentication: authentication_required`", "`oauth_discovery: available_dcr`", "`oauth_discovery: available_cimd`",
 		"`available` alone or `incomplete` does not establish support",
 		"list_projects", "find_mcp", "get_mcp", "inspect_mcp_candidate",

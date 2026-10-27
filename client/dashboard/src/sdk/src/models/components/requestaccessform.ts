@@ -26,6 +26,8 @@ export const RequestAccessFormScope = {
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  InferenceExecute: "inference:execute",
+  LogRead: "log:read",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",

@@ -34,10 +34,12 @@ type Service interface {
 	// Records agent-volunteered feedback about a distributed skill.
 	SkillFeedback(context.Context, *SkillFeedbackPayload) (err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
-	// authentication.
+	// authentication, or a device-agent token from a headless device enrolled as a
+	// workload.
 	Logs(context.Context, *LogsPayload) (err error)
 	// Endpoint to receive OTEL metrics data from Claude Code. Requires API key
-	// authentication.
+	// authentication, or a device-agent token from a headless device enrolled as a
+	// workload.
 	Metrics(context.Context, *MetricsPayload) (err error)
 	// Report whether the organization has any hook telemetry source configured.
 	// Reads configuration only; it does not query hook traffic.
@@ -46,6 +48,8 @@ type Service interface {
 
 // Auther defines the authorization functions to be implemented by the service.
 type Auther interface {
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
@@ -92,6 +96,9 @@ type ClaudePayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Optional `Bearer` device-agent token a headless device presents in place of
+	// an API key.
+	DeviceAgentToken *string
 	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
 	HookHostname *string
 	// Optional per-invocation token reused across retries so the server stores a
@@ -152,6 +159,7 @@ type CodexHookResult struct {
 
 // CodexPayload is the payload type of the hooks service codex method.
 type CodexPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
@@ -201,6 +209,7 @@ type CursorHookResult struct {
 
 // CursorPayload is the payload type of the hooks service cursor method.
 type CursorPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
@@ -281,6 +290,64 @@ type GetStatusPayload struct {
 	ProjectSlugInput *string
 }
 
+// Failure class the hook sender observed. http means the control plane
+// answered with a retryable status.
+type HookDeliveryCause string
+
+// Canonical type of the event whose delivery failed. Bounded to the hook
+// activity event vocabulary because it is a metric dimension; a report never
+// describes another report.
+type HookDeliveryFailedEventType string
+
+// Device-side delivery failure report, sent with event type
+// client.delivery_failed and a required Idempotency-Key so each failure counts
+// once. The speakeasy-hooks binary writes one when an event could not reach
+// the control plane and redelivers it from the offline spool once connectivity
+// returns, so the record describes the original attempt rather than the
+// request that carried it. It is diagnostic only and never counts as agent
+// activity.
+type HookDeliveryFailureData struct {
+	// Canonical type of the event whose delivery failed.
+	FailedEventType HookDeliveryFailedEventType
+	// Whether the failed send was a live hook or a spool-drain replay.
+	DeliveryPhase HookDeliveryPhase
+	// Failure class the client observed.
+	Cause HookDeliveryCause
+	// HTTP status of the final attempt, 0 when no response arrived.
+	StatusCode *int
+	// Wall time the client spent on the send across its attempts, in milliseconds.
+	ElapsedMs *int
+	// Number of send attempts the client made.
+	Attempts *int
+	// Whether the send gated an agent action (a verdict was awaited) rather than
+	// observing one.
+	Gating *bool
+	// RFC3339 time the failed send started, on the device clock.
+	AttemptedAt string
+	// speakeasy-hooks binary version that made the attempt.
+	BinaryVersion *string
+	// Operating system of the device.
+	Os *string
+	// CPU architecture of the device.
+	Arch *string
+	// Coding agent harness the hook ran under.
+	Harness *string
+	// Harness variant, when the harness distinguishes one.
+	HarnessVariant *string
+	// Harness version, when known.
+	HarnessVersion *string
+	// Idempotency key of the event that failed, so the report joins to the row its
+	// eventual replay produces.
+	FailedIdempotencyKey *string
+	// Session id of the event that failed.
+	SessionID *string
+	// Events waiting in the device's offline spool when the report was written.
+	SpoolDepth *int
+}
+
+// Whether a failed send was a live hook or a spool-drain replay.
+type HookDeliveryPhase string
+
 // Feature-specific payloads. Hooks populate only the blocks needed for the
 // event.
 type HookIngestData struct {
@@ -306,6 +373,10 @@ type HookIngestData struct {
 	// Transcript-derived prompt attachment content (Claude
 	// Stop/SubagentStop/SessionEnd).
 	PromptAttachments []*HookPromptAttachmentEntry
+	// Device-side delivery failure report. Required on client.delivery_failed,
+	// where it must be the only block and the payload carries no session; rejected
+	// on every other event type.
+	DeliveryFailure *HookDeliveryFailureData
 }
 
 // Canonical Speakeasy feature event.
@@ -511,6 +582,9 @@ type IngestPayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Optional `Bearer` device-agent token a headless device presents in place of
+	// an API key.
+	DeviceAgentToken *string
 	// Set when the event is redelivered from a device's offline spool after
 	// control-plane downtime, under its original Idempotency-Key and occurred_at.
 	Replayed *bool
@@ -530,6 +604,7 @@ type IngestPayload struct {
 
 // LogsPayload is the payload type of the hooks service logs method.
 type LogsPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Array of resource logs
@@ -538,6 +613,7 @@ type LogsPayload struct {
 
 // MetricsPayload is the payload type of the hooks service metrics method.
 type MetricsPayload struct {
+	DeviceAgentToken *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Array of resource metrics

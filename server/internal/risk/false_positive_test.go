@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // chDismissalCopy builds one ClickHouse copy of a finding in the false-positive
@@ -56,11 +55,9 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("False Positive Test")})
 	require.NoError(t, err)
-	policyID, err2 := uuid.Parse(policy.ID)
-	require.NoError(t, err2)
 
 	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
-	resultUUID := seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "aws-access-key-id", "AKIAIOSFODNN7EXAMPLE")
+	resultUUID := uuid.New()
 	resultID := resultUUID.String()
 
 	// Seed the ClickHouse source row that the direct mark and unmark copies.
@@ -68,7 +65,6 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	before, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
 	require.NoError(t, err)
@@ -101,17 +97,8 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NotNil(t, dismissed.Results[0].FalsePositiveAt)
 	require.Equal(t, int64(1), dismissed.TotalCount)
 
-	// The reason isn't surfaced on the API type today (no UI sends one yet),
-	// but it must still land in Postgres from the RPC payload.
-	dismissedRows, err := riskrepo.New(ti.conn).ListFalsePositiveRiskResults(ctx, riskrepo.ListFalsePositiveRiskResultsParams{
-		ProjectID: projectID,
-		PageLimit: 10,
-	})
-	require.NoError(t, err)
-	require.Len(t, dismissedRows, 1)
-	require.Equal(t, resultUUID, dismissedRows[0].ID)
-	require.True(t, dismissedRows[0].FalsePositiveReason.Valid)
-	require.Equal(t, "noise", dismissedRows[0].FalsePositiveReason.String)
+	require.NotNil(t, dismissed.Results[0].SuppressedDetail)
+	require.Equal(t, "noise", *dismissed.Results[0].SuppressedDetail, "the dismissal reason lands on the ClickHouse suppression copy")
 
 	restoreCountBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultRestore)
 	require.NoError(t, err)
@@ -150,12 +137,8 @@ func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Concurrent False Positive Test")})
 	require.NoError(t, err)
-	policyID := uuid.MustParse(policy.ID)
 	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
-	resultIDs := []uuid.UUID{
-		seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "secret.github_pat", "token-a"),
-		seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "secret.aws_access_token", "token-b"),
-	}
+	resultIDs := []uuid.UUID{uuid.New(), uuid.New()}
 	resultIDStrings := []string{resultIDs[0].String(), resultIDs[1].String()}
 	reversedIDStrings := []string{resultIDStrings[1], resultIDStrings[0]}
 
@@ -164,8 +147,6 @@ func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultIDs[0], chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultIDs[1], chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-	pgQueries := riskrepo.New(ti.conn)
 
 	for round := range 20 {
 		start := make(chan struct{})
@@ -186,7 +167,6 @@ func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.
 		close(start)
 		require.NoError(t, <-errs)
 		require.NoError(t, <-errs)
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 		dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
 		require.NoError(t, err)
@@ -195,16 +175,11 @@ func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.
 			dismissedIDs[result.ID] = struct{}{}
 		}
 
-		for _, resultID := range resultIDs {
-			falsePositiveAt, err := pgQueries.GetRiskResultFalsePositiveForTest(ctx, riskrepo.GetRiskResultFalsePositiveForTestParams{
-				ProjectID: projectID,
-				ID:        resultID,
-			})
-			require.NoError(t, err)
-			pgDismissed := falsePositiveAt.Valid
-			_, chDismissed := dismissedIDs[resultID.String()]
-			require.Equalf(t, pgDismissed, chDismissed, "round %d result %s diverged", round, resultID)
-		}
+		// Both batches lock every id in one order, so whichever ran last owns
+		// the state of both findings.
+		_, firstDismissed := dismissedIDs[resultIDs[0].String()]
+		_, secondDismissed := dismissedIDs[resultIDs[1].String()]
+		require.Equalf(t, firstDismissed, secondDismissed, "round %d left the batch half applied", round)
 	}
 }
 
@@ -255,7 +230,6 @@ func TestMarkUnmarkRiskResultsFalsePositive_ClickHouseOnlyMediatedFinding(t *tes
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	pgRows, err := riskrepo.New(ti.conn).GetRiskResultsByIDs(ctx, riskrepo.GetRiskResultsByIDsParams{
 		ProjectID: projectID,
@@ -267,12 +241,17 @@ func TestMarkUnmarkRiskResultsFalsePositive_ClickHouseOnlyMediatedFinding(t *tes
 	before, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{McpServerID: &serverID})
 	require.NoError(t, err)
 	require.Len(t, before.Results, 1)
+	dismissBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
 
 	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{finding.ID.String()},
 		Reason:    new("noise"),
 	})
 	require.NoError(t, err)
+	dismissAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+	require.Equal(t, dismissBefore+1, dismissAfter)
 
 	liveAfterMark, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{McpServerID: &serverID})
 	require.NoError(t, err)
@@ -296,11 +275,16 @@ func TestMarkUnmarkRiskResultsFalsePositive_ClickHouseOnlyMediatedFinding(t *tes
 	require.Equal(t, finding.IdentityStamped, *row.IdentityStamped)
 	require.Equal(t, finding.EnforcementOutcome, *row.EnforcementOutcome)
 	require.Equal(t, "noise", *row.SuppressedDetail)
+	restoreBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultRestore)
+	require.NoError(t, err)
 
 	err = ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{finding.ID.String()},
 	})
 	require.NoError(t, err)
+	restoreAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultRestore)
+	require.NoError(t, err)
+	require.Equal(t, restoreBefore+1, restoreAfter)
 
 	dismissedAfterUndo, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
 	require.NoError(t, err)
@@ -312,6 +296,49 @@ func TestMarkUnmarkRiskResultsFalsePositive_ClickHouseOnlyMediatedFinding(t *tes
 	require.Equal(t, finding.ID.String(), liveAfterUndo.Results[0].ID)
 	require.Equal(t, serverID, *liveAfterUndo.Results[0].McpServerID)
 	require.Equal(t, finding.ExecutionID, *liveAfterUndo.Results[0].ExecutionID)
+}
+
+func TestMarkRiskResultsFalsePositive_ClickHouseTenancy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	finding := chListFinding(
+		t,
+		uuid.New(),
+		"org_"+uuid.NewString(),
+		uuid.Nil,
+		uuid.Nil,
+		uuid.NewString(),
+		time.Now().UTC(),
+		time.Now().UTC(),
+		"gitleaks",
+		"secret.github_pat",
+		"",
+		"<redacted len=8 sha=aaaaaaaa>",
+		"foreign-fingerprint",
+		"",
+	)
+	queries := chrepo.New(ti.chConn)
+	require.NoError(t, queries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+	require.NoError(t, ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{finding.ID.String()},
+	}))
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+
+	states, err := queries.ListFalsePositiveStates(ctx, finding.OrganizationID, finding.ProjectID, []uuid.UUID{finding.ID})
+	require.NoError(t, err)
+	require.Len(t, states, 1)
+	require.False(t, states[0].Dismissed)
 }
 
 func TestMarkRiskResultsFalsePositive_RejectsEmptyIDs(t *testing.T) {
@@ -455,7 +482,6 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 	source.ContentPartID = partID.String()
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{source}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{resultID.String()},
@@ -570,7 +596,6 @@ func TestListDismissedRiskResults_ClickHousePageOrderingAndRedaction(t *testing.
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		manual, tiedA, tiedB, legacy, ruleSuppressed, open, deadLetter, foreign,
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	ids := func(result *gen.ListRiskResultsResult) []string {
 		out := make([]string, 0, len(result.Results))
@@ -715,7 +740,6 @@ func TestListDismissedRiskResults_ClickHouseLegacyRuleRowDerivesRule(t *testing.
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{legacyRule}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	listed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{Limit: nil, Cursor: nil, Reasons: nil})
 	require.NoError(t, err)
@@ -766,17 +790,36 @@ func TestListDismissedRiskResults_ClickHouseResolvesLatestCopy(t *testing.T) {
 		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
 		chDismissalCopy(t, projectID, orgID, policy.ID, stillDismissedID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The undo's copy: same id, no suppression, inserted later.
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, time.Time{}, chrepo.EventKindUnsuppression),
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
 	require.NoError(t, err)
 	require.Len(t, dismissed.Results, 1)
 	require.Equal(t, stillDismissedID.String(), dismissed.Results[0].ID)
 	require.Equal(t, int64(1), dismissed.TotalCount)
+}
+
+func TestAppendAutomatedFalsePositiveSuppression_RoundTrip(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	createdAt := time.Now().UTC().Add(-time.Hour)
+	finding := chListFinding(t, projectID, orgID, uuid.New(), uuid.New(), uuid.NewString(), createdAt, createdAt,
+		"presidio", "pii.email", "", "<redacted len=8 sha=aaaaaaaa>", "fingerprint", "")
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+
+	now := chrepo.FormatCHTime(time.Now())
+	require.NoError(t, chQueries.AppendAutomatedFalsePositiveSuppression(ctx, orgID, projectID.String(), now, now, "placeholder email", []uuid.UUID{finding.ID}))
+
+	states, err := chQueries.ListFalsePositiveStates(ctx, orgID, projectID.String(), []uuid.UUID{finding.ID})
+	require.NoError(t, err)
+	require.Equal(t, []chrepo.FalsePositiveState{{ID: finding.ID, Dismissed: true, RuleSuppressed: false}}, states)
 }

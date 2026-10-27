@@ -12,6 +12,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLiveAuthClientsInOrganization = `-- name: CountLiveAuthClientsInOrganization :one
+SELECT COUNT(*)
+FROM mcp_auth_clients
+WHERE organization_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type CountLiveAuthClientsInOrganizationParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+func (q *Queries) CountLiveAuthClientsInOrganization(ctx context.Context, arg CountLiveAuthClientsInOrganizationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveAuthClientsInOrganization, arg.OrganizationID, arg.Ids)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :one
 INSERT INTO api_keys (
     organization_id
@@ -433,7 +453,9 @@ func (q *Queries) GetAPIKeyByIDForUpdate(ctx context.Context, arg GetAPIKeyByIDF
 }
 
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
-SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email,
+       EXISTS (SELECT 1 FROM assistant_inference_credentials c
+               WHERE c.api_key_id = api_keys.id AND c.project_id = api_keys.project_id) AS superseded_kit_credential
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
@@ -442,24 +464,25 @@ WHERE key_hash = $1
 `
 
 type GetAPIKeyByKeyHashRow struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	ProjectID              uuid.NullUUID
-	CreatedByUserID        string
-	Name                   string
-	KeyPrefix              string
-	KeyHash                string
-	Scopes                 []string
-	SubjectUrn             pgtype.Text
-	DelegatedGrants        []byte
-	DelegatedGrantsVersion pgtype.Int4
-	ExpiresAt              pgtype.Timestamptz
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
-	LastAccessedAt         pgtype.Timestamptz
-	Email                  string
+	ID                      uuid.UUID
+	OrganizationID          string
+	ProjectID               uuid.NullUUID
+	CreatedByUserID         string
+	Name                    string
+	KeyPrefix               string
+	KeyHash                 string
+	Scopes                  []string
+	SubjectUrn              pgtype.Text
+	DelegatedGrants         []byte
+	DelegatedGrantsVersion  pgtype.Int4
+	ExpiresAt               pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
+	LastAccessedAt          pgtype.Timestamptz
+	Email                   string
+	SupersededKitCredential bool
 }
 
 // expires_at is enforced here rather than in Go so every credential shape --
@@ -487,7 +510,38 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 		&i.Deleted,
 		&i.LastAccessedAt,
 		&i.Email,
+		&i.SupersededKitCredential,
 	)
+	return i, err
+}
+
+const getActiveLegacyAPIKeyForAdmission = `-- name: GetActiveLegacyAPIKeyForAdmission :one
+SELECT id, project_id, scopes
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+  AND subject_urn IS NULL
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+`
+
+type GetActiveLegacyAPIKeyForAdmissionParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetActiveLegacyAPIKeyForAdmissionRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+	Scopes    []string
+}
+
+// A legacy key is admitted as its own principal only while its live row is in
+// the tenant, unrevoked and unexpired; agent keys keep their own admission.
+func (q *Queries) GetActiveLegacyAPIKeyForAdmission(ctx context.Context, arg GetActiveLegacyAPIKeyForAdmissionParams) (GetActiveLegacyAPIKeyForAdmissionRow, error) {
+	row := q.db.QueryRow(ctx, getActiveLegacyAPIKeyForAdmission, arg.ID, arg.OrganizationID)
+	var i GetActiveLegacyAPIKeyForAdmissionRow
+	err := row.Scan(&i.ID, &i.ProjectID, &i.Scopes)
 	return i, err
 }
 
@@ -782,6 +836,26 @@ func (q *Queries) RevokePluginHooksAPIKeysByProject(ctx context.Context, arg Rev
 		return nil, err
 	}
 	return items, nil
+}
+
+const touchAPIKeyUpdatedAt = `-- name: TouchAPIKeyUpdatedAt :one
+UPDATE api_keys
+SET updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+RETURNING updated_at
+`
+
+type TouchAPIKeyUpdatedAtParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) TouchAPIKeyUpdatedAt(ctx context.Context, arg TouchAPIKeyUpdatedAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, touchAPIKeyUpdatedAt, arg.ID, arg.OrganizationID)
+	var updated_at pgtype.Timestamptz
+	err := row.Scan(&updated_at)
+	return updated_at, err
 }
 
 const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec

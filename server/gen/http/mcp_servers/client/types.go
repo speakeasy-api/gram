@@ -66,6 +66,9 @@ type UpdateMcpServerRequestBody struct {
 	// The ID of an existing project- or organization-owned user session issuer to
 	// attach. Omit to preserve the current issuer.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Detach the current user session issuer, so the server no longer requires
+	// user sessions. Must not be true when user_session_issuer_id is set.
+	ClearUserSessionIssuer *bool `form:"clear_user_session_issuer,omitempty" json:"clear_user_session_issuer,omitempty" xml:"clear_user_session_issuer,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The allowed network surfaces. Omit to preserve the stored mode.
@@ -123,9 +126,8 @@ type CreateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// An addressable platform endpoint slug for this server, populated only when
-	// getting by toolset ID. Absent when no platform endpoint exists; never a
-	// custom-domain slug.
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
@@ -144,10 +146,28 @@ type CreateMcpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -165,9 +185,8 @@ type GetMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// An addressable platform endpoint slug for this server, populated only when
-	// getting by toolset ID. Absent when no platform endpoint exists; never a
-	// custom-domain slug.
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
@@ -186,10 +205,28 @@ type GetMcpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -219,9 +256,8 @@ type UpdateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// An addressable platform endpoint slug for this server, populated only when
-	// getting by toolset ID. Absent when no platform endpoint exists; never a
-	// custom-domain slug.
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
@@ -240,10 +276,28 @@ type UpdateMcpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -2791,6 +2845,40 @@ type DeleteMcpServerUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// McpServerToolsetSummaryResponseBody is used to define fields on response
+// body types.
+type McpServerToolsetSummaryResponseBody struct {
+	// The ID of the toolset
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The slug of the toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The name of the toolset
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The toolset's description, if any
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Number of tools the toolset serves: deployment-backed tools (HTTP, function,
+	// external MCP) that resolve in the project's latest completed deployment,
+	// plus its prompt templates and registered platform tools. External MCP proxy
+	// tools are excluded.
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The toolset's tool selection mode
+	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// The distinct slugs of the external MCP sources the toolset's configured
+	// tools come from, sorted
+	ExternalMcpSlugs []string `form:"external_mcp_slugs,omitempty" json:"external_mcp_slugs,omitempty" xml:"external_mcp_slugs,omitempty"`
+	// Whether every configured tool is an external MCP proxy tool, so the real
+	// tool count is unknown until a user signs in
+	ExternalMcpProxyOnly *bool `form:"external_mcp_proxy_only,omitempty" json:"external_mcp_proxy_only,omitempty" xml:"external_mcp_proxy_only,omitempty"`
+	// The ID of the external OAuth server attached to the toolset, if any
+	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
+	// The registry specifier the toolset originated from, if any
+	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
+	// The ID of the MCP server that stands in for the toolset: its canonical
+	// server, whose ID is the toolset's, or when it has none, its oldest live
+	// server with a live endpoint. Absent when it has neither.
+	HostingMcpServerID *string `form:"hosting_mcp_server_id,omitempty" json:"hosting_mcp_server_id,omitempty" xml:"hosting_mcp_server_id,omitempty"`
+}
+
 // McpServerResponseBody is used to define fields on response body types.
 type McpServerResponseBody struct {
 	// The ID of the MCP server
@@ -2801,9 +2889,8 @@ type McpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// An addressable platform endpoint slug for this server, populated only when
-	// getting by toolset ID. Absent when no platform endpoint exists; never a
-	// custom-domain slug.
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
@@ -2822,10 +2909,28 @@ type McpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -2919,16 +3024,17 @@ func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *Create
 // of the "updateMcpServer" endpoint of the "mcpServers" service.
 func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *UpdateMcpServerRequestBody {
 	body := &UpdateMcpServerRequestBody{
-		ID:                    p.ID,
-		Name:                  p.Name,
-		EnvironmentID:         p.EnvironmentID,
-		RemoteMcpServerID:     p.RemoteMcpServerID,
-		TunneledMcpServerID:   p.TunneledMcpServerID,
-		ToolsetID:             p.ToolsetID,
-		UnproxiedMcpServerID:  p.UnproxiedMcpServerID,
-		ToolVariationsGroupID: p.ToolVariationsGroupID,
-		UserSessionIssuerID:   p.UserSessionIssuerID,
-		Visibility:            string(p.Visibility),
+		ID:                     p.ID,
+		Name:                   p.Name,
+		EnvironmentID:          p.EnvironmentID,
+		RemoteMcpServerID:      p.RemoteMcpServerID,
+		TunneledMcpServerID:    p.TunneledMcpServerID,
+		ToolsetID:              p.ToolsetID,
+		UnproxiedMcpServerID:   p.UnproxiedMcpServerID,
+		ToolVariationsGroupID:  p.ToolVariationsGroupID,
+		UserSessionIssuerID:    p.UserSessionIssuerID,
+		ClearUserSessionIssuer: p.ClearUserSessionIssuer,
+		Visibility:             string(p.Visibility),
 	}
 	if p.NetworkAccessMode != nil {
 		networkAccessMode := string(*p.NetworkAccessMode)
@@ -3010,10 +3116,17 @@ func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.Mcp
 		ToolsetID:             body.ToolsetID,
 		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		BuiltinBackend:        body.BuiltinBackend,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
+		PrimaryEndpointID:     body.PrimaryEndpointID,
+		PrimaryEndpointURL:    body.PrimaryEndpointURL,
+		HasEndpoint:           body.HasEndpoint,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
+	}
+	if body.Toolset != nil {
+		v.Toolset = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.Toolset)
 	}
 
 	return v
@@ -3200,10 +3313,17 @@ func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer
 		ToolsetID:             body.ToolsetID,
 		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		BuiltinBackend:        body.BuiltinBackend,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
+		PrimaryEndpointID:     body.PrimaryEndpointID,
+		PrimaryEndpointURL:    body.PrimaryEndpointURL,
+		HasEndpoint:           body.HasEndpoint,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
+	}
+	if body.Toolset != nil {
+		v.Toolset = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.Toolset)
 	}
 
 	return v
@@ -3752,10 +3872,17 @@ func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.Mcp
 		ToolsetID:             body.ToolsetID,
 		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		BuiltinBackend:        body.BuiltinBackend,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
+		PrimaryEndpointID:     body.PrimaryEndpointID,
+		PrimaryEndpointURL:    body.PrimaryEndpointURL,
+		HasEndpoint:           body.HasEndpoint,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
+	}
+	if body.Toolset != nil {
+		v.Toolset = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.Toolset)
 	}
 
 	return v
@@ -5226,6 +5353,11 @@ func ValidateCreateMcpServerResponseBody(body *CreateMcpServerResponseBody) (err
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
+	if body.BuiltinBackend != nil {
+		if !(*body.BuiltinBackend == "approvals") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.builtin_backend", *body.BuiltinBackend, []any{"approvals"}))
+		}
+	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
@@ -5235,6 +5367,14 @@ func ValidateCreateMcpServerResponseBody(body *CreateMcpServerResponseBody) (err
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
+	}
+	if body.Toolset != nil {
+		if err2 := ValidateMcpServerToolsetSummaryResponseBody(body.Toolset); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.PrimaryEndpointID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5293,6 +5433,11 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
+	if body.BuiltinBackend != nil {
+		if !(*body.BuiltinBackend == "approvals") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.builtin_backend", *body.BuiltinBackend, []any{"approvals"}))
+		}
+	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
@@ -5302,6 +5447,14 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
+	}
+	if body.Toolset != nil {
+		if err2 := ValidateMcpServerToolsetSummaryResponseBody(body.Toolset); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.PrimaryEndpointID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5392,6 +5545,11 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
+	if body.BuiltinBackend != nil {
+		if !(*body.BuiltinBackend == "approvals") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.builtin_backend", *body.BuiltinBackend, []any{"approvals"}))
+		}
+	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
@@ -5401,6 +5559,14 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
+	}
+	if body.Toolset != nil {
+		if err2 := ValidateMcpServerToolsetSummaryResponseBody(body.Toolset); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.PrimaryEndpointID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -8692,6 +8858,42 @@ func ValidateDeleteMcpServerUnavailableResponseBody(body *DeleteMcpServerUnavail
 	return
 }
 
+// ValidateMcpServerToolsetSummaryResponseBody runs the validations defined on
+// McpServerToolsetSummaryResponseBody
+func ValidateMcpServerToolsetSummaryResponseBody(body *McpServerToolsetSummaryResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	}
+	if body.ToolSelectionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
+	if body.ExternalMcpSlugs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcp_slugs", "body"))
+	}
+	if body.ExternalMcpProxyOnly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("external_mcp_proxy_only", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ExternalOauthServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
+	}
+	if body.HostingMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.hosting_mcp_server_id", *body.HostingMcpServerID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateMcpServerResponseBody runs the validations defined on
 // McpServerResponseBody
 func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
@@ -8740,6 +8942,11 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
+	if body.BuiltinBackend != nil {
+		if !(*body.BuiltinBackend == "approvals") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.builtin_backend", *body.BuiltinBackend, []any{"approvals"}))
+		}
+	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
@@ -8749,6 +8956,14 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
+	}
+	if body.Toolset != nil {
+		if err2 := ValidateMcpServerToolsetSummaryResponseBody(body.Toolset); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.PrimaryEndpointID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

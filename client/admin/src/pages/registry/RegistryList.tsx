@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/select";
 import { badgeTone } from "@/lib/badgeTone";
 import { Badge } from "@/components/ui/badge";
-import { RegistryEntrySheet, STAGE_A_NOTICE } from "./RegistryEntrySheet";
+import { RegistryEntrySheet, CATALOG_NOTICE } from "./RegistryEntrySheet";
+import { RegistryPromotionCandidates } from "./RegistryPromotionCandidates";
 import { RegistryOktaUnmapped } from "./RegistryOktaUnmapped";
 
 export function RegistryList(): JSX.Element {
@@ -42,7 +43,7 @@ export function RegistryList(): JSX.Element {
         <h1 className="text-2xl font-semibold">MCP Registry</h1>
         <Button onClick={() => setEditor({ id: null })}>New entry</Button>
       </div>
-      <p className="text-muted-foreground text-sm">{STAGE_A_NOTICE}</p>
+      <p className="text-muted-foreground text-sm">{CATALOG_NOTICE}</p>
       <div className="flex flex-wrap items-center gap-2">
         <Input
           aria-label="Search registry"
@@ -177,6 +178,7 @@ export function RegistryList(): JSX.Element {
           Next
         </Button>
       </div>
+      <RegistryPromotionCandidates onOpenEntry={(id) => setEditor({ id })} />
       <RegistryOktaUnmapped onOpen={(id) => setEditor({ id })} />
       {editor && (
         <RegistryEntrySheet

@@ -107,6 +107,9 @@ type RemoteSessionIssuer struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool
-	CreatedAt                  string
-	UpdatedAt                  string
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrder
+	CreatedAt    string
+	UpdatedAt    string
 }

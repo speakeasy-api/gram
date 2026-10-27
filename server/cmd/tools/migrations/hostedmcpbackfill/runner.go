@@ -1,5 +1,5 @@
 // Package hostedmcpbackfill gives legacy hosted toolsets their canonical
-// mcp_servers wrapper and endpoint through hostedmcp.Sync; see
+// mcp_servers wrapper and endpoint through hostedmcp.BackfillSync; see
 // HOSTED_MCP_WRAPPERS_MIGRATION.md.
 package hostedmcpbackfill
 
@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"reflect"
 
 	"github.com/google/uuid"
@@ -28,6 +30,8 @@ import (
 // ActorComponent is the system principal (system:<ActorComponent>) the backfill's audit entries carry.
 const ActorComponent = "hosted-mcp-wrapper-backfill"
 
+const phaseWrappers = "wrappers"
+
 // defaultPageSize bounds each candidate page; rows are processed one transaction at a time regardless.
 const defaultPageSize = 100
 
@@ -37,11 +41,8 @@ type Outcome string
 const (
 	OutcomeWouldCreate              Outcome = "would_create"
 	OutcomeCreated                  Outcome = "created"
-	OutcomeWouldReconcile           Outcome = "would_reconcile"
-	OutcomeReconciled               Outcome = "reconciled"
 	OutcomeAlreadyComplete          Outcome = "already_complete"
 	OutcomeDeadCustomDomain         Outcome = "dead_custom_domain"
-	OutcomeBlockedMultipleEndpoints Outcome = "blocked_multiple_endpoints"
 	OutcomeBlockedSlugCollision     Outcome = "blocked_slug_collision"
 	OutcomeBlockedCanonicalConflict Outcome = "blocked_canonical_conflict"
 	OutcomeBlockedSyncRejected      Outcome = "blocked_sync_rejected"
@@ -98,11 +99,16 @@ type RowReport struct {
 type Report struct {
 	Mode string `json:"mode"`
 
+	Phase string `json:"phase"`
+
 	Scanned int `json:"scanned"`
+
+	// Toolsets counts the toolsets walked; -limit and -cursor count these.
+	Toolsets int `json:"toolsets"`
 
 	Outcomes map[Outcome]int `json:"outcomes"`
 
-	// Writes counts toolsets whose transaction committed (apply) or would commit (dry run).
+	// Writes counts toolset transactions that committed (apply) or would commit (dry run).
 	Writes int `json:"writes"`
 
 	// FreshIDServersPresent counts toolsets that also back fresh-id servers.
@@ -125,14 +131,16 @@ func NewRunner(pool *pgxpool.Pool, options Options) *Runner {
 	if options.PageSize <= 0 {
 		options.PageSize = defaultPageSize
 	}
-	return &Runner{pool: pool, audit: audit.NewLogger(), options: options}
+	return &Runner{pool: pool, audit: audit.NewLogger(audit.WithoutOutbox()), options: options}
 }
 
 // Run processes every candidate. On error the report holds the rows processed so far.
 func (r *Runner) Run(ctx context.Context) (Report, error) {
 	report := Report{
 		Mode:                  conv.Ternary(r.options.Apply, "apply", "dry-run"),
+		Phase:                 phaseWrappers,
 		Scanned:               0,
+		Toolsets:              0,
 		Outcomes:              map[Outcome]int{},
 		Writes:                0,
 		FreshIDServersPresent: 0,
@@ -161,6 +169,7 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 				return report, fmt.Errorf("toolset %s: %w", candidate.ID, err)
 			}
 			report.Scanned++
+			report.Toolsets++
 			report.Outcomes[row.Outcome]++
 			if row.Wrote {
 				report.Writes++
@@ -214,7 +223,7 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return row, fmt.Errorf("advisory lock: %w", err)
 	}
 
-	// Toolset row first, as every hostedmcp.Sync caller holds it before Sync locks domains, endpoints, then the server.
+	// Toolset row first, as hostedmcp.BackfillSync expects before it locks domains, endpoints, then the server.
 	toolsets := toolsetsrepo.New(tx)
 	current, err := toolsets.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: candidate.ID, ProjectID: candidate.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -258,6 +267,15 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return blocked(row, OutcomeBlockedCanonicalConflict, "canonical id belongs to another backend"), nil
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return row, fmt.Errorf("load canonical identity: %w", err)
+	case err == nil:
+		// An existing canonical wrapper owns its hosting state; the toolset columns never overwrite it.
+		existing, err := loadCanonical(ctx, tx, toolset)
+		if err != nil {
+			return row, err
+		}
+		row.LiveEndpoints = len(existing.endpoints)
+		row.Outcome = OutcomeAlreadyComplete
+		return row, nil
 	}
 
 	dead := false
@@ -274,9 +292,6 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return row, err
 	}
 	row.LiveEndpoints = len(before.endpoints)
-	if before.server != nil && len(before.endpoints) > 1 {
-		return blocked(row, OutcomeBlockedMultipleEndpoints, "canonical wrapper has multiple live endpoints"), nil
-	}
 	if !dead {
 		held, err := q.EndpointAddressHeldElsewhere(ctx, EndpointAddressHeldElsewhereParams{Slug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID, McpServerID: toolset.ID})
 		if err != nil {
@@ -296,7 +311,7 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		}
 	}
 
-	domains, err := hostedmcp.Sync(ctx, tx, r.audit, hostedmcp.SystemActor(ActorComponent), toolset, nil)
+	domains, err := hostedmcp.BackfillSync(ctx, tx, r.audit, hostedmcp.SystemActor(ActorComponent), toolset)
 	if err != nil {
 		outcome, ok := classifySyncError(err)
 		if !ok {
@@ -320,8 +335,6 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		row.Outcome = OutcomeDeadCustomDomain
 	case before.server == nil:
 		row.Outcome = conv.Ternary(r.options.Apply, OutcomeCreated, OutcomeWouldCreate)
-	case row.Wrote:
-		row.Outcome = conv.Ternary(r.options.Apply, OutcomeReconciled, OutcomeWouldReconcile)
 	default:
 		row.Outcome = OutcomeAlreadyComplete
 	}
@@ -349,6 +362,9 @@ func blocked(row RowReport, outcome Outcome, reason string) RowReport {
 
 // classifySyncError maps a Sync refusal to a blocked outcome; ok is false for errors that must stop the run.
 func classifySyncError(err error) (Outcome, bool) {
+	if isTransient(err) {
+		return "", false
+	}
 	var shareable *oops.ShareableError
 	if !errors.As(err, &shareable) || shareable.Code == oops.CodeUnexpected || shareable.Code == oops.CodeUnauthorized {
 		return "", false
@@ -358,6 +374,26 @@ func classifySyncError(err error) (Outcome, bool) {
 		return OutcomeBlockedSlugCollision, true
 	}
 	return OutcomeBlockedSyncRejected, true
+}
+
+// isTransient reports errors a rerun can get past (deadlocks, lock or statement timeouts, cancellation, lost connections).
+func isTransient(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || pgconn.Timeout(err) || pgconn.SafeToRetry(err) {
+		return true
+	}
+	var netErr net.Error
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) || errors.As(err, &netErr) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgerrcode.IsTransactionRollback(pgErr.Code) ||
+		pgerrcode.IsConnectionException(pgErr.Code) ||
+		pgerrcode.IsOperatorIntervention(pgErr.Code) ||
+		pgErr.Code == pgerrcode.LockNotAvailable ||
+		pgErr.Code == pgerrcode.IdleInTransactionSessionTimeout
 }
 
 // syncErrorReason keeps the violated constraint, which the public message hides, so blocked rows name the colliding address.

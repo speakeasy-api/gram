@@ -399,6 +399,71 @@ type UpdateSupportMatrixRequestBody struct {
 	Draft    *SupportDraftRequestBody `form:"draft" json:"draft" xml:"draft"`
 }
 
+// PreviewExternalMcpMigrationRequestBody is the type of the "admin" service
+// "previewExternalMcpMigration" endpoint HTTP request body.
+type PreviewExternalMcpMigrationRequestBody struct {
+	// Servers to migrate or delete, in order.
+	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers" json:"servers" xml:"servers"`
+}
+
+// MigrateExternalMcpServersRequestBody is the type of the "admin" service
+// "migrateExternalMcpServers" endpoint HTTP request body.
+type MigrateExternalMcpServersRequestBody struct {
+	// Servers to migrate or delete, in order.
+	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers" json:"servers" xml:"servers"`
+}
+
+// GetRegistryPromotionCandidateRequestBody is the type of the "admin" service
+// "getRegistryPromotionCandidate" endpoint HTTP request body.
+type GetRegistryPromotionCandidateRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID      string `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID    string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+}
+
+// PromoteRegistryCandidateRequestBody is the type of the "admin" service
+// "promoteRegistryCandidate" endpoint HTTP request body.
+type PromoteRegistryCandidateRequestBody struct {
+	OrganizationID   string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID        string `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID      string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	SourceRevision   string `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	CurationRevision string `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	PublicName       string `form:"public_name" json:"public_name" xml:"public_name"`
+	// Public title, at most 100 Unicode code points.
+	PublicTitle string `form:"public_title" json:"public_title" xml:"public_title"`
+	// Public description, at most 100 Unicode code points.
+	PublicDescription       string `form:"public_description" json:"public_description" xml:"public_description"`
+	PublicURL               string `form:"public_url" json:"public_url" xml:"public_url"`
+	DocumentationURL        string `form:"documentation_url" json:"documentation_url" xml:"documentation_url"`
+	DocsSlug                string `form:"docs_slug" json:"docs_slug" xml:"docs_slug"`
+	AuthMode                string `form:"auth_mode" json:"auth_mode" xml:"auth_mode"`
+	RetryKey                string `form:"retry_key" json:"retry_key" xml:"retry_key"`
+	PublicMetadataConfirmed bool   `form:"public_metadata_confirmed" json:"public_metadata_confirmed" xml:"public_metadata_confirmed"`
+	// Explicitly accept insufficient, failed, or unavailable health evidence.
+	// Source safety checks still apply.
+	OverrideEligibility bool `form:"override_eligibility" json:"override_eligibility" xml:"override_eligibility"`
+}
+
+// CurateRegistryPromotionCandidateRequestBody is the type of the "admin"
+// service "curateRegistryPromotionCandidate" endpoint HTTP request body.
+type CurateRegistryPromotionCandidateRequestBody struct {
+	OrganizationID   string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	PromotionID      string `form:"promotion_id" json:"promotion_id" xml:"promotion_id"`
+	CurationRevision string `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	Action           string `form:"action" json:"action" xml:"action"`
+	RetryKey         string `form:"retry_key" json:"retry_key" xml:"retry_key"`
+}
+
+// RetryRegistryPromotionDocsRequestBody is the type of the "admin" service
+// "retryRegistryPromotionDocs" endpoint HTTP request body.
+type RetryRegistryPromotionDocsRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	PromotionID    string `form:"promotion_id" json:"promotion_id" xml:"promotion_id"`
+	DocsRevision   string `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	RetryKey       string `form:"retry_key" json:"retry_key" xml:"retry_key"`
+}
+
 // CreateRegistryEntryRequestBody is the type of the "admin" service
 // "createRegistryEntry" endpoint HTTP request body.
 type CreateRegistryEntryRequestBody struct {
@@ -507,11 +572,57 @@ type AssignOrganizationOnboardingPlaybookRequestBody struct {
 	PlaybookID *string `form:"playbook_id,omitempty" json:"playbook_id,omitempty" xml:"playbook_id,omitempty"`
 }
 
+// CreateSignupOfferRequestBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP request body.
+type CreateSignupOfferRequestBody struct {
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+}
+
+// UpdateSignupOfferRequestBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP request body.
+type UpdateSignupOfferRequestBody struct {
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
 // SetStripeSubscriptionRequestBody is the type of the "admin" service
 // "setStripeSubscription" endpoint HTTP request body.
 type SetStripeSubscriptionRequestBody struct {
 	OrganizationID       string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	StripeSubscriptionID string `form:"stripe_subscription_id" json:"stripe_subscription_id" xml:"stripe_subscription_id"`
+}
+
+// RunUpstreamOAuthMigrationRequestBody is the type of the "admin" service
+// "runUpstreamOAuthMigration" endpoint HTTP request body.
+type RunUpstreamOAuthMigrationRequestBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+}
+
+// EnableUpstreamAuthEnforcementRequestBody is the type of the "admin" service
+// "enableUpstreamAuthEnforcement" endpoint HTTP request body.
+type EnableUpstreamAuthEnforcementRequestBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The caller checked the organization's mandatory authorization shadow
+	// (mcp.authz.mandatory_shadow) and found no unexplained new denial.
+	ShadowParityConfirmed bool `form:"shadow_parity_confirmed" json:"shadow_parity_confirmed" xml:"shadow_parity_confirmed"`
+	// The organization was told that valid credentials from another organization
+	// are refused on its public servers once enforcement is on, instead of being
+	// served anonymously.
+	CrossOrganizationDenialCommunicated bool `form:"cross_organization_denial_communicated" json:"cross_organization_denial_communicated" xml:"cross_organization_denial_communicated"`
+}
+
+// DisableUpstreamAuthEnforcementRequestBody is the type of the "admin" service
+// "disableUpstreamAuthEnforcement" endpoint HTTP request body.
+type DisableUpstreamAuthEnforcementRequestBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 }
 
 // GetSessionResponseBody is the type of the "admin" service "getSession"
@@ -563,9 +674,6 @@ type GetOrganizationFeaturesResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool `form:"remote_session_auto_refresh_enforced_enabled,omitempty" json:"remote_session_auto_refresh_enforced_enabled,omitempty" xml:"remote_session_auto_refresh_enforced_enabled,omitempty"`
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled *bool `form:"consent_tool_filtering_enabled,omitempty" json:"consent_tool_filtering_enabled,omitempty" xml:"consent_tool_filtering_enabled,omitempty"`
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -575,6 +683,11 @@ type GetOrganizationFeaturesResponseBody struct {
 	NetworkIngressEnabled *bool `form:"network_ingress_enabled,omitempty" json:"network_ingress_enabled,omitempty" xml:"network_ingress_enabled,omitempty"`
 	// Whether the organization can configure signals intelligence
 	SignalsIntelligenceEnabled *bool `form:"signals_intelligence_enabled,omitempty" json:"signals_intelligence_enabled,omitempty" xml:"signals_intelligence_enabled,omitempty"`
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled *bool `form:"organization_gateway_disabled,omitempty" json:"organization_gateway_disabled,omitempty" xml:"organization_gateway_disabled,omitempty"`
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -623,9 +736,6 @@ type SetOrganizationFeatureResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool `form:"remote_session_auto_refresh_enforced_enabled,omitempty" json:"remote_session_auto_refresh_enforced_enabled,omitempty" xml:"remote_session_auto_refresh_enforced_enabled,omitempty"`
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled *bool `form:"consent_tool_filtering_enabled,omitempty" json:"consent_tool_filtering_enabled,omitempty" xml:"consent_tool_filtering_enabled,omitempty"`
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -635,6 +745,11 @@ type SetOrganizationFeatureResponseBody struct {
 	NetworkIngressEnabled *bool `form:"network_ingress_enabled,omitempty" json:"network_ingress_enabled,omitempty" xml:"network_ingress_enabled,omitempty"`
 	// Whether the organization can configure signals intelligence
 	SignalsIntelligenceEnabled *bool `form:"signals_intelligence_enabled,omitempty" json:"signals_intelligence_enabled,omitempty" xml:"signals_intelligence_enabled,omitempty"`
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled *bool `form:"organization_gateway_disabled,omitempty" json:"organization_gateway_disabled,omitempty" xml:"organization_gateway_disabled,omitempty"`
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -721,6 +836,14 @@ type UpdateOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -779,6 +902,14 @@ type DisableOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -826,6 +957,14 @@ type EnableOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -873,6 +1012,14 @@ type GetOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -979,6 +1126,14 @@ type ExtendTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1026,6 +1181,14 @@ type CreateOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1073,6 +1236,14 @@ type RearmTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1177,6 +1348,14 @@ type SetStripeCustomerResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1353,9 +1532,12 @@ type CreateGlobalIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetGlobalIssuerDuplicatePreflightResponseBody is the type of the "admin"
@@ -1499,9 +1681,12 @@ type UpdateGlobalIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // FetchGlobalIssuerMetadataResponseBody is the type of the "admin" service
@@ -1675,6 +1860,14 @@ type StartTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1722,6 +1915,14 @@ type ChangeTrialEndDateResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1825,6 +2026,8 @@ type DescribeMcpServerHealthResponseBody struct {
 	// issuer.
 	LegacyAuth        *string                                            `form:"legacy_auth,omitempty" json:"legacy_auth,omitempty" xml:"legacy_auth,omitempty"`
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuerResponseBody `form:"user_session_issuer,omitempty" json:"user_session_issuer,omitempty" xml:"user_session_issuer,omitempty"`
+	// How the server reaches its upstream. Omitted for toolset-only servers.
+	UpstreamAuth *AdminMcpServerHealthUpstreamAuthResponseBody `form:"upstream_auth,omitempty" json:"upstream_auth,omitempty" xml:"upstream_auth,omitempty"`
 }
 
 // GetMcpServerToolCallsResponseBody is the type of the "admin" service
@@ -1840,6 +2043,200 @@ type GetMcpServerToolCallsResponseBody struct {
 	BucketSeconds *int64 `form:"bucket_seconds,omitempty" json:"bucket_seconds,omitempty" xml:"bucket_seconds,omitempty"`
 	// Tool calls per bucket, oldest first.
 	Daily []*AdminMcpServerToolCallBucketResponseBody `form:"daily,omitempty" json:"daily,omitempty" xml:"daily,omitempty"`
+}
+
+// GetHookClientsResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body.
+type GetHookClientsResponseBody struct {
+	// Length of the window in days.
+	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
+	// When the grids were read from ClickHouse.
+	QueriedAt *string `form:"queried_at,omitempty" json:"queried_at,omitempty" xml:"queried_at,omitempty"`
+	// True when the grids came from the cache rather than a fresh ClickHouse read.
+	// Cached grids last 24 hours and refresh in the background once an hour old.
+	FromCache *bool `form:"from_cache,omitempty" json:"from_cache,omitempty" xml:"from_cache,omitempty"`
+	// Every organization that appears in any grid.
+	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	// The hook client grid, new sessions only.
+	Sessions []*AdminHookClientSessionCellResponseBody `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+	// The inference hook traffic grid.
+	Inference []*AdminInferenceHookCellResponseBody `form:"inference,omitempty" json:"inference,omitempty" xml:"inference,omitempty"`
+	// The device agent version grid. Empty for days before versions were recorded.
+	DeviceAgents []*AdminDeviceAgentCellResponseBody `form:"device_agents,omitempty" json:"device_agents,omitempty" xml:"device_agents,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesResponseBody is the type of the "admin"
+// service "listExternalMcpMigrationCandidates" endpoint HTTP response body.
+type ListExternalMcpMigrationCandidatesResponseBody struct {
+	// Every candidate across all organizations.
+	Candidates []*AdminExternalMcpMigrationCandidateResponseBody `form:"candidates,omitempty" json:"candidates,omitempty" xml:"candidates,omitempty"`
+	// Days of tool calls each candidate's tool_calls covers.
+	ToolCallWindowDays *int `form:"tool_call_window_days,omitempty" json:"tool_call_window_days,omitempty" xml:"tool_call_window_days,omitempty"`
+}
+
+// PreviewExternalMcpMigrationResponseBody is the type of the "admin" service
+// "previewExternalMcpMigration" endpoint HTTP response body.
+type PreviewExternalMcpMigrationResponseBody struct {
+	// One outcome per requested server, in request order.
+	Outcomes []*AdminExternalMcpMigrationOutcomeResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+}
+
+// MigrateExternalMcpServersResponseBody is the type of the "admin" service
+// "migrateExternalMcpServers" endpoint HTTP response body.
+type MigrateExternalMcpServersResponseBody struct {
+	// One outcome per requested server, in request order.
+	Outcomes []*AdminExternalMcpMigrationOutcomeResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesResponseBody is the type of the "admin"
+// service "listRegistryPromotionCandidates" endpoint HTTP response body.
+type ListRegistryPromotionCandidatesResponseBody struct {
+	Candidates []*AdminRegistryPromotionCandidateResponseBody `form:"candidates,omitempty" json:"candidates,omitempty" xml:"candidates,omitempty"`
+	NextCursor *string                                        `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
+// "getRegistryPromotionCandidate" endpoint HTTP response body.
+type GetRegistryPromotionCandidateResponseBody struct {
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// PromoteRegistryCandidateResponseBody is the type of the "admin" service
+// "promoteRegistryCandidate" endpoint HTTP response body.
+type PromoteRegistryCandidateResponseBody struct {
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
+// service "curateRegistryPromotionCandidate" endpoint HTTP response body.
+type CurateRegistryPromotionCandidateResponseBody struct {
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
+// "retryRegistryPromotionDocs" endpoint HTTP response body.
+type RetryRegistryPromotionDocsResponseBody struct {
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
@@ -2086,6 +2483,36 @@ type AssignOrganizationOnboardingPlaybookResponseBody struct {
 	Applicability []*AdminOnboardingStepApplicabilityResponseBody `form:"applicability,omitempty" json:"applicability,omitempty" xml:"applicability,omitempty"`
 }
 
+// ListSignupOffersResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body.
+type ListSignupOffersResponseBody struct {
+	Offers []*AdminSignupOfferResponseBody `form:"offers,omitempty" json:"offers,omitempty" xml:"offers,omitempty"`
+}
+
+// CreateSignupOfferResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body.
+type CreateSignupOfferResponseBody struct {
+	ID                    *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// UpdateSignupOfferResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body.
+type UpdateSignupOfferResponseBody struct {
+	ID                    *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // GetStripeSubscriptionCandidateResponseBody is the type of the "admin"
 // service "getStripeSubscriptionCandidate" endpoint HTTP response body.
 type GetStripeSubscriptionCandidateResponseBody struct {
@@ -2118,6 +2545,14 @@ type SetStripeSubscriptionResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -2154,6 +2589,149 @@ type ListCustomerUsageResponseBody struct {
 	QueriedAt *string `form:"queried_at,omitempty" json:"queried_at,omitempty" xml:"queried_at,omitempty"`
 	// Every qualifying organization, ordered by name
 	Customers []*AdminCustomerUsageResponseBody `form:"customers,omitempty" json:"customers,omitempty" xml:"customers,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsResponseBody is the type of the
+// "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint HTTP
+// response body.
+type ListUpstreamOAuthMigrationOrganizationsResponseBody struct {
+	// Every organization the migration applies to, by name.
+	Organizations []*AdminUpstreamOAuthMigrationOrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusResponseBody is the type of the "admin"
+// service "getUpstreamOAuthMigrationStatus" endpoint HTTP response body.
+type GetUpstreamOAuthMigrationStatusResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Whether the organization has nothing left to write and no server needing
+	// configuration.
+	Migrated *bool `form:"migrated,omitempty" json:"migrated,omitempty" xml:"migrated,omitempty"`
+	// MCP servers on a user session issuer that the association backfill decided.
+	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Server to client associations the configuration proves that are not yet
+	// recorded.
+	PendingAssociations *int64 `form:"pending_associations,omitempty" json:"pending_associations,omitempty" xml:"pending_associations,omitempty"`
+	// Servers whose upstream OAuth client must be associated by an administrator.
+	UnresolvedServers []*AdminUpstreamOAuthMigrationServerResponseBody `form:"unresolved_servers,omitempty" json:"unresolved_servers,omitempty" xml:"unresolved_servers,omitempty"`
+	// Live user session credentials scanned.
+	Credentials *int64 `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
+	// Credential choices the configuration decides that are not yet recorded.
+	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
+	// Credentials with at least one server they will be asked to reconnect to,
+	// because no single client is decided for them.
+	ReconnectCredentials *int64 `form:"reconnect_credentials,omitempty" json:"reconnect_credentials,omitempty" xml:"reconnect_credentials,omitempty"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationResponseBody is the type of the "admin" service
+// "runUpstreamOAuthMigration" endpoint HTTP response body.
+type RunUpstreamOAuthMigrationResponseBody struct {
+	// Server to client associations recorded.
+	AssociationsWritten *int64 `form:"associations_written,omitempty" json:"associations_written,omitempty" xml:"associations_written,omitempty"`
+	// Associations not recorded because their configuration changed during the
+	// run. Run again to pick them up.
+	AssociationsSkipped *int64 `form:"associations_skipped,omitempty" json:"associations_skipped,omitempty" xml:"associations_skipped,omitempty"`
+	// Credential choices recorded.
+	SelectionsWritten *int64 `form:"selections_written,omitempty" json:"selections_written,omitempty" xml:"selections_written,omitempty"`
+	// Typed auth clients recorded.
+	AuthClientsWritten *int64 `form:"auth_clients_written,omitempty" json:"auth_clients_written,omitempty" xml:"auth_clients_written,omitempty"`
+	// Server to auth client links recorded.
+	AuthClientLinksWritten *int64 `form:"auth_client_links_written,omitempty" json:"auth_client_links_written,omitempty" xml:"auth_client_links_written,omitempty"`
+	// Servers marked as needing upstream authentication because they offer a
+	// backfilled auth client.
+	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
+	// Credential choices this run named a typed auth client on.
+	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
+	// Execution-selection profile versions this run recorded.
+	ExecutionProfileVersionsWritten *int64 `form:"execution_profile_versions_written,omitempty" json:"execution_profile_versions_written,omitempty" xml:"execution_profile_versions_written,omitempty"`
+	// Default auth permissions this run granted across the organization: the
+	// personal default and shared client grants for every recorded client, and API
+	// key policies once every client is recorded. The auth-permission-defaults
+	// backfill grants the rest.
+	AuthPermissionGrantsWritten *int64 `form:"auth_permission_grants_written,omitempty" json:"auth_permission_grants_written,omitempty" xml:"auth_permission_grants_written,omitempty"`
+	// Why recording typed auth clients failed, when it did. The upstream OAuth
+	// migration itself is unaffected.
+	AuthClientsError *string `form:"auth_clients_error,omitempty" json:"auth_clients_error,omitempty" xml:"auth_clients_error,omitempty"`
+	// The organization's status after the run.
+	Status *AdminUpstreamOAuthMigrationStatusResponseBody `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementResponseBody is the type of the "admin" service
+// "enableUpstreamAuthEnforcement" endpoint HTTP response body.
+type EnableUpstreamAuthEnforcementResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Whether the organization has nothing left to write and no server needing
+	// configuration.
+	Migrated *bool `form:"migrated,omitempty" json:"migrated,omitempty" xml:"migrated,omitempty"`
+	// MCP servers on a user session issuer that the association backfill decided.
+	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Server to client associations the configuration proves that are not yet
+	// recorded.
+	PendingAssociations *int64 `form:"pending_associations,omitempty" json:"pending_associations,omitempty" xml:"pending_associations,omitempty"`
+	// Servers whose upstream OAuth client must be associated by an administrator.
+	UnresolvedServers []*AdminUpstreamOAuthMigrationServerResponseBody `form:"unresolved_servers,omitempty" json:"unresolved_servers,omitempty" xml:"unresolved_servers,omitempty"`
+	// Live user session credentials scanned.
+	Credentials *int64 `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
+	// Credential choices the configuration decides that are not yet recorded.
+	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
+	// Credentials with at least one server they will be asked to reconnect to,
+	// because no single client is decided for them.
+	ReconnectCredentials *int64 `form:"reconnect_credentials,omitempty" json:"reconnect_credentials,omitempty" xml:"reconnect_credentials,omitempty"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementResponseBody is the type of the "admin"
+// service "disableUpstreamAuthEnforcement" endpoint HTTP response body.
+type DisableUpstreamAuthEnforcementResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Whether the organization has nothing left to write and no server needing
+	// configuration.
+	Migrated *bool `form:"migrated,omitempty" json:"migrated,omitempty" xml:"migrated,omitempty"`
+	// MCP servers on a user session issuer that the association backfill decided.
+	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Server to client associations the configuration proves that are not yet
+	// recorded.
+	PendingAssociations *int64 `form:"pending_associations,omitempty" json:"pending_associations,omitempty" xml:"pending_associations,omitempty"`
+	// Servers whose upstream OAuth client must be associated by an administrator.
+	UnresolvedServers []*AdminUpstreamOAuthMigrationServerResponseBody `form:"unresolved_servers,omitempty" json:"unresolved_servers,omitempty" xml:"unresolved_servers,omitempty"`
+	// Live user session credentials scanned.
+	Credentials *int64 `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
+	// Credential choices the configuration decides that are not yet recorded.
+	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
+	// Credentials with at least one server they will be asked to reconnect to,
+	// because no single client is decided for them.
+	ReconnectCredentials *int64 `form:"reconnect_credentials,omitempty" json:"reconnect_credentials,omitempty" xml:"reconnect_credentials,omitempty"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -13683,6 +14261,1765 @@ type GetMcpServerToolCallsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetHookClientsUnauthorizedResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "unauthorized" error.
+type GetHookClientsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsForbiddenResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "forbidden" error.
+type GetHookClientsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsBadRequestResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "bad_request" error.
+type GetHookClientsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsNotFoundResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "not_found" error.
+type GetHookClientsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsConflictResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "conflict" error.
+type GetHookClientsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsUnsupportedMediaResponseBody is the type of the "admin"
+// service "getHookClients" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetHookClientsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsInvalidResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "invalid" error.
+type GetHookClientsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsInvariantViolationResponseBody is the type of the "admin"
+// service "getHookClients" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetHookClientsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsUnexpectedResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "unexpected" error.
+type GetHookClientsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetHookClientsGatewayErrorResponseBody is the type of the "admin" service
+// "getHookClients" endpoint HTTP response body for the "gateway_error" error.
+type GetHookClientsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesUnavailableResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "unavailable" error.
+type ListExternalMcpMigrationCandidatesUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesUnauthorizedResponseBody is the type of
+// the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListExternalMcpMigrationCandidatesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesForbiddenResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "forbidden" error.
+type ListExternalMcpMigrationCandidatesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesBadRequestResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "bad_request" error.
+type ListExternalMcpMigrationCandidatesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesNotFoundResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "not_found" error.
+type ListExternalMcpMigrationCandidatesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesConflictResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "conflict" error.
+type ListExternalMcpMigrationCandidatesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody is the type
+// of the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesInvalidResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "invalid" error.
+type ListExternalMcpMigrationCandidatesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesInvariantViolationResponseBody is the type
+// of the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListExternalMcpMigrationCandidatesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesUnexpectedResponseBody is the type of the
+// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
+// body for the "unexpected" error.
+type ListExternalMcpMigrationCandidatesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExternalMcpMigrationCandidatesGatewayErrorResponseBody is the type of
+// the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListExternalMcpMigrationCandidatesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationUnavailableResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "unavailable" error.
+type PreviewExternalMcpMigrationUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationUnauthorizedResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "unauthorized" error.
+type PreviewExternalMcpMigrationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationForbiddenResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "forbidden" error.
+type PreviewExternalMcpMigrationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationBadRequestResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "bad_request" error.
+type PreviewExternalMcpMigrationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationNotFoundResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "not_found" error.
+type PreviewExternalMcpMigrationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationConflictResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "conflict" error.
+type PreviewExternalMcpMigrationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationUnsupportedMediaResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "unsupported_media" error.
+type PreviewExternalMcpMigrationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationInvalidResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "invalid" error.
+type PreviewExternalMcpMigrationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationInvariantViolationResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "invariant_violation" error.
+type PreviewExternalMcpMigrationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationUnexpectedResponseBody is the type of the "admin"
+// service "previewExternalMcpMigration" endpoint HTTP response body for the
+// "unexpected" error.
+type PreviewExternalMcpMigrationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewExternalMcpMigrationGatewayErrorResponseBody is the type of the
+// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
+// for the "gateway_error" error.
+type PreviewExternalMcpMigrationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersUnavailableResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "unavailable" error.
+type MigrateExternalMcpServersUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersUnauthorizedResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "unauthorized" error.
+type MigrateExternalMcpServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersForbiddenResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "forbidden" error.
+type MigrateExternalMcpServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersBadRequestResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "bad_request" error.
+type MigrateExternalMcpServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersNotFoundResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "not_found" error.
+type MigrateExternalMcpServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersConflictResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "conflict" error.
+type MigrateExternalMcpServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersUnsupportedMediaResponseBody is the type of the
+// "admin" service "migrateExternalMcpServers" endpoint HTTP response body for
+// the "unsupported_media" error.
+type MigrateExternalMcpServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersInvalidResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "invalid" error.
+type MigrateExternalMcpServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersInvariantViolationResponseBody is the type of the
+// "admin" service "migrateExternalMcpServers" endpoint HTTP response body for
+// the "invariant_violation" error.
+type MigrateExternalMcpServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersUnexpectedResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "unexpected" error.
+type MigrateExternalMcpServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateExternalMcpServersGatewayErrorResponseBody is the type of the "admin"
+// service "migrateExternalMcpServers" endpoint HTTP response body for the
+// "gateway_error" error.
+type MigrateExternalMcpServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesUnauthorizedResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListRegistryPromotionCandidatesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesForbiddenResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "forbidden" error.
+type ListRegistryPromotionCandidatesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesBadRequestResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "bad_request" error.
+type ListRegistryPromotionCandidatesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesNotFoundResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "not_found" error.
+type ListRegistryPromotionCandidatesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesConflictResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "conflict" error.
+type ListRegistryPromotionCandidatesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesUnsupportedMediaResponseBody is the type of
+// the "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListRegistryPromotionCandidatesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesInvalidResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "invalid" error.
+type ListRegistryPromotionCandidatesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesInvariantViolationResponseBody is the type of
+// the "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListRegistryPromotionCandidatesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesUnexpectedResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "unexpected" error.
+type ListRegistryPromotionCandidatesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesGatewayErrorResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListRegistryPromotionCandidatesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateUnauthorizedResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetRegistryPromotionCandidateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateForbiddenResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "forbidden" error.
+type GetRegistryPromotionCandidateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateBadRequestResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "bad_request" error.
+type GetRegistryPromotionCandidateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateNotFoundResponseBody is the type of the "admin"
+// service "getRegistryPromotionCandidate" endpoint HTTP response body for the
+// "not_found" error.
+type GetRegistryPromotionCandidateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateConflictResponseBody is the type of the "admin"
+// service "getRegistryPromotionCandidate" endpoint HTTP response body for the
+// "conflict" error.
+type GetRegistryPromotionCandidateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateUnsupportedMediaResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetRegistryPromotionCandidateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateInvalidResponseBody is the type of the "admin"
+// service "getRegistryPromotionCandidate" endpoint HTTP response body for the
+// "invalid" error.
+type GetRegistryPromotionCandidateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateInvariantViolationResponseBody is the type of
+// the "admin" service "getRegistryPromotionCandidate" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetRegistryPromotionCandidateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateUnexpectedResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "unexpected" error.
+type GetRegistryPromotionCandidateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateGatewayErrorResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetRegistryPromotionCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateUnauthorizedResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "unauthorized" error.
+type PromoteRegistryCandidateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateForbiddenResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "forbidden" error.
+type PromoteRegistryCandidateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateBadRequestResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "bad_request" error.
+type PromoteRegistryCandidateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateNotFoundResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "not_found" error.
+type PromoteRegistryCandidateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateConflictResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "conflict" error.
+type PromoteRegistryCandidateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateUnsupportedMediaResponseBody is the type of the
+// "admin" service "promoteRegistryCandidate" endpoint HTTP response body for
+// the "unsupported_media" error.
+type PromoteRegistryCandidateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateInvalidResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "invalid" error.
+type PromoteRegistryCandidateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateInvariantViolationResponseBody is the type of the
+// "admin" service "promoteRegistryCandidate" endpoint HTTP response body for
+// the "invariant_violation" error.
+type PromoteRegistryCandidateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateUnexpectedResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "unexpected" error.
+type PromoteRegistryCandidateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateGatewayErrorResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "gateway_error" error.
+type PromoteRegistryCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateUnauthorizedResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "unauthorized" error.
+type CurateRegistryPromotionCandidateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateForbiddenResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "forbidden" error.
+type CurateRegistryPromotionCandidateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateBadRequestResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "bad_request" error.
+type CurateRegistryPromotionCandidateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateNotFoundResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "not_found" error.
+type CurateRegistryPromotionCandidateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateConflictResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "conflict" error.
+type CurateRegistryPromotionCandidateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateUnsupportedMediaResponseBody is the type of
+// the "admin" service "curateRegistryPromotionCandidate" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CurateRegistryPromotionCandidateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateInvalidResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "invalid" error.
+type CurateRegistryPromotionCandidateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateInvariantViolationResponseBody is the type
+// of the "admin" service "curateRegistryPromotionCandidate" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CurateRegistryPromotionCandidateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateUnexpectedResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "unexpected" error.
+type CurateRegistryPromotionCandidateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateGatewayErrorResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "gateway_error" error.
+type CurateRegistryPromotionCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsUnauthorizedResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "unauthorized" error.
+type RetryRegistryPromotionDocsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsForbiddenResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "forbidden" error.
+type RetryRegistryPromotionDocsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsBadRequestResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "bad_request" error.
+type RetryRegistryPromotionDocsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsNotFoundResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "not_found" error.
+type RetryRegistryPromotionDocsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsConflictResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "conflict" error.
+type RetryRegistryPromotionDocsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsUnsupportedMediaResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "unsupported_media" error.
+type RetryRegistryPromotionDocsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsInvalidResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "invalid" error.
+type RetryRegistryPromotionDocsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsInvariantViolationResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "invariant_violation" error.
+type RetryRegistryPromotionDocsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsUnexpectedResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "unexpected" error.
+type RetryRegistryPromotionDocsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsGatewayErrorResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "gateway_error" error.
+type RetryRegistryPromotionDocsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetRegistryOktaCandidatesUnauthorizedResponseBody is the type of the "admin"
 // service "getRegistryOktaCandidates" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -17832,6 +20169,554 @@ type AssignOrganizationOnboardingPlaybookGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListSignupOffersUnauthorizedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unauthorized" error.
+type ListSignupOffersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersForbiddenResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "forbidden" error.
+type ListSignupOffersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersBadRequestResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "bad_request" error.
+type ListSignupOffersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersNotFoundResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "not_found" error.
+type ListSignupOffersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersConflictResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "conflict" error.
+type ListSignupOffersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersUnsupportedMediaResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSignupOffersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersInvalidResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "invalid" error.
+type ListSignupOffersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersInvariantViolationResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSignupOffersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersUnexpectedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unexpected" error.
+type ListSignupOffersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersGatewayErrorResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "gateway_error" error.
+type ListSignupOffersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type CreateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type CreateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type CreateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "not_found" error.
+type CreateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferConflictResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "conflict" error.
+type CreateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "invalid" error.
+type CreateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type CreateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type CreateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type UpdateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type UpdateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type UpdateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "not_found" error.
+type UpdateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferConflictResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "conflict" error.
+type UpdateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "invalid" error.
+type UpdateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type UpdateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type UpdateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetStripeSubscriptionCandidateUnavailableResponseBody is the type of the
 // "admin" service "getStripeSubscriptionCandidate" endpoint HTTP response body
 // for the "unavailable" error.
@@ -18449,6 +21334,956 @@ type ListCustomerUsageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListUpstreamOAuthMigrationOrganizationsUnauthorizedResponseBody is the type
+// of the "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint
+// HTTP response body for the "unauthorized" error.
+type ListUpstreamOAuthMigrationOrganizationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsForbiddenResponseBody is the type of
+// the "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint HTTP
+// response body for the "forbidden" error.
+type ListUpstreamOAuthMigrationOrganizationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsBadRequestResponseBody is the type of
+// the "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint HTTP
+// response body for the "bad_request" error.
+type ListUpstreamOAuthMigrationOrganizationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsNotFoundResponseBody is the type of
+// the "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint HTTP
+// response body for the "not_found" error.
+type ListUpstreamOAuthMigrationOrganizationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsConflictResponseBody is the type of
+// the "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint HTTP
+// response body for the "conflict" error.
+type ListUpstreamOAuthMigrationOrganizationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsUnsupportedMediaResponseBody is the
+// type of the "admin" service "listUpstreamOAuthMigrationOrganizations"
+// endpoint HTTP response body for the "unsupported_media" error.
+type ListUpstreamOAuthMigrationOrganizationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsInvalidResponseBody is the type of
+// the "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint HTTP
+// response body for the "invalid" error.
+type ListUpstreamOAuthMigrationOrganizationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsInvariantViolationResponseBody is the
+// type of the "admin" service "listUpstreamOAuthMigrationOrganizations"
+// endpoint HTTP response body for the "invariant_violation" error.
+type ListUpstreamOAuthMigrationOrganizationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsUnexpectedResponseBody is the type of
+// the "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint HTTP
+// response body for the "unexpected" error.
+type ListUpstreamOAuthMigrationOrganizationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListUpstreamOAuthMigrationOrganizationsGatewayErrorResponseBody is the type
+// of the "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint
+// HTTP response body for the "gateway_error" error.
+type ListUpstreamOAuthMigrationOrganizationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusUnauthorizedResponseBody is the type of the
+// "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetUpstreamOAuthMigrationStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusForbiddenResponseBody is the type of the
+// "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "forbidden" error.
+type GetUpstreamOAuthMigrationStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusBadRequestResponseBody is the type of the
+// "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "bad_request" error.
+type GetUpstreamOAuthMigrationStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusNotFoundResponseBody is the type of the
+// "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "not_found" error.
+type GetUpstreamOAuthMigrationStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusConflictResponseBody is the type of the
+// "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "conflict" error.
+type GetUpstreamOAuthMigrationStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusUnsupportedMediaResponseBody is the type of
+// the "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetUpstreamOAuthMigrationStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusInvalidResponseBody is the type of the
+// "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "invalid" error.
+type GetUpstreamOAuthMigrationStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusInvariantViolationResponseBody is the type of
+// the "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetUpstreamOAuthMigrationStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusUnexpectedResponseBody is the type of the
+// "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "unexpected" error.
+type GetUpstreamOAuthMigrationStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpstreamOAuthMigrationStatusGatewayErrorResponseBody is the type of the
+// "admin" service "getUpstreamOAuthMigrationStatus" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetUpstreamOAuthMigrationStatusGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationUnauthorizedResponseBody is the type of the "admin"
+// service "runUpstreamOAuthMigration" endpoint HTTP response body for the
+// "unauthorized" error.
+type RunUpstreamOAuthMigrationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationForbiddenResponseBody is the type of the "admin"
+// service "runUpstreamOAuthMigration" endpoint HTTP response body for the
+// "forbidden" error.
+type RunUpstreamOAuthMigrationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationBadRequestResponseBody is the type of the "admin"
+// service "runUpstreamOAuthMigration" endpoint HTTP response body for the
+// "bad_request" error.
+type RunUpstreamOAuthMigrationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationNotFoundResponseBody is the type of the "admin"
+// service "runUpstreamOAuthMigration" endpoint HTTP response body for the
+// "not_found" error.
+type RunUpstreamOAuthMigrationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationConflictResponseBody is the type of the "admin"
+// service "runUpstreamOAuthMigration" endpoint HTTP response body for the
+// "conflict" error.
+type RunUpstreamOAuthMigrationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationUnsupportedMediaResponseBody is the type of the
+// "admin" service "runUpstreamOAuthMigration" endpoint HTTP response body for
+// the "unsupported_media" error.
+type RunUpstreamOAuthMigrationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationInvalidResponseBody is the type of the "admin"
+// service "runUpstreamOAuthMigration" endpoint HTTP response body for the
+// "invalid" error.
+type RunUpstreamOAuthMigrationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationInvariantViolationResponseBody is the type of the
+// "admin" service "runUpstreamOAuthMigration" endpoint HTTP response body for
+// the "invariant_violation" error.
+type RunUpstreamOAuthMigrationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationUnexpectedResponseBody is the type of the "admin"
+// service "runUpstreamOAuthMigration" endpoint HTTP response body for the
+// "unexpected" error.
+type RunUpstreamOAuthMigrationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunUpstreamOAuthMigrationGatewayErrorResponseBody is the type of the "admin"
+// service "runUpstreamOAuthMigration" endpoint HTTP response body for the
+// "gateway_error" error.
+type RunUpstreamOAuthMigrationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementUnauthorizedResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unauthorized" error.
+type EnableUpstreamAuthEnforcementUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementForbiddenResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "forbidden" error.
+type EnableUpstreamAuthEnforcementForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementBadRequestResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "bad_request" error.
+type EnableUpstreamAuthEnforcementBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementNotFoundResponseBody is the type of the "admin"
+// service "enableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "not_found" error.
+type EnableUpstreamAuthEnforcementNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementConflictResponseBody is the type of the "admin"
+// service "enableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "conflict" error.
+type EnableUpstreamAuthEnforcementConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unsupported_media" error.
+type EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementInvalidResponseBody is the type of the "admin"
+// service "enableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "invalid" error.
+type EnableUpstreamAuthEnforcementInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementInvariantViolationResponseBody is the type of
+// the "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response
+// body for the "invariant_violation" error.
+type EnableUpstreamAuthEnforcementInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementUnexpectedResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unexpected" error.
+type EnableUpstreamAuthEnforcementUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnableUpstreamAuthEnforcementGatewayErrorResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "gateway_error" error.
+type EnableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementUnauthorizedResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unauthorized" error.
+type DisableUpstreamAuthEnforcementUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementForbiddenResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "forbidden" error.
+type DisableUpstreamAuthEnforcementForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementBadRequestResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "bad_request" error.
+type DisableUpstreamAuthEnforcementBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementNotFoundResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "not_found" error.
+type DisableUpstreamAuthEnforcementNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementConflictResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "conflict" error.
+type DisableUpstreamAuthEnforcementConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody is the type of
+// the "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response
+// body for the "unsupported_media" error.
+type DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementInvalidResponseBody is the type of the "admin"
+// service "disableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "invalid" error.
+type DisableUpstreamAuthEnforcementInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementInvariantViolationResponseBody is the type of
+// the "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response
+// body for the "invariant_violation" error.
+type DisableUpstreamAuthEnforcementInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementUnexpectedResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unexpected" error.
+type DisableUpstreamAuthEnforcementUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementGatewayErrorResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "gateway_error" error.
+type DisableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -18564,6 +22399,14 @@ type AdminOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -18641,6 +22484,47 @@ type AdminInferenceSpendMonthResponse struct {
 	// Exclusive end of the UTC calendar month.
 	PeriodEnd *string `form:"period_end,omitempty" json:"period_end,omitempty" xml:"period_end,omitempty"`
 	SpendUsd  *string `form:"spend_usd,omitempty" json:"spend_usd,omitempty" xml:"spend_usd,omitempty"`
+}
+
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
+	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
+}
+
+// EMAProviderResponseBody is used to define fields on response body types.
+type EMAProviderResponseBody struct {
+	// external or speakeasy.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's internal session issuer, for speakeasy.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -18788,9 +22672,12 @@ type RemoteSessionIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // IssuerConvergenceCandidateResponseBody is used to define fields on response
@@ -19045,6 +22932,13 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to:
+	// one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id}
+	// (shared).
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether a shared authorization server's issuer URL is pinned, so it stays
+	// the same if the deployment's hosts change.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
 	// Set when the issuer trusts an external authorization server's assertions.
 	TrustedRemoteSession *AdminMcpServerHealthTrustedRemoteSessionResponseBody `form:"trusted_remote_session,omitempty" json:"trusted_remote_session,omitempty" xml:"trusted_remote_session,omitempty"`
 	// Other live servers in the project that share this issuer.
@@ -19162,6 +23056,37 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 	ValidationStatusCounts map[string]int64 `form:"validation_status_counts,omitempty" json:"validation_status_counts,omitempty" xml:"validation_status_counts,omitempty"`
 }
 
+// AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthUpstreamAuthResponseBody struct {
+	// configured, setup_incomplete (required with no enabled client),
+	// no_auth_required or undecided.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool                                         `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	AuthClients          []*AdminMcpServerHealthAuthClientResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+}
+
+// AdminMcpServerHealthAuthClientResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthAuthClientResponseBody struct {
+	// Auth client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// How the client authenticates upstream.
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// backfill when created from existing configuration, admin when an
+	// administrator created it.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Whether the client can be used.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// The OAuth registration behind an OAuth-backed client.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Servers offering the client, this one included.
+	ServerCount *int `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Headers the client sends upstream.
+	HeaderCount *int `form:"header_count,omitempty" json:"header_count,omitempty" xml:"header_count,omitempty"`
+}
+
 // AdminMcpServerToolCallOutcomesResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerToolCallOutcomesResponseBody struct {
@@ -19180,8 +23105,205 @@ type AdminMcpServerToolCallBucketResponseBody struct {
 	BucketStart *string `form:"bucket_start,omitempty" json:"bucket_start,omitempty" xml:"bucket_start,omitempty"`
 	// Tool calls in the bucket.
 	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
-	// Failed tool calls in the bucket.
+	// Tool calls in the bucket that failed with status 400 or above. Tool errors
+	// returned inside HTTP 200 (isError) are not counted here.
 	Failed *int64 `form:"failed,omitempty" json:"failed,omitempty" xml:"failed,omitempty"`
+}
+
+// AdminHookClientOrganizationResponseBody is used to define fields on response
+// body types.
+type AdminHookClientOrganizationResponseBody struct {
+	// The organization ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The organization name. Absent when the organization no longer exists.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The organization slug. Absent when the organization no longer exists.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
+// AdminHookClientSessionCellResponseBody is used to define fields on response
+// body types.
+type AdminHookClientSessionCellResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The UTC day, as YYYY-MM-DD.
+	Day *string `form:"day,omitempty" json:"day,omitempty" xml:"day,omitempty"`
+	// curl for the legacy curl hooks, a hooks binary version, binary for binary
+	// rows that record no version, or empty for the organization-day total.
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Machines that started a session on this day.
+	Machines *int64 `form:"machines,omitempty" json:"machines,omitempty" xml:"machines,omitempty"`
+	// Sessions started on this day.
+	Sessions *int64 `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+	// Machines that sent any hook on this day, including sessions started earlier.
+	MachinesAll *int64 `form:"machines_all,omitempty" json:"machines_all,omitempty" xml:"machines_all,omitempty"`
+}
+
+// AdminInferenceHookCellResponseBody is used to define fields on response body
+// types.
+type AdminInferenceHookCellResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The UTC day, as YYYY-MM-DD.
+	Day *string `form:"day,omitempty" json:"day,omitempty" xml:"day,omitempty"`
+	// The Claude app that sent the transcript, or empty for the organization-day
+	// total.
+	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
+	// Distinct users.
+	Users *int64 `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+	// Stored transcript messages.
+	Events *int64 `form:"events,omitempty" json:"events,omitempty" xml:"events,omitempty"`
+	// Distinct sessions.
+	Sessions *int64 `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+}
+
+// AdminDeviceAgentCellResponseBody is used to define fields on response body
+// types.
+type AdminDeviceAgentCellResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The UTC day, as YYYY-MM-DD.
+	Day *string `form:"day,omitempty" json:"day,omitempty" xml:"day,omitempty"`
+	// The speakeasyd version, or empty for the organization-day total.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Machines whose agent polled on this day, by the last version each reported
+	// that day.
+	Machines *int64 `form:"machines,omitempty" json:"machines,omitempty" xml:"machines,omitempty"`
+}
+
+// AdminExternalMcpMigrationCandidateResponseBody is used to define fields on
+// response body types.
+type AdminExternalMcpMigrationCandidateResponseBody struct {
+	// The toolset behind the server.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Organization name.
+	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
+	// Organization slug.
+	OrganizationSlug *string `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
+	// Project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Project name.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Project slug.
+	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	// The server's display name.
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	// The slug in the server's /mcp/<slug> address. Absent when the server has
+	// none.
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// The attachment's upstream URL. Absent when the server proxies several.
+	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
+	// The upstream URL the server will dial as a remote MCP server: the one
+	// resource its signed-in sessions recorded, otherwise the attachment's URL
+	// without unfilled template query parameters.
+	ReplacementURL *string `form:"replacement_url,omitempty" json:"replacement_url,omitempty" xml:"replacement_url,omitempty"`
+	// The server's user session issuer and the upstream authorization servers
+	// behind it. Absent when the server has none.
+	SignInProvider *string `form:"sign_in_provider,omitempty" json:"sign_in_provider,omitempty" xml:"sign_in_provider,omitempty"`
+	// Tool calls over the last tool_call_window_days. Absent when telemetry is
+	// unavailable.
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// What running the candidate does: migrate switches its server in place to a
+	// remote MCP server; delete removes the toolset because nothing is left to
+	// migrate, along with any server, addresses and plugin entries it still owns.
+	// A server already migrated in place is kept and keeps working.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Why the candidate is deleted rather than migrated. Empty when it migrates.
+	DeleteReasons []string `form:"delete_reasons,omitempty" json:"delete_reasons,omitempty" xml:"delete_reasons,omitempty"`
+	// Why the server cannot be migrated. Empty when it can.
+	Blockers []string `form:"blockers,omitempty" json:"blockers,omitempty" xml:"blockers,omitempty"`
+	// What migrating the server drops or cannot carry over. Warnings do not stop
+	// it.
+	Warnings []string `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
+}
+
+// AdminExternalMcpMigrationRequestRequestBody is used to define fields on
+// request body types.
+type AdminExternalMcpMigrationRequestRequestBody struct {
+	// The candidate's toolset.
+	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
+}
+
+// AdminExternalMcpMigrationOutcomeResponseBody is used to define fields on
+// response body types.
+type AdminExternalMcpMigrationOutcomeResponseBody struct {
+	// The candidate's toolset.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// What the run did, or would do, with the candidate. Absent when it was not
+	// attempted.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// migrated, deleted and previewed completed every step; deleted removed the
+	// toolset and any server it still owned, so mcp_server_id,
+	// remote_mcp_server_id and remote_url are absent; failed left the server
+	// unchanged; not_attempted follows an earlier failure.
+	MigrationStatus *string `form:"migration_status,omitempty" json:"migration_status,omitempty" xml:"migration_status,omitempty"`
+	// Why the server failed or was not attempted.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// The server's /mcp/<slug> address. Migrating keeps it; deleting a server the
+	// toolset still owns removes it.
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// The server, which keeps its ID.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The remote MCP source the server proxies once migrated. Absent when the
+	// server failed; a preview's source is rolled back.
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The upstream URL the server dials once migrated. Absent when the server
+	// failed.
+	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
+	// Each change, in order.
+	Actions []string `form:"actions,omitempty" json:"actions,omitempty" xml:"actions,omitempty"`
+	// What the migration could not carry over.
+	Warnings []string `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
+}
+
+// AdminRegistryPromotionCandidateResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionCandidateResponseBody struct {
+	ID                *string                                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string                                        `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string                                        `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string                                        `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string                                        `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         *string                                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	CurationRevision  *string                                        `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// AdminRegistryPromotionSuggestionsResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionSuggestionsResponseBody struct {
+	PublicName        *string `form:"public_name,omitempty" json:"public_name,omitempty" xml:"public_name,omitempty"`
+	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	PublicDescription *string `form:"public_description,omitempty" json:"public_description,omitempty" xml:"public_description,omitempty"`
+	PublicURL         *string `form:"public_url,omitempty" json:"public_url,omitempty" xml:"public_url,omitempty"`
+	DocumentationURL  *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	DocsSlug          *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
+	AuthMode          *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
 }
 
 // AdminRegistryOktaCandidateResponseBody is used to define fields on response
@@ -19358,6 +23480,17 @@ type AdminOnboardingStepApplicabilityResponseBody struct {
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
+// AdminSignupOfferResponseBody is used to define fields on response body types.
+type AdminSignupOfferResponseBody struct {
+	ID                    *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // AdminCustomerUsageResponseBody is used to define fields on response body
 // types.
 type AdminCustomerUsageResponseBody struct {
@@ -19391,6 +23524,258 @@ type AdminCustomerUsageProductCostResponseBody struct {
 	ProductID *string `form:"product_id,omitempty" json:"product_id,omitempty" xml:"product_id,omitempty"`
 	// Exact estimated cost at current PAYG list prices
 	CostUsd *string `form:"cost_usd,omitempty" json:"cost_usd,omitempty" xml:"cost_usd,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationOrganizationResponseBody is used to define fields
+// on response body types.
+type AdminUpstreamOAuthMigrationOrganizationResponseBody struct {
+	// The organization ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The organization name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The organization slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Live MCP servers in the organization signed in through a user session issuer.
+	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationServerResponseBody is used to define fields on
+// response body types.
+type AdminUpstreamOAuthMigrationServerResponseBody struct {
+	// The MCP server ID.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The server's project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationAuthClientsResponseBody is used to define fields
+// on response body types.
+type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
+	// Whether every configured identity has its auth client, server links and
+	// header copies recorded, no backfilled record is left to retire, no server
+	// offering one is left undecided, and no phase failed.
+	Complete *bool `form:"complete,omitempty" json:"complete,omitempty" xml:"complete,omitempty"`
+	// Whether a run is recording typed auth clients for the organization right
+	// now. The other counts are then empty; check again when it finishes.
+	InProgress *bool `form:"in_progress,omitempty" json:"in_progress,omitempty" xml:"in_progress,omitempty"`
+	// Servers offering a backfilled auth client whose need for upstream
+	// authentication is still undecided, not yet marked as needing it.
+	PendingMarkedServers *int64 `form:"pending_marked_servers,omitempty" json:"pending_marked_servers,omitempty" xml:"pending_marked_servers,omitempty"`
+	// Configured identities and server links decided.
+	Associations *int64 `form:"associations,omitempty" json:"associations,omitempty" xml:"associations,omitempty"`
+	// Auth clients not yet recorded.
+	PendingClients *int64 `form:"pending_clients,omitempty" json:"pending_clients,omitempty" xml:"pending_clients,omitempty"`
+	// Server to auth client links not yet recorded.
+	PendingLinks *int64 `form:"pending_links,omitempty" json:"pending_links,omitempty" xml:"pending_links,omitempty"`
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders *int64 `form:"pending_headers,omitempty" json:"pending_headers,omitempty" xml:"pending_headers,omitempty"`
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
+	PendingRetirements *int64 `form:"pending_retirements,omitempty" json:"pending_retirements,omitempty" xml:"pending_retirements,omitempty"`
+	// Configured identities that cannot be recorded without a guess and need
+	// attention.
+	Unresolved *int64 `form:"unresolved,omitempty" json:"unresolved,omitempty" xml:"unresolved,omitempty"`
+	// The configuration counted in unresolved.
+	UnresolvedAssociations []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"unresolved_associations,omitempty" json:"unresolved_associations,omitempty" xml:"unresolved_associations,omitempty"`
+	// Configuration worth a look that needs no action and does not hold back
+	// complete, such as a server at an identity chaining upstream's origin that
+	// only live discovery could confirm.
+	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
+	// The same counts for each kind of configured identity.
+	Kinds []*AdminUpstreamOAuthMigrationAuthClientKindResponseBody `form:"kinds,omitempty" json:"kinds,omitempty" xml:"kinds,omitempty"`
+	// Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile,
+	// mark, selections or grants. The counts cover the other phases.
+	FailedPhases []string `form:"failed_phases,omitempty" json:"failed_phases,omitempty" xml:"failed_phases,omitempty"`
+	// Whether every live credential choice names a usable auth client or is an
+	// explicit no-auth choice, and the selections check did not fail.
+	SelectionsComplete *bool `form:"selections_complete,omitempty" json:"selections_complete,omitempty" xml:"selections_complete,omitempty"`
+	// Live credential choices with exactly one auth client to name, not yet named.
+	PendingSelectionMappings *int64 `form:"pending_selection_mappings,omitempty" json:"pending_selection_mappings,omitempty" xml:"pending_selection_mappings,omitempty"`
+	// Default auth permission grants (mcp:auth) the organization's roles, users,
+	// agents and API keys are missing, which a run adds. Enforcement needs them,
+	// so existing callers keep their access.
+	PendingGrants *int64 `form:"pending_grants,omitempty" json:"pending_grants,omitempty" xml:"pending_grants,omitempty"`
+	// Credential choice coverage for each credential class.
+	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClassResponseBody `form:"selection_classes,omitempty" json:"selection_classes,omitempty" xml:"selection_classes,omitempty"`
+	// The first live credential choices left without a usable auth client.
+	SelectionGaps []*AdminUpstreamOAuthMigrationSelectionGapResponseBody `form:"selection_gaps,omitempty" json:"selection_gaps,omitempty" xml:"selection_gaps,omitempty"`
+	// Every live credential choice left without a usable auth client, including
+	// those beyond selection_gaps.
+	SelectionGapCount *int64 `form:"selection_gap_count,omitempty" json:"selection_gap_count,omitempty" xml:"selection_gap_count,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody is used to
+// define fields on response body types.
+type AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody struct {
+	// What was decided: oauth, header or ema.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// Why it cannot be recorded: unknown_owner, type_mismatch, project_mismatch,
+	// multiple_authorization_headers, duplicate_header_names, denied_source,
+	// mixed_credential_headers, oauth_client_shared_across_sources,
+	// ema_client_shared_across_sources, conflicting_scopes, resource_variants,
+	// resource_not_matched, issuer_not_allowed or registration_out_of_reach; for a
+	// warning, server_not_matched.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// The association, source, upstream OAuth client or first binding decided.
+	SubjectID *string `form:"subject_id,omitempty" json:"subject_id,omitempty" xml:"subject_id,omitempty"`
+	// The server to upstream OAuth client association ID, for an oauth association.
+	AssociationID *string `form:"association_id,omitempty" json:"association_id,omitempty" xml:"association_id,omitempty"`
+	// The MCP server ID, when one server is concerned.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The project the configuration belongs to.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The upstream OAuth client ID, for oauth and ema.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Every identity chaining binding decided together, for ema.
+	BindingIds []string `form:"binding_ids,omitempty" json:"binding_ids,omitempty" xml:"binding_ids,omitempty"`
+	// The sources concerned, for an upstream OAuth client shared across sources.
+	SourceIds []string `form:"source_ids,omitempty" json:"source_ids,omitempty" xml:"source_ids,omitempty"`
+	// The servers concerned, for an upstream OAuth client shared across sources.
+	ServerIds []string `form:"server_ids,omitempty" json:"server_ids,omitempty" xml:"server_ids,omitempty"`
+	// The auth client already recorded, if any.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationAuthClientKindResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationAuthClientKindResponseBody struct {
+	// The kind: oauth, header or ema.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// Configuration and server links decided.
+	Decided *int64 `form:"decided,omitempty" json:"decided,omitempty" xml:"decided,omitempty"`
+	// Auth clients not yet recorded.
+	PendingClients *int64 `form:"pending_clients,omitempty" json:"pending_clients,omitempty" xml:"pending_clients,omitempty"`
+	// Server to auth client links not yet recorded.
+	PendingLinks *int64 `form:"pending_links,omitempty" json:"pending_links,omitempty" xml:"pending_links,omitempty"`
+	// Header copies and EMA scope sets not yet up to date.
+	PendingHeaders *int64 `form:"pending_headers,omitempty" json:"pending_headers,omitempty" xml:"pending_headers,omitempty"`
+	// Backfilled auth clients and server links the configuration no longer yields,
+	// not yet retired.
+	PendingRetirements *int64 `form:"pending_retirements,omitempty" json:"pending_retirements,omitempty" xml:"pending_retirements,omitempty"`
+	// Configuration that cannot be recorded without a guess.
+	Unresolved *int64 `form:"unresolved,omitempty" json:"unresolved,omitempty" xml:"unresolved,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationSelectionClassResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationSelectionClassResponseBody struct {
+	// The class: interactive, id_jag, dashboard_mint, workload or agent.
+	CredentialClass *string `form:"credential_class,omitempty" json:"credential_class,omitempty" xml:"credential_class,omitempty"`
+	// Live credential choices of this class.
+	Selections *int64 `form:"selections,omitempty" json:"selections,omitempty" xml:"selections,omitempty"`
+	// Choices that already name a usable auth client.
+	Mapped *int64 `form:"mapped,omitempty" json:"mapped,omitempty" xml:"mapped,omitempty"`
+	// Choices with exactly one auth client to name, not yet named.
+	Pending *int64 `form:"pending,omitempty" json:"pending,omitempty" xml:"pending,omitempty"`
+	// Explicit no-auth choices on servers with no auth client.
+	NoAuth *int64 `form:"no_auth,omitempty" json:"no_auth,omitempty" xml:"no_auth,omitempty"`
+	// Choices several auth clients could serve. They are never guessed: configure
+	// the server or ask the credential to reconnect.
+	Ambiguous *int64 `form:"ambiguous,omitempty" json:"ambiguous,omitempty" xml:"ambiguous,omitempty"`
+	// Choices whose upstream OAuth client has no live, enabled auth client linked
+	// to the server.
+	NoClient *int64 `form:"no_client,omitempty" json:"no_client,omitempty" xml:"no_client,omitempty"`
+	// No-auth choices, and choices naming the server's headers, on servers that
+	// now offer an OAuth-backed client; the credential reconnects.
+	StaleNoAuth *int64 `form:"stale_no_auth,omitempty" json:"stale_no_auth,omitempty" xml:"stale_no_auth,omitempty"`
+	// Choices naming an auth client that is no longer usable for the server; the
+	// credential reconnects.
+	Unusable *int64 `form:"unusable,omitempty" json:"unusable,omitempty" xml:"unusable,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationSelectionGapResponseBody is used to define fields
+// on response body types.
+type AdminUpstreamOAuthMigrationSelectionGapResponseBody struct {
+	// The choice.
+	SelectionID *string `form:"selection_id,omitempty" json:"selection_id,omitempty" xml:"selection_id,omitempty"`
+	// The class of the credential the choice belongs to.
+	CredentialClass *string `form:"credential_class,omitempty" json:"credential_class,omitempty" xml:"credential_class,omitempty"`
+	// The credential.
+	CredentialID *string `form:"credential_id,omitempty" json:"credential_id,omitempty" xml:"credential_id,omitempty"`
+	// The server the choice is for.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The server's project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Why the choice has no usable auth client: ambiguous, no_client,
+	// stale_no_auth, unusable or skipped_race.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfilesResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfilesResponseBody struct {
+	// Whether every profile is recorded and holds a choice for every server its
+	// assistant reaches.
+	Complete *bool `form:"complete,omitempty" json:"complete,omitempty" xml:"complete,omitempty"`
+	// Assistant and trigger pairs, each with a profile per execution context.
+	Targets *int64 `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
+	// Profile versions not yet recorded.
+	PendingVersions *int64 `form:"pending_versions,omitempty" json:"pending_versions,omitempty" xml:"pending_versions,omitempty"`
+	// Servers the profiles hold no choice for, by execution context and reason.
+	// They are never guessed: configure the server's auth clients.
+	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody `form:"gaps,omitempty" json:"gaps,omitempty" xml:"gaps,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
+	// user_backed for turns run for a user the event identified, userless for
+	// turns run as the trigger's workload.
+	ExecutionContext *string `form:"execution_context,omitempty" json:"execution_context,omitempty" xml:"execution_context,omitempty"`
+	// Why there is no choice: selection_required (several clients could serve it),
+	// personal_requires_user (only a personal client serves it, and the turn has
+	// no user), no_client (no live, enabled auth client carries its upstream OAuth
+	// client), setup_incomplete (it needs upstream authentication and offers no
+	// auth client) or upstream_auth_undecided (it offers no auth client and an
+	// administrator has not decided whether it needs upstream authentication).
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Profile and server pairs with no choice for this reason.
+	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+}
+
+// AdminUpstreamAuthEnforcementResponseBody is used to define fields on
+// response body types.
+type AdminUpstreamAuthEnforcementResponseBody struct {
+	// Whether enforcement is on.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Whether the coverage enforcement needs is in place, so it can be turned on.
+	Ready *bool `form:"ready,omitempty" json:"ready,omitempty" xml:"ready,omitempty"`
+	// What keeps enforcement from being turned on, empty when ready.
+	Blockers []string `form:"blockers,omitempty" json:"blockers,omitempty" xml:"blockers,omitempty"`
+}
+
+// AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
+// response body types.
+type AdminUpstreamOAuthMigrationStatusResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Whether the organization has nothing left to write and no server needing
+	// configuration.
+	Migrated *bool `form:"migrated,omitempty" json:"migrated,omitempty" xml:"migrated,omitempty"`
+	// MCP servers on a user session issuer that the association backfill decided.
+	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Server to client associations the configuration proves that are not yet
+	// recorded.
+	PendingAssociations *int64 `form:"pending_associations,omitempty" json:"pending_associations,omitempty" xml:"pending_associations,omitempty"`
+	// Servers whose upstream OAuth client must be associated by an administrator.
+	UnresolvedServers []*AdminUpstreamOAuthMigrationServerResponseBody `form:"unresolved_servers,omitempty" json:"unresolved_servers,omitempty" xml:"unresolved_servers,omitempty"`
+	// Live user session credentials scanned.
+	Credentials *int64 `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
+	// Credential choices the configuration decides that are not yet recorded.
+	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
+	// Credentials with at least one server they will be asked to reconnect to,
+	// because no single client is decided for them.
+	ReconnectCredentials *int64 `form:"reconnect_credentials,omitempty" json:"reconnect_credentials,omitempty" xml:"reconnect_credentials,omitempty"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
@@ -19818,6 +24203,114 @@ func NewUpdateSupportMatrixRequestBody(p *admin.UpdateSupportMatrixPayload) *Upd
 	return body
 }
 
+// NewPreviewExternalMcpMigrationRequestBody builds the HTTP request body from
+// the payload of the "previewExternalMcpMigration" endpoint of the "admin"
+// service.
+func NewPreviewExternalMcpMigrationRequestBody(p *admin.PreviewExternalMcpMigrationPayload) *PreviewExternalMcpMigrationRequestBody {
+	body := &PreviewExternalMcpMigrationRequestBody{}
+	if p.Servers != nil {
+		body.Servers = make([]*AdminExternalMcpMigrationRequestRequestBody, len(p.Servers))
+		for i, val := range p.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalAdminAdminExternalMcpMigrationRequestToAdminExternalMcpMigrationRequestRequestBody(val)
+		}
+	} else {
+		body.Servers = []*AdminExternalMcpMigrationRequestRequestBody{}
+	}
+	return body
+}
+
+// NewMigrateExternalMcpServersRequestBody builds the HTTP request body from
+// the payload of the "migrateExternalMcpServers" endpoint of the "admin"
+// service.
+func NewMigrateExternalMcpServersRequestBody(p *admin.MigrateExternalMcpServersPayload) *MigrateExternalMcpServersRequestBody {
+	body := &MigrateExternalMcpServersRequestBody{}
+	if p.Servers != nil {
+		body.Servers = make([]*AdminExternalMcpMigrationRequestRequestBody, len(p.Servers))
+		for i, val := range p.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalAdminAdminExternalMcpMigrationRequestToAdminExternalMcpMigrationRequestRequestBody(val)
+		}
+	} else {
+		body.Servers = []*AdminExternalMcpMigrationRequestRequestBody{}
+	}
+	return body
+}
+
+// NewGetRegistryPromotionCandidateRequestBody builds the HTTP request body
+// from the payload of the "getRegistryPromotionCandidate" endpoint of the
+// "admin" service.
+func NewGetRegistryPromotionCandidateRequestBody(p *admin.GetRegistryPromotionCandidatePayload) *GetRegistryPromotionCandidateRequestBody {
+	body := &GetRegistryPromotionCandidateRequestBody{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      p.ProjectID,
+		McpServerID:    p.McpServerID,
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateRequestBody builds the HTTP request body from the
+// payload of the "promoteRegistryCandidate" endpoint of the "admin" service.
+func NewPromoteRegistryCandidateRequestBody(p *admin.PromoteRegistryCandidatePayload) *PromoteRegistryCandidateRequestBody {
+	body := &PromoteRegistryCandidateRequestBody{
+		OrganizationID:          p.OrganizationID,
+		ProjectID:               p.ProjectID,
+		McpServerID:             p.McpServerID,
+		SourceRevision:          p.SourceRevision,
+		CurationRevision:        p.CurationRevision,
+		PublicName:              p.PublicName,
+		PublicTitle:             p.PublicTitle,
+		PublicDescription:       p.PublicDescription,
+		PublicURL:               p.PublicURL,
+		DocumentationURL:        p.DocumentationURL,
+		DocsSlug:                p.DocsSlug,
+		AuthMode:                p.AuthMode,
+		RetryKey:                p.RetryKey,
+		PublicMetadataConfirmed: p.PublicMetadataConfirmed,
+		OverrideEligibility:     p.OverrideEligibility,
+	}
+	{
+		var zero bool
+		if body.OverrideEligibility == zero {
+			body.OverrideEligibility = false
+		}
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateRequestBody builds the HTTP request body
+// from the payload of the "curateRegistryPromotionCandidate" endpoint of the
+// "admin" service.
+func NewCurateRegistryPromotionCandidateRequestBody(p *admin.CurateRegistryPromotionCandidatePayload) *CurateRegistryPromotionCandidateRequestBody {
+	body := &CurateRegistryPromotionCandidateRequestBody{
+		OrganizationID:   p.OrganizationID,
+		PromotionID:      p.PromotionID,
+		CurationRevision: p.CurationRevision,
+		Action:           p.Action,
+		RetryKey:         p.RetryKey,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsRequestBody builds the HTTP request body from
+// the payload of the "retryRegistryPromotionDocs" endpoint of the "admin"
+// service.
+func NewRetryRegistryPromotionDocsRequestBody(p *admin.RetryRegistryPromotionDocsPayload) *RetryRegistryPromotionDocsRequestBody {
+	body := &RetryRegistryPromotionDocsRequestBody{
+		OrganizationID: p.OrganizationID,
+		PromotionID:    p.PromotionID,
+		DocsRevision:   p.DocsRevision,
+		RetryKey:       p.RetryKey,
+	}
+	return body
+}
+
 // NewCreateRegistryEntryRequestBody builds the HTTP request body from the
 // payload of the "createRegistryEntry" endpoint of the "admin" service.
 func NewCreateRegistryEntryRequestBody(p *admin.CreateRegistryEntryPayload) *CreateRegistryEntryRequestBody {
@@ -19977,12 +24470,68 @@ func NewAssignOrganizationOnboardingPlaybookRequestBody(p *admin.AssignOrganizat
 	return body
 }
 
+// NewCreateSignupOfferRequestBody builds the HTTP request body from the
+// payload of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferRequestBody(p *admin.CreateSignupOfferPayload) *CreateSignupOfferRequestBody {
+	body := &CreateSignupOfferRequestBody{
+		Name:                  p.Name,
+		StripePromotionCodeID: p.StripePromotionCodeID,
+		SignupFlow:            p.SignupFlow,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferRequestBody builds the HTTP request body from the
+// payload of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferRequestBody(p *admin.UpdateSignupOfferPayload) *UpdateSignupOfferRequestBody {
+	body := &UpdateSignupOfferRequestBody{
+		Name:                  p.Name,
+		StripePromotionCodeID: p.StripePromotionCodeID,
+		SignupFlow:            p.SignupFlow,
+		ID:                    p.ID,
+		Enabled:               p.Enabled,
+	}
+	return body
+}
+
 // NewSetStripeSubscriptionRequestBody builds the HTTP request body from the
 // payload of the "setStripeSubscription" endpoint of the "admin" service.
 func NewSetStripeSubscriptionRequestBody(p *admin.SetStripeSubscriptionPayload) *SetStripeSubscriptionRequestBody {
 	body := &SetStripeSubscriptionRequestBody{
 		OrganizationID:       p.OrganizationID,
 		StripeSubscriptionID: p.StripeSubscriptionID,
+	}
+	return body
+}
+
+// NewRunUpstreamOAuthMigrationRequestBody builds the HTTP request body from
+// the payload of the "runUpstreamOAuthMigration" endpoint of the "admin"
+// service.
+func NewRunUpstreamOAuthMigrationRequestBody(p *admin.RunUpstreamOAuthMigrationPayload) *RunUpstreamOAuthMigrationRequestBody {
+	body := &RunUpstreamOAuthMigrationRequestBody{
+		OrganizationID: p.OrganizationID,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementRequestBody builds the HTTP request body
+// from the payload of the "enableUpstreamAuthEnforcement" endpoint of the
+// "admin" service.
+func NewEnableUpstreamAuthEnforcementRequestBody(p *admin.EnableUpstreamAuthEnforcementPayload) *EnableUpstreamAuthEnforcementRequestBody {
+	body := &EnableUpstreamAuthEnforcementRequestBody{
+		OrganizationID:                      p.OrganizationID,
+		ShadowParityConfirmed:               p.ShadowParityConfirmed,
+		CrossOrganizationDenialCommunicated: p.CrossOrganizationDenialCommunicated,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementRequestBody builds the HTTP request body
+// from the payload of the "disableUpstreamAuthEnforcement" endpoint of the
+// "admin" service.
+func NewDisableUpstreamAuthEnforcementRequestBody(p *admin.DisableUpstreamAuthEnforcementPayload) *DisableUpstreamAuthEnforcementRequestBody {
+	body := &DisableUpstreamAuthEnforcementRequestBody{
+		OrganizationID: p.OrganizationID,
 	}
 	return body
 }
@@ -20623,10 +25172,11 @@ func NewGetOrganizationFeaturesProductFeaturesOK(body *GetOrganizationFeaturesRe
 		CustomerManagedEncryptionKeysEnabled:    body.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         body.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: body.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         body.CodeModeEnabled,
 		DeviceAgent:                             body.DeviceAgent,
 	}
 
@@ -20803,10 +25353,11 @@ func NewSetOrganizationFeatureProductFeaturesOK(body *SetOrganizationFeatureResp
 		CustomerManagedEncryptionKeysEnabled:    body.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         body.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: body.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         body.CodeModeEnabled,
 		DeviceAgent:                             body.DeviceAgent,
 	}
 
@@ -21796,25 +26347,27 @@ func NewGetProjectGatewayError(body *GetProjectGatewayErrorResponseBody) *goa.Se
 // "updateOrganization" endpoint result from a HTTP "OK" response.
 func NewUpdateOrganizationAdminOrganizationOK(body *UpdateOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -22140,25 +26693,27 @@ func NewBulkUpdateAccountTypeGatewayError(body *BulkUpdateAccountTypeGatewayErro
 // "disableOrganization" endpoint result from a HTTP "OK" response.
 func NewDisableOrganizationAdminOrganizationOK(body *DisableOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -22318,25 +26873,27 @@ func NewDisableOrganizationGatewayError(body *DisableOrganizationGatewayErrorRes
 // "enableOrganization" endpoint result from a HTTP "OK" response.
 func NewEnableOrganizationAdminOrganizationOK(body *EnableOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -22496,25 +27053,27 @@ func NewEnableOrganizationGatewayError(body *EnableOrganizationGatewayErrorRespo
 // "getOrganization" endpoint result from a HTTP "OK" response.
 func NewGetOrganizationAdminOrganizationOK(body *GetOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -23851,25 +28410,27 @@ func NewListOrganizationsGatewayError(body *ListOrganizationsGatewayErrorRespons
 // endpoint result from a HTTP "OK" response.
 func NewExtendTrialAdminOrganizationOK(body *ExtendTrialResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -24029,25 +28590,27 @@ func NewExtendTrialGatewayError(body *ExtendTrialGatewayErrorResponseBody) *goa.
 // "createOrganization" endpoint result from a HTTP "OK" response.
 func NewCreateOrganizationAdminOrganizationOK(body *CreateOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -24207,25 +28770,27 @@ func NewCreateOrganizationGatewayError(body *CreateOrganizationGatewayErrorRespo
 // endpoint result from a HTTP "OK" response.
 func NewRearmTrialAdminOrganizationOK(body *RearmTrialResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -25565,25 +30130,27 @@ func NewGetStripeCustomerGatewayError(body *GetStripeCustomerGatewayErrorRespons
 // "setStripeCustomer" endpoint result from a HTTP "OK" response.
 func NewSetStripeCustomerAdminOrganizationOK(body *SetStripeCustomerResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -26559,6 +31126,9 @@ func NewCreateGlobalIssuerRemoteSessionIssuerOK(body *CreateGlobalIssuerResponse
 			v.ScopeOverride[i] = val
 		}
 	}
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
+	}
 
 	return v
 }
@@ -27366,6 +31936,9 @@ func NewUpdateGlobalIssuerRemoteSessionIssuerOK(body *UpdateGlobalIssuerResponse
 		for i, val := range body.ScopeOverride {
 			v.ScopeOverride[i] = val
 		}
+	}
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
 	}
 
 	return v
@@ -29059,25 +33632,27 @@ func NewServeImageGatewayError(body *ServeImageGatewayErrorResponseBody) *goa.Se
 // endpoint result from a HTTP "OK" response.
 func NewStartTrialAdminOrganizationOK(body *StartTrialResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -29237,25 +33812,27 @@ func NewStartTrialGatewayError(body *StartTrialGatewayErrorResponseBody) *goa.Se
 // "changeTrialEndDate" endpoint result from a HTTP "OK" response.
 func NewChangeTrialEndDateAdminOrganizationOK(body *ChangeTrialEndDateResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -30361,6 +34938,9 @@ func NewDescribeMcpServerHealthAdminMcpServerHealthOK(body *DescribeMcpServerHea
 	if body.UserSessionIssuer != nil {
 		v.UserSessionIssuer = unmarshalAdminMcpServerHealthUserSessionIssuerResponseBodyToAdminAdminMcpServerHealthUserSessionIssuer(body.UserSessionIssuer)
 	}
+	if body.UpstreamAuth != nil {
+		v.UpstreamAuth = unmarshalAdminMcpServerHealthUpstreamAuthResponseBodyToAdminAdminMcpServerHealthUpstreamAuth(body.UpstreamAuth)
+	}
 
 	return v
 }
@@ -30679,6 +35259,1686 @@ func NewGetMcpServerToolCallsUnexpected(body *GetMcpServerToolCallsUnexpectedRes
 // NewGetMcpServerToolCallsGatewayError builds a admin service
 // getMcpServerToolCalls endpoint gateway_error error.
 func NewGetMcpServerToolCallsGatewayError(body *GetMcpServerToolCallsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsAdminHookClientsResultOK builds a "admin" service
+// "getHookClients" endpoint result from a HTTP "OK" response.
+func NewGetHookClientsAdminHookClientsResultOK(body *GetHookClientsResponseBody) *admin.AdminHookClientsResult {
+	v := &admin.AdminHookClientsResult{
+		WindowDays: *body.WindowDays,
+		QueriedAt:  *body.QueriedAt,
+		FromCache:  *body.FromCache,
+	}
+	v.Organizations = make([]*admin.AdminHookClientOrganization, len(body.Organizations))
+	for i, val := range body.Organizations {
+		if val == nil {
+			v.Organizations[i] = nil
+			continue
+		}
+		v.Organizations[i] = unmarshalAdminHookClientOrganizationResponseBodyToAdminAdminHookClientOrganization(val)
+	}
+	v.Sessions = make([]*admin.AdminHookClientSessionCell, len(body.Sessions))
+	for i, val := range body.Sessions {
+		if val == nil {
+			v.Sessions[i] = nil
+			continue
+		}
+		v.Sessions[i] = unmarshalAdminHookClientSessionCellResponseBodyToAdminAdminHookClientSessionCell(val)
+	}
+	v.Inference = make([]*admin.AdminInferenceHookCell, len(body.Inference))
+	for i, val := range body.Inference {
+		if val == nil {
+			v.Inference[i] = nil
+			continue
+		}
+		v.Inference[i] = unmarshalAdminInferenceHookCellResponseBodyToAdminAdminInferenceHookCell(val)
+	}
+	v.DeviceAgents = make([]*admin.AdminDeviceAgentCell, len(body.DeviceAgents))
+	for i, val := range body.DeviceAgents {
+		if val == nil {
+			v.DeviceAgents[i] = nil
+			continue
+		}
+		v.DeviceAgents[i] = unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell(val)
+	}
+
+	return v
+}
+
+// NewGetHookClientsUnauthorized builds a admin service getHookClients endpoint
+// unauthorized error.
+func NewGetHookClientsUnauthorized(body *GetHookClientsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsForbidden builds a admin service getHookClients endpoint
+// forbidden error.
+func NewGetHookClientsForbidden(body *GetHookClientsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsBadRequest builds a admin service getHookClients endpoint
+// bad_request error.
+func NewGetHookClientsBadRequest(body *GetHookClientsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsNotFound builds a admin service getHookClients endpoint
+// not_found error.
+func NewGetHookClientsNotFound(body *GetHookClientsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsConflict builds a admin service getHookClients endpoint
+// conflict error.
+func NewGetHookClientsConflict(body *GetHookClientsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsUnsupportedMedia builds a admin service getHookClients
+// endpoint unsupported_media error.
+func NewGetHookClientsUnsupportedMedia(body *GetHookClientsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsInvalid builds a admin service getHookClients endpoint
+// invalid error.
+func NewGetHookClientsInvalid(body *GetHookClientsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsInvariantViolation builds a admin service getHookClients
+// endpoint invariant_violation error.
+func NewGetHookClientsInvariantViolation(body *GetHookClientsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsUnexpected builds a admin service getHookClients endpoint
+// unexpected error.
+func NewGetHookClientsUnexpected(body *GetHookClientsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetHookClientsGatewayError builds a admin service getHookClients endpoint
+// gateway_error error.
+func NewGetHookClientsGatewayError(body *GetHookClientsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesAdminListExternalMcpMigrationCandidatesResultOK
+// builds a "admin" service "listExternalMcpMigrationCandidates" endpoint
+// result from a HTTP "OK" response.
+func NewListExternalMcpMigrationCandidatesAdminListExternalMcpMigrationCandidatesResultOK(body *ListExternalMcpMigrationCandidatesResponseBody) *admin.AdminListExternalMcpMigrationCandidatesResult {
+	v := &admin.AdminListExternalMcpMigrationCandidatesResult{
+		ToolCallWindowDays: *body.ToolCallWindowDays,
+	}
+	v.Candidates = make([]*admin.AdminExternalMcpMigrationCandidate, len(body.Candidates))
+	for i, val := range body.Candidates {
+		if val == nil {
+			v.Candidates[i] = nil
+			continue
+		}
+		v.Candidates[i] = unmarshalAdminExternalMcpMigrationCandidateResponseBodyToAdminAdminExternalMcpMigrationCandidate(val)
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesUnavailable builds a admin service
+// listExternalMcpMigrationCandidates endpoint unavailable error.
+func NewListExternalMcpMigrationCandidatesUnavailable(body *ListExternalMcpMigrationCandidatesUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesUnauthorized builds a admin service
+// listExternalMcpMigrationCandidates endpoint unauthorized error.
+func NewListExternalMcpMigrationCandidatesUnauthorized(body *ListExternalMcpMigrationCandidatesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesForbidden builds a admin service
+// listExternalMcpMigrationCandidates endpoint forbidden error.
+func NewListExternalMcpMigrationCandidatesForbidden(body *ListExternalMcpMigrationCandidatesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesBadRequest builds a admin service
+// listExternalMcpMigrationCandidates endpoint bad_request error.
+func NewListExternalMcpMigrationCandidatesBadRequest(body *ListExternalMcpMigrationCandidatesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesNotFound builds a admin service
+// listExternalMcpMigrationCandidates endpoint not_found error.
+func NewListExternalMcpMigrationCandidatesNotFound(body *ListExternalMcpMigrationCandidatesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesConflict builds a admin service
+// listExternalMcpMigrationCandidates endpoint conflict error.
+func NewListExternalMcpMigrationCandidatesConflict(body *ListExternalMcpMigrationCandidatesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesUnsupportedMedia builds a admin service
+// listExternalMcpMigrationCandidates endpoint unsupported_media error.
+func NewListExternalMcpMigrationCandidatesUnsupportedMedia(body *ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesInvalid builds a admin service
+// listExternalMcpMigrationCandidates endpoint invalid error.
+func NewListExternalMcpMigrationCandidatesInvalid(body *ListExternalMcpMigrationCandidatesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesInvariantViolation builds a admin
+// service listExternalMcpMigrationCandidates endpoint invariant_violation
+// error.
+func NewListExternalMcpMigrationCandidatesInvariantViolation(body *ListExternalMcpMigrationCandidatesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesUnexpected builds a admin service
+// listExternalMcpMigrationCandidates endpoint unexpected error.
+func NewListExternalMcpMigrationCandidatesUnexpected(body *ListExternalMcpMigrationCandidatesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExternalMcpMigrationCandidatesGatewayError builds a admin service
+// listExternalMcpMigrationCandidates endpoint gateway_error error.
+func NewListExternalMcpMigrationCandidatesGatewayError(body *ListExternalMcpMigrationCandidatesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationAdminExternalMcpMigrationResultOK builds a
+// "admin" service "previewExternalMcpMigration" endpoint result from a HTTP
+// "OK" response.
+func NewPreviewExternalMcpMigrationAdminExternalMcpMigrationResultOK(body *PreviewExternalMcpMigrationResponseBody) *admin.AdminExternalMcpMigrationResult {
+	v := &admin.AdminExternalMcpMigrationResult{}
+	v.Outcomes = make([]*admin.AdminExternalMcpMigrationOutcome, len(body.Outcomes))
+	for i, val := range body.Outcomes {
+		if val == nil {
+			v.Outcomes[i] = nil
+			continue
+		}
+		v.Outcomes[i] = unmarshalAdminExternalMcpMigrationOutcomeResponseBodyToAdminAdminExternalMcpMigrationOutcome(val)
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationUnavailable builds a admin service
+// previewExternalMcpMigration endpoint unavailable error.
+func NewPreviewExternalMcpMigrationUnavailable(body *PreviewExternalMcpMigrationUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationUnauthorized builds a admin service
+// previewExternalMcpMigration endpoint unauthorized error.
+func NewPreviewExternalMcpMigrationUnauthorized(body *PreviewExternalMcpMigrationUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationForbidden builds a admin service
+// previewExternalMcpMigration endpoint forbidden error.
+func NewPreviewExternalMcpMigrationForbidden(body *PreviewExternalMcpMigrationForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationBadRequest builds a admin service
+// previewExternalMcpMigration endpoint bad_request error.
+func NewPreviewExternalMcpMigrationBadRequest(body *PreviewExternalMcpMigrationBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationNotFound builds a admin service
+// previewExternalMcpMigration endpoint not_found error.
+func NewPreviewExternalMcpMigrationNotFound(body *PreviewExternalMcpMigrationNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationConflict builds a admin service
+// previewExternalMcpMigration endpoint conflict error.
+func NewPreviewExternalMcpMigrationConflict(body *PreviewExternalMcpMigrationConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationUnsupportedMedia builds a admin service
+// previewExternalMcpMigration endpoint unsupported_media error.
+func NewPreviewExternalMcpMigrationUnsupportedMedia(body *PreviewExternalMcpMigrationUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationInvalid builds a admin service
+// previewExternalMcpMigration endpoint invalid error.
+func NewPreviewExternalMcpMigrationInvalid(body *PreviewExternalMcpMigrationInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationInvariantViolation builds a admin service
+// previewExternalMcpMigration endpoint invariant_violation error.
+func NewPreviewExternalMcpMigrationInvariantViolation(body *PreviewExternalMcpMigrationInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationUnexpected builds a admin service
+// previewExternalMcpMigration endpoint unexpected error.
+func NewPreviewExternalMcpMigrationUnexpected(body *PreviewExternalMcpMigrationUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewExternalMcpMigrationGatewayError builds a admin service
+// previewExternalMcpMigration endpoint gateway_error error.
+func NewPreviewExternalMcpMigrationGatewayError(body *PreviewExternalMcpMigrationGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersAdminExternalMcpMigrationResultOK builds a
+// "admin" service "migrateExternalMcpServers" endpoint result from a HTTP "OK"
+// response.
+func NewMigrateExternalMcpServersAdminExternalMcpMigrationResultOK(body *MigrateExternalMcpServersResponseBody) *admin.AdminExternalMcpMigrationResult {
+	v := &admin.AdminExternalMcpMigrationResult{}
+	v.Outcomes = make([]*admin.AdminExternalMcpMigrationOutcome, len(body.Outcomes))
+	for i, val := range body.Outcomes {
+		if val == nil {
+			v.Outcomes[i] = nil
+			continue
+		}
+		v.Outcomes[i] = unmarshalAdminExternalMcpMigrationOutcomeResponseBodyToAdminAdminExternalMcpMigrationOutcome(val)
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersUnavailable builds a admin service
+// migrateExternalMcpServers endpoint unavailable error.
+func NewMigrateExternalMcpServersUnavailable(body *MigrateExternalMcpServersUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersUnauthorized builds a admin service
+// migrateExternalMcpServers endpoint unauthorized error.
+func NewMigrateExternalMcpServersUnauthorized(body *MigrateExternalMcpServersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersForbidden builds a admin service
+// migrateExternalMcpServers endpoint forbidden error.
+func NewMigrateExternalMcpServersForbidden(body *MigrateExternalMcpServersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersBadRequest builds a admin service
+// migrateExternalMcpServers endpoint bad_request error.
+func NewMigrateExternalMcpServersBadRequest(body *MigrateExternalMcpServersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersNotFound builds a admin service
+// migrateExternalMcpServers endpoint not_found error.
+func NewMigrateExternalMcpServersNotFound(body *MigrateExternalMcpServersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersConflict builds a admin service
+// migrateExternalMcpServers endpoint conflict error.
+func NewMigrateExternalMcpServersConflict(body *MigrateExternalMcpServersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersUnsupportedMedia builds a admin service
+// migrateExternalMcpServers endpoint unsupported_media error.
+func NewMigrateExternalMcpServersUnsupportedMedia(body *MigrateExternalMcpServersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersInvalid builds a admin service
+// migrateExternalMcpServers endpoint invalid error.
+func NewMigrateExternalMcpServersInvalid(body *MigrateExternalMcpServersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersInvariantViolation builds a admin service
+// migrateExternalMcpServers endpoint invariant_violation error.
+func NewMigrateExternalMcpServersInvariantViolation(body *MigrateExternalMcpServersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersUnexpected builds a admin service
+// migrateExternalMcpServers endpoint unexpected error.
+func NewMigrateExternalMcpServersUnexpected(body *MigrateExternalMcpServersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateExternalMcpServersGatewayError builds a admin service
+// migrateExternalMcpServers endpoint gateway_error error.
+func NewMigrateExternalMcpServersGatewayError(body *MigrateExternalMcpServersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesAdminRegistryPromotionCandidatesOK builds
+// a "admin" service "listRegistryPromotionCandidates" endpoint result from a
+// HTTP "OK" response.
+func NewListRegistryPromotionCandidatesAdminRegistryPromotionCandidatesOK(body *ListRegistryPromotionCandidatesResponseBody) *admin.AdminRegistryPromotionCandidates {
+	v := &admin.AdminRegistryPromotionCandidates{
+		NextCursor: body.NextCursor,
+	}
+	v.Candidates = make([]*admin.AdminRegistryPromotionCandidate, len(body.Candidates))
+	for i, val := range body.Candidates {
+		if val == nil {
+			v.Candidates[i] = nil
+			continue
+		}
+		v.Candidates[i] = unmarshalAdminRegistryPromotionCandidateResponseBodyToAdminAdminRegistryPromotionCandidate(val)
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesUnauthorized builds a admin service
+// listRegistryPromotionCandidates endpoint unauthorized error.
+func NewListRegistryPromotionCandidatesUnauthorized(body *ListRegistryPromotionCandidatesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesForbidden builds a admin service
+// listRegistryPromotionCandidates endpoint forbidden error.
+func NewListRegistryPromotionCandidatesForbidden(body *ListRegistryPromotionCandidatesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesBadRequest builds a admin service
+// listRegistryPromotionCandidates endpoint bad_request error.
+func NewListRegistryPromotionCandidatesBadRequest(body *ListRegistryPromotionCandidatesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesNotFound builds a admin service
+// listRegistryPromotionCandidates endpoint not_found error.
+func NewListRegistryPromotionCandidatesNotFound(body *ListRegistryPromotionCandidatesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesConflict builds a admin service
+// listRegistryPromotionCandidates endpoint conflict error.
+func NewListRegistryPromotionCandidatesConflict(body *ListRegistryPromotionCandidatesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesUnsupportedMedia builds a admin service
+// listRegistryPromotionCandidates endpoint unsupported_media error.
+func NewListRegistryPromotionCandidatesUnsupportedMedia(body *ListRegistryPromotionCandidatesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesInvalid builds a admin service
+// listRegistryPromotionCandidates endpoint invalid error.
+func NewListRegistryPromotionCandidatesInvalid(body *ListRegistryPromotionCandidatesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesInvariantViolation builds a admin service
+// listRegistryPromotionCandidates endpoint invariant_violation error.
+func NewListRegistryPromotionCandidatesInvariantViolation(body *ListRegistryPromotionCandidatesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesUnexpected builds a admin service
+// listRegistryPromotionCandidates endpoint unexpected error.
+func NewListRegistryPromotionCandidatesUnexpected(body *ListRegistryPromotionCandidatesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesGatewayError builds a admin service
+// listRegistryPromotionCandidates endpoint gateway_error error.
+func NewListRegistryPromotionCandidatesGatewayError(body *ListRegistryPromotionCandidatesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK builds a
+// "admin" service "getRegistryPromotionCandidate" endpoint result from a HTTP
+// "OK" response.
+func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *GetRegistryPromotionCandidateResponseBody) *admin.AdminRegistryPromotionCandidate {
+	v := &admin.AdminRegistryPromotionCandidate{
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		ProjectID:              *body.ProjectID,
+		McpServerID:            *body.McpServerID,
+		RemoteMcpServerID:      *body.RemoteMcpServerID,
+		SourceName:             body.SourceName,
+		CreatedAt:              *body.CreatedAt,
+		CurationRevision:       *body.CurationRevision,
+		SourceRevision:         *body.SourceRevision,
+		Eligible:               *body.Eligible,
+		CanOverrideEligibility: *body.CanOverrideEligibility,
+		Reason:                 *body.Reason,
+		Status:                 *body.Status,
+		ObservedSuccesses:      *body.ObservedSuccesses,
+		ObservedFailures:       *body.ObservedFailures,
+		ObservedDays:           *body.ObservedDays,
+		CheckedAt:              body.CheckedAt,
+		RegistryEntryID:        body.RegistryEntryID,
+		DocsStatus:             body.DocsStatus,
+		DocsURL:                body.DocsURL,
+		DocsRevision:           *body.DocsRevision,
+		DocsRetryAllowed:       *body.DocsRetryAllowed,
+		DocsAttempts:           *body.DocsAttempts,
+		DocsLastAttemptAt:      body.DocsLastAttemptAt,
+		DocsNextAttemptAt:      body.DocsNextAttemptAt,
+		DocsQueuedAt:           body.DocsQueuedAt,
+		PromotedAt:             body.PromotedAt,
+		PublicTitle:            body.PublicTitle,
+		DeliveryError:          body.DeliveryError,
+	}
+	if body.SuggestedMetadata != nil {
+		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateUnauthorized builds a admin service
+// getRegistryPromotionCandidate endpoint unauthorized error.
+func NewGetRegistryPromotionCandidateUnauthorized(body *GetRegistryPromotionCandidateUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateForbidden builds a admin service
+// getRegistryPromotionCandidate endpoint forbidden error.
+func NewGetRegistryPromotionCandidateForbidden(body *GetRegistryPromotionCandidateForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateBadRequest builds a admin service
+// getRegistryPromotionCandidate endpoint bad_request error.
+func NewGetRegistryPromotionCandidateBadRequest(body *GetRegistryPromotionCandidateBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateNotFound builds a admin service
+// getRegistryPromotionCandidate endpoint not_found error.
+func NewGetRegistryPromotionCandidateNotFound(body *GetRegistryPromotionCandidateNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateConflict builds a admin service
+// getRegistryPromotionCandidate endpoint conflict error.
+func NewGetRegistryPromotionCandidateConflict(body *GetRegistryPromotionCandidateConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateUnsupportedMedia builds a admin service
+// getRegistryPromotionCandidate endpoint unsupported_media error.
+func NewGetRegistryPromotionCandidateUnsupportedMedia(body *GetRegistryPromotionCandidateUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateInvalid builds a admin service
+// getRegistryPromotionCandidate endpoint invalid error.
+func NewGetRegistryPromotionCandidateInvalid(body *GetRegistryPromotionCandidateInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateInvariantViolation builds a admin service
+// getRegistryPromotionCandidate endpoint invariant_violation error.
+func NewGetRegistryPromotionCandidateInvariantViolation(body *GetRegistryPromotionCandidateInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateUnexpected builds a admin service
+// getRegistryPromotionCandidate endpoint unexpected error.
+func NewGetRegistryPromotionCandidateUnexpected(body *GetRegistryPromotionCandidateUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateGatewayError builds a admin service
+// getRegistryPromotionCandidate endpoint gateway_error error.
+func NewGetRegistryPromotionCandidateGatewayError(body *GetRegistryPromotionCandidateGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK builds a
+// "admin" service "promoteRegistryCandidate" endpoint result from a HTTP "OK"
+// response.
+func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteRegistryCandidateResponseBody) *admin.AdminRegistryPromotionCandidate {
+	v := &admin.AdminRegistryPromotionCandidate{
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		ProjectID:              *body.ProjectID,
+		McpServerID:            *body.McpServerID,
+		RemoteMcpServerID:      *body.RemoteMcpServerID,
+		SourceName:             body.SourceName,
+		CreatedAt:              *body.CreatedAt,
+		CurationRevision:       *body.CurationRevision,
+		SourceRevision:         *body.SourceRevision,
+		Eligible:               *body.Eligible,
+		CanOverrideEligibility: *body.CanOverrideEligibility,
+		Reason:                 *body.Reason,
+		Status:                 *body.Status,
+		ObservedSuccesses:      *body.ObservedSuccesses,
+		ObservedFailures:       *body.ObservedFailures,
+		ObservedDays:           *body.ObservedDays,
+		CheckedAt:              body.CheckedAt,
+		RegistryEntryID:        body.RegistryEntryID,
+		DocsStatus:             body.DocsStatus,
+		DocsURL:                body.DocsURL,
+		DocsRevision:           *body.DocsRevision,
+		DocsRetryAllowed:       *body.DocsRetryAllowed,
+		DocsAttempts:           *body.DocsAttempts,
+		DocsLastAttemptAt:      body.DocsLastAttemptAt,
+		DocsNextAttemptAt:      body.DocsNextAttemptAt,
+		DocsQueuedAt:           body.DocsQueuedAt,
+		PromotedAt:             body.PromotedAt,
+		PublicTitle:            body.PublicTitle,
+		DeliveryError:          body.DeliveryError,
+	}
+	if body.SuggestedMetadata != nil {
+		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateUnauthorized builds a admin service
+// promoteRegistryCandidate endpoint unauthorized error.
+func NewPromoteRegistryCandidateUnauthorized(body *PromoteRegistryCandidateUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateForbidden builds a admin service
+// promoteRegistryCandidate endpoint forbidden error.
+func NewPromoteRegistryCandidateForbidden(body *PromoteRegistryCandidateForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateBadRequest builds a admin service
+// promoteRegistryCandidate endpoint bad_request error.
+func NewPromoteRegistryCandidateBadRequest(body *PromoteRegistryCandidateBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateNotFound builds a admin service
+// promoteRegistryCandidate endpoint not_found error.
+func NewPromoteRegistryCandidateNotFound(body *PromoteRegistryCandidateNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateConflict builds a admin service
+// promoteRegistryCandidate endpoint conflict error.
+func NewPromoteRegistryCandidateConflict(body *PromoteRegistryCandidateConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateUnsupportedMedia builds a admin service
+// promoteRegistryCandidate endpoint unsupported_media error.
+func NewPromoteRegistryCandidateUnsupportedMedia(body *PromoteRegistryCandidateUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateInvalid builds a admin service
+// promoteRegistryCandidate endpoint invalid error.
+func NewPromoteRegistryCandidateInvalid(body *PromoteRegistryCandidateInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateInvariantViolation builds a admin service
+// promoteRegistryCandidate endpoint invariant_violation error.
+func NewPromoteRegistryCandidateInvariantViolation(body *PromoteRegistryCandidateInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateUnexpected builds a admin service
+// promoteRegistryCandidate endpoint unexpected error.
+func NewPromoteRegistryCandidateUnexpected(body *PromoteRegistryCandidateUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateGatewayError builds a admin service
+// promoteRegistryCandidate endpoint gateway_error error.
+func NewPromoteRegistryCandidateGatewayError(body *PromoteRegistryCandidateGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK builds
+// a "admin" service "curateRegistryPromotionCandidate" endpoint result from a
+// HTTP "OK" response.
+func NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *CurateRegistryPromotionCandidateResponseBody) *admin.AdminRegistryPromotionCandidate {
+	v := &admin.AdminRegistryPromotionCandidate{
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		ProjectID:              *body.ProjectID,
+		McpServerID:            *body.McpServerID,
+		RemoteMcpServerID:      *body.RemoteMcpServerID,
+		SourceName:             body.SourceName,
+		CreatedAt:              *body.CreatedAt,
+		CurationRevision:       *body.CurationRevision,
+		SourceRevision:         *body.SourceRevision,
+		Eligible:               *body.Eligible,
+		CanOverrideEligibility: *body.CanOverrideEligibility,
+		Reason:                 *body.Reason,
+		Status:                 *body.Status,
+		ObservedSuccesses:      *body.ObservedSuccesses,
+		ObservedFailures:       *body.ObservedFailures,
+		ObservedDays:           *body.ObservedDays,
+		CheckedAt:              body.CheckedAt,
+		RegistryEntryID:        body.RegistryEntryID,
+		DocsStatus:             body.DocsStatus,
+		DocsURL:                body.DocsURL,
+		DocsRevision:           *body.DocsRevision,
+		DocsRetryAllowed:       *body.DocsRetryAllowed,
+		DocsAttempts:           *body.DocsAttempts,
+		DocsLastAttemptAt:      body.DocsLastAttemptAt,
+		DocsNextAttemptAt:      body.DocsNextAttemptAt,
+		DocsQueuedAt:           body.DocsQueuedAt,
+		PromotedAt:             body.PromotedAt,
+		PublicTitle:            body.PublicTitle,
+		DeliveryError:          body.DeliveryError,
+	}
+	if body.SuggestedMetadata != nil {
+		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateUnauthorized builds a admin service
+// curateRegistryPromotionCandidate endpoint unauthorized error.
+func NewCurateRegistryPromotionCandidateUnauthorized(body *CurateRegistryPromotionCandidateUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateForbidden builds a admin service
+// curateRegistryPromotionCandidate endpoint forbidden error.
+func NewCurateRegistryPromotionCandidateForbidden(body *CurateRegistryPromotionCandidateForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateBadRequest builds a admin service
+// curateRegistryPromotionCandidate endpoint bad_request error.
+func NewCurateRegistryPromotionCandidateBadRequest(body *CurateRegistryPromotionCandidateBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateNotFound builds a admin service
+// curateRegistryPromotionCandidate endpoint not_found error.
+func NewCurateRegistryPromotionCandidateNotFound(body *CurateRegistryPromotionCandidateNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateConflict builds a admin service
+// curateRegistryPromotionCandidate endpoint conflict error.
+func NewCurateRegistryPromotionCandidateConflict(body *CurateRegistryPromotionCandidateConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateUnsupportedMedia builds a admin service
+// curateRegistryPromotionCandidate endpoint unsupported_media error.
+func NewCurateRegistryPromotionCandidateUnsupportedMedia(body *CurateRegistryPromotionCandidateUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateInvalid builds a admin service
+// curateRegistryPromotionCandidate endpoint invalid error.
+func NewCurateRegistryPromotionCandidateInvalid(body *CurateRegistryPromotionCandidateInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateInvariantViolation builds a admin service
+// curateRegistryPromotionCandidate endpoint invariant_violation error.
+func NewCurateRegistryPromotionCandidateInvariantViolation(body *CurateRegistryPromotionCandidateInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateUnexpected builds a admin service
+// curateRegistryPromotionCandidate endpoint unexpected error.
+func NewCurateRegistryPromotionCandidateUnexpected(body *CurateRegistryPromotionCandidateUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidateGatewayError builds a admin service
+// curateRegistryPromotionCandidate endpoint gateway_error error.
+func NewCurateRegistryPromotionCandidateGatewayError(body *CurateRegistryPromotionCandidateGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK builds a
+// "admin" service "retryRegistryPromotionDocs" endpoint result from a HTTP
+// "OK" response.
+func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryRegistryPromotionDocsResponseBody) *admin.AdminRegistryPromotionCandidate {
+	v := &admin.AdminRegistryPromotionCandidate{
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		ProjectID:              *body.ProjectID,
+		McpServerID:            *body.McpServerID,
+		RemoteMcpServerID:      *body.RemoteMcpServerID,
+		SourceName:             body.SourceName,
+		CreatedAt:              *body.CreatedAt,
+		CurationRevision:       *body.CurationRevision,
+		SourceRevision:         *body.SourceRevision,
+		Eligible:               *body.Eligible,
+		CanOverrideEligibility: *body.CanOverrideEligibility,
+		Reason:                 *body.Reason,
+		Status:                 *body.Status,
+		ObservedSuccesses:      *body.ObservedSuccesses,
+		ObservedFailures:       *body.ObservedFailures,
+		ObservedDays:           *body.ObservedDays,
+		CheckedAt:              body.CheckedAt,
+		RegistryEntryID:        body.RegistryEntryID,
+		DocsStatus:             body.DocsStatus,
+		DocsURL:                body.DocsURL,
+		DocsRevision:           *body.DocsRevision,
+		DocsRetryAllowed:       *body.DocsRetryAllowed,
+		DocsAttempts:           *body.DocsAttempts,
+		DocsLastAttemptAt:      body.DocsLastAttemptAt,
+		DocsNextAttemptAt:      body.DocsNextAttemptAt,
+		DocsQueuedAt:           body.DocsQueuedAt,
+		PromotedAt:             body.PromotedAt,
+		PublicTitle:            body.PublicTitle,
+		DeliveryError:          body.DeliveryError,
+	}
+	if body.SuggestedMetadata != nil {
+		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsUnauthorized builds a admin service
+// retryRegistryPromotionDocs endpoint unauthorized error.
+func NewRetryRegistryPromotionDocsUnauthorized(body *RetryRegistryPromotionDocsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsForbidden builds a admin service
+// retryRegistryPromotionDocs endpoint forbidden error.
+func NewRetryRegistryPromotionDocsForbidden(body *RetryRegistryPromotionDocsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsBadRequest builds a admin service
+// retryRegistryPromotionDocs endpoint bad_request error.
+func NewRetryRegistryPromotionDocsBadRequest(body *RetryRegistryPromotionDocsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsNotFound builds a admin service
+// retryRegistryPromotionDocs endpoint not_found error.
+func NewRetryRegistryPromotionDocsNotFound(body *RetryRegistryPromotionDocsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsConflict builds a admin service
+// retryRegistryPromotionDocs endpoint conflict error.
+func NewRetryRegistryPromotionDocsConflict(body *RetryRegistryPromotionDocsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsUnsupportedMedia builds a admin service
+// retryRegistryPromotionDocs endpoint unsupported_media error.
+func NewRetryRegistryPromotionDocsUnsupportedMedia(body *RetryRegistryPromotionDocsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsInvalid builds a admin service
+// retryRegistryPromotionDocs endpoint invalid error.
+func NewRetryRegistryPromotionDocsInvalid(body *RetryRegistryPromotionDocsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsInvariantViolation builds a admin service
+// retryRegistryPromotionDocs endpoint invariant_violation error.
+func NewRetryRegistryPromotionDocsInvariantViolation(body *RetryRegistryPromotionDocsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsUnexpected builds a admin service
+// retryRegistryPromotionDocs endpoint unexpected error.
+func NewRetryRegistryPromotionDocsUnexpected(body *RetryRegistryPromotionDocsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsGatewayError builds a admin service
+// retryRegistryPromotionDocs endpoint gateway_error error.
+func NewRetryRegistryPromotionDocsGatewayError(body *RetryRegistryPromotionDocsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -34429,6 +40689,504 @@ func NewAssignOrganizationOnboardingPlaybookGatewayError(body *AssignOrganizatio
 	return v
 }
 
+// NewListSignupOffersResultOK builds a "admin" service "listSignupOffers"
+// endpoint result from a HTTP "OK" response.
+func NewListSignupOffersResultOK(body *ListSignupOffersResponseBody) *admin.ListSignupOffersResult {
+	v := &admin.ListSignupOffersResult{}
+	v.Offers = make([]*admin.AdminSignupOffer, len(body.Offers))
+	for i, val := range body.Offers {
+		if val == nil {
+			v.Offers[i] = nil
+			continue
+		}
+		v.Offers[i] = unmarshalAdminSignupOfferResponseBodyToAdminAdminSignupOffer(val)
+	}
+
+	return v
+}
+
+// NewListSignupOffersUnauthorized builds a admin service listSignupOffers
+// endpoint unauthorized error.
+func NewListSignupOffersUnauthorized(body *ListSignupOffersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersForbidden builds a admin service listSignupOffers
+// endpoint forbidden error.
+func NewListSignupOffersForbidden(body *ListSignupOffersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersBadRequest builds a admin service listSignupOffers
+// endpoint bad_request error.
+func NewListSignupOffersBadRequest(body *ListSignupOffersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersNotFound builds a admin service listSignupOffers endpoint
+// not_found error.
+func NewListSignupOffersNotFound(body *ListSignupOffersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersConflict builds a admin service listSignupOffers endpoint
+// conflict error.
+func NewListSignupOffersConflict(body *ListSignupOffersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersUnsupportedMedia builds a admin service listSignupOffers
+// endpoint unsupported_media error.
+func NewListSignupOffersUnsupportedMedia(body *ListSignupOffersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersInvalid builds a admin service listSignupOffers endpoint
+// invalid error.
+func NewListSignupOffersInvalid(body *ListSignupOffersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersInvariantViolation builds a admin service
+// listSignupOffers endpoint invariant_violation error.
+func NewListSignupOffersInvariantViolation(body *ListSignupOffersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersUnexpected builds a admin service listSignupOffers
+// endpoint unexpected error.
+func NewListSignupOffersUnexpected(body *ListSignupOffersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersGatewayError builds a admin service listSignupOffers
+// endpoint gateway_error error.
+func NewListSignupOffersGatewayError(body *ListSignupOffersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferAdminSignupOfferOK builds a "admin" service
+// "createSignupOffer" endpoint result from a HTTP "OK" response.
+func NewCreateSignupOfferAdminSignupOfferOK(body *CreateSignupOfferResponseBody) *admin.AdminSignupOffer {
+	v := &admin.AdminSignupOffer{
+		ID:                    *body.ID,
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+		Enabled:               *body.Enabled,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferUnauthorized builds a admin service createSignupOffer
+// endpoint unauthorized error.
+func NewCreateSignupOfferUnauthorized(body *CreateSignupOfferUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferForbidden builds a admin service createSignupOffer
+// endpoint forbidden error.
+func NewCreateSignupOfferForbidden(body *CreateSignupOfferForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferBadRequest builds a admin service createSignupOffer
+// endpoint bad_request error.
+func NewCreateSignupOfferBadRequest(body *CreateSignupOfferBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferNotFound builds a admin service createSignupOffer
+// endpoint not_found error.
+func NewCreateSignupOfferNotFound(body *CreateSignupOfferNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferConflict builds a admin service createSignupOffer
+// endpoint conflict error.
+func NewCreateSignupOfferConflict(body *CreateSignupOfferConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferUnsupportedMedia builds a admin service
+// createSignupOffer endpoint unsupported_media error.
+func NewCreateSignupOfferUnsupportedMedia(body *CreateSignupOfferUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferInvalid builds a admin service createSignupOffer
+// endpoint invalid error.
+func NewCreateSignupOfferInvalid(body *CreateSignupOfferInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferInvariantViolation builds a admin service
+// createSignupOffer endpoint invariant_violation error.
+func NewCreateSignupOfferInvariantViolation(body *CreateSignupOfferInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferUnexpected builds a admin service createSignupOffer
+// endpoint unexpected error.
+func NewCreateSignupOfferUnexpected(body *CreateSignupOfferUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferGatewayError builds a admin service createSignupOffer
+// endpoint gateway_error error.
+func NewCreateSignupOfferGatewayError(body *CreateSignupOfferGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferAdminSignupOfferOK builds a "admin" service
+// "updateSignupOffer" endpoint result from a HTTP "OK" response.
+func NewUpdateSignupOfferAdminSignupOfferOK(body *UpdateSignupOfferResponseBody) *admin.AdminSignupOffer {
+	v := &admin.AdminSignupOffer{
+		ID:                    *body.ID,
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+		Enabled:               *body.Enabled,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferUnauthorized builds a admin service updateSignupOffer
+// endpoint unauthorized error.
+func NewUpdateSignupOfferUnauthorized(body *UpdateSignupOfferUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferForbidden builds a admin service updateSignupOffer
+// endpoint forbidden error.
+func NewUpdateSignupOfferForbidden(body *UpdateSignupOfferForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferBadRequest builds a admin service updateSignupOffer
+// endpoint bad_request error.
+func NewUpdateSignupOfferBadRequest(body *UpdateSignupOfferBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferNotFound builds a admin service updateSignupOffer
+// endpoint not_found error.
+func NewUpdateSignupOfferNotFound(body *UpdateSignupOfferNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferConflict builds a admin service updateSignupOffer
+// endpoint conflict error.
+func NewUpdateSignupOfferConflict(body *UpdateSignupOfferConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferUnsupportedMedia builds a admin service
+// updateSignupOffer endpoint unsupported_media error.
+func NewUpdateSignupOfferUnsupportedMedia(body *UpdateSignupOfferUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferInvalid builds a admin service updateSignupOffer
+// endpoint invalid error.
+func NewUpdateSignupOfferInvalid(body *UpdateSignupOfferInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferInvariantViolation builds a admin service
+// updateSignupOffer endpoint invariant_violation error.
+func NewUpdateSignupOfferInvariantViolation(body *UpdateSignupOfferInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferUnexpected builds a admin service updateSignupOffer
+// endpoint unexpected error.
+func NewUpdateSignupOfferUnexpected(body *UpdateSignupOfferUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferGatewayError builds a admin service updateSignupOffer
+// endpoint gateway_error error.
+func NewUpdateSignupOfferGatewayError(body *UpdateSignupOfferGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetStripeSubscriptionCandidateAdminStripeSubscriptionCandidateOK builds a
 // "admin" service "getStripeSubscriptionCandidate" endpoint result from a HTTP
 // "OK" response.
@@ -34611,25 +41369,27 @@ func NewGetStripeSubscriptionCandidateGatewayError(body *GetStripeSubscriptionCa
 // "setStripeSubscription" endpoint result from a HTTP "OK" response.
 func NewSetStripeSubscriptionAdminOrganizationOK(body *SetStripeSubscriptionResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -34986,6 +41746,898 @@ func NewListCustomerUsageGatewayError(body *ListCustomerUsageGatewayErrorRespons
 	return v
 }
 
+// NewListUpstreamOAuthMigrationOrganizationsAdminUpstreamOAuthMigrationOrganizationsOK
+// builds a "admin" service "listUpstreamOAuthMigrationOrganizations" endpoint
+// result from a HTTP "OK" response.
+func NewListUpstreamOAuthMigrationOrganizationsAdminUpstreamOAuthMigrationOrganizationsOK(body *ListUpstreamOAuthMigrationOrganizationsResponseBody) *admin.AdminUpstreamOAuthMigrationOrganizations {
+	v := &admin.AdminUpstreamOAuthMigrationOrganizations{}
+	v.Organizations = make([]*admin.AdminUpstreamOAuthMigrationOrganization, len(body.Organizations))
+	for i, val := range body.Organizations {
+		if val == nil {
+			v.Organizations[i] = nil
+			continue
+		}
+		v.Organizations[i] = unmarshalAdminUpstreamOAuthMigrationOrganizationResponseBodyToAdminAdminUpstreamOAuthMigrationOrganization(val)
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsUnauthorized builds a admin
+// service listUpstreamOAuthMigrationOrganizations endpoint unauthorized error.
+func NewListUpstreamOAuthMigrationOrganizationsUnauthorized(body *ListUpstreamOAuthMigrationOrganizationsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsForbidden builds a admin service
+// listUpstreamOAuthMigrationOrganizations endpoint forbidden error.
+func NewListUpstreamOAuthMigrationOrganizationsForbidden(body *ListUpstreamOAuthMigrationOrganizationsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsBadRequest builds a admin service
+// listUpstreamOAuthMigrationOrganizations endpoint bad_request error.
+func NewListUpstreamOAuthMigrationOrganizationsBadRequest(body *ListUpstreamOAuthMigrationOrganizationsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsNotFound builds a admin service
+// listUpstreamOAuthMigrationOrganizations endpoint not_found error.
+func NewListUpstreamOAuthMigrationOrganizationsNotFound(body *ListUpstreamOAuthMigrationOrganizationsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsConflict builds a admin service
+// listUpstreamOAuthMigrationOrganizations endpoint conflict error.
+func NewListUpstreamOAuthMigrationOrganizationsConflict(body *ListUpstreamOAuthMigrationOrganizationsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsUnsupportedMedia builds a admin
+// service listUpstreamOAuthMigrationOrganizations endpoint unsupported_media
+// error.
+func NewListUpstreamOAuthMigrationOrganizationsUnsupportedMedia(body *ListUpstreamOAuthMigrationOrganizationsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsInvalid builds a admin service
+// listUpstreamOAuthMigrationOrganizations endpoint invalid error.
+func NewListUpstreamOAuthMigrationOrganizationsInvalid(body *ListUpstreamOAuthMigrationOrganizationsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsInvariantViolation builds a admin
+// service listUpstreamOAuthMigrationOrganizations endpoint invariant_violation
+// error.
+func NewListUpstreamOAuthMigrationOrganizationsInvariantViolation(body *ListUpstreamOAuthMigrationOrganizationsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsUnexpected builds a admin service
+// listUpstreamOAuthMigrationOrganizations endpoint unexpected error.
+func NewListUpstreamOAuthMigrationOrganizationsUnexpected(body *ListUpstreamOAuthMigrationOrganizationsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListUpstreamOAuthMigrationOrganizationsGatewayError builds a admin
+// service listUpstreamOAuthMigrationOrganizations endpoint gateway_error error.
+func NewListUpstreamOAuthMigrationOrganizationsGatewayError(body *ListUpstreamOAuthMigrationOrganizationsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusAdminUpstreamOAuthMigrationStatusOK builds
+// a "admin" service "getUpstreamOAuthMigrationStatus" endpoint result from a
+// HTTP "OK" response.
+func NewGetUpstreamOAuthMigrationStatusAdminUpstreamOAuthMigrationStatusOK(body *GetUpstreamOAuthMigrationStatusResponseBody) *admin.AdminUpstreamOAuthMigrationStatus {
+	v := &admin.AdminUpstreamOAuthMigrationStatus{
+		OrganizationID:       *body.OrganizationID,
+		Migrated:             *body.Migrated,
+		Servers:              *body.Servers,
+		PendingAssociations:  *body.PendingAssociations,
+		Credentials:          *body.Credentials,
+		PendingSelections:    *body.PendingSelections,
+		ReconnectCredentials: *body.ReconnectCredentials,
+	}
+	v.UnresolvedServers = make([]*admin.AdminUpstreamOAuthMigrationServer, len(body.UnresolvedServers))
+	for i, val := range body.UnresolvedServers {
+		if val == nil {
+			v.UnresolvedServers[i] = nil
+			continue
+		}
+		v.UnresolvedServers[i] = unmarshalAdminUpstreamOAuthMigrationServerResponseBodyToAdminAdminUpstreamOAuthMigrationServer(val)
+	}
+	if body.AuthClients != nil {
+		v.AuthClients = unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpstreamOAuthMigrationAuthClients(body.AuthClients)
+	}
+	if body.ExecutionProfiles != nil {
+		v.ExecutionProfiles = unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfiles(body.ExecutionProfiles)
+	}
+	if body.Enforcement != nil {
+		v.Enforcement = unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEnforcement(body.Enforcement)
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusUnauthorized builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint unauthorized error.
+func NewGetUpstreamOAuthMigrationStatusUnauthorized(body *GetUpstreamOAuthMigrationStatusUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusForbidden builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint forbidden error.
+func NewGetUpstreamOAuthMigrationStatusForbidden(body *GetUpstreamOAuthMigrationStatusForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusBadRequest builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint bad_request error.
+func NewGetUpstreamOAuthMigrationStatusBadRequest(body *GetUpstreamOAuthMigrationStatusBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusNotFound builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint not_found error.
+func NewGetUpstreamOAuthMigrationStatusNotFound(body *GetUpstreamOAuthMigrationStatusNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusConflict builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint conflict error.
+func NewGetUpstreamOAuthMigrationStatusConflict(body *GetUpstreamOAuthMigrationStatusConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusUnsupportedMedia builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint unsupported_media error.
+func NewGetUpstreamOAuthMigrationStatusUnsupportedMedia(body *GetUpstreamOAuthMigrationStatusUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusInvalid builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint invalid error.
+func NewGetUpstreamOAuthMigrationStatusInvalid(body *GetUpstreamOAuthMigrationStatusInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusInvariantViolation builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint invariant_violation error.
+func NewGetUpstreamOAuthMigrationStatusInvariantViolation(body *GetUpstreamOAuthMigrationStatusInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusUnexpected builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint unexpected error.
+func NewGetUpstreamOAuthMigrationStatusUnexpected(body *GetUpstreamOAuthMigrationStatusUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpstreamOAuthMigrationStatusGatewayError builds a admin service
+// getUpstreamOAuthMigrationStatus endpoint gateway_error error.
+func NewGetUpstreamOAuthMigrationStatusGatewayError(body *GetUpstreamOAuthMigrationStatusGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationAdminUpstreamOAuthMigrationRunOK builds a
+// "admin" service "runUpstreamOAuthMigration" endpoint result from a HTTP "OK"
+// response.
+func NewRunUpstreamOAuthMigrationAdminUpstreamOAuthMigrationRunOK(body *RunUpstreamOAuthMigrationResponseBody) *admin.AdminUpstreamOAuthMigrationRun {
+	v := &admin.AdminUpstreamOAuthMigrationRun{
+		AssociationsWritten:                *body.AssociationsWritten,
+		AssociationsSkipped:                *body.AssociationsSkipped,
+		SelectionsWritten:                  *body.SelectionsWritten,
+		AuthClientsWritten:                 body.AuthClientsWritten,
+		AuthClientLinksWritten:             body.AuthClientLinksWritten,
+		ServersMarkedRequiringUpstreamAuth: body.ServersMarkedRequiringUpstreamAuth,
+		SelectionsMapped:                   body.SelectionsMapped,
+		ExecutionProfileVersionsWritten:    body.ExecutionProfileVersionsWritten,
+		AuthPermissionGrantsWritten:        body.AuthPermissionGrantsWritten,
+		AuthClientsError:                   body.AuthClientsError,
+	}
+	v.Status = unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamOAuthMigrationStatus(body.Status)
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationUnauthorized builds a admin service
+// runUpstreamOAuthMigration endpoint unauthorized error.
+func NewRunUpstreamOAuthMigrationUnauthorized(body *RunUpstreamOAuthMigrationUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationForbidden builds a admin service
+// runUpstreamOAuthMigration endpoint forbidden error.
+func NewRunUpstreamOAuthMigrationForbidden(body *RunUpstreamOAuthMigrationForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationBadRequest builds a admin service
+// runUpstreamOAuthMigration endpoint bad_request error.
+func NewRunUpstreamOAuthMigrationBadRequest(body *RunUpstreamOAuthMigrationBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationNotFound builds a admin service
+// runUpstreamOAuthMigration endpoint not_found error.
+func NewRunUpstreamOAuthMigrationNotFound(body *RunUpstreamOAuthMigrationNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationConflict builds a admin service
+// runUpstreamOAuthMigration endpoint conflict error.
+func NewRunUpstreamOAuthMigrationConflict(body *RunUpstreamOAuthMigrationConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationUnsupportedMedia builds a admin service
+// runUpstreamOAuthMigration endpoint unsupported_media error.
+func NewRunUpstreamOAuthMigrationUnsupportedMedia(body *RunUpstreamOAuthMigrationUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationInvalid builds a admin service
+// runUpstreamOAuthMigration endpoint invalid error.
+func NewRunUpstreamOAuthMigrationInvalid(body *RunUpstreamOAuthMigrationInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationInvariantViolation builds a admin service
+// runUpstreamOAuthMigration endpoint invariant_violation error.
+func NewRunUpstreamOAuthMigrationInvariantViolation(body *RunUpstreamOAuthMigrationInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationUnexpected builds a admin service
+// runUpstreamOAuthMigration endpoint unexpected error.
+func NewRunUpstreamOAuthMigrationUnexpected(body *RunUpstreamOAuthMigrationUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunUpstreamOAuthMigrationGatewayError builds a admin service
+// runUpstreamOAuthMigration endpoint gateway_error error.
+func NewRunUpstreamOAuthMigrationGatewayError(body *RunUpstreamOAuthMigrationGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementAdminUpstreamOAuthMigrationStatusOK builds a
+// "admin" service "enableUpstreamAuthEnforcement" endpoint result from a HTTP
+// "OK" response.
+func NewEnableUpstreamAuthEnforcementAdminUpstreamOAuthMigrationStatusOK(body *EnableUpstreamAuthEnforcementResponseBody) *admin.AdminUpstreamOAuthMigrationStatus {
+	v := &admin.AdminUpstreamOAuthMigrationStatus{
+		OrganizationID:       *body.OrganizationID,
+		Migrated:             *body.Migrated,
+		Servers:              *body.Servers,
+		PendingAssociations:  *body.PendingAssociations,
+		Credentials:          *body.Credentials,
+		PendingSelections:    *body.PendingSelections,
+		ReconnectCredentials: *body.ReconnectCredentials,
+	}
+	v.UnresolvedServers = make([]*admin.AdminUpstreamOAuthMigrationServer, len(body.UnresolvedServers))
+	for i, val := range body.UnresolvedServers {
+		if val == nil {
+			v.UnresolvedServers[i] = nil
+			continue
+		}
+		v.UnresolvedServers[i] = unmarshalAdminUpstreamOAuthMigrationServerResponseBodyToAdminAdminUpstreamOAuthMigrationServer(val)
+	}
+	if body.AuthClients != nil {
+		v.AuthClients = unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpstreamOAuthMigrationAuthClients(body.AuthClients)
+	}
+	if body.ExecutionProfiles != nil {
+		v.ExecutionProfiles = unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfiles(body.ExecutionProfiles)
+	}
+	if body.Enforcement != nil {
+		v.Enforcement = unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEnforcement(body.Enforcement)
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementUnauthorized builds a admin service
+// enableUpstreamAuthEnforcement endpoint unauthorized error.
+func NewEnableUpstreamAuthEnforcementUnauthorized(body *EnableUpstreamAuthEnforcementUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementForbidden builds a admin service
+// enableUpstreamAuthEnforcement endpoint forbidden error.
+func NewEnableUpstreamAuthEnforcementForbidden(body *EnableUpstreamAuthEnforcementForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementBadRequest builds a admin service
+// enableUpstreamAuthEnforcement endpoint bad_request error.
+func NewEnableUpstreamAuthEnforcementBadRequest(body *EnableUpstreamAuthEnforcementBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementNotFound builds a admin service
+// enableUpstreamAuthEnforcement endpoint not_found error.
+func NewEnableUpstreamAuthEnforcementNotFound(body *EnableUpstreamAuthEnforcementNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementConflict builds a admin service
+// enableUpstreamAuthEnforcement endpoint conflict error.
+func NewEnableUpstreamAuthEnforcementConflict(body *EnableUpstreamAuthEnforcementConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementUnsupportedMedia builds a admin service
+// enableUpstreamAuthEnforcement endpoint unsupported_media error.
+func NewEnableUpstreamAuthEnforcementUnsupportedMedia(body *EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementInvalid builds a admin service
+// enableUpstreamAuthEnforcement endpoint invalid error.
+func NewEnableUpstreamAuthEnforcementInvalid(body *EnableUpstreamAuthEnforcementInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementInvariantViolation builds a admin service
+// enableUpstreamAuthEnforcement endpoint invariant_violation error.
+func NewEnableUpstreamAuthEnforcementInvariantViolation(body *EnableUpstreamAuthEnforcementInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementUnexpected builds a admin service
+// enableUpstreamAuthEnforcement endpoint unexpected error.
+func NewEnableUpstreamAuthEnforcementUnexpected(body *EnableUpstreamAuthEnforcementUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnableUpstreamAuthEnforcementGatewayError builds a admin service
+// enableUpstreamAuthEnforcement endpoint gateway_error error.
+func NewEnableUpstreamAuthEnforcementGatewayError(body *EnableUpstreamAuthEnforcementGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementAdminUpstreamOAuthMigrationStatusOK builds
+// a "admin" service "disableUpstreamAuthEnforcement" endpoint result from a
+// HTTP "OK" response.
+func NewDisableUpstreamAuthEnforcementAdminUpstreamOAuthMigrationStatusOK(body *DisableUpstreamAuthEnforcementResponseBody) *admin.AdminUpstreamOAuthMigrationStatus {
+	v := &admin.AdminUpstreamOAuthMigrationStatus{
+		OrganizationID:       *body.OrganizationID,
+		Migrated:             *body.Migrated,
+		Servers:              *body.Servers,
+		PendingAssociations:  *body.PendingAssociations,
+		Credentials:          *body.Credentials,
+		PendingSelections:    *body.PendingSelections,
+		ReconnectCredentials: *body.ReconnectCredentials,
+	}
+	v.UnresolvedServers = make([]*admin.AdminUpstreamOAuthMigrationServer, len(body.UnresolvedServers))
+	for i, val := range body.UnresolvedServers {
+		if val == nil {
+			v.UnresolvedServers[i] = nil
+			continue
+		}
+		v.UnresolvedServers[i] = unmarshalAdminUpstreamOAuthMigrationServerResponseBodyToAdminAdminUpstreamOAuthMigrationServer(val)
+	}
+	if body.AuthClients != nil {
+		v.AuthClients = unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpstreamOAuthMigrationAuthClients(body.AuthClients)
+	}
+	if body.ExecutionProfiles != nil {
+		v.ExecutionProfiles = unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfiles(body.ExecutionProfiles)
+	}
+	if body.Enforcement != nil {
+		v.Enforcement = unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEnforcement(body.Enforcement)
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementUnauthorized builds a admin service
+// disableUpstreamAuthEnforcement endpoint unauthorized error.
+func NewDisableUpstreamAuthEnforcementUnauthorized(body *DisableUpstreamAuthEnforcementUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementForbidden builds a admin service
+// disableUpstreamAuthEnforcement endpoint forbidden error.
+func NewDisableUpstreamAuthEnforcementForbidden(body *DisableUpstreamAuthEnforcementForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementBadRequest builds a admin service
+// disableUpstreamAuthEnforcement endpoint bad_request error.
+func NewDisableUpstreamAuthEnforcementBadRequest(body *DisableUpstreamAuthEnforcementBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementNotFound builds a admin service
+// disableUpstreamAuthEnforcement endpoint not_found error.
+func NewDisableUpstreamAuthEnforcementNotFound(body *DisableUpstreamAuthEnforcementNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementConflict builds a admin service
+// disableUpstreamAuthEnforcement endpoint conflict error.
+func NewDisableUpstreamAuthEnforcementConflict(body *DisableUpstreamAuthEnforcementConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementUnsupportedMedia builds a admin service
+// disableUpstreamAuthEnforcement endpoint unsupported_media error.
+func NewDisableUpstreamAuthEnforcementUnsupportedMedia(body *DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementInvalid builds a admin service
+// disableUpstreamAuthEnforcement endpoint invalid error.
+func NewDisableUpstreamAuthEnforcementInvalid(body *DisableUpstreamAuthEnforcementInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementInvariantViolation builds a admin service
+// disableUpstreamAuthEnforcement endpoint invariant_violation error.
+func NewDisableUpstreamAuthEnforcementInvariantViolation(body *DisableUpstreamAuthEnforcementInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementUnexpected builds a admin service
+// disableUpstreamAuthEnforcement endpoint unexpected error.
+func NewDisableUpstreamAuthEnforcementUnexpected(body *DisableUpstreamAuthEnforcementUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementGatewayError builds a admin service
+// disableUpstreamAuthEnforcement endpoint gateway_error error.
+func NewDisableUpstreamAuthEnforcementGatewayError(body *DisableUpstreamAuthEnforcementGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -35130,6 +42782,12 @@ func ValidateUpdateOrganizationResponseBody(body *UpdateOrganizationResponseBody
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35198,6 +42856,12 @@ func ValidateDisableOrganizationResponseBody(body *DisableOrganizationResponseBo
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35254,6 +42918,12 @@ func ValidateEnableOrganizationResponseBody(body *EnableOrganizationResponseBody
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35309,6 +42979,12 @@ func ValidateGetOrganizationResponseBody(body *GetOrganizationResponseBody) (err
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -35499,6 +43175,12 @@ func ValidateExtendTrialResponseBody(body *ExtendTrialResponseBody) (err error) 
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35555,6 +43237,12 @@ func ValidateCreateOrganizationResponseBody(body *CreateOrganizationResponseBody
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35610,6 +43298,12 @@ func ValidateRearmTrialResponseBody(body *RearmTrialResponseBody) (err error) {
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -35770,6 +43464,12 @@ func ValidateSetStripeCustomerResponseBody(body *SetStripeCustomerResponseBody) 
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -35992,6 +43692,11 @@ func ValidateCreateGlobalIssuerResponseBody(body *CreateGlobalIssuerResponseBody
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -36103,6 +43808,11 @@ func ValidateUpdateGlobalIssuerResponseBody(body *UpdateGlobalIssuerResponseBody
 	}
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
+	}
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -36284,6 +43994,12 @@ func ValidateStartTrialResponseBody(body *StartTrialResponseBody) (err error) {
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -36339,6 +44055,12 @@ func ValidateChangeTrialEndDateResponseBody(body *ChangeTrialEndDateResponseBody
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -36637,12 +44359,17 @@ func ValidateDescribeMcpServerHealthResponseBody(body *DescribeMcpServerHealthRe
 		}
 	}
 	if body.LegacyAuth != nil {
-		if !(*body.LegacyAuth == "external_oauth" || *body.LegacyAuth == "oauth_proxy" || *body.LegacyAuth == "gram_private") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.legacy_auth", *body.LegacyAuth, []any{"external_oauth", "oauth_proxy", "gram_private"}))
+		if !(*body.LegacyAuth == "external_oauth" || *body.LegacyAuth == "gram_private") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.legacy_auth", *body.LegacyAuth, []any{"external_oauth", "gram_private"}))
 		}
 	}
 	if body.UserSessionIssuer != nil {
 		if err2 := ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body.UserSessionIssuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.UpstreamAuth != nil {
+		if err2 := ValidateAdminMcpServerHealthUpstreamAuthResponseBody(body.UpstreamAuth); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -36674,6 +44401,475 @@ func ValidateGetMcpServerToolCallsResponseBody(body *GetMcpServerToolCallsRespon
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateGetHookClientsResponseBody runs the validations defined on
+// GetHookClientsResponseBody
+func ValidateGetHookClientsResponseBody(body *GetHookClientsResponseBody) (err error) {
+	if body.WindowDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_days", "body"))
+	}
+	if body.QueriedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("queried_at", "body"))
+	}
+	if body.FromCache == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from_cache", "body"))
+	}
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.Sessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	if body.Inference == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("inference", "body"))
+	}
+	if body.DeviceAgents == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("device_agents", "body"))
+	}
+	if body.QueriedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.queried_at", *body.QueriedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Organizations {
+		if e != nil {
+			if err2 := ValidateAdminHookClientOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Sessions {
+		if e != nil {
+			if err2 := ValidateAdminHookClientSessionCellResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Inference {
+		if e != nil {
+			if err2 := ValidateAdminInferenceHookCellResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.DeviceAgents {
+		if e != nil {
+			if err2 := ValidateAdminDeviceAgentCellResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesResponseBody runs the validations
+// defined on ListExternalMcpMigrationCandidatesResponseBody
+func ValidateListExternalMcpMigrationCandidatesResponseBody(body *ListExternalMcpMigrationCandidatesResponseBody) (err error) {
+	if body.Candidates == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidates", "body"))
+	}
+	if body.ToolCallWindowDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_call_window_days", "body"))
+	}
+	for _, e := range body.Candidates {
+		if e != nil {
+			if err2 := ValidateAdminExternalMcpMigrationCandidateResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationResponseBody runs the validations defined
+// on PreviewExternalMcpMigrationResponseBody
+func ValidatePreviewExternalMcpMigrationResponseBody(body *PreviewExternalMcpMigrationResponseBody) (err error) {
+	if body.Outcomes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcomes", "body"))
+	}
+	for _, e := range body.Outcomes {
+		if e != nil {
+			if err2 := ValidateAdminExternalMcpMigrationOutcomeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersResponseBody runs the validations defined
+// on MigrateExternalMcpServersResponseBody
+func ValidateMigrateExternalMcpServersResponseBody(body *MigrateExternalMcpServersResponseBody) (err error) {
+	if body.Outcomes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcomes", "body"))
+	}
+	for _, e := range body.Outcomes {
+		if e != nil {
+			if err2 := ValidateAdminExternalMcpMigrationOutcomeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesResponseBody runs the validations
+// defined on ListRegistryPromotionCandidatesResponseBody
+func ValidateListRegistryPromotionCandidatesResponseBody(body *ListRegistryPromotionCandidatesResponseBody) (err error) {
+	if body.Candidates == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidates", "body"))
+	}
+	for _, e := range body.Candidates {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionCandidateResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateResponseBody runs the validations
+// defined on GetRegistryPromotionCandidateResponseBody
+func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotionCandidateResponseBody) (err error) {
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.CurationRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("curation_revision", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.Eligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ObservedSuccesses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_successes", "body"))
+	}
+	if body.ObservedFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_failures", "body"))
+	}
+	if body.ObservedDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_days", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.DocsRetryAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_retry_allowed", "body"))
+	}
+	if body.DocsAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.CurationRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", *body.CurationRevision, goa.FormatUUID))
+	}
+	if body.SuggestedMetadata != nil {
+		if err2 := ValidateAdminRegistryPromotionSuggestionsResponseBody(body.SuggestedMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	if body.DocsLastAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_last_attempt_at", *body.DocsLastAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsNextAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_next_attempt_at", *body.DocsNextAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsQueuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_queued_at", *body.DocsQueuedAt, goa.FormatDateTime))
+	}
+	if body.PromotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateResponseBody runs the validations defined on
+// PromoteRegistryCandidateResponseBody
+func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidateResponseBody) (err error) {
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.CurationRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("curation_revision", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.Eligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ObservedSuccesses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_successes", "body"))
+	}
+	if body.ObservedFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_failures", "body"))
+	}
+	if body.ObservedDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_days", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.DocsRetryAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_retry_allowed", "body"))
+	}
+	if body.DocsAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.CurationRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", *body.CurationRevision, goa.FormatUUID))
+	}
+	if body.SuggestedMetadata != nil {
+		if err2 := ValidateAdminRegistryPromotionSuggestionsResponseBody(body.SuggestedMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	if body.DocsLastAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_last_attempt_at", *body.DocsLastAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsNextAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_next_attempt_at", *body.DocsNextAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsQueuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_queued_at", *body.DocsQueuedAt, goa.FormatDateTime))
+	}
+	if body.PromotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateResponseBody runs the validations
+// defined on CurateRegistryPromotionCandidateResponseBody
+func ValidateCurateRegistryPromotionCandidateResponseBody(body *CurateRegistryPromotionCandidateResponseBody) (err error) {
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.CurationRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("curation_revision", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.Eligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ObservedSuccesses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_successes", "body"))
+	}
+	if body.ObservedFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_failures", "body"))
+	}
+	if body.ObservedDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_days", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.DocsRetryAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_retry_allowed", "body"))
+	}
+	if body.DocsAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.CurationRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", *body.CurationRevision, goa.FormatUUID))
+	}
+	if body.SuggestedMetadata != nil {
+		if err2 := ValidateAdminRegistryPromotionSuggestionsResponseBody(body.SuggestedMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	if body.DocsLastAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_last_attempt_at", *body.DocsLastAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsNextAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_next_attempt_at", *body.DocsNextAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsQueuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_queued_at", *body.DocsQueuedAt, goa.FormatDateTime))
+	}
+	if body.PromotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsResponseBody runs the validations defined
+// on RetryRegistryPromotionDocsResponseBody
+func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotionDocsResponseBody) (err error) {
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.CurationRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("curation_revision", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.Eligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ObservedSuccesses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_successes", "body"))
+	}
+	if body.ObservedFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_failures", "body"))
+	}
+	if body.ObservedDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_days", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.DocsRetryAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_retry_allowed", "body"))
+	}
+	if body.DocsAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.CurationRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", *body.CurationRevision, goa.FormatUUID))
+	}
+	if body.SuggestedMetadata != nil {
+		if err2 := ValidateAdminRegistryPromotionSuggestionsResponseBody(body.SuggestedMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	if body.DocsLastAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_last_attempt_at", *body.DocsLastAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsNextAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_next_attempt_at", *body.DocsNextAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsQueuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_queued_at", *body.DocsQueuedAt, goa.FormatDateTime))
+	}
+	if body.PromotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -37162,6 +45358,104 @@ func ValidateAssignOrganizationOnboardingPlaybookResponseBody(body *AssignOrgani
 	return
 }
 
+// ValidateListSignupOffersResponseBody runs the validations defined on
+// ListSignupOffersResponseBody
+func ValidateListSignupOffersResponseBody(body *ListSignupOffersResponseBody) (err error) {
+	if body.Offers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("offers", "body"))
+	}
+	for _, e := range body.Offers {
+		if e != nil {
+			if err2 := ValidateAdminSignupOfferResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCreateSignupOfferResponseBody runs the validations defined on
+// CreateSignupOfferResponseBody
+func ValidateCreateSignupOfferResponseBody(body *CreateSignupOfferResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferResponseBody runs the validations defined on
+// UpdateSignupOfferResponseBody
+func ValidateUpdateSignupOfferResponseBody(body *UpdateSignupOfferResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateGetStripeSubscriptionCandidateResponseBody runs the validations
 // defined on GetStripeSubscriptionCandidateResponseBody
 func ValidateGetStripeSubscriptionCandidateResponseBody(body *GetStripeSubscriptionCandidateResponseBody) (err error) {
@@ -37206,6 +45500,12 @@ func ValidateSetStripeSubscriptionResponseBody(body *SetStripeSubscriptionRespon
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -37274,6 +45574,201 @@ func ValidateListCustomerUsageResponseBody(body *ListCustomerUsageResponseBody) 
 			if err2 := ValidateAdminCustomerUsageResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsResponseBody runs the
+// validations defined on ListUpstreamOAuthMigrationOrganizationsResponseBody
+func ValidateListUpstreamOAuthMigrationOrganizationsResponseBody(body *ListUpstreamOAuthMigrationOrganizationsResponseBody) (err error) {
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	for _, e := range body.Organizations {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusResponseBody runs the validations
+// defined on GetUpstreamOAuthMigrationStatusResponseBody
+func ValidateGetUpstreamOAuthMigrationStatusResponseBody(body *GetUpstreamOAuthMigrationStatusResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Migrated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("migrated", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.PendingAssociations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_associations", "body"))
+	}
+	if body.UnresolvedServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved_servers", "body"))
+	}
+	if body.Credentials == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credentials", "body"))
+	}
+	if body.PendingSelections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selections", "body"))
+	}
+	if body.ReconnectCredentials == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconnect_credentials", "body"))
+	}
+	for _, e := range body.UnresolvedServers {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.AuthClients != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body.AuthClients); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ExecutionProfiles != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(body.ExecutionProfiles); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Enforcement != nil {
+		if err2 := ValidateAdminUpstreamAuthEnforcementResponseBody(body.Enforcement); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationResponseBody runs the validations defined
+// on RunUpstreamOAuthMigrationResponseBody
+func ValidateRunUpstreamOAuthMigrationResponseBody(body *RunUpstreamOAuthMigrationResponseBody) (err error) {
+	if body.AssociationsWritten == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("associations_written", "body"))
+	}
+	if body.AssociationsSkipped == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("associations_skipped", "body"))
+	}
+	if body.SelectionsWritten == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selections_written", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Status != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationStatusResponseBody(body.Status); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementResponseBody runs the validations
+// defined on EnableUpstreamAuthEnforcementResponseBody
+func ValidateEnableUpstreamAuthEnforcementResponseBody(body *EnableUpstreamAuthEnforcementResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Migrated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("migrated", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.PendingAssociations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_associations", "body"))
+	}
+	if body.UnresolvedServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved_servers", "body"))
+	}
+	if body.Credentials == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credentials", "body"))
+	}
+	if body.PendingSelections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selections", "body"))
+	}
+	if body.ReconnectCredentials == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconnect_credentials", "body"))
+	}
+	for _, e := range body.UnresolvedServers {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.AuthClients != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body.AuthClients); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ExecutionProfiles != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(body.ExecutionProfiles); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Enforcement != nil {
+		if err2 := ValidateAdminUpstreamAuthEnforcementResponseBody(body.Enforcement); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementResponseBody runs the validations
+// defined on DisableUpstreamAuthEnforcementResponseBody
+func ValidateDisableUpstreamAuthEnforcementResponseBody(body *DisableUpstreamAuthEnforcementResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Migrated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("migrated", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.PendingAssociations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_associations", "body"))
+	}
+	if body.UnresolvedServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved_servers", "body"))
+	}
+	if body.Credentials == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credentials", "body"))
+	}
+	if body.PendingSelections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selections", "body"))
+	}
+	if body.ReconnectCredentials == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconnect_credentials", "body"))
+	}
+	for _, e := range body.UnresolvedServers {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.AuthClients != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body.AuthClients); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ExecutionProfiles != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(body.ExecutionProfiles); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Enforcement != nil {
+		if err2 := ValidateAdminUpstreamAuthEnforcementResponseBody(body.Enforcement); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -52281,6 +60776,2280 @@ func ValidateGetMcpServerToolCallsGatewayErrorResponseBody(body *GetMcpServerToo
 	return
 }
 
+// ValidateGetHookClientsUnauthorizedResponseBody runs the validations defined
+// on getHookClients_unauthorized_response_body
+func ValidateGetHookClientsUnauthorizedResponseBody(body *GetHookClientsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsForbiddenResponseBody runs the validations defined on
+// getHookClients_forbidden_response_body
+func ValidateGetHookClientsForbiddenResponseBody(body *GetHookClientsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsBadRequestResponseBody runs the validations defined on
+// getHookClients_bad_request_response_body
+func ValidateGetHookClientsBadRequestResponseBody(body *GetHookClientsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsNotFoundResponseBody runs the validations defined on
+// getHookClients_not_found_response_body
+func ValidateGetHookClientsNotFoundResponseBody(body *GetHookClientsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsConflictResponseBody runs the validations defined on
+// getHookClients_conflict_response_body
+func ValidateGetHookClientsConflictResponseBody(body *GetHookClientsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsUnsupportedMediaResponseBody runs the validations
+// defined on getHookClients_unsupported_media_response_body
+func ValidateGetHookClientsUnsupportedMediaResponseBody(body *GetHookClientsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsInvalidResponseBody runs the validations defined on
+// getHookClients_invalid_response_body
+func ValidateGetHookClientsInvalidResponseBody(body *GetHookClientsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsInvariantViolationResponseBody runs the validations
+// defined on getHookClients_invariant_violation_response_body
+func ValidateGetHookClientsInvariantViolationResponseBody(body *GetHookClientsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsUnexpectedResponseBody runs the validations defined on
+// getHookClients_unexpected_response_body
+func ValidateGetHookClientsUnexpectedResponseBody(body *GetHookClientsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetHookClientsGatewayErrorResponseBody runs the validations defined
+// on getHookClients_gateway_error_response_body
+func ValidateGetHookClientsGatewayErrorResponseBody(body *GetHookClientsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesUnavailableResponseBody runs the
+// validations defined on
+// listExternalMcpMigrationCandidates_unavailable_response_body
+func ValidateListExternalMcpMigrationCandidatesUnavailableResponseBody(body *ListExternalMcpMigrationCandidatesUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesUnauthorizedResponseBody runs the
+// validations defined on
+// listExternalMcpMigrationCandidates_unauthorized_response_body
+func ValidateListExternalMcpMigrationCandidatesUnauthorizedResponseBody(body *ListExternalMcpMigrationCandidatesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesForbiddenResponseBody runs the
+// validations defined on
+// listExternalMcpMigrationCandidates_forbidden_response_body
+func ValidateListExternalMcpMigrationCandidatesForbiddenResponseBody(body *ListExternalMcpMigrationCandidatesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesBadRequestResponseBody runs the
+// validations defined on
+// listExternalMcpMigrationCandidates_bad_request_response_body
+func ValidateListExternalMcpMigrationCandidatesBadRequestResponseBody(body *ListExternalMcpMigrationCandidatesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesNotFoundResponseBody runs the
+// validations defined on
+// listExternalMcpMigrationCandidates_not_found_response_body
+func ValidateListExternalMcpMigrationCandidatesNotFoundResponseBody(body *ListExternalMcpMigrationCandidatesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesConflictResponseBody runs the
+// validations defined on
+// listExternalMcpMigrationCandidates_conflict_response_body
+func ValidateListExternalMcpMigrationCandidatesConflictResponseBody(body *ListExternalMcpMigrationCandidatesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody runs
+// the validations defined on
+// listExternalMcpMigrationCandidates_unsupported_media_response_body
+func ValidateListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody(body *ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesInvalidResponseBody runs the
+// validations defined on
+// listExternalMcpMigrationCandidates_invalid_response_body
+func ValidateListExternalMcpMigrationCandidatesInvalidResponseBody(body *ListExternalMcpMigrationCandidatesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesInvariantViolationResponseBody
+// runs the validations defined on
+// listExternalMcpMigrationCandidates_invariant_violation_response_body
+func ValidateListExternalMcpMigrationCandidatesInvariantViolationResponseBody(body *ListExternalMcpMigrationCandidatesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesUnexpectedResponseBody runs the
+// validations defined on
+// listExternalMcpMigrationCandidates_unexpected_response_body
+func ValidateListExternalMcpMigrationCandidatesUnexpectedResponseBody(body *ListExternalMcpMigrationCandidatesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExternalMcpMigrationCandidatesGatewayErrorResponseBody runs the
+// validations defined on
+// listExternalMcpMigrationCandidates_gateway_error_response_body
+func ValidateListExternalMcpMigrationCandidatesGatewayErrorResponseBody(body *ListExternalMcpMigrationCandidatesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationUnavailableResponseBody runs the
+// validations defined on previewExternalMcpMigration_unavailable_response_body
+func ValidatePreviewExternalMcpMigrationUnavailableResponseBody(body *PreviewExternalMcpMigrationUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationUnauthorizedResponseBody runs the
+// validations defined on previewExternalMcpMigration_unauthorized_response_body
+func ValidatePreviewExternalMcpMigrationUnauthorizedResponseBody(body *PreviewExternalMcpMigrationUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationForbiddenResponseBody runs the
+// validations defined on previewExternalMcpMigration_forbidden_response_body
+func ValidatePreviewExternalMcpMigrationForbiddenResponseBody(body *PreviewExternalMcpMigrationForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationBadRequestResponseBody runs the
+// validations defined on previewExternalMcpMigration_bad_request_response_body
+func ValidatePreviewExternalMcpMigrationBadRequestResponseBody(body *PreviewExternalMcpMigrationBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationNotFoundResponseBody runs the validations
+// defined on previewExternalMcpMigration_not_found_response_body
+func ValidatePreviewExternalMcpMigrationNotFoundResponseBody(body *PreviewExternalMcpMigrationNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationConflictResponseBody runs the validations
+// defined on previewExternalMcpMigration_conflict_response_body
+func ValidatePreviewExternalMcpMigrationConflictResponseBody(body *PreviewExternalMcpMigrationConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationUnsupportedMediaResponseBody runs the
+// validations defined on
+// previewExternalMcpMigration_unsupported_media_response_body
+func ValidatePreviewExternalMcpMigrationUnsupportedMediaResponseBody(body *PreviewExternalMcpMigrationUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationInvalidResponseBody runs the validations
+// defined on previewExternalMcpMigration_invalid_response_body
+func ValidatePreviewExternalMcpMigrationInvalidResponseBody(body *PreviewExternalMcpMigrationInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationInvariantViolationResponseBody runs the
+// validations defined on
+// previewExternalMcpMigration_invariant_violation_response_body
+func ValidatePreviewExternalMcpMigrationInvariantViolationResponseBody(body *PreviewExternalMcpMigrationInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationUnexpectedResponseBody runs the
+// validations defined on previewExternalMcpMigration_unexpected_response_body
+func ValidatePreviewExternalMcpMigrationUnexpectedResponseBody(body *PreviewExternalMcpMigrationUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewExternalMcpMigrationGatewayErrorResponseBody runs the
+// validations defined on
+// previewExternalMcpMigration_gateway_error_response_body
+func ValidatePreviewExternalMcpMigrationGatewayErrorResponseBody(body *PreviewExternalMcpMigrationGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersUnavailableResponseBody runs the
+// validations defined on migrateExternalMcpServers_unavailable_response_body
+func ValidateMigrateExternalMcpServersUnavailableResponseBody(body *MigrateExternalMcpServersUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersUnauthorizedResponseBody runs the
+// validations defined on migrateExternalMcpServers_unauthorized_response_body
+func ValidateMigrateExternalMcpServersUnauthorizedResponseBody(body *MigrateExternalMcpServersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersForbiddenResponseBody runs the validations
+// defined on migrateExternalMcpServers_forbidden_response_body
+func ValidateMigrateExternalMcpServersForbiddenResponseBody(body *MigrateExternalMcpServersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersBadRequestResponseBody runs the validations
+// defined on migrateExternalMcpServers_bad_request_response_body
+func ValidateMigrateExternalMcpServersBadRequestResponseBody(body *MigrateExternalMcpServersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersNotFoundResponseBody runs the validations
+// defined on migrateExternalMcpServers_not_found_response_body
+func ValidateMigrateExternalMcpServersNotFoundResponseBody(body *MigrateExternalMcpServersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersConflictResponseBody runs the validations
+// defined on migrateExternalMcpServers_conflict_response_body
+func ValidateMigrateExternalMcpServersConflictResponseBody(body *MigrateExternalMcpServersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersUnsupportedMediaResponseBody runs the
+// validations defined on
+// migrateExternalMcpServers_unsupported_media_response_body
+func ValidateMigrateExternalMcpServersUnsupportedMediaResponseBody(body *MigrateExternalMcpServersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersInvalidResponseBody runs the validations
+// defined on migrateExternalMcpServers_invalid_response_body
+func ValidateMigrateExternalMcpServersInvalidResponseBody(body *MigrateExternalMcpServersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersInvariantViolationResponseBody runs the
+// validations defined on
+// migrateExternalMcpServers_invariant_violation_response_body
+func ValidateMigrateExternalMcpServersInvariantViolationResponseBody(body *MigrateExternalMcpServersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersUnexpectedResponseBody runs the validations
+// defined on migrateExternalMcpServers_unexpected_response_body
+func ValidateMigrateExternalMcpServersUnexpectedResponseBody(body *MigrateExternalMcpServersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateExternalMcpServersGatewayErrorResponseBody runs the
+// validations defined on migrateExternalMcpServers_gateway_error_response_body
+func ValidateMigrateExternalMcpServersGatewayErrorResponseBody(body *MigrateExternalMcpServersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesUnauthorizedResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_unauthorized_response_body
+func ValidateListRegistryPromotionCandidatesUnauthorizedResponseBody(body *ListRegistryPromotionCandidatesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesForbiddenResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_forbidden_response_body
+func ValidateListRegistryPromotionCandidatesForbiddenResponseBody(body *ListRegistryPromotionCandidatesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesBadRequestResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_bad_request_response_body
+func ValidateListRegistryPromotionCandidatesBadRequestResponseBody(body *ListRegistryPromotionCandidatesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesNotFoundResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_not_found_response_body
+func ValidateListRegistryPromotionCandidatesNotFoundResponseBody(body *ListRegistryPromotionCandidatesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesConflictResponseBody runs the
+// validations defined on listRegistryPromotionCandidates_conflict_response_body
+func ValidateListRegistryPromotionCandidatesConflictResponseBody(body *ListRegistryPromotionCandidatesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesUnsupportedMediaResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_unsupported_media_response_body
+func ValidateListRegistryPromotionCandidatesUnsupportedMediaResponseBody(body *ListRegistryPromotionCandidatesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesInvalidResponseBody runs the
+// validations defined on listRegistryPromotionCandidates_invalid_response_body
+func ValidateListRegistryPromotionCandidatesInvalidResponseBody(body *ListRegistryPromotionCandidatesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesInvariantViolationResponseBody runs
+// the validations defined on
+// listRegistryPromotionCandidates_invariant_violation_response_body
+func ValidateListRegistryPromotionCandidatesInvariantViolationResponseBody(body *ListRegistryPromotionCandidatesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesUnexpectedResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_unexpected_response_body
+func ValidateListRegistryPromotionCandidatesUnexpectedResponseBody(body *ListRegistryPromotionCandidatesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesGatewayErrorResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_gateway_error_response_body
+func ValidateListRegistryPromotionCandidatesGatewayErrorResponseBody(body *ListRegistryPromotionCandidatesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateUnauthorizedResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_unauthorized_response_body
+func ValidateGetRegistryPromotionCandidateUnauthorizedResponseBody(body *GetRegistryPromotionCandidateUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateForbiddenResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_forbidden_response_body
+func ValidateGetRegistryPromotionCandidateForbiddenResponseBody(body *GetRegistryPromotionCandidateForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateBadRequestResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_bad_request_response_body
+func ValidateGetRegistryPromotionCandidateBadRequestResponseBody(body *GetRegistryPromotionCandidateBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateNotFoundResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_not_found_response_body
+func ValidateGetRegistryPromotionCandidateNotFoundResponseBody(body *GetRegistryPromotionCandidateNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateConflictResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_conflict_response_body
+func ValidateGetRegistryPromotionCandidateConflictResponseBody(body *GetRegistryPromotionCandidateConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateUnsupportedMediaResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_unsupported_media_response_body
+func ValidateGetRegistryPromotionCandidateUnsupportedMediaResponseBody(body *GetRegistryPromotionCandidateUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateInvalidResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_invalid_response_body
+func ValidateGetRegistryPromotionCandidateInvalidResponseBody(body *GetRegistryPromotionCandidateInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateInvariantViolationResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_invariant_violation_response_body
+func ValidateGetRegistryPromotionCandidateInvariantViolationResponseBody(body *GetRegistryPromotionCandidateInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateUnexpectedResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_unexpected_response_body
+func ValidateGetRegistryPromotionCandidateUnexpectedResponseBody(body *GetRegistryPromotionCandidateUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateGatewayErrorResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_gateway_error_response_body
+func ValidateGetRegistryPromotionCandidateGatewayErrorResponseBody(body *GetRegistryPromotionCandidateGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateUnauthorizedResponseBody runs the
+// validations defined on promoteRegistryCandidate_unauthorized_response_body
+func ValidatePromoteRegistryCandidateUnauthorizedResponseBody(body *PromoteRegistryCandidateUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateForbiddenResponseBody runs the validations
+// defined on promoteRegistryCandidate_forbidden_response_body
+func ValidatePromoteRegistryCandidateForbiddenResponseBody(body *PromoteRegistryCandidateForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateBadRequestResponseBody runs the validations
+// defined on promoteRegistryCandidate_bad_request_response_body
+func ValidatePromoteRegistryCandidateBadRequestResponseBody(body *PromoteRegistryCandidateBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateNotFoundResponseBody runs the validations
+// defined on promoteRegistryCandidate_not_found_response_body
+func ValidatePromoteRegistryCandidateNotFoundResponseBody(body *PromoteRegistryCandidateNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateConflictResponseBody runs the validations
+// defined on promoteRegistryCandidate_conflict_response_body
+func ValidatePromoteRegistryCandidateConflictResponseBody(body *PromoteRegistryCandidateConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateUnsupportedMediaResponseBody runs the
+// validations defined on
+// promoteRegistryCandidate_unsupported_media_response_body
+func ValidatePromoteRegistryCandidateUnsupportedMediaResponseBody(body *PromoteRegistryCandidateUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateInvalidResponseBody runs the validations
+// defined on promoteRegistryCandidate_invalid_response_body
+func ValidatePromoteRegistryCandidateInvalidResponseBody(body *PromoteRegistryCandidateInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateInvariantViolationResponseBody runs the
+// validations defined on
+// promoteRegistryCandidate_invariant_violation_response_body
+func ValidatePromoteRegistryCandidateInvariantViolationResponseBody(body *PromoteRegistryCandidateInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateUnexpectedResponseBody runs the validations
+// defined on promoteRegistryCandidate_unexpected_response_body
+func ValidatePromoteRegistryCandidateUnexpectedResponseBody(body *PromoteRegistryCandidateUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateGatewayErrorResponseBody runs the
+// validations defined on promoteRegistryCandidate_gateway_error_response_body
+func ValidatePromoteRegistryCandidateGatewayErrorResponseBody(body *PromoteRegistryCandidateGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateUnauthorizedResponseBody runs the
+// validations defined on
+// curateRegistryPromotionCandidate_unauthorized_response_body
+func ValidateCurateRegistryPromotionCandidateUnauthorizedResponseBody(body *CurateRegistryPromotionCandidateUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateForbiddenResponseBody runs the
+// validations defined on
+// curateRegistryPromotionCandidate_forbidden_response_body
+func ValidateCurateRegistryPromotionCandidateForbiddenResponseBody(body *CurateRegistryPromotionCandidateForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateBadRequestResponseBody runs the
+// validations defined on
+// curateRegistryPromotionCandidate_bad_request_response_body
+func ValidateCurateRegistryPromotionCandidateBadRequestResponseBody(body *CurateRegistryPromotionCandidateBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateNotFoundResponseBody runs the
+// validations defined on
+// curateRegistryPromotionCandidate_not_found_response_body
+func ValidateCurateRegistryPromotionCandidateNotFoundResponseBody(body *CurateRegistryPromotionCandidateNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateConflictResponseBody runs the
+// validations defined on
+// curateRegistryPromotionCandidate_conflict_response_body
+func ValidateCurateRegistryPromotionCandidateConflictResponseBody(body *CurateRegistryPromotionCandidateConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateUnsupportedMediaResponseBody runs
+// the validations defined on
+// curateRegistryPromotionCandidate_unsupported_media_response_body
+func ValidateCurateRegistryPromotionCandidateUnsupportedMediaResponseBody(body *CurateRegistryPromotionCandidateUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateInvalidResponseBody runs the
+// validations defined on curateRegistryPromotionCandidate_invalid_response_body
+func ValidateCurateRegistryPromotionCandidateInvalidResponseBody(body *CurateRegistryPromotionCandidateInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateInvariantViolationResponseBody runs
+// the validations defined on
+// curateRegistryPromotionCandidate_invariant_violation_response_body
+func ValidateCurateRegistryPromotionCandidateInvariantViolationResponseBody(body *CurateRegistryPromotionCandidateInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateUnexpectedResponseBody runs the
+// validations defined on
+// curateRegistryPromotionCandidate_unexpected_response_body
+func ValidateCurateRegistryPromotionCandidateUnexpectedResponseBody(body *CurateRegistryPromotionCandidateUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateGatewayErrorResponseBody runs the
+// validations defined on
+// curateRegistryPromotionCandidate_gateway_error_response_body
+func ValidateCurateRegistryPromotionCandidateGatewayErrorResponseBody(body *CurateRegistryPromotionCandidateGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsUnauthorizedResponseBody runs the
+// validations defined on retryRegistryPromotionDocs_unauthorized_response_body
+func ValidateRetryRegistryPromotionDocsUnauthorizedResponseBody(body *RetryRegistryPromotionDocsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsForbiddenResponseBody runs the validations
+// defined on retryRegistryPromotionDocs_forbidden_response_body
+func ValidateRetryRegistryPromotionDocsForbiddenResponseBody(body *RetryRegistryPromotionDocsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsBadRequestResponseBody runs the
+// validations defined on retryRegistryPromotionDocs_bad_request_response_body
+func ValidateRetryRegistryPromotionDocsBadRequestResponseBody(body *RetryRegistryPromotionDocsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsNotFoundResponseBody runs the validations
+// defined on retryRegistryPromotionDocs_not_found_response_body
+func ValidateRetryRegistryPromotionDocsNotFoundResponseBody(body *RetryRegistryPromotionDocsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsConflictResponseBody runs the validations
+// defined on retryRegistryPromotionDocs_conflict_response_body
+func ValidateRetryRegistryPromotionDocsConflictResponseBody(body *RetryRegistryPromotionDocsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsUnsupportedMediaResponseBody runs the
+// validations defined on
+// retryRegistryPromotionDocs_unsupported_media_response_body
+func ValidateRetryRegistryPromotionDocsUnsupportedMediaResponseBody(body *RetryRegistryPromotionDocsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsInvalidResponseBody runs the validations
+// defined on retryRegistryPromotionDocs_invalid_response_body
+func ValidateRetryRegistryPromotionDocsInvalidResponseBody(body *RetryRegistryPromotionDocsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsInvariantViolationResponseBody runs the
+// validations defined on
+// retryRegistryPromotionDocs_invariant_violation_response_body
+func ValidateRetryRegistryPromotionDocsInvariantViolationResponseBody(body *RetryRegistryPromotionDocsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsUnexpectedResponseBody runs the
+// validations defined on retryRegistryPromotionDocs_unexpected_response_body
+func ValidateRetryRegistryPromotionDocsUnexpectedResponseBody(body *RetryRegistryPromotionDocsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsGatewayErrorResponseBody runs the
+// validations defined on retryRegistryPromotionDocs_gateway_error_response_body
+func ValidateRetryRegistryPromotionDocsGatewayErrorResponseBody(body *RetryRegistryPromotionDocsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody runs the
 // validations defined on getRegistryOktaCandidates_unauthorized_response_body
 func ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody(body *GetRegistryOktaCandidatesUnauthorizedResponseBody) (err error) {
@@ -57618,6 +68387,726 @@ func ValidateAssignOrganizationOnboardingPlaybookGatewayErrorResponseBody(body *
 	return
 }
 
+// ValidateListSignupOffersUnauthorizedResponseBody runs the validations
+// defined on listSignupOffers_unauthorized_response_body
+func ValidateListSignupOffersUnauthorizedResponseBody(body *ListSignupOffersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersForbiddenResponseBody runs the validations defined
+// on listSignupOffers_forbidden_response_body
+func ValidateListSignupOffersForbiddenResponseBody(body *ListSignupOffersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersBadRequestResponseBody runs the validations defined
+// on listSignupOffers_bad_request_response_body
+func ValidateListSignupOffersBadRequestResponseBody(body *ListSignupOffersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersNotFoundResponseBody runs the validations defined on
+// listSignupOffers_not_found_response_body
+func ValidateListSignupOffersNotFoundResponseBody(body *ListSignupOffersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersConflictResponseBody runs the validations defined on
+// listSignupOffers_conflict_response_body
+func ValidateListSignupOffersConflictResponseBody(body *ListSignupOffersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersUnsupportedMediaResponseBody runs the validations
+// defined on listSignupOffers_unsupported_media_response_body
+func ValidateListSignupOffersUnsupportedMediaResponseBody(body *ListSignupOffersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersInvalidResponseBody runs the validations defined on
+// listSignupOffers_invalid_response_body
+func ValidateListSignupOffersInvalidResponseBody(body *ListSignupOffersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersInvariantViolationResponseBody runs the validations
+// defined on listSignupOffers_invariant_violation_response_body
+func ValidateListSignupOffersInvariantViolationResponseBody(body *ListSignupOffersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersUnexpectedResponseBody runs the validations defined
+// on listSignupOffers_unexpected_response_body
+func ValidateListSignupOffersUnexpectedResponseBody(body *ListSignupOffersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersGatewayErrorResponseBody runs the validations
+// defined on listSignupOffers_gateway_error_response_body
+func ValidateListSignupOffersGatewayErrorResponseBody(body *ListSignupOffersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferUnauthorizedResponseBody runs the validations
+// defined on createSignupOffer_unauthorized_response_body
+func ValidateCreateSignupOfferUnauthorizedResponseBody(body *CreateSignupOfferUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferForbiddenResponseBody runs the validations defined
+// on createSignupOffer_forbidden_response_body
+func ValidateCreateSignupOfferForbiddenResponseBody(body *CreateSignupOfferForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferBadRequestResponseBody runs the validations defined
+// on createSignupOffer_bad_request_response_body
+func ValidateCreateSignupOfferBadRequestResponseBody(body *CreateSignupOfferBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferNotFoundResponseBody runs the validations defined
+// on createSignupOffer_not_found_response_body
+func ValidateCreateSignupOfferNotFoundResponseBody(body *CreateSignupOfferNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferConflictResponseBody runs the validations defined
+// on createSignupOffer_conflict_response_body
+func ValidateCreateSignupOfferConflictResponseBody(body *CreateSignupOfferConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferUnsupportedMediaResponseBody runs the validations
+// defined on createSignupOffer_unsupported_media_response_body
+func ValidateCreateSignupOfferUnsupportedMediaResponseBody(body *CreateSignupOfferUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferInvalidResponseBody runs the validations defined on
+// createSignupOffer_invalid_response_body
+func ValidateCreateSignupOfferInvalidResponseBody(body *CreateSignupOfferInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferInvariantViolationResponseBody runs the validations
+// defined on createSignupOffer_invariant_violation_response_body
+func ValidateCreateSignupOfferInvariantViolationResponseBody(body *CreateSignupOfferInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferUnexpectedResponseBody runs the validations defined
+// on createSignupOffer_unexpected_response_body
+func ValidateCreateSignupOfferUnexpectedResponseBody(body *CreateSignupOfferUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferGatewayErrorResponseBody runs the validations
+// defined on createSignupOffer_gateway_error_response_body
+func ValidateCreateSignupOfferGatewayErrorResponseBody(body *CreateSignupOfferGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferUnauthorizedResponseBody runs the validations
+// defined on updateSignupOffer_unauthorized_response_body
+func ValidateUpdateSignupOfferUnauthorizedResponseBody(body *UpdateSignupOfferUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferForbiddenResponseBody runs the validations defined
+// on updateSignupOffer_forbidden_response_body
+func ValidateUpdateSignupOfferForbiddenResponseBody(body *UpdateSignupOfferForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferBadRequestResponseBody runs the validations defined
+// on updateSignupOffer_bad_request_response_body
+func ValidateUpdateSignupOfferBadRequestResponseBody(body *UpdateSignupOfferBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferNotFoundResponseBody runs the validations defined
+// on updateSignupOffer_not_found_response_body
+func ValidateUpdateSignupOfferNotFoundResponseBody(body *UpdateSignupOfferNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferConflictResponseBody runs the validations defined
+// on updateSignupOffer_conflict_response_body
+func ValidateUpdateSignupOfferConflictResponseBody(body *UpdateSignupOfferConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferUnsupportedMediaResponseBody runs the validations
+// defined on updateSignupOffer_unsupported_media_response_body
+func ValidateUpdateSignupOfferUnsupportedMediaResponseBody(body *UpdateSignupOfferUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferInvalidResponseBody runs the validations defined on
+// updateSignupOffer_invalid_response_body
+func ValidateUpdateSignupOfferInvalidResponseBody(body *UpdateSignupOfferInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferInvariantViolationResponseBody runs the validations
+// defined on updateSignupOffer_invariant_violation_response_body
+func ValidateUpdateSignupOfferInvariantViolationResponseBody(body *UpdateSignupOfferInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferUnexpectedResponseBody runs the validations defined
+// on updateSignupOffer_unexpected_response_body
+func ValidateUpdateSignupOfferUnexpectedResponseBody(body *UpdateSignupOfferUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferGatewayErrorResponseBody runs the validations
+// defined on updateSignupOffer_gateway_error_response_body
+func ValidateUpdateSignupOfferGatewayErrorResponseBody(body *UpdateSignupOfferGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetStripeSubscriptionCandidateUnavailableResponseBody runs the
 // validations defined on
 // getStripeSubscriptionCandidate_unavailable_response_body
@@ -58418,6 +69907,1237 @@ func ValidateListCustomerUsageGatewayErrorResponseBody(body *ListCustomerUsageGa
 	return
 }
 
+// ValidateListUpstreamOAuthMigrationOrganizationsUnauthorizedResponseBody runs
+// the validations defined on
+// listUpstreamOAuthMigrationOrganizations_unauthorized_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsUnauthorizedResponseBody(body *ListUpstreamOAuthMigrationOrganizationsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsForbiddenResponseBody runs
+// the validations defined on
+// listUpstreamOAuthMigrationOrganizations_forbidden_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsForbiddenResponseBody(body *ListUpstreamOAuthMigrationOrganizationsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsBadRequestResponseBody runs
+// the validations defined on
+// listUpstreamOAuthMigrationOrganizations_bad_request_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsBadRequestResponseBody(body *ListUpstreamOAuthMigrationOrganizationsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsNotFoundResponseBody runs the
+// validations defined on
+// listUpstreamOAuthMigrationOrganizations_not_found_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsNotFoundResponseBody(body *ListUpstreamOAuthMigrationOrganizationsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsConflictResponseBody runs the
+// validations defined on
+// listUpstreamOAuthMigrationOrganizations_conflict_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsConflictResponseBody(body *ListUpstreamOAuthMigrationOrganizationsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsUnsupportedMediaResponseBody
+// runs the validations defined on
+// listUpstreamOAuthMigrationOrganizations_unsupported_media_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsUnsupportedMediaResponseBody(body *ListUpstreamOAuthMigrationOrganizationsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsInvalidResponseBody runs the
+// validations defined on
+// listUpstreamOAuthMigrationOrganizations_invalid_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsInvalidResponseBody(body *ListUpstreamOAuthMigrationOrganizationsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsInvariantViolationResponseBody
+// runs the validations defined on
+// listUpstreamOAuthMigrationOrganizations_invariant_violation_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsInvariantViolationResponseBody(body *ListUpstreamOAuthMigrationOrganizationsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsUnexpectedResponseBody runs
+// the validations defined on
+// listUpstreamOAuthMigrationOrganizations_unexpected_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsUnexpectedResponseBody(body *ListUpstreamOAuthMigrationOrganizationsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListUpstreamOAuthMigrationOrganizationsGatewayErrorResponseBody runs
+// the validations defined on
+// listUpstreamOAuthMigrationOrganizations_gateway_error_response_body
+func ValidateListUpstreamOAuthMigrationOrganizationsGatewayErrorResponseBody(body *ListUpstreamOAuthMigrationOrganizationsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusUnauthorizedResponseBody runs the
+// validations defined on
+// getUpstreamOAuthMigrationStatus_unauthorized_response_body
+func ValidateGetUpstreamOAuthMigrationStatusUnauthorizedResponseBody(body *GetUpstreamOAuthMigrationStatusUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusForbiddenResponseBody runs the
+// validations defined on
+// getUpstreamOAuthMigrationStatus_forbidden_response_body
+func ValidateGetUpstreamOAuthMigrationStatusForbiddenResponseBody(body *GetUpstreamOAuthMigrationStatusForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusBadRequestResponseBody runs the
+// validations defined on
+// getUpstreamOAuthMigrationStatus_bad_request_response_body
+func ValidateGetUpstreamOAuthMigrationStatusBadRequestResponseBody(body *GetUpstreamOAuthMigrationStatusBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusNotFoundResponseBody runs the
+// validations defined on
+// getUpstreamOAuthMigrationStatus_not_found_response_body
+func ValidateGetUpstreamOAuthMigrationStatusNotFoundResponseBody(body *GetUpstreamOAuthMigrationStatusNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusConflictResponseBody runs the
+// validations defined on getUpstreamOAuthMigrationStatus_conflict_response_body
+func ValidateGetUpstreamOAuthMigrationStatusConflictResponseBody(body *GetUpstreamOAuthMigrationStatusConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusUnsupportedMediaResponseBody runs the
+// validations defined on
+// getUpstreamOAuthMigrationStatus_unsupported_media_response_body
+func ValidateGetUpstreamOAuthMigrationStatusUnsupportedMediaResponseBody(body *GetUpstreamOAuthMigrationStatusUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusInvalidResponseBody runs the
+// validations defined on getUpstreamOAuthMigrationStatus_invalid_response_body
+func ValidateGetUpstreamOAuthMigrationStatusInvalidResponseBody(body *GetUpstreamOAuthMigrationStatusInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusInvariantViolationResponseBody runs
+// the validations defined on
+// getUpstreamOAuthMigrationStatus_invariant_violation_response_body
+func ValidateGetUpstreamOAuthMigrationStatusInvariantViolationResponseBody(body *GetUpstreamOAuthMigrationStatusInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusUnexpectedResponseBody runs the
+// validations defined on
+// getUpstreamOAuthMigrationStatus_unexpected_response_body
+func ValidateGetUpstreamOAuthMigrationStatusUnexpectedResponseBody(body *GetUpstreamOAuthMigrationStatusUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpstreamOAuthMigrationStatusGatewayErrorResponseBody runs the
+// validations defined on
+// getUpstreamOAuthMigrationStatus_gateway_error_response_body
+func ValidateGetUpstreamOAuthMigrationStatusGatewayErrorResponseBody(body *GetUpstreamOAuthMigrationStatusGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationUnauthorizedResponseBody runs the
+// validations defined on runUpstreamOAuthMigration_unauthorized_response_body
+func ValidateRunUpstreamOAuthMigrationUnauthorizedResponseBody(body *RunUpstreamOAuthMigrationUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationForbiddenResponseBody runs the validations
+// defined on runUpstreamOAuthMigration_forbidden_response_body
+func ValidateRunUpstreamOAuthMigrationForbiddenResponseBody(body *RunUpstreamOAuthMigrationForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationBadRequestResponseBody runs the validations
+// defined on runUpstreamOAuthMigration_bad_request_response_body
+func ValidateRunUpstreamOAuthMigrationBadRequestResponseBody(body *RunUpstreamOAuthMigrationBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationNotFoundResponseBody runs the validations
+// defined on runUpstreamOAuthMigration_not_found_response_body
+func ValidateRunUpstreamOAuthMigrationNotFoundResponseBody(body *RunUpstreamOAuthMigrationNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationConflictResponseBody runs the validations
+// defined on runUpstreamOAuthMigration_conflict_response_body
+func ValidateRunUpstreamOAuthMigrationConflictResponseBody(body *RunUpstreamOAuthMigrationConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationUnsupportedMediaResponseBody runs the
+// validations defined on
+// runUpstreamOAuthMigration_unsupported_media_response_body
+func ValidateRunUpstreamOAuthMigrationUnsupportedMediaResponseBody(body *RunUpstreamOAuthMigrationUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationInvalidResponseBody runs the validations
+// defined on runUpstreamOAuthMigration_invalid_response_body
+func ValidateRunUpstreamOAuthMigrationInvalidResponseBody(body *RunUpstreamOAuthMigrationInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationInvariantViolationResponseBody runs the
+// validations defined on
+// runUpstreamOAuthMigration_invariant_violation_response_body
+func ValidateRunUpstreamOAuthMigrationInvariantViolationResponseBody(body *RunUpstreamOAuthMigrationInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationUnexpectedResponseBody runs the validations
+// defined on runUpstreamOAuthMigration_unexpected_response_body
+func ValidateRunUpstreamOAuthMigrationUnexpectedResponseBody(body *RunUpstreamOAuthMigrationUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunUpstreamOAuthMigrationGatewayErrorResponseBody runs the
+// validations defined on runUpstreamOAuthMigration_gateway_error_response_body
+func ValidateRunUpstreamOAuthMigrationGatewayErrorResponseBody(body *RunUpstreamOAuthMigrationGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementUnauthorizedResponseBody runs the
+// validations defined on
+// enableUpstreamAuthEnforcement_unauthorized_response_body
+func ValidateEnableUpstreamAuthEnforcementUnauthorizedResponseBody(body *EnableUpstreamAuthEnforcementUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementForbiddenResponseBody runs the
+// validations defined on enableUpstreamAuthEnforcement_forbidden_response_body
+func ValidateEnableUpstreamAuthEnforcementForbiddenResponseBody(body *EnableUpstreamAuthEnforcementForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementBadRequestResponseBody runs the
+// validations defined on
+// enableUpstreamAuthEnforcement_bad_request_response_body
+func ValidateEnableUpstreamAuthEnforcementBadRequestResponseBody(body *EnableUpstreamAuthEnforcementBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementNotFoundResponseBody runs the
+// validations defined on enableUpstreamAuthEnforcement_not_found_response_body
+func ValidateEnableUpstreamAuthEnforcementNotFoundResponseBody(body *EnableUpstreamAuthEnforcementNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementConflictResponseBody runs the
+// validations defined on enableUpstreamAuthEnforcement_conflict_response_body
+func ValidateEnableUpstreamAuthEnforcementConflictResponseBody(body *EnableUpstreamAuthEnforcementConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementUnsupportedMediaResponseBody runs the
+// validations defined on
+// enableUpstreamAuthEnforcement_unsupported_media_response_body
+func ValidateEnableUpstreamAuthEnforcementUnsupportedMediaResponseBody(body *EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementInvalidResponseBody runs the
+// validations defined on enableUpstreamAuthEnforcement_invalid_response_body
+func ValidateEnableUpstreamAuthEnforcementInvalidResponseBody(body *EnableUpstreamAuthEnforcementInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementInvariantViolationResponseBody runs the
+// validations defined on
+// enableUpstreamAuthEnforcement_invariant_violation_response_body
+func ValidateEnableUpstreamAuthEnforcementInvariantViolationResponseBody(body *EnableUpstreamAuthEnforcementInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementUnexpectedResponseBody runs the
+// validations defined on enableUpstreamAuthEnforcement_unexpected_response_body
+func ValidateEnableUpstreamAuthEnforcementUnexpectedResponseBody(body *EnableUpstreamAuthEnforcementUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementGatewayErrorResponseBody runs the
+// validations defined on
+// enableUpstreamAuthEnforcement_gateway_error_response_body
+func ValidateEnableUpstreamAuthEnforcementGatewayErrorResponseBody(body *EnableUpstreamAuthEnforcementGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementUnauthorizedResponseBody runs the
+// validations defined on
+// disableUpstreamAuthEnforcement_unauthorized_response_body
+func ValidateDisableUpstreamAuthEnforcementUnauthorizedResponseBody(body *DisableUpstreamAuthEnforcementUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementForbiddenResponseBody runs the
+// validations defined on disableUpstreamAuthEnforcement_forbidden_response_body
+func ValidateDisableUpstreamAuthEnforcementForbiddenResponseBody(body *DisableUpstreamAuthEnforcementForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementBadRequestResponseBody runs the
+// validations defined on
+// disableUpstreamAuthEnforcement_bad_request_response_body
+func ValidateDisableUpstreamAuthEnforcementBadRequestResponseBody(body *DisableUpstreamAuthEnforcementBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementNotFoundResponseBody runs the
+// validations defined on disableUpstreamAuthEnforcement_not_found_response_body
+func ValidateDisableUpstreamAuthEnforcementNotFoundResponseBody(body *DisableUpstreamAuthEnforcementNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementConflictResponseBody runs the
+// validations defined on disableUpstreamAuthEnforcement_conflict_response_body
+func ValidateDisableUpstreamAuthEnforcementConflictResponseBody(body *DisableUpstreamAuthEnforcementConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementUnsupportedMediaResponseBody runs the
+// validations defined on
+// disableUpstreamAuthEnforcement_unsupported_media_response_body
+func ValidateDisableUpstreamAuthEnforcementUnsupportedMediaResponseBody(body *DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementInvalidResponseBody runs the
+// validations defined on disableUpstreamAuthEnforcement_invalid_response_body
+func ValidateDisableUpstreamAuthEnforcementInvalidResponseBody(body *DisableUpstreamAuthEnforcementInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementInvariantViolationResponseBody runs
+// the validations defined on
+// disableUpstreamAuthEnforcement_invariant_violation_response_body
+func ValidateDisableUpstreamAuthEnforcementInvariantViolationResponseBody(body *DisableUpstreamAuthEnforcementInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementUnexpectedResponseBody runs the
+// validations defined on
+// disableUpstreamAuthEnforcement_unexpected_response_body
+func ValidateDisableUpstreamAuthEnforcementUnexpectedResponseBody(body *DisableUpstreamAuthEnforcementUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementGatewayErrorResponseBody runs the
+// validations defined on
+// disableUpstreamAuthEnforcement_gateway_error_response_body
+func ValidateDisableUpstreamAuthEnforcementGatewayErrorResponseBody(body *DisableUpstreamAuthEnforcementGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -58624,6 +71344,12 @@ func ValidateAdminOrganizationResponseBody(body *AdminOrganizationResponseBody) 
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -58760,6 +71486,56 @@ func ValidateAdminInferenceSpendMonthResponse(body *AdminInferenceSpendMonthResp
 	return
 }
 
+// ValidateEMAProviderOrderResponseBody runs the validations defined on
+// EMAProviderOrderResponseBody
+func ValidateEMAProviderOrderResponseBody(body *EMAProviderOrderResponseBody) (err error) {
+	if body.VendorIssuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendor_issuer", "body"))
+	}
+	if body.IsDefault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
+	}
+	if body.Providers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
+	}
+	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateEMAProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateEMAProviderResponseBody runs the validations defined on
+// EMAProviderResponseBody
+func ValidateEMAProviderResponseBody(body *EMAProviderResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "external" || *body.Kind == "speakeasy") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"external", "speakeasy"}))
+		}
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.InternalSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.internal_session_issuer_id", *body.InternalSessionIssuerID, goa.FormatUUID))
+	}
+	if body.UnavailableReason != nil {
+		if !(*body.UnavailableReason == "deleted" || *body.UnavailableReason == "disabled" || *body.UnavailableReason == "not_trusted_by_endpoint" || *body.UnavailableReason == "signing_unavailable" || *body.UnavailableReason == "not_rolled_out" || *body.UnavailableReason == "verified_domain_required" || *body.UnavailableReason == "setup_required" || *body.UnavailableReason == "keyless" || *body.UnavailableReason == "signing_paused" || *body.UnavailableReason == "sign_in_enforcement_required" || *body.UnavailableReason == "readiness_unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.unavailable_reason", *body.UnavailableReason, []any{"deleted", "disabled", "not_trusted_by_endpoint", "signing_unavailable", "not_rolled_out", "verified_domain_required", "setup_required", "keyless", "signing_paused", "sign_in_enforcement_required", "readiness_unknown"}))
+		}
+	}
+	if body.LastAcceptedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accepted_at", *body.LastAcceptedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateRemoteSessionIssuerDuplicateMatchResponseBody runs the validations
 // defined on RemoteSessionIssuerDuplicateMatchResponseBody
 func ValidateRemoteSessionIssuerDuplicateMatchResponseBody(body *RemoteSessionIssuerDuplicateMatchResponseBody) (err error) {
@@ -58862,6 +71638,11 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	}
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
+	}
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -59391,6 +72172,12 @@ func ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body *AdminMcpSer
 	if body.UseAuthenticationHost == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.OtherServersUsingIssuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("other_servers_using_issuer", "body"))
 	}
@@ -59421,6 +72208,11 @@ func ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body *AdminMcpSer
 	if body.ClientIDMetadataAdmissionMode != nil {
 		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
 		}
 	}
 	if body.TrustedRemoteSession != nil {
@@ -59631,6 +72423,70 @@ func ValidateAdminMcpServerHealthRemoteSessionsResponseBody(body *AdminMcpServer
 	return
 }
 
+// ValidateAdminMcpServerHealthUpstreamAuthResponseBody runs the validations
+// defined on AdminMcpServerHealthUpstreamAuthResponseBody
+func ValidateAdminMcpServerHealthUpstreamAuthResponseBody(body *AdminMcpServerHealthUpstreamAuthResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.AuthClients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auth_clients", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required" || *body.Status == "undecided") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required", "undecided"}))
+		}
+	}
+	for _, e := range body.AuthClients {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerHealthAuthClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthAuthClientResponseBody runs the validations
+// defined on AdminMcpServerHealthAuthClientResponseBody
+func ValidateAdminMcpServerHealthAuthClientResponseBody(body *AdminMcpServerHealthAuthClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ClientType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_type", "body"))
+	}
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.ServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_count", "body"))
+	}
+	if body.HeaderCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("header_count", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+		}
+	}
+	if body.Source != nil {
+		if !(*body.Source == "backfill" || *body.Source == "admin") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"backfill", "admin"}))
+		}
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateAdminMcpServerToolCallOutcomesResponseBody runs the validations
 // defined on AdminMcpServerToolCallOutcomesResponseBody
 func ValidateAdminMcpServerToolCallOutcomesResponseBody(body *AdminMcpServerToolCallOutcomesResponseBody) (err error) {
@@ -59672,6 +72528,284 @@ func ValidateAdminMcpServerToolCallBucketResponseBody(body *AdminMcpServerToolCa
 	}
 	if body.BucketStart != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.bucket_start", *body.BucketStart, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminHookClientOrganizationResponseBody runs the validations defined
+// on AdminHookClientOrganizationResponseBody
+func ValidateAdminHookClientOrganizationResponseBody(body *AdminHookClientOrganizationResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	return
+}
+
+// ValidateAdminHookClientSessionCellResponseBody runs the validations defined
+// on AdminHookClientSessionCellResponseBody
+func ValidateAdminHookClientSessionCellResponseBody(body *AdminHookClientSessionCellResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Day == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("day", "body"))
+	}
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Machines == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("machines", "body"))
+	}
+	if body.Sessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	if body.MachinesAll == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("machines_all", "body"))
+	}
+	if body.Day != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day", *body.Day, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateAdminInferenceHookCellResponseBody runs the validations defined on
+// AdminInferenceHookCellResponseBody
+func ValidateAdminInferenceHookCellResponseBody(body *AdminInferenceHookCellResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Day == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("day", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	if body.Users == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("users", "body"))
+	}
+	if body.Events == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("events", "body"))
+	}
+	if body.Sessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	if body.Day != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day", *body.Day, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateAdminDeviceAgentCellResponseBody runs the validations defined on
+// AdminDeviceAgentCellResponseBody
+func ValidateAdminDeviceAgentCellResponseBody(body *AdminDeviceAgentCellResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Day == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("day", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Machines == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("machines", "body"))
+	}
+	if body.Day != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day", *body.Day, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateAdminExternalMcpMigrationCandidateResponseBody runs the validations
+// defined on AdminExternalMcpMigrationCandidateResponseBody
+func ValidateAdminExternalMcpMigrationCandidateResponseBody(body *AdminExternalMcpMigrationCandidateResponseBody) (err error) {
+	if body.ToolsetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.OrganizationName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_name", "body"))
+	}
+	if body.OrganizationSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_slug", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.ProjectSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
+	}
+	if body.ServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_name", "body"))
+	}
+	if body.Action == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
+	}
+	if body.DeleteReasons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("delete_reasons", "body"))
+	}
+	if body.Blockers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blockers", "body"))
+	}
+	if body.Warnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warnings", "body"))
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "migrate" || *body.Action == "delete") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"migrate", "delete"}))
+		}
+	}
+	return
+}
+
+// ValidateAdminExternalMcpMigrationRequestRequestBody runs the validations
+// defined on AdminExternalMcpMigrationRequestRequestBody
+func ValidateAdminExternalMcpMigrationRequestRequestBody(body *AdminExternalMcpMigrationRequestRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+	return
+}
+
+// ValidateAdminExternalMcpMigrationOutcomeResponseBody runs the validations
+// defined on AdminExternalMcpMigrationOutcomeResponseBody
+func ValidateAdminExternalMcpMigrationOutcomeResponseBody(body *AdminExternalMcpMigrationOutcomeResponseBody) (err error) {
+	if body.ToolsetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
+	}
+	if body.MigrationStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("migration_status", "body"))
+	}
+	if body.Actions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("actions", "body"))
+	}
+	if body.Warnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warnings", "body"))
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "migrate" || *body.Action == "delete") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"migrate", "delete"}))
+		}
+	}
+	if body.MigrationStatus != nil {
+		if !(*body.MigrationStatus == "migrated" || *body.MigrationStatus == "deleted" || *body.MigrationStatus == "previewed" || *body.MigrationStatus == "failed" || *body.MigrationStatus == "not_attempted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.migration_status", *body.MigrationStatus, []any{"migrated", "deleted", "previewed", "failed", "not_attempted"}))
+		}
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.RemoteMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAdminRegistryPromotionCandidateResponseBody runs the validations
+// defined on AdminRegistryPromotionCandidateResponseBody
+func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryPromotionCandidateResponseBody) (err error) {
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.CurationRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("curation_revision", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.Eligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ObservedSuccesses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_successes", "body"))
+	}
+	if body.ObservedFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_failures", "body"))
+	}
+	if body.ObservedDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_days", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.DocsRetryAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_retry_allowed", "body"))
+	}
+	if body.DocsAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.CurationRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", *body.CurationRevision, goa.FormatUUID))
+	}
+	if body.SuggestedMetadata != nil {
+		if err2 := ValidateAdminRegistryPromotionSuggestionsResponseBody(body.SuggestedMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
+	}
+	if body.DocsLastAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_last_attempt_at", *body.DocsLastAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsNextAttemptAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_next_attempt_at", *body.DocsNextAttemptAt, goa.FormatDateTime))
+	}
+	if body.DocsQueuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_queued_at", *body.DocsQueuedAt, goa.FormatDateTime))
+	}
+	if body.PromotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminRegistryPromotionSuggestionsResponseBody runs the validations
+// defined on AdminRegistryPromotionSuggestionsResponseBody
+func ValidateAdminRegistryPromotionSuggestionsResponseBody(body *AdminRegistryPromotionSuggestionsResponseBody) (err error) {
+	if body.AuthMode != nil {
+		if !(*body.AuthMode == "none" || *body.AuthMode == "oauth") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_mode", *body.AuthMode, []any{"none", "oauth"}))
+		}
 	}
 	return
 }
@@ -59948,6 +73082,47 @@ func ValidateAdminOnboardingStepApplicabilityResponseBody(body *AdminOnboardingS
 	return
 }
 
+// ValidateAdminSignupOfferResponseBody runs the validations defined on
+// AdminSignupOfferResponseBody
+func ValidateAdminSignupOfferResponseBody(body *AdminSignupOfferResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateAdminCustomerUsageResponseBody runs the validations defined on
 // AdminCustomerUsageResponseBody
 func ValidateAdminCustomerUsageResponseBody(body *AdminCustomerUsageResponseBody) (err error) {
@@ -60032,6 +73207,391 @@ func ValidateAdminCustomerUsageProductCostResponseBody(body *AdminCustomerUsageP
 	if body.ProductID != nil {
 		if !(*body.ProductID == "agent_session_storage" || *body.ProductID == "risk_content_scans" || *body.ProductID == "mcp_egress") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.product_id", *body.ProductID, []any{"agent_session_storage", "risk_content_scans", "mcp_egress"}))
+		}
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationOrganizationResponseBody runs the
+// validations defined on AdminUpstreamOAuthMigrationOrganizationResponseBody
+func ValidateAdminUpstreamOAuthMigrationOrganizationResponseBody(body *AdminUpstreamOAuthMigrationOrganizationResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationServerResponseBody runs the validations
+// defined on AdminUpstreamOAuthMigrationServerResponseBody
+func ValidateAdminUpstreamOAuthMigrationServerResponseBody(body *AdminUpstreamOAuthMigrationServerResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody runs the
+// validations defined on AdminUpstreamOAuthMigrationAuthClientsResponseBody
+func ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body *AdminUpstreamOAuthMigrationAuthClientsResponseBody) (err error) {
+	if body.Complete == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("complete", "body"))
+	}
+	if body.InProgress == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("in_progress", "body"))
+	}
+	if body.Associations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("associations", "body"))
+	}
+	if body.PendingClients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_clients", "body"))
+	}
+	if body.PendingLinks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_links", "body"))
+	}
+	if body.PendingHeaders == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_headers", "body"))
+	}
+	if body.PendingRetirements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_retirements", "body"))
+	}
+	if body.PendingMarkedServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_marked_servers", "body"))
+	}
+	if body.Unresolved == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved", "body"))
+	}
+	if body.UnresolvedAssociations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved_associations", "body"))
+	}
+	if body.Warnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warnings", "body"))
+	}
+	if body.Kinds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kinds", "body"))
+	}
+	if body.FailedPhases == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failed_phases", "body"))
+	}
+	for _, e := range body.UnresolvedAssociations {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Warnings {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Kinds {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationAuthClientKindResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SelectionClasses {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationSelectionClassResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SelectionGaps {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationSelectionGapResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody runs
+// the validations defined on
+// AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody
+func ValidateAdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody(body *AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.SubjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_id", "body"))
+	}
+	if body.AssociationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("association_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.RemoteSessionClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
+	}
+	if body.BindingIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("binding_ids", "body"))
+	}
+	if body.SourceIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_ids", "body"))
+	}
+	if body.ServerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_ids", "body"))
+	}
+	if body.SubjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.subject_id", *body.SubjectID, goa.FormatUUID))
+	}
+	if body.AssociationID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.association_id", *body.AssociationID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
+	}
+	for _, e := range body.BindingIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.binding_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.SourceIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.ServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_ids[*]", e, goa.FormatUUID))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationAuthClientKindResponseBody runs the
+// validations defined on AdminUpstreamOAuthMigrationAuthClientKindResponseBody
+func ValidateAdminUpstreamOAuthMigrationAuthClientKindResponseBody(body *AdminUpstreamOAuthMigrationAuthClientKindResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Decided == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("decided", "body"))
+	}
+	if body.PendingClients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_clients", "body"))
+	}
+	if body.PendingLinks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_links", "body"))
+	}
+	if body.PendingHeaders == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_headers", "body"))
+	}
+	if body.PendingRetirements == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_retirements", "body"))
+	}
+	if body.Unresolved == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved", "body"))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationSelectionClassResponseBody runs the
+// validations defined on AdminUpstreamOAuthMigrationSelectionClassResponseBody
+func ValidateAdminUpstreamOAuthMigrationSelectionClassResponseBody(body *AdminUpstreamOAuthMigrationSelectionClassResponseBody) (err error) {
+	if body.CredentialClass == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_class", "body"))
+	}
+	if body.Selections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selections", "body"))
+	}
+	if body.Mapped == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mapped", "body"))
+	}
+	if body.Pending == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending", "body"))
+	}
+	if body.NoAuth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("no_auth", "body"))
+	}
+	if body.Ambiguous == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ambiguous", "body"))
+	}
+	if body.NoClient == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("no_client", "body"))
+	}
+	if body.StaleNoAuth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stale_no_auth", "body"))
+	}
+	if body.Unusable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unusable", "body"))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationSelectionGapResponseBody runs the
+// validations defined on AdminUpstreamOAuthMigrationSelectionGapResponseBody
+func ValidateAdminUpstreamOAuthMigrationSelectionGapResponseBody(body *AdminUpstreamOAuthMigrationSelectionGapResponseBody) (err error) {
+	if body.SelectionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selection_id", "body"))
+	}
+	if body.CredentialClass == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_class", "body"))
+	}
+	if body.CredentialID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.SelectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.selection_id", *body.SelectionID, goa.FormatUUID))
+	}
+	if body.CredentialID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.credential_id", *body.CredentialID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody runs the
+// validations defined on
+// AdminUpstreamOAuthMigrationExecutionProfilesResponseBody
+func ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(body *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody) (err error) {
+	if body.Complete == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("complete", "body"))
+	}
+	if body.Targets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("targets", "body"))
+	}
+	if body.PendingVersions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_versions", "body"))
+	}
+	if body.Gaps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gaps", "body"))
+	}
+	for _, e := range body.Gaps {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationExecutionProfileGapResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationExecutionProfileGapResponseBody runs the
+// validations defined on
+// AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody
+func ValidateAdminUpstreamOAuthMigrationExecutionProfileGapResponseBody(body *AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody) (err error) {
+	if body.ExecutionContext == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execution_context", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	return
+}
+
+// ValidateAdminUpstreamAuthEnforcementResponseBody runs the validations
+// defined on AdminUpstreamAuthEnforcementResponseBody
+func ValidateAdminUpstreamAuthEnforcementResponseBody(body *AdminUpstreamAuthEnforcementResponseBody) (err error) {
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Ready == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ready", "body"))
+	}
+	if body.Blockers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blockers", "body"))
+	}
+	return
+}
+
+// ValidateAdminUpstreamOAuthMigrationStatusResponseBody runs the validations
+// defined on AdminUpstreamOAuthMigrationStatusResponseBody
+func ValidateAdminUpstreamOAuthMigrationStatusResponseBody(body *AdminUpstreamOAuthMigrationStatusResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Migrated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("migrated", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.PendingAssociations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_associations", "body"))
+	}
+	if body.UnresolvedServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unresolved_servers", "body"))
+	}
+	if body.Credentials == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credentials", "body"))
+	}
+	if body.PendingSelections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selections", "body"))
+	}
+	if body.ReconnectCredentials == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconnect_credentials", "body"))
+	}
+	for _, e := range body.UnresolvedServers {
+		if e != nil {
+			if err2 := ValidateAdminUpstreamOAuthMigrationServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.AuthClients != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationAuthClientsResponseBody(body.AuthClients); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ExecutionProfiles != nil {
+		if err2 := ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(body.ExecutionProfiles); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Enforcement != nil {
+		if err2 := ValidateAdminUpstreamAuthEnforcementResponseBody(body.Enforcement); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return

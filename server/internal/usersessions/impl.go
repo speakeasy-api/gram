@@ -34,12 +34,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
@@ -47,13 +49,15 @@ import (
 // packages keeps the management-API surface logically grouped while a single
 // Service struct lets handlers share dependencies.
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	auth         *auth.Auth
-	authz        *authz.Engine
-	chatSessions TokenRevoker
-	audit        *audit.Logger
+	codeModeSelection codemode.SelectionGate
+	tracer            trace.Tracer
+	logger            *slog.Logger
+	db                *pgxpool.Pool
+	auth              *auth.Auth
+	sessions          *sessions.Manager
+	authz             *authz.Engine
+	chatSessions      TokenRevoker
+	audit             *audit.Logger
 	// signer mints the user-session JWT returned by mintUserSession. Same
 	// signer the /mcp/{slug}/token handler uses, so the resulting JWTs
 	// validate through the runtime gateway by the existing user-session
@@ -62,6 +66,12 @@ type Service struct {
 	// serverURL is the public base URL used to stamp the JWT issuer claim
 	// on mintUserSession output. Matches the issuer URL /token would emit.
 	serverURL string
+
+	// sharedHosts are the hosts the deployment serves shared authorization
+	// servers on, which the issuer URLs and token endpoints it shows are
+	// derived from.
+	sharedHosts authserver.Hosts
+
 	// cimdResolver backs the VerifyURL handler, which probes an
 	// operator-supplied CIMD document URL on demand. Guardian-backed, so the
 	// probe cannot be turned into an SSRF primitive against internal
@@ -107,22 +117,26 @@ var (
 // substitute a failing revoker.
 // signer + serverURL drive mintUserSession; pass an empty serverURL to
 // disable that handler (it will 503 on call — used in tests that don't
-// need the surface).
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, verifyStore ratelimit.Store, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
+// need the surface). sharedHosts must match the hosts the MCP service serves
+// shared authorization servers on.
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, sharedHosts authserver.Hosts, verifyStore ratelimit.Store, codeModeSelection codemode.SelectionGate, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
-		logger:       logger,
-		db:           db,
-		auth:         auth.New(logger, db, sessionManager, authzEngine),
-		authz:        authzEngine,
-		chatSessions: chatSessionsManager,
-		audit:        auditLogger,
-		signer:       signer,
-		serverURL:    serverURL,
-		cimdResolver: cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		revoker:      remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, assertionSigners...),
+		codeModeSelection: codeModeSelection,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
+		logger:            logger,
+		db:                db,
+		auth:              auth.New(logger, db, sessionManager, authzEngine),
+		sessions:          sessionManager,
+		authz:             authzEngine,
+		chatSessions:      chatSessionsManager,
+		audit:             auditLogger,
+		signer:            signer,
+		serverURL:         serverURL,
+		sharedHosts:       sharedHosts,
+		cimdResolver:      cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		revoker:           remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, assertionSigners...),
 		verifyLimiter: ratelimit.New(verifyStore, "cimd-url-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),

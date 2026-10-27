@@ -96,11 +96,10 @@ func TestAuthenticationHostSharedAuthorizationServer_CORS(t *testing.T) {
 		{"/.well-known/oauth-authorization-server" + base, http.MethodGet, http.StatusOK, "*"},
 		{base + "/.well-known/oauth-authorization-server", http.MethodGet, http.StatusOK, "*"},
 		{base + "/token", http.MethodPost, http.StatusBadRequest, "*"},
-		{base + "/revoke", http.MethodPost, http.StatusUnauthorized, "*"},
-		// Successful preflights do not make an unmounted host route available.
-		{base + "/register", http.MethodPost, http.StatusNotFound, "*"},
-		{base + "/authorize", http.MethodGet, http.StatusNotFound, ""},
-		{base + "/connect", http.MethodGet, http.StatusNotFound, ""},
+		{base + "/revoke", http.MethodPost, http.StatusBadRequest, "*"},
+		{base + "/register", http.MethodPost, http.StatusBadRequest, "*"},
+		{base + "/authorize", http.MethodGet, http.StatusBadRequest, ""},
+		{base + "/connect", http.MethodGet, http.StatusBadRequest, ""},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			t.Parallel()

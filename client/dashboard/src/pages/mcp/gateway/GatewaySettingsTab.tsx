@@ -1,3 +1,4 @@
+import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
 import { Check, Copy, Loader2 } from "lucide-react";
 import {
   DangerSettingsSection,
@@ -22,6 +23,8 @@ import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/Netwo
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
 import { Textarea } from "@/components/moon/textarea";
+import codeInstructions from "./builtin-gateway-code-instructions.txt?raw";
+import directInstructions from "./builtin-gateway-direct-instructions.txt?raw";
 import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
 import { cn } from "@/lib/utils";
 import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
@@ -32,6 +35,7 @@ import { useDeleteMetaMcpServerMutation } from "@gram/client/react-query/deleteM
 import { useMetaMcpAuthTarget } from "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { useUpdateMetaMcpServerMutation } from "@gram/client/react-query/updateMetaMcpServer.js";
 
@@ -81,6 +85,10 @@ export function GatewaySettingsTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <GatewayNameSection metaMcpServer={metaMcpServer} />
+      <GatewayDiscoverySection
+        key={`${metaMcpServer.id}:${metaMcpServer.discoveryMode}`}
+        metaMcpServer={metaMcpServer}
+      />
       <GatewayInstructionsSection metaMcpServer={metaMcpServer} />
       <ServerUrlSection
         backend={{ metaMcpServerId: metaMcpServer.id }}
@@ -201,7 +209,22 @@ export function GatewayInstructionsSection({
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
-  const stored = metaMcpServer.instructions || builtInInstructions;
+  const servedMode =
+    metaMcpServer.discoveryMode === "code_mode" &&
+    !metaMcpServer.codeModeEnabled
+      ? "progressive"
+      : metaMcpServer.discoveryMode;
+  const defaultInstructions =
+    servedMode === "direct"
+      ? directInstructions.trimEnd()
+      : servedMode === "progressive"
+        ? builtInInstructions
+        : servedMode === "code_mode"
+          ? codeInstructions.trimEnd()
+          : undefined;
+  const supportsEditing =
+    defaultInstructions !== undefined || !!metaMcpServer.instructions;
+  const stored = metaMcpServer.instructions || defaultInstructions || "";
   const [draft, setDraft] = useState(stored);
 
   useEffect(() => {
@@ -219,7 +242,7 @@ export function GatewayInstructionsSection({
       // Refetching an already-empty saved value does not change `stored`.
       setDraft((current) =>
         current.replaceAll("\0", "").trim() === ""
-          ? builtInInstructions
+          ? (defaultInstructions ?? "")
           : current,
       );
       toast.success("Gateway instructions updated");
@@ -232,7 +255,14 @@ export function GatewayInstructionsSection({
   // the limit agree with what will be stored.
   const characterCount = Array.from(trimmedDraft.replaceAll("\0", "")).length;
   const overLimit = characterCount > INSTRUCTIONS_MAX_LENGTH;
-  const saveDisabled = !canWrite || !dirty || overLimit || update.isPending;
+  const saveDisabled =
+    !canWrite ||
+    !supportsEditing ||
+    !dirty ||
+    overLimit ||
+    update.isPending ||
+    (defaultInstructions === undefined &&
+      trimmedDraft.replaceAll("\0", "").trim() === "");
 
   return (
     <SettingsSection id={GATEWAY_INSTRUCTIONS_SECTION_ID}>
@@ -240,11 +270,10 @@ export function GatewayInstructionsSection({
         <SettingsSection.Title>Instructions</SettingsSection.Title>
         <SettingsSection.Description>
           Sent to every client on connect. Speakeasy&apos;s built-in
-          instructions teach agents to list servers and describe tools before
-          executing; your text replaces them. Save it blank to restore the
-          built-in text. Anyone who can connect to this gateway can read the
-          text, and clients already connected keep the old text until they
-          reconnect.
+          instructions reflect the active discovery mode; your text replaces
+          them. Save it blank to restore the built-in text. Anyone who can
+          connect to this gateway can read the text, and clients already
+          connected keep the old text until they reconnect.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -254,7 +283,11 @@ export function GatewayInstructionsSection({
               <FieldLabel htmlFor="gateway-instructions">
                 Custom instructions
               </FieldLabel>
-              <CopyBuiltInInstructionsButton />
+              {defaultInstructions !== undefined && (
+                <CopyBuiltInInstructionsButton
+                  instructions={defaultInstructions}
+                />
+              )}
             </div>
             <Textarea
               id="gateway-instructions"
@@ -262,7 +295,12 @@ export function GatewayInstructionsSection({
               onChange={(event) => setDraft(event.target.value)}
               className="min-h-[160px]"
               aria-invalid={update.isError || overLimit}
-              disabled={!canWrite || update.isPending}
+              disabled={!canWrite || !supportsEditing || update.isPending}
+              placeholder={
+                defaultInstructions === undefined
+                  ? "Default instructions unavailable"
+                  : undefined
+              }
             />
             {overLimit && (
               <FieldError>
@@ -276,7 +314,17 @@ export function GatewayInstructionsSection({
           <SettingsSection.FooterHint
             className={cn(overLimit && "text-destructive")}
           >
-            {`${characterCount.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
+            {supportsEditing && (
+              <span className="block">
+                {`${characterCount.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
+              </span>
+            )}
+            {defaultInstructions === undefined && (
+              <span className="block">
+                Refresh the page to view or restore default instructions for
+                this gateway’s unsupported discovery mode.
+              </span>
+            )}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope
@@ -287,7 +335,8 @@ export function GatewayInstructionsSection({
               <FooterSaveButton
                 pending={update.isPending}
                 disabled={saveDisabled}
-                onClick={() =>
+                onClick={() => {
+                  if (saveDisabled) return;
                   update.mutate({
                     request: {
                       updateMetaMcpServerForm: {
@@ -299,8 +348,8 @@ export function GatewayInstructionsSection({
                         instructions: trimmedDraft,
                       },
                     },
-                  })
-                }
+                  });
+                }}
               />
             </RequireScope>
           </SettingsSection.FooterActions>
@@ -311,7 +360,11 @@ export function GatewayInstructionsSection({
 }
 
 // Keeps the default text available when editing saved custom instructions.
-function CopyBuiltInInstructionsButton(): JSX.Element {
+function CopyBuiltInInstructionsButton({
+  instructions,
+}: {
+  instructions: string;
+}): JSX.Element {
   const [copied, setCopied] = useState(false);
 
   return (
@@ -319,7 +372,7 @@ function CopyBuiltInInstructionsButton(): JSX.Element {
       variant="tertiary"
       size="xs"
       onClick={() => {
-        void navigator.clipboard.writeText(builtInInstructions).then(
+        void navigator.clipboard.writeText(instructions).then(
           () => {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
@@ -349,7 +402,8 @@ function GatewayAuthenticationSection({
     endpoints.find((e) => !e.customDomainId)?.slug ??
     endpoints[0]?.slug ??
     "gateway";
-  const target = useMetaMcpAuthTarget(metaMcpServer, slugSeed);
+  const { mcpUrl } = useResolvedMcpServerUrl(endpoints, false);
+  const target = useMetaMcpAuthTarget(metaMcpServer, slugSeed, mcpUrl);
 
   return (
     <SettingsSection id={GATEWAY_AUTHENTICATION_SECTION_ID}>

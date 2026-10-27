@@ -83,14 +83,16 @@ type AllowEntry struct {
 }
 
 // SessionSelection is the consent-screen tool policy persisted on
-// user_sessions.tool_selection. A NULL column (no document) is the only
-// all-tools representation. Any document is restrictive: a tool is in scope
+// the legacy user_sessions.tool_selection document. A nil selection is unrestricted;
+// versioned policies may carry connection options without a selection. Any
+// SessionSelection document is restrictive: a tool is in scope
 // iff some allow entry includes it — by exact name for tool entries and
 // snapshot expansions, or by serve-time hint matching for live annotation
 // entries. An empty allow list authorizes zero tools.
 type SessionSelection struct {
 	// Resource pins the selection to the endpoint whose tool inventory the
-	// user consented on: "mcp_server:<uuid>" or "toolset:<uuid>". Session
+	// user consented on: "mcp_server:<uuid>", "toolset:<uuid>" or, for a
+	// gateway, "meta_mcp_server:<uuid>". Session
 	// tokens are portable across endpoints sharing an issuer, so a selection
 	// served against a different resource is rejected, never reinterpreted.
 	Resource string `json:"resource"`
@@ -198,7 +200,7 @@ func ParseSessionSelection(raw []byte) (*SessionSelection, error) {
 // server-authored "<kind>:<uuid>" shape with a canonical, non-zero UUID.
 func validResource(resource string) bool {
 	kind, id, ok := strings.Cut(resource, ":")
-	if !ok || (kind != "mcp_server" && kind != "toolset") {
+	if !ok || (kind != "mcp_server" && kind != "toolset" && kind != gatewayResourceKind) {
 		return false
 	}
 	parsed, err := uuid.Parse(id)
@@ -383,3 +385,5 @@ func FilterToolsBySelection(tools []*types.Tool, sel *SessionSelection) []*types
 	}
 	return filtered
 }
+
+const gatewayResourceKind = "meta_mcp_server"

@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { RequireScope } from "@/components/require-scope";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -191,6 +192,7 @@ function TriggersTable({
   onEdit?: (trigger: TriggerInstance) => void;
 }) {
   const routes = useRoutes();
+  const canViewToolLogs = useCanViewToolLogs();
   const defMap = new Map(definitions.map((d) => [d.slug, d]));
   const columns: Column<TriggerInstance>[] = [
     {
@@ -243,21 +245,27 @@ function TriggersTable({
         </span>
       ),
     },
-    {
-      key: "logs",
-      header: "",
-      width: "auto",
-      render: (trigger) => (
-        <div onClick={(e) => e.stopPropagation()}>
-          <routes.logs.Link
-            queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
-            className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
-          >
-            <Icon name="file-text" className="h-4 w-4" />
-          </routes.logs.Link>
-        </div>
-      ),
-    },
+    // Tool Logs needs log:read on the project, so the shortcut is only
+    // offered to those who can open it.
+    ...(canViewToolLogs
+      ? ([
+          {
+            key: "logs",
+            header: "",
+            width: "auto",
+            render: (trigger) => (
+              <div onClick={(e) => e.stopPropagation()}>
+                <routes.logs.Link
+                  queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
+                  className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
+                >
+                  <Icon name="file-text" className="h-4 w-4" />
+                </routes.logs.Link>
+              </div>
+            ),
+          },
+        ] satisfies Column<TriggerInstance>[])
+      : []),
   ];
 
   return (

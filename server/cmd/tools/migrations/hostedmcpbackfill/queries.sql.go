@@ -201,7 +201,7 @@ func (q *Queries) ListEndpointsFixture(ctx context.Context, projectID uuid.UUID)
 }
 
 const listServersFixture = `-- name: ListServersFixture :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
 ORDER BY id
@@ -228,9 +228,11 @@ func (q *Queries) ListServersFixture(ctx context.Context, projectID uuid.UUID) (
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.RequiresUpstreamAuth,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -342,7 +344,6 @@ func (q *Queries) SeedEndpointFixture(ctx context.Context, arg SeedEndpointFixtu
 }
 
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
-
 INSERT INTO organization_metadata (id, name, slug)
 VALUES ($1, $2, $3)
 `
@@ -353,7 +354,6 @@ type SeedOrganizationFixtureParams struct {
 	Slug string
 }
 
-// TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
 func (q *Queries) SeedOrganizationFixture(ctx context.Context, arg SeedOrganizationFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedOrganizationFixture, arg.ID, arg.Name, arg.Slug)
 	return err

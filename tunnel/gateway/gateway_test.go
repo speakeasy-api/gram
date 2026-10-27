@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/hashicorp/yamux"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -354,6 +356,9 @@ func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
 	req.Header.Set(wire.HeaderTunnelRequireActive, "1")
 	req.Header.Set(wire.HeaderTunnelAgentSession, "session-a")
+	for _, header := range []string{wire.HeaderControlToken, wire.HeaderCapabilities, wire.HeaderTargetDisplay} {
+		req.Header.Set(header, "private")
+	}
 
 	gw.ForwardHandler().ServeHTTP(rec, req)
 
@@ -363,6 +368,9 @@ func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelID))
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelForwardToken))
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelRequireActive))
+	for _, header := range []string{wire.HeaderControlToken, wire.HeaderCapabilities, wire.HeaderTargetDisplay} {
+		require.Empty(t, forwarded.Get(header))
+	}
 }
 
 func TestForwardHandlerRejectsSensitiveRequestAfterTunnelRevocation(t *testing.T) {
@@ -440,4 +448,139 @@ func TestRegistryAddRejectsAfterDrainBegins(t *testing.T) {
 	require.Nil(t, remove)
 	require.True(t, session.IsClosed())
 	require.Zero(t, reg.activeSessions())
+}
+
+func TestForwardHandlerRejectsDiagnosticControlPaths(t *testing.T) {
+	t.Parallel()
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	for _, path := range []string{wire.ControlStatusPath, wire.ControlPathPrefix + "other"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+		req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+		rec := httptest.NewRecorder()
+		gw.ForwardHandler().ServeHTTP(rec, req)
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	}
+}
+
+// connectAgent dials the gateway's /connect endpoint with the given headers and
+// holds the agent end of the yamux session without accepting substreams, so the
+// gateway's hello and diagnostics polls stay outstanding and the connection
+// keeps the diagnostics state it was registered with.
+func connectAgent(t *testing.T, gatewayURL, key string, header http.Header) {
+	t.Helper()
+
+	header.Set("Authorization", "Bearer "+key)
+	header.Set(wire.HeaderTunnelServiceVersion, "1.0.0")
+	ws, _, err := websocket.Dial(t.Context(), gatewayURL, &websocket.DialOptions{HTTPHeader: header})
+	require.NoError(t, err)
+
+	ycfg := yamux.DefaultConfig()
+	ycfg.LogOutput = io.Discard
+	session, err := yamux.Server(websocket.NetConn(t.Context(), ws, websocket.MessageBinary), ycfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+}
+
+func TestConnectRecordsAgentDiagnosticsState(t *testing.T) {
+	t.Parallel()
+
+	controlToken := strings.Repeat("ab", 32)
+	tests := []struct {
+		name              string
+		header            http.Header
+		wantState         string
+		wantTargetDisplay string
+		wantPoll          bool
+	}{
+		{
+			name: "diagnostics agent",
+			header: http.Header{
+				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
+				wire.HeaderControlToken:  {controlToken},
+				wire.HeaderTargetDisplay: {"https://mcp.internal:8443"},
+			},
+			wantState:         "pending",
+			wantTargetDisplay: "https://mcp.internal:8443",
+			wantPoll:          true,
+		},
+		{
+			name: "agent with diagnostics turned off",
+			header: http.Header{
+				wire.HeaderCapabilities: {wire.DiagnosticsDisabledCapability},
+			},
+			wantState:         "disabled",
+			wantTargetDisplay: "",
+			wantPoll:          false,
+		},
+		{
+			name:              "agent that predates diagnostics",
+			header:            http.Header{},
+			wantState:         "unsupported",
+			wantTargetDisplay: "",
+			wantPoll:          false,
+		},
+		{
+			name: "target path from an older agent is dropped",
+			header: http.Header{
+				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
+				wire.HeaderControlToken:  {controlToken},
+				wire.HeaderTargetDisplay: {"https://mcp.internal:8443/mcp/secret-token"},
+			},
+			wantState:         "pending",
+			wantTargetDisplay: "https://mcp.internal:8443",
+			wantPoll:          true,
+		},
+		{
+			name: "diagnostics capability without a valid control token",
+			header: http.Header{
+				wire.HeaderCapabilities:  {wire.DiagnosticsCapability},
+				wire.HeaderControlToken:  {"not-a-control-token"},
+				wire.HeaderTargetDisplay: {"https://mcp.internal:8443"},
+			},
+			wantState:         "unsupported",
+			wantTargetDisplay: "",
+			wantPoll:          false,
+		},
+		{
+			name: "agent with diagnostics turned off cannot supply a target",
+			header: http.Header{
+				wire.HeaderCapabilities:  {wire.DiagnosticsDisabledCapability},
+				wire.HeaderTargetDisplay: {"https://mcp.internal:8443"},
+			},
+			wantState:         "disabled",
+			wantTargetDisplay: "",
+			wantPoll:          false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			const tunnelID = "tunnel-1"
+			const key = "gram_tunnel_testkey"
+			gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+			keys, ok := gw.keys.(*StaticKeyStore)
+			require.True(t, ok)
+			keys.Add(tunnelID, key)
+			server := httptest.NewServer(gw.PublicHandler())
+			t.Cleanup(server.Close)
+
+			connectAgent(t, "ws"+strings.TrimPrefix(server.URL, "http")+"/connect", key, tc.header.Clone())
+
+			var connection route.Connection
+			require.EventuallyWithT(t, func(c *assert.CollectT) {
+				connections := gw.reg.connections(tunnelID, time.Now())
+				if assert.Len(c, connections, 1) {
+					connection = connections[0]
+				}
+			}, 5*time.Second, 10*time.Millisecond)
+			require.NotNil(t, connection.Diagnostics)
+			require.Equal(t, tc.wantState, connection.Diagnostics.State)
+			require.Equal(t, tc.wantTargetDisplay, connection.TargetDisplay)
+
+			_, _, poll := agentDiagnostics(tc.header)
+			require.Equal(t, tc.wantPoll, poll)
+		})
+	}
 }

@@ -2,6 +2,7 @@ package usersessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,14 +18,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -40,7 +47,7 @@ const (
 )
 
 // mintTarget is the issuer-gated audience the JWT is bound to, resolved from
-// either a toolset (/mcp) or a remote MCP server (/x/mcp) before the shared
+// either a toolset or an MCP server before the shared
 // mint+persist tail runs.
 type mintTarget struct {
 	issuerID uuid.UUID
@@ -53,7 +60,7 @@ type mintTarget struct {
 }
 
 // MintUserSession issues a user-session JWT against an issuer-gated audience —
-// either a toolset (/mcp) or a remote MCP server (/x/mcp) — on behalf of the
+// either a toolset or an MCP server — on behalf of the
 // authenticated dashboard user. Exactly one of toolset_id / mcp_server_id must
 // be set. The resulting JWT has the same shape as the one /token would emit
 // after a real OAuth dance, so the runtime gateway validates it through the
@@ -114,6 +121,26 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		return nil, fmt.Errorf("authorize MCP session mint: %w", mcpaccess.ServerPermissionDenied(err, ""))
 	}
 
+	var toolPolicy []byte
+	if payload.DiscoveryMode != nil {
+		mode := metamcp.DiscoveryMode(*payload.DiscoveryMode)
+		if !hasMeta || !mode.Valid() {
+			return nil, oops.E(oops.CodeBadRequest, nil, "discovery_mode requires a gateway and a supported mode")
+		}
+		if mode == metamcp.DiscoveryModeCode && !s.codeModeSelection.Allows(ctx, authCtx.ActiveOrganizationID) {
+			return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+		}
+		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{
+			Resource:  "meta_mcp_server:" + target.resourceID,
+			Selection: nil,
+			Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+			Catalog:   nil,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "encode gateway connection options").LogError(ctx, s.logger)
+		}
+	}
+
 	issuer, err := repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
 		ID:             target.issuerID,
 		ProjectID:      *authCtx.ProjectID,
@@ -150,7 +177,17 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	now := time.Now()
-	if _, err := repo.New(s.db).CreateUserSession(ctx, repo.CreateUserSessionParams{
+	signInID, err := s.dashboardSignIn(ctx, authCtx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "link sign-in").LogError(ctx, s.logger)
+	}
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txRepo := repo.New(dbtx)
+	session, err := txRepo.CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
 		// No registration row. The refresh-token sentinel is what the session
 		// list reads to label the connection as the dashboard.
@@ -167,14 +204,40 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		RefreshTokenHash: conv.ToPGText(fmt.Sprintf("%s:%s", sessiontokens.DashboardMintRefreshTokenHashPrefix, jti)),
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
-		ToolSelection:    nil,
+		ToolSelection:    toolPolicy,
 		// Dashboard sessions are issuer-scoped, never bound to one resource.
-		Resource: pgtype.Text{String: "", Valid: false},
-	}); err != nil {
+		Resource:     pgtype.Text{String: "", Valid: false},
+		SignInID:     signInID,
+		SignInUserID: conv.ToPGText(authCtx.UserID),
+		CredentialID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			revoked, lookupErr := s.signInRevoked(ctx, authCtx.ActiveOrganizationID, signInID)
+			switch {
+			case lookupErr != nil:
+				return nil, oops.E(oops.CodeUnavailable, lookupErr, "check sign-in after refused mint").LogError(ctx, s.logger)
+			case revoked:
+				return nil, oops.E(oops.CodeUnauthorized, err, "sign-in was revoked, sign in again").LogError(ctx, s.logger)
+			}
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
+	}
+	if _, err := txRepo.RecordUpstreamClientSelections(ctx, repo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: target.issuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        session.ID,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		// A dashboard mint has no consent page, so it picks nothing.
+		PickedMcpServerIds:  []uuid.UUID{},
+		PickedClientIds:     []uuid.UUID{},
+		PickedAuthClientIds: nil,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit user session").LogError(ctx, s.logger)
 	}
 
 	// Spread the attrs (incl. the per-target audience attr) so loggercheck
@@ -211,6 +274,11 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
 	}
+	// The legacy binding below gates on the hosting state the slug fallback serves.
+	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load toolset mcp server").LogError(ctx, s.logger)
+	}
 
 	wrapper, err := mcpserversrepo.New(s.db).GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{
 		ToolsetID: toolset.ID,
@@ -238,7 +306,7 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
 	if toolset.McpSlug.String == "" {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated toolset has no mcp slug").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "the hosted MCP server has no address; add one before minting a user-session token").LogWarn(ctx, s.logger)
 	}
 
 	issuerURL, err := url.JoinPath(s.serverURL, "mcp", toolset.McpSlug.String)
@@ -297,18 +365,35 @@ func (s *Service) serverMintTarget(ctx context.Context, server *mcpserversrepo.M
 
 // wrapperMintTarget binds a toolset's wrapper only when an endpoint addresses
 // it; a nil target means the legacy toolset route is the one that serves.
+// Endpoints on a domain that cannot serve yet still bind the wrapper.
 func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (*mintTarget, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	issuerURL, err := endpointaddr.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}
-	if issuerURL == "" {
+	if issuerURL != "" {
+		return serverMintTargetAt(server, issuerURL), nil
+	}
+
+	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		McpServerID:    server.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mint wrapper endpoints").LogError(ctx, s.logger)
+	}
+	if len(endpoints) == 0 {
 		return nil, nil
+	}
+	issuerURL, err = s.serverSlugIssuerURL(ctx, server)
+	if err != nil {
+		return nil, err
 	}
 	return serverMintTargetAt(server, issuerURL), nil
 }
@@ -324,25 +409,28 @@ func serverMintTargetAt(server *mcpserversrepo.McpServer, issuerURL string) *min
 }
 
 // serverMintIssuerURL builds the descriptive iss claim from the server's
-// primary endpoint; servers with no endpoint keep the legacy /x/mcp shape.
+// primary endpoint; servers with no endpoint fall back to /mcp/{slug}.
 func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	issuerURL, err := endpointaddr.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}
 	if issuerURL != "" {
 		return issuerURL, nil
 	}
+	return s.serverSlugIssuerURL(ctx, server)
+}
 
+func (s *Service) serverSlugIssuerURL(ctx context.Context, server *mcpserversrepo.McpServer) (string, error) {
 	if server.Slug.String == "" {
 		return "", oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no addressable endpoint or slug").LogError(ctx, s.logger)
 	}
-	issuerURL, err = url.JoinPath(s.serverURL, "x", "mcp", server.Slug.String)
+	issuerURL, err := url.JoinPath(s.serverURL, "mcp", server.Slug.String)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
 	}
@@ -409,4 +497,44 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 		resourceID: metaServer.ID.String(),
 		logAttr:    attr.SlogMetaMcpServerID(metaServer.ID.String()),
 	}, nil
+}
+
+// signInRevoked reports whether a refused mint was refused for its sign-in,
+// so an issuer miss is not reported as a revocation. Only a missing sign-in
+// reads as not revoked; any other lookup failure is returned.
+func (s *Service) signInRevoked(ctx context.Context, organizationID string, signInID uuid.NullUUID) (bool, error) {
+	if !signInID.Valid {
+		return false, nil
+	}
+	row, err := repo.New(s.db).LockSignInForGrant(ctx, repo.LockSignInForGrantParams{ID: signInID.UUID, OrganizationID: organizationID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("look up sign-in: %w", err)
+	}
+	return row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(signins.RevokeReasonSignOut)), nil
+}
+
+// dashboardSignIn is the caller's sign-in in its active organization,
+// revoked or not, so the guarded insert refuses a revoked one. While
+// enforcement is on a failed lookup fails the mint rather than leave it
+// unlinked.
+func (s *Service) dashboardSignIn(ctx context.Context, authCtx *contextvalues.AuthContext) (uuid.NullUUID, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" || !s.sessions.SignInEnforced(ctx, authCtx.ActiveOrganizationID) {
+		return none, nil
+	}
+	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return none, fmt.Errorf("load dashboard session: %w", err)
+	}
+	if session.UserID != authCtx.UserID || session.ImpersonatorEmail != "" || session.SupportOrganizationID != "" {
+		return none, nil
+	}
+	id, err := signins.SignInForSession(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.UserID, session.WorkOSSessionID)
+	if err != nil {
+		return none, fmt.Errorf("look up sign-in: %w", err)
+	}
+	return id, nil
 }

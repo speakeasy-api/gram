@@ -1,3 +1,4 @@
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Alert, AlertDescription } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -208,6 +209,7 @@ function ExistingConfigReview({
       });
       await Promise.all([
         invalidateAllToolset(queryClient),
+        invalidateAllMcpServers(queryClient),
         invalidateAllGetMcpMetadata(queryClient),
       ]);
       setStage("success");
@@ -347,9 +349,11 @@ function WizardBody({
         actions: {
           invalidateOnExternalSuccess: () => {
             void invalidateAllToolset(queryClient);
+            void invalidateAllMcpServers(queryClient);
           },
           invalidateOnProxyCreate: () => {
             void invalidateAllToolset(queryClient);
+            void invalidateAllMcpServers(queryClient);
             void invalidateAllGetMcpMetadata(queryClient);
             void invalidateAllListEnvironments(queryClient);
           },
@@ -373,6 +377,7 @@ function WizardBody({
   const input: WizardInput = {
     discovered,
     initialPath,
+    toolsetId: toolset.id,
     toolsetSlug,
     toolsetName: toolset.name,
     activeOrganizationId: session.activeOrganizationId,

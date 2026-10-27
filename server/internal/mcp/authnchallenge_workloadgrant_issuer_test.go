@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -85,7 +86,7 @@ func (f workloadGrantFixture) seedToolsetOnUserSessionIssuer(t *testing.T, issue
 		AudienceURN:         urn.NewToolset(toolset.ID).String(),
 		OrganizationID:      f.fx.orgID,
 		ProjectID:           f.fx.target.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                slug,
 		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		UserSessionIssuerID: issuerID,

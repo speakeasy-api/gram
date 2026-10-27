@@ -34,7 +34,7 @@ const ORG = anOrganization();
 const FEATURES: ProductFeatures = {
   aiPlatformPushIntegrationsEnabled: false,
   authzChallengeLoggingEnabled: true,
-  consentToolFilteringEnabled: false,
+  codeModeEnabled: false,
   customModelKeysEnabled: true,
   customerManagedEncryptionKeysEnabled: false,
   deviceAgent: false,
@@ -42,6 +42,7 @@ const FEATURES: ProductFeatures = {
   hooksFailOpenEnabled: false,
   logsEnabled: true,
   networkIngressEnabled: false,
+  organizationGatewayDisabled: false,
   platformMcpEnabled: true,
   remoteSessionAutoRefreshEnabled: false,
   remoteSessionAutoRefreshEnforcedEnabled: false,
@@ -58,7 +59,7 @@ const FEATURES: ProductFeatures = {
 const FEATURES_RESPONSE = {
   ai_platform_push_integrations_enabled: false,
   authz_challenge_logging_enabled: true,
-  consent_tool_filtering_enabled: false,
+  code_mode_enabled: false,
   custom_model_keys_enabled: true,
   customer_managed_encryption_keys_enabled: false,
   device_agent: false,
@@ -66,6 +67,7 @@ const FEATURES_RESPONSE = {
   hooks_fail_open_enabled: false,
   logs_enabled: true,
   network_ingress_enabled: false,
+  organization_gateway_disabled: false,
   platform_mcp_enabled: true,
   remote_session_auto_refresh_enabled: false,
   remote_session_auto_refresh_enforced_enabled: false,
@@ -94,6 +96,11 @@ const TOGGLE_FEATURES = [
     featureName: "customer_managed_encryption_keys",
     enabledKey: "customerManagedEncryptionKeysEnabled",
     label: "Customer-Managed Encryption Keys",
+  },
+  {
+    featureName: "code_mode",
+    enabledKey: "codeModeEnabled",
+    label: "Gateway Code Mode",
   },
   {
     featureName: "custom_model_keys",
@@ -144,7 +151,7 @@ const OMITTED_FEATURES = {
   skills: "omitted",
   skill_capture_metadata_only: "omitted",
   remote_session_auto_refresh_enforced: "omitted",
-  consent_tool_filtering: "omitted",
+  organization_gateway_disabled: "omitted",
 } as const satisfies Record<Exclude<FeatureName, ToggleFeatureName>, "omitted">;
 
 function jsonResponse(body: unknown, status = 200): Response {

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -29,6 +30,9 @@ import (
 )
 
 type preparationDCRResponse struct {
+	// callbackBaseURL is local registration provenance, never provider input.
+	callbackBaseURL pgtype.Text
+
 	ClientID                string   `json:"client_id"`
 	ClientSecret            string   `json:"client_secret"`
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
@@ -64,7 +68,20 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	if (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
 		return result, PreparationStateManualSetupRequired
 	}
-	origin := s.origins.ForNewClient(true)
+	callbackBaseURL := s.origins.NewClientBaseURL(true)
+	if s.origins.OrganizationHosts != nil {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+			return result, PreparationStateIndeterminate
+		}
+		var err error
+		callbackBaseURL, err = s.origins.ResolveNewClientBaseURL(ctx, s.db, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return result, PreparationStateIndeterminate
+		}
+	}
+	result.callbackBaseURL = callbackBaseURL
+	origin := s.origins.ForClient(callbackBaseURL)
 	if s.policy == nil || origin == nil {
 		return result, PreparationStateIndeterminate
 	}
@@ -265,7 +282,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 			expires = conv.ToPGTimestamptz(time.Unix(response.ClientSecretExpiresAt, 0))
 		}
 		// The registration's redirect_uris use this origin, as interactive clients do.
-		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{JsonWebKeySetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, CallbackBaseUrl: s.origins.NewClientBaseURL(true), ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires, GrantTypes: nil, CredentialOwner: pgtype.Text{String: "", Valid: false}})
+		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{JsonWebKeySetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, CallbackBaseUrl: response.callbackBaseURL, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires, GrantTypes: nil, CredentialOwner: pgtype.Text{String: "", Valid: false}})
 		if err != nil {
 			return preparationResult(b, currentIssuer, client, PreparationStateIndeterminate), err
 		}
@@ -294,7 +311,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		// completions retain the claim generation. Preserve the original CAS below.
 		b.Generation++
 		b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
-		b.RequestedScopes = scopes
+		b.RequestedScopes = sortedScopes(scopes)
 		b.GrantSource = conv.ToPGText(PreparationGrantSourceProviderReturned)
 		b.ClaimID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		b.ClaimedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}

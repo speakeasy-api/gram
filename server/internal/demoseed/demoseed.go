@@ -1,8 +1,8 @@
 // Package demoseed provisions the shared demo organization
-// (constants.DemoOrganizationID). The SQL sources are embedded so the seed
-// versions atomically with the server binary: the daily `gram demo-seed` run
-// always applies the seed that shipped with the current deploy — no
-// migrations, no runtime file fetches. Authoring docs live in seed/demo/.
+// (constants.DemoOrganizationID). The seed is Go code compiled into the server
+// binary, so the daily `gram demo-seed` run always applies the seed that
+// shipped with the current deploy — no migrations, no runtime file fetches.
+// Authoring docs live in seed/demo/.
 package demoseed
 
 import (
@@ -13,23 +13,17 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
-
-//go:embed postgres.sql
-var postgresSQL string
-
-//go:embed clickhouse.sql
-var clickhouseSQL string
 
 //go:embed openapi.yaml
 var openapiDoc []byte
@@ -41,11 +35,13 @@ const (
 )
 
 // Run replaces the data for spec's tenant while holding the shared advisory
-// lock. The ClickHouse script deletes both source rows and materialized-view
-// targets before its inserts incrementally repopulate the summaries.
+// lock. The Postgres seed runs in one transaction, so a failed run leaves the
+// previous data in place; each statement in it gets its own statement
+// timeout. The ClickHouse seed then deletes both source rows and
+// materialized-view targets before its inserts incrementally repopulate the
+// summaries.
 //
-// Pass DefaultSpec() for the shared production demo org — the scripts are
-// written against its literals, so they run through unmodified.
+// Pass DefaultSpec() for the shared production demo org.
 func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, spec Spec) (retErr error) {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
@@ -94,19 +90,49 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		retErr = errors.Join(retErr, fmt.Errorf("release demo seed advisory lock: %w", unlockErr))
 	}()
 
-	// The script is multi-statement (CREATE SCHEMA / CREATE FUNCTION with a
-	// dollar-quoted body / SELECT), which requires the simple query protocol.
-	if err := conn.Conn().PgConn().Exec(ctx, spec.Rewrite(postgresSQL)).Close(); err != nil {
-		return fmt.Errorf("apply demo seed to postgres: %w", err)
+	s, err := seedPostgres(ctx, logger, conn, blob, spec)
+	if err != nil {
+		return err
 	}
 	logger.InfoContext(ctx, "demo seed applied to postgres")
 
-	// The Sources page's "OpenAPI Specification" tab serves the asset blob,
-	// which SQL alone cannot place — write the embedded spec through the
-	// asset store (fs locally, GCS in prod) and point the assets row at it.
+	if err := s.runClickHouse(ctx, ch); err != nil {
+		return fmt.Errorf("apply demo seed to clickhouse: %w", err)
+	}
+	logger.InfoContext(ctx, "demo seed applied to clickhouse")
+	return nil
+}
+
+// txBeginner starts a transaction. Run passes the *pgxpool.Conn that holds the
+// advisory lock, so the seed runs inside the locked session; tests pass the
+// *pgxpool.Pool.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// seedPostgres runs the Postgres seed for spec in one transaction on db, so a
+// failed run leaves the previous data in place. It returns the seeder, whose
+// clock the ClickHouse seed reuses.
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, spec Spec) (*seeder, error) {
+	s := &seeder{spec: spec, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
+		s.q = repo.New(tx)
+		if err := s.runPostgres(ctx); err != nil {
+			return err
+		}
+		return s.uploadOpenAPIDoc(ctx, blob)
+	}); err != nil {
+		return nil, fmt.Errorf("apply demo seed to postgres: %w", err)
+	}
+	return s, nil
+}
+
+// uploadOpenAPIDoc places the Sources page's "OpenAPI Specification" blob,
+// which SQL alone cannot: it writes the embedded spec through the asset store
+// (fs locally, GCS in prod) and points the seeded assets row at it.
+func (s *seeder) uploadOpenAPIDoc(ctx context.Context, blob assets.BlobStore) error {
 	docSHA := sha256.Sum256(openapiDoc)
-	docHex := hex.EncodeToString(docSHA[:])
-	w, objURL, err := blob.Write(ctx, "demoseed/"+spec.OrgSlug+"-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
+	w, objURL, err := blob.Write(ctx, "demoseed/"+s.spec.OrgSlug+"-openapi.yaml", "application/x-yaml", int64(len(openapiDoc)))
 	if err != nil {
 		return fmt.Errorf("open demo openapi asset for writing: %w", err)
 	}
@@ -117,64 +143,16 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("finalize demo openapi asset: %w", err)
 	}
-	if _, err := conn.Exec(ctx,
-		"UPDATE assets SET url = $1, sha256 = $2, content_length = $3, content_type = 'application/x-yaml' WHERE id = $4 AND project_id = $5",
-		objURL.String(), docHex, len(openapiDoc), spec.AssetID(), spec.ProjectID(),
-	); err != nil {
+	if err := s.q.PointAssetAtUpload(ctx, repo.PointAssetAtUploadParams{
+		Url:           objURL.String(),
+		Sha256:        hex.EncodeToString(docSHA[:]),
+		ContentLength: int64(len(openapiDoc)),
+		ID:            s.assetID(),
+		ProjectID:     s.projectID(),
+	}); err != nil {
 		return fmt.Errorf("point demo assets row at the uploaded spec: %w", err)
 	}
-	logger.InfoContext(ctx, "demo openapi asset uploaded")
-
-	// clickhouse-go executes one statement per call and pools sessions, so the
-	// script's SET line cannot carry across statements — the setting rides on
-	// the context instead. Statements are split on ';': the seed files keep
-	// semicolons out of string literals by convention (see seed/demo/PAGES.md).
-	// lightweight_deletes_sync=2 waits for ALL replicas (prod ClickHouse Cloud
-	// is replicated; =1 would let the re-insert race a delete still running on
-	// another replica). The base client caps max_execution_time at 60s, which
-	// prod-sized telemetry_logs deletes can exceed — raise it here.
-	chCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"lightweight_deletes_sync": 2,
-		"max_execution_time":       600,
-	}))
-	deleted := false
-	deleteVisible := false
-	for _, stmt := range splitStatements(spec.Rewrite(clickhouseSQL)) {
-		upperStmt := strings.ToUpper(stmt)
-		if strings.HasPrefix(upperStmt, "SET ") {
-			continue
-		}
-		if strings.HasPrefix(upperStmt, "DELETE ") {
-			deleted = true
-		} else if deleted && !deleteVisible {
-			if err := waitForClickHouseDelete(
-				chCtx,
-				clickHouseDeleteVisibilityTimeout,
-				clickHouseDeleteVisibilityPoll,
-				func(queryCtx context.Context) (uint64, error) {
-					var remaining uint64
-					err := ch.QueryRow(queryCtx, `
-						SELECT
-							(SELECT count() FROM telemetry_logs WHERE gram_project_id = toUUID(?))
-							+ (SELECT count() FROM billing_meter_readings_by_time WHERE organization_id = ?)
-							+ (SELECT count() FROM billing_meter_daily_summaries WHERE organization_id = ?)
-					`, spec.ProjectID(), spec.OrgID, spec.OrgID).Scan(&remaining)
-					if err != nil {
-						return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, and summary rows: %w", err)
-					}
-					return remaining, nil
-				},
-			); err != nil {
-				return fmt.Errorf("apply demo seed to clickhouse: %w", err)
-			}
-			deleteVisible = true
-		}
-		if err := ch.Exec(chCtx, stmt); err != nil {
-			return fmt.Errorf("apply demo seed to clickhouse: %w: %.120s", err, stmt)
-		}
-	}
-
-	logger.InfoContext(ctx, "demo seed applied to clickhouse")
+	s.logger.InfoContext(ctx, "demo openapi asset uploaded")
 	return nil
 }
 
@@ -205,25 +183,4 @@ func waitForClickHouseDelete(
 		case <-ticker.C:
 		}
 	}
-}
-
-// splitStatements strips -- line comments and splits the script into
-// individual statements on ';'.
-func splitStatements(script string) []string {
-	var sb strings.Builder
-	for line := range strings.Lines(script) {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "--") {
-			continue
-		}
-		sb.WriteString(line)
-	}
-
-	var out []string
-	for stmt := range strings.SplitSeq(sb.String(), ";") {
-		if s := strings.TrimSpace(stmt); s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }

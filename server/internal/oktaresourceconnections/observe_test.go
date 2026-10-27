@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -35,19 +36,20 @@ func confirmedUpstream(t *testing.T, ctx context.Context, si *instance, name str
 	row := rowFor(t, list(t, ctx, si, true), f.serverID)
 	return f, identitychaining.Observation{
 		OrganizationID:  si.orgID,
+		Provider:        remotesessions.EMAProviderExternal,
 		TrustedIssuerID: si.oktaIssuerID,
 		RemoteIssuerID:  f.issuerID,
 		RemoteIssuer:    audience,
 		Audience:        audience,
 		Resource:        row.ResourceIndicator + "/",
-		Outcome:         identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false},
+		Outcome:         identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""},
 		GrantValidated:  true,
 		StartedAt:       time.Now().Add(time.Second),
 	}
 }
 
 func failure(stage identitychaining.Stage, reason identitychaining.Reason, retryable bool) identitychaining.Outcome {
-	return identitychaining.Outcome{Stage: stage, Reason: reason, Confidence: identitychaining.ConfidenceInferred, Retryable: retryable, Cached: false}
+	return identitychaining.Outcome{Stage: stage, Reason: reason, Confidence: identitychaining.ConfidenceInferred, Retryable: retryable, Cached: false, Provider: ""}
 }
 
 func observedRow(t *testing.T, ctx context.Context, si *instance, serverID uuid.UUID) *gen.OktaResourceConnectionServer {
@@ -65,7 +67,7 @@ func TestObserveAttempt_Mapping(t *testing.T) {
 		want      string
 		state     string
 	}{
-		{"success", identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false}, true, "verified", "verified"},
+		{"success", identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, "verified", "verified"},
 		{"redemption rejected after a valid grant", failure(identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, false), true, "downstream_rejected", "broken"},
 		{"exchange invalid_target", failure(identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false), false, "connection_missing", "needs_connection"},
 		{"exchange scope denied", failure(identitychaining.StageExchange, identitychaining.ReasonScopePolicyDenied, false), false, "scope_not_allowed", "broken"},
@@ -115,7 +117,10 @@ func TestObserveAttempt_OnlyRecordsOnTheOrganizationsConfirmedOktaUpstream(t *te
 	otherUpstream.RemoteIssuerID = unconfirmed.issuerID
 	beforeConfirmation := obs
 	beforeConfirmation.StartedAt = time.Now().Add(-time.Hour)
+	speakeasyServed := obs
+	speakeasyServed.Provider = remotesessions.EMAProviderSpeakeasy
 	for name, o := range map[string]identitychaining.Observation{
+		"another ema provider":                   speakeasyServed,
 		"another identity provider":              otherIdP,
 		"another organization":                   otherOrg,
 		"an unconfirmed upstream":                otherUpstream,
@@ -240,6 +245,7 @@ func TestObserveAttempt_MismatchedAudienceDoesNotRecordMissingConnection(t *test
 	require.NoError(t, err)
 	obs := identitychaining.Observation{
 		OrganizationID:  si.orgID,
+		Provider:        remotesessions.EMAProviderExternal,
 		TrustedIssuerID: si.oktaIssuerID,
 		RemoteIssuerID:  f.issuerID,
 		RemoteIssuer:    audience,

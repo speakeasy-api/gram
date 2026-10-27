@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
   draftToSchedule,
   draftToScope,
@@ -24,6 +25,17 @@ const validDraft = (): EditorDraft => ({
 });
 
 describe("killswitch view model", () => {
+  it.each(["future_capability", "constructor", "__proto__"])(
+    "rejects unsupported capability %s without changing the draft",
+    (key) => {
+      const draft = { ...validDraft(), capabilityKey: unrecognized(key) };
+      expect(validateDraft(draft).capabilityKey).toBe(
+        "Refresh the page before editing this unsupported capability.",
+      );
+      expect(draft.capabilityKey).toBe(key);
+      expect(validateDraft(validDraft()).capabilityKey).toBeUndefined();
+    },
+  );
   it("requires principal, capability, an explicit scope, and both notes", () => {
     const errors = validateDraft({
       ...validDraft(),

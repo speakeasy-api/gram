@@ -5,9 +5,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  McpServerToolsetSummary,
+  McpServerToolsetSummary$inboundSchema,
+} from "./mcpservertoolsetsummary.js";
+
+/**
+ * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
+ */
+export const BuiltinBackend = {
+  Approvals: "approvals",
+} as const;
+/**
+ * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
+ */
+export type BuiltinBackend = OpenEnum<typeof BuiltinBackend>;
 
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
@@ -20,7 +36,7 @@ export const McpServerNetworkAccessMode = {
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
-export type McpServerNetworkAccessMode = ClosedEnum<
+export type McpServerNetworkAccessMode = OpenEnum<
   typeof McpServerNetworkAccessMode
 >;
 
@@ -35,12 +51,16 @@ export const McpServerVisibility = {
 /**
  * The visibility of an MCP server
  */
-export type McpServerVisibility = ClosedEnum<typeof McpServerVisibility>;
+export type McpServerVisibility = OpenEnum<typeof McpServerVisibility>;
 
 /**
  * An MCP server configuration: authentication, environment, and backend selection for an MCP server.
  */
 export type McpServer = {
+  /**
+   * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
+   */
+  builtinBackend?: BuiltinBackend | undefined;
   /**
    * When the MCP server was created
    */
@@ -49,6 +69,10 @@ export type McpServer = {
    * The ID of the environment associated with the server
    */
   environmentId?: string | undefined;
+  /**
+   * Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.
+   */
+  hasEndpoint?: boolean | undefined;
   /**
    * The ID of the MCP server
    */
@@ -62,9 +86,17 @@ export type McpServer = {
    */
   networkAccessMode: McpServerNetworkAccessMode;
   /**
-   * An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.
+   * The slug of this server's primary platform endpoint, the oldest one. Absent when no platform endpoint exists; never a custom-domain slug.
    */
   platformEndpointSlug?: string | undefined;
+  /**
+   * The ID of the endpoint that stands for this server when a single address must be chosen: domain-root custom-domain endpoints first, then other custom-domain endpoints, then platform endpoints. Absent when the server has no addressable endpoint.
+   */
+  primaryEndpointId?: string | undefined;
+  /**
+   * The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.
+   */
+  primaryEndpointUrl?: string | undefined;
   /**
    * The project ID this MCP server belongs to
    */
@@ -81,6 +113,10 @@ export type McpServer = {
    * The ID of the tool variations group enabling MCP tool filtering for this server, if any.
    */
   toolVariationsGroupId?: string | undefined;
+  /**
+   * A summary of the toolset backing a hosted MCP server.
+   */
+  toolset?: McpServerToolsetSummary | undefined;
   /**
    * The ID of the toolset used as the backend
    */
@@ -108,32 +144,45 @@ export type McpServer = {
 };
 
 /** @internal */
-export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
-  typeof McpServerNetworkAccessMode
-> = z.enum(McpServerNetworkAccessMode);
+export const BuiltinBackend$inboundSchema: z.ZodMiniType<
+  BuiltinBackend,
+  unknown
+> = openEnums.inboundSchema(BuiltinBackend);
 
 /** @internal */
-export const McpServerVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof McpServerVisibility
-> = z.enum(McpServerVisibility);
+export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniType<
+  McpServerNetworkAccessMode,
+  unknown
+> = openEnums.inboundSchema(McpServerNetworkAccessMode);
+
+/** @internal */
+export const McpServerVisibility$inboundSchema: z.ZodMiniType<
+  McpServerVisibility,
+  unknown
+> = openEnums.inboundSchema(McpServerVisibility);
 
 /** @internal */
 export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
   .pipe(
     z.object({
+      builtin_backend: z.optional(BuiltinBackend$inboundSchema),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
       environment_id: z.optional(z.string()),
+      has_endpoint: z.optional(z.boolean()),
       id: z.string(),
       name: z.optional(z.string()),
       network_access_mode: McpServerNetworkAccessMode$inboundSchema,
       platform_endpoint_slug: z.optional(z.string()),
+      primary_endpoint_id: z.optional(z.string()),
+      primary_endpoint_url: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
       slug: z.optional(z.string()),
       tool_variations_group_id: z.optional(z.string()),
+      toolset: z.optional(McpServerToolsetSummary$inboundSchema),
       toolset_id: z.optional(z.string()),
       tunneled_mcp_server_id: z.optional(z.string()),
       unproxied_mcp_server_id: z.optional(z.string()),
@@ -146,10 +195,14 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "builtin_backend": "builtinBackend",
         "created_at": "createdAt",
         "environment_id": "environmentId",
+        "has_endpoint": "hasEndpoint",
         "network_access_mode": "networkAccessMode",
         "platform_endpoint_slug": "platformEndpointSlug",
+        "primary_endpoint_id": "primaryEndpointId",
+        "primary_endpoint_url": "primaryEndpointUrl",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
         "tool_variations_group_id": "toolVariationsGroupId",

@@ -20,6 +20,7 @@ INSERT INTO risk_policies (
   , user_message
   , prompt
   , model_config
+  , approval_config
   , score
   , version
 )
@@ -44,6 +45,7 @@ VALUES (
   , @user_message
   , sqlc.narg(prompt)::text
   , sqlc.narg(model_config)::jsonb
+  , sqlc.narg(approval_config)::jsonb
   , COALESCE(sqlc.narg(score)::double precision, 5.0)
   , 1
 )
@@ -105,6 +107,16 @@ WHERE project_id = @project_id
 ORDER BY created_at DESC, id DESC
 LIMIT @page_limit;
 
+-- name: ListRiskPolicyAnalyticsLabels :many
+-- Explore reads a finding's policy as its name and its severity band. Deleted
+-- policies are included: their findings still count, as they do on the
+-- Watchdog page, and read as the category's fallback severity.
+SELECT id, name, score, deleted
+FROM risk_policies
+WHERE project_id = @project_id
+  AND organization_id = @organization_id
+ORDER BY created_at DESC, id DESC;
+
 -- name: ListRiskPoliciesPage :many
 -- Platform MCP keyset page. The existing unbounded query remains the Goa
 -- compatibility path.
@@ -126,6 +138,14 @@ LIMIT @page_limit;
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE;
+
+-- name: ListEnabledRiskPolicyIDsByOrganizationProject :many
+SELECT id
+FROM risk_policies
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
@@ -184,6 +204,7 @@ SET name = @name
   , user_message = @user_message
   , prompt = sqlc.narg(prompt)::text
   , model_config = sqlc.narg(model_config)::jsonb
+  , approval_config = sqlc.narg(approval_config)::jsonb
   -- Descriptive severity: preserve on omit, never contributes to the version bump.
   , score = COALESCE(sqlc.narg(score)::double precision, score)
   , version = CASE
@@ -198,6 +219,7 @@ SET name = @name
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
         OR model_config IS DISTINCT FROM sqlc.narg(model_config)::jsonb
+        OR approval_config IS DISTINCT FROM sqlc.narg(approval_config)::jsonb
         OR audience_type IS DISTINCT FROM @audience_type
       THEN version + 1
       ELSE version
@@ -244,6 +266,29 @@ WHERE project_id = @project_id
     jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))
   )
 ORDER BY id;
+
+-- name: ListRiskPoliciesScopingMCPServerForUpdate :many
+-- Containment never raises on a malformed scope.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))
+  )
+ORDER BY id
+FOR UPDATE;
+
+-- name: PruneRiskPolicyMCPScope :one
+-- Only for dropping a deleted server: it gets no traffic, so version stays.
+UPDATE risk_policies
+SET mcp_scope = @mcp_scope::jsonb
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
 
 -- name: ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies :many
 SELECT DISTINCT policy.project_id
@@ -637,73 +682,10 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
--- name: CountAllFindings :one
--- Project-wide total_count reported with the chat-scoped ListRiskResults
--- page. Skill-anchored rows have no chat, so that listing never returns them.
-SELECT COUNT(*)::BIGINT
-FROM risk_results rr
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND rr.skill_version_id IS NULL;
-
--- name: GetRiskOverviewScanCounts :one
--- messages_scanned counts every scanned message in the window regardless of
--- found state. chat_message_id is NOT NULL with a FK to chat_messages, so the
--- old JOIN was lossless — dropping it lets this be an index-only distinct on
--- risk_results_project_created_msg_idx (project_id, created_at, chat_message_id).
--- active_policies is a cheap scalar subquery, folded in here to save a round trip.
-SELECT
-    COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
-  , (
-      SELECT COUNT(*)::BIGINT
-      FROM risk_policies active_rp
-      WHERE active_rp.project_id = @project_id
-        AND enabled IS TRUE
-        AND deleted IS FALSE
-    ) AS active_policies
-FROM risk_results rr
-WHERE rr.project_id = @project_id
-  AND rr.created_at >= @from_time
-  AND rr.created_at < @to_time;
-
--- name: GetRiskOverviewFindingCounts :one
--- findings + flagged_sessions over the live-found subset. Pushing the found
--- predicate into WHERE lets the partial risk_results_project_found_idx serve the
--- scan, so the JOIN to chat_messages only touches found rows instead of every
--- scanned row. COUNT(DISTINCT cm.chat_id) already skips NULL chat_ids.
-SELECT
-    COUNT(*)::BIGINT AS findings
-  , COUNT(DISTINCT cm.chat_id)::BIGINT AS flagged_sessions
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-WHERE rr.project_id = @project_id
-  AND rr.created_at >= @from_time
-  AND rr.created_at < @to_time
-  AND rr.found IS TRUE
-  AND rr.excluded_at IS NULL
-  AND rr.false_positive_at IS NULL;
-
--- name: ListRiskOverviewTopRules :many
--- Project-wide finding counts grouped by rule_id within a window.
-SELECT
-  COALESCE(rr.rule_id, '')::TEXT AS rule_id,
-  rr.source,
-  COUNT(*)::BIGINT AS findings
-FROM risk_results rr
-WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND rr.skill_version_id IS NULL
-  AND rr.created_at >= @from_time
-  AND rr.created_at < @to_time
-GROUP BY rr.rule_id, rr.source
-ORDER BY findings DESC, rule_id ASC
-LIMIT @row_limit;
-
 -- name: ListRiskUserCategoryBreakdown :many
 -- Per-category finding counts for a single external_user_id in a window.
--- The category CASE expression must stay in sync with the other ListRisk*
--- queries.
+-- The category CASE expression must stay in sync with the Go classifier in
+-- internal/risk/categories.
 WITH user_findings AS (
   SELECT
     CASE
@@ -785,193 +767,6 @@ WHERE rr.project_id = @project_id
 GROUP BY rr.rule_id, rr.source
 ORDER BY findings DESC, rule_id ASC;
 
--- name: ListRiskRulesByCategory :many
--- Returns per-rule_id finding counts for a category within a window.
--- The CASE expression must stay in sync with ListRiskOverviewTimeSeriesFindings;
--- both classify rr.rule_id the same way.
-WITH categorized AS (
-  SELECT
-    COALESCE(rr.rule_id, '')::TEXT AS rule_id,
-    rr.source,
-    CASE
-      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
-      WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-      WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
-      WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
-      WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
-      WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-      WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-      WHEN rr.rule_id IN (
-          'pii.us_ssn'
-        , 'pii.us_passport'
-        , 'pii.us_driver_license'
-        , 'pii.us_itin'
-        , 'pii.uk_nhs'
-        , 'pii.uk_nino'
-        , 'pii.uk_passport'
-        , 'pii.es_nif'
-        , 'pii.it_fiscal_code'
-        , 'pii.au_tfn'
-        , 'pii.in_pan'
-        , 'pii.in_aadhaar'
-        , 'pii.sg_nric_fin'
-      ) THEN 'government_ids'
-      WHEN rr.rule_id IN (
-          'pii.medical_license'
-        , 'pii.us_mbi'
-        , 'pii.us_npi'
-        , 'pii.medical_disease_disorder'
-        , 'pii.medical_medication'
-        , 'pii.medical_therapeutic_procedure'
-        , 'pii.medical_clinical_event'
-        , 'pii.medical_biological_attribute'
-        , 'pii.medical_family_history'
-      ) THEN 'healthcare'
-      WHEN rr.rule_id IN (
-          'pii.harmful_content_request'
-        , 'pii.policy_violation'
-        , 'pii.unauthorized_action'
-        , 'pii.topic_boundary_violation'
-      ) THEN 'off_policy'
-      WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-      -- Scanner-source fallbacks: keep these LAST so any prefixed
-      -- rule_id wins. Stay in sync with the Go classifier in
-      -- internal/risk/categories.
-      WHEN rr.source = 'gitleaks' THEN 'secrets'
-      WHEN rr.source = 'presidio' THEN 'pii'
-      ELSE 'custom'
-    END AS category
-  FROM risk_results rr
-  -- Soft-deleted policies keep their findings until the cleanup catches up;
-  -- the breakdown must not count them, matching the listing's visibility.
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-  WHERE rr.project_id = @project_id
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND rr.skill_version_id IS NULL
-    AND rr.created_at >= @from_time
-    AND rr.created_at < @to_time
-)
-SELECT rule_id, source, COUNT(*)::BIGINT AS findings
-FROM categorized
-WHERE category = @category::text
-GROUP BY rule_id, source
-ORDER BY findings DESC, rule_id ASC
--- A NULL page_limit is LIMIT ALL: the dashboard reads every rule, while
--- bounded callers pass one extra row to detect truncation.
-LIMIT sqlc.narg(page_limit)::int;
-
--- name: ListRiskOverviewTopUsers :many
-WITH user_findings AS (
-  SELECT
-    COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::TEXT AS external_user_id,
-    COALESCE(
-      NULLIF(u.email, ''),
-      CASE WHEN cm.external_user_id LIKE '%@%' THEN cm.external_user_id END,
-      CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END,
-      'Unknown user'
-    )::TEXT AS email
-  FROM risk_results rr
-  JOIN chat_messages cm ON cm.id = rr.chat_message_id
-  LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-  LEFT JOIN users u ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
-  WHERE rr.project_id = @project_id
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND rr.created_at >= @from_time
-    AND rr.created_at < @to_time
-)
-SELECT external_user_id, email, COUNT(*)::BIGINT AS findings
-FROM user_findings
-GROUP BY external_user_id, email
-ORDER BY findings DESC, email ASC
-LIMIT @row_limit;
-
--- name: ListRiskOverviewTimeSeriesFindings :many
-WITH buckets AS (
-  SELECT generate_series(
-      date_trunc('hour', sqlc.arg(from_time)::timestamptz)
-    , date_trunc('hour', (sqlc.arg(to_time)::timestamptz - INTERVAL '1 microsecond'))
-    , INTERVAL '1 hour'
-  )::timestamptz AS bucket_start
-),
-categorized AS (
-  SELECT
-      date_trunc('hour', rr.created_at)::timestamptz AS bucket_start
-    , CASE
-        WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
-        WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-        WHEN rr.rule_id = 'destructive_tool.llm' THEN 'destructive_tool'
-        WHEN rr.rule_id = 'cli_destructive.llm' THEN 'cli_destructive'
-        WHEN rr.rule_id = 'prompt_injection.llm' THEN 'prompt_injection'
-        WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-        WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-        WHEN rr.rule_id IN (
-            'pii.us_ssn'
-          , 'pii.us_passport'
-          , 'pii.us_driver_license'
-          , 'pii.us_itin'
-          , 'pii.uk_nhs'
-          , 'pii.uk_nino'
-          , 'pii.uk_passport'
-          , 'pii.es_nif'
-          , 'pii.it_fiscal_code'
-          , 'pii.au_tfn'
-          , 'pii.in_pan'
-          , 'pii.in_aadhaar'
-          , 'pii.sg_nric_fin'
-        ) THEN 'government_ids'
-        WHEN rr.rule_id IN (
-            'pii.medical_license'
-          , 'pii.us_mbi'
-          , 'pii.us_npi'
-          , 'pii.medical_disease_disorder'
-          , 'pii.medical_medication'
-          , 'pii.medical_therapeutic_procedure'
-          , 'pii.medical_clinical_event'
-          , 'pii.medical_biological_attribute'
-          , 'pii.medical_family_history'
-        ) THEN 'healthcare'
-        WHEN rr.rule_id IN (
-            'pii.harmful_content_request'
-          , 'pii.policy_violation'
-          , 'pii.unauthorized_action'
-          , 'pii.topic_boundary_violation'
-        ) THEN 'off_policy'
-        WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-        -- Scanner-source fallbacks: keep these LAST so any prefixed
-        -- rule_id wins. Stay in sync with the Go classifier in
-        -- internal/risk/categories.
-        WHEN rr.source = 'gitleaks' THEN 'secrets'
-        WHEN rr.source = 'presidio' THEN 'pii'
-        ELSE 'custom'
-      END AS category
-  FROM risk_results rr
-  WHERE rr.project_id = sqlc.arg(project_id)::uuid
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    AND rr.skill_version_id IS NULL
-    AND rr.created_at >= @from_time
-    AND rr.created_at < @to_time
-),
-categories AS (
-  SELECT DISTINCT category
-  FROM categorized
-),
-findings_by_bucket AS (
-  SELECT
-      bucket_start
-    , category
-    , COUNT(*)::BIGINT AS findings
-  FROM categorized
-  GROUP BY bucket_start, category
-)
-SELECT
-    buckets.bucket_start
-  , categories.category
-  , COALESCE(findings_by_bucket.findings, 0)::BIGINT AS findings
-FROM buckets
-CROSS JOIN categories
-LEFT JOIN findings_by_bucket ON findings_by_bucket.bucket_start = buckets.bucket_start AND findings_by_bucket.category = categories.category
-ORDER BY buckets.bucket_start ASC, categories.category ASC;
-
 -- name: FetchUnanalyzedMessageIDs :many
 -- Scans the partial index chat_messages_risk_analyzed_at_null_idx
 -- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
@@ -1018,7 +813,7 @@ WHERE id = ANY(@content_part_ids::uuid[])
 -- name: GetMessageContentBatch :many
 -- The scanned user's id rides along so the LLM judge's completion telemetry
 -- can attribute scanning volume to whose traffic was analyzed. Same
--- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
+-- attribution rule as the risk overview top users: the message's own user_id
 -- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
 -- never is, while its messages remain eligible for scanning.
 -- The lateral probes capture bounded causal context at the same event read:
@@ -1322,56 +1117,6 @@ WHERE rr.project_id = @project_id
 ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
 LIMIT @page_limit;
 
--- name: ListRiskResultsByChatFound :many
--- chat_user_id resolves the message's own external identity first and falls
--- back to the chat's, matching the ClickHouse listing's ingest-time
--- attribution so a pager sees the same identity on either store.
-SELECT rr.*, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, COALESCE(NULLIF(cm.external_user_id, ''), c.external_user_id) AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
-FROM risk_results rr
-LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
-LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-LEFT JOIN LATERAL (
-  SELECT tcb.id AS block_id FROM tool_call_blocks tcb
-  WHERE tcb.project_id = rr.project_id
-    AND tcb.chat_message_id = rr.chat_message_id
-    AND tcb.deleted IS FALSE
-  ORDER BY tcb.created_at DESC LIMIT 1
-) blk ON TRUE
-WHERE COALESCE(cm.chat_id, ccp.chat_id) = @chat_id
-  AND rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND (
-    sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
-    OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
-  )
-ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
-LIMIT @page_limit;
-
--- name: ListRiskResultsGroupedByChat :many
--- A finding is anchored to either a chat message or a chat content part
--- (attachment), so both anchors resolve the chat; skill-anchored findings
--- have neither and are excluded by the non-null chat check.
-SELECT
-    COALESCE(cm.chat_id, ccp.chat_id)::uuid AS chat_id
-  , c.title AS chat_title
-  , c.external_user_id AS chat_user_id
-  , COUNT(*)::BIGINT AS findings_count
-  , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
-FROM risk_results rr
-LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
-LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND COALESCE(cm.chat_id, ccp.chat_id) IS NOT NULL
-  AND (sqlc.narg(cursor)::uuid IS NULL OR COALESCE(cm.chat_id, ccp.chat_id) <= sqlc.narg(cursor)::uuid)
-GROUP BY COALESCE(cm.chat_id, ccp.chat_id), c.title, c.external_user_id
-ORDER BY COALESCE(cm.chat_id, ccp.chat_id) DESC
-LIMIT @page_limit;
-
 -- name: ListEnabledEnforcingPoliciesByProject :many
 -- Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
 -- allowed after acknowledgement), and quarantine (hard deny + session circuit).
@@ -1646,9 +1391,8 @@ WHERE project_id = @project_id
 SELECT pg_advisory_xact_lock(hashtext(@project_id::text), hashtext(@id::text));
 
 -- name: MarkRiskResultsFalsePositive :many
--- Returns the full rows the UPDATE actually changed for audit logging.
--- ClickHouse copies are selected independently by requested id so a retry can
--- repair a successful append followed by a failed Postgres commit.
+-- Sets the dismissal columns on risk_results rows. Dismissals are recorded in
+-- ClickHouse; only tests that seed dismissed Postgres rows call this.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)
@@ -1656,54 +1400,6 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[])
   AND false_positive_at IS NULL
 RETURNING *;
-
--- name: UnmarkRiskResultsFalsePositive :many
-UPDATE risk_results
-SET false_positive_at = NULL
-  , false_positive_reason = NULL
-WHERE project_id = @project_id
-  AND id = ANY(@ids::uuid[])
-  AND false_positive_at IS NOT NULL
-RETURNING *;
-
--- name: ListFalsePositiveRiskResults :many
--- Powers the Dismissed tab: every result manually marked as a false positive
--- in this project, newest dismissal first. Cursor is (false_positive_at, id)
--- for stable pagination. block_id is always the nil UUID (foundRowToResult maps that to
--- a nil pointer) since the Dismissed tab doesn't need durable tool-call-block
--- links. LEFT JOINs both anchor tables (a result is anchored to exactly one,
--- per risk_results_anchor_check) so content-part-anchored dismissals are not
--- silently dropped.
-SELECT
-    rr.id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id,
-    rr.source, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
-    rr.confidence, rr.tags, rr.spans, rr.created_at,
-    rr.false_positive_at, rr.false_positive_reason,
-    COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
-    c.title AS chat_title, c.external_user_id AS chat_user_id
-FROM risk_results rr
-LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
-LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-WHERE rr.project_id = @project_id
-  AND rr.false_positive_at IS NOT NULL
-  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
-  -- fail the non-null scan. They need their own read path, not this one.
-  AND rr.skill_version_id IS NULL
-  AND (
-    sqlc.narg(cursor_false_positive_at)::timestamptz IS NULL
-    OR (rr.false_positive_at, rr.id) < (sqlc.narg(cursor_false_positive_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
-  )
-ORDER BY rr.false_positive_at DESC, rr.id DESC
-LIMIT @page_limit;
-
--- name: CountFalsePositiveRiskResults :one
--- Total for ListFalsePositiveRiskResults, which drops skill-anchored rows.
-SELECT COUNT(*)::BIGINT
-FROM risk_results
-WHERE project_id = @project_id
-  AND false_positive_at IS NOT NULL
-  AND skill_version_id IS NULL;
 
 -- Exclusion reconcile sweep -------------------------------------------------
 -- All batches are keyset-paginated by id (id > @cursor, ORDER BY id, LIMIT
@@ -2347,9 +2043,3 @@ WHERE id = @id;
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
 WHERE id = @id;
-
--- name: GetRiskResultFalsePositiveForTest :one
-SELECT false_positive_at
-FROM risk_results
-WHERE project_id = @project_id
-  AND id = @id;

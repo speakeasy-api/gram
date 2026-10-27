@@ -5,6 +5,7 @@ const authErrorMessages: Record<string, string> = {
   lookup_error:
     "Failed to look up account details. Try again or contact support.",
   init_error: "Failed to initialize account. Try again or contact support.",
+  sign_in_revoked: "Your sign-in was ended. Sign in again to continue.",
   // A session transfer between Speakeasy hosts failed and sent the browser here.
   transfer_session_expired:
     "Your previous sign-in is no longer available. Please sign in again.",

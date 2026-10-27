@@ -79,12 +79,15 @@ vi.mock("@/routes", () => ({
 vi.mock("@/components/command-palette/recentlyVisited", () => ({
   useRecentLabelOverride: () => {},
 }));
-vi.mock("@/components/page-layout", () => {
+vi.mock("@/components/page-layout", async (importOriginal) => {
+  const { Page: ActualPage } =
+    await importOriginal<typeof import("@/components/page-layout")>();
   const Container = ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   );
   return {
     Page: Object.assign(Container, {
+      Toolbar: ActualPage.Toolbar,
       Header: Object.assign(Container, { Breadcrumbs: () => null }),
       Body: Container,
     }),
@@ -93,13 +96,21 @@ vi.mock("@/components/page-layout", () => {
 vi.mock("./use-plugin-assignments-visible", () => ({
   usePluginAssignmentsVisible: () => true,
 }));
+const serverData = vi.hoisted(() => ({
+  toolsets: undefined as unknown,
+  mcpServers: undefined as unknown,
+  mcpEndpoints: undefined as unknown,
+}));
 vi.mock("./usePluginServerQueries", () => ({
   usePluginServerQueries: () => ({
     canReadServers: state.canReadServers,
-    toolsetsQuery: {},
-    serversQuery: {},
-    endpointsQuery: {},
+    toolsetsQuery: { data: serverData.toolsets },
+    serversQuery: { data: serverData.mcpServers },
+    endpointsQuery: { data: serverData.mcpEndpoints },
   }),
+}));
+vi.mock("@/components/sources/SourceCard", () => ({
+  SourceMcpIcon: () => null,
 }));
 vi.mock("@gram/client/react-query/roles", () => ({
   useRoles: assignments.roles,
@@ -132,26 +143,23 @@ vi.mock("@gram/client/react-query/deletePlugin", () => ({
     return { mutate: remove };
   },
 }));
+const addServer = vi.hoisted(() => vi.fn());
 vi.mock("@gram/client/react-query/addPluginServer", () => ({
-  useAddPluginServerMutation: () => ({ mutate: vi.fn() }),
+  useAddPluginServerMutation: () => ({ mutateAsync: addServer }),
 }));
 vi.mock("@gram/client/react-query/removePluginServer", () => ({
   useRemovePluginServerMutation: () => ({ mutate: vi.fn() }),
 }));
-function renderAdmin(section = "servers") {
+const hostedServer = {
+  id: "server-a",
+  displayName: "Example server",
+  toolsetId: "toolset-a",
+  mcpServerId: "toolset-a",
+  createdAt: new Date(),
+};
+function renderAdmin(section = "overview", servers: object[] = [hostedServer]) {
   adminQuery.mockReturnValue({
-    data: {
-      name: "Example plugin",
-      slug: "example-plugin",
-      servers: [
-        {
-          id: "server-a",
-          displayName: "Example server",
-          toolsetId: "toolset-a",
-          createdAt: new Date(),
-        },
-      ],
-    },
+    data: { name: "Example plugin", slug: "example-plugin", servers },
   });
   return render(
     <TooltipProvider>
@@ -175,6 +183,9 @@ beforeEach(() => {
   state.pluginWrite = false;
   state.orgAdmin = false;
   state.canReadServers = false;
+  serverData.toolsets = undefined;
+  serverData.mcpServers = undefined;
+  serverData.mcpEndpoints = undefined;
   vi.clearAllMocks();
   adminQuery.mockClear();
 });
@@ -232,7 +243,6 @@ describe("plugin detail permission boundary", () => {
     });
     expect(screen.getByText("Example server")).toBeTruthy();
     expect(screen.getByText("Server metadata unavailable")).toBeTruthy();
-    expect(screen.queryByText("Toolset missing")).toBeNull();
     for (const query of Object.values(assignments))
       expect(query).not.toHaveBeenCalled();
   });
@@ -244,17 +254,163 @@ describe("plugin detail permission boundary", () => {
     for (const query of Object.values(assignments))
       expect(query).not.toHaveBeenCalled();
   });
+  it("adds several servers at once and reports each failure on its row", async () => {
+    state.pluginWrite = true;
+    state.canReadServers = true;
+    serverData.toolsets = {
+      toolsets: [
+        {
+          id: "toolset-a",
+          name: "Already added",
+          slug: "already-added",
+          tools: [],
+        },
+        {
+          id: "toolset-b",
+          name: "Billing",
+          slug: "billing",
+          mcpEnabled: true,
+          mcpSlug: "billing",
+          tools: [],
+        },
+        {
+          id: "toolset-c",
+          name: "Payroll",
+          slug: "payroll",
+          mcpEnabled: false,
+          tools: [],
+        },
+        {
+          id: "toolset-d",
+          name: "Expenses",
+          slug: "expenses",
+          mcpEnabled: true,
+          tools: [],
+        },
+        {
+          id: "toolset-e",
+          name: "Ledger",
+          slug: "ledger",
+          mcpEnabled: true,
+          mcpSlug: "ledger",
+          tools: [],
+        },
+      ],
+    };
+    serverData.mcpServers = {
+      mcpServers: [
+        // Billing's canonical MCP server; Ledger has none.
+        {
+          id: "toolset-b",
+          name: "Billing",
+          slug: "billing",
+          toolsetId: "toolset-b",
+          visibility: "private",
+        },
+        {
+          id: "remote-a",
+          name: "Linear",
+          slug: "linear",
+          remoteMcpServerId: "r-a",
+          visibility: "private",
+        },
+        {
+          id: "remote-b",
+          name: "Notion",
+          slug: "notion",
+          remoteMcpServerId: "r-b",
+          visibility: "private",
+        },
+      ],
+    };
+    serverData.mcpEndpoints = {
+      mcpEndpoints: [{ mcpServerId: "remote-a" }, { mcpServerId: "remote-b" }],
+    };
+    addServer.mockImplementation(
+      async (args: {
+        request: { addPluginServerForm: { mcpServerId?: string } };
+      }) => {
+        if (args.request.addPluginServerForm.mcpServerId === "remote-b")
+          throw new Error("Server is not reachable");
+      },
+    );
+    renderAdmin();
+    fireEvent.click(screen.getByRole("button", { name: "Add Server" }));
+    // Servers already in the plugin are not offered.
+    expect(
+      screen.queryByRole("checkbox", { name: "Already added" }),
+    ).toBeNull();
+    // The backend refuses hosted servers with MCP off, so they can't be picked.
+    expect(
+      (screen.getByRole("checkbox", { name: "Payroll" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByRole("img", { name: "MCP off" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "No MCP address" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Set an MCP address for this server before adding it to a plugin.",
+      ),
+    ).toBeTruthy();
+    // A hosted toolset without a canonical MCP server is rejected by the API too.
+    expect(
+      (screen.getByRole("checkbox", { name: "Ledger" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByRole("img", { name: "No MCP server" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Add selected servers" }),
+      );
+    });
+    expect(addServer).toHaveBeenCalledTimes(3);
+    expect(
+      addServer.mock.calls.map(
+        ([args]) =>
+          (
+            args as {
+              request: {
+                addPluginServerForm: {
+                  toolsetId?: string;
+                  mcpServerId?: string;
+                };
+              };
+            }
+          ).request.addPluginServerForm,
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        toolsetId: "toolset-b",
+        displayName: "Billing",
+      }),
+      expect.objectContaining({
+        mcpServerId: "remote-a",
+        displayName: "Linear",
+      }),
+      expect.objectContaining({
+        mcpServerId: "remote-b",
+        displayName: "Notion",
+      }),
+    ]);
+    expect(screen.getByText("Notion: Server is not reachable")).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("checkbox", { name: "Notion" }) as HTMLElement
+      ).getAttribute("data-state"),
+    ).toBe("checked");
+  });
   it.each(["overview", "servers", "skills", "assignments", "settings"])(
     "loads writer-only %s without assignment queries",
     (section) => {
       state.pluginWrite = true;
       renderAdmin(section);
+      if (section === "overview" || section === "servers") {
+        expect(screen.getByText("Overview")).toBeTruthy();
+        expect(screen.getByText("Example server")).toBeTruthy();
+      }
       expect(adminQuery).toHaveBeenCalled();
-      expect(features).toHaveBeenLastCalledWith(
-        { organizationId: "org-a" },
-        undefined,
-        { enabled: false },
-      );
+      expect(features).not.toHaveBeenCalled();
       expect(screen.queryByText("Distribution-only skills")).toBeNull();
       for (const query of Object.values(assignments))
         expect(query).not.toHaveBeenCalled();
@@ -287,11 +443,25 @@ describe("plugin detail permission boundary", () => {
     for (const query of Object.values(assignments))
       expect(query).toHaveBeenCalled();
   });
-  it("reports missing toolsets only when metadata is available", () => {
+  it("labels gateway-backed members as gateways", () => {
     state.orgRead = true;
     state.canReadServers = true;
-    renderAdmin();
-    expect(screen.getByText("Toolset missing")).toBeTruthy();
-    expect(screen.queryByText("Server metadata unavailable")).toBeNull();
+    renderAdmin("overview", [
+      {
+        id: "server-g",
+        displayName: "Example gateway",
+        metaMcpServerId: "gateway-a",
+        createdAt: new Date(),
+      },
+    ]);
+    expect(screen.getByText("Gateway")).toBeTruthy();
+    expect(screen.queryByText("Remote MCP")).toBeNull();
   });
 });
+
+vi.mock("@/components/sources/SourceCard", () => ({
+  SourceMcpIcon: () => null,
+}));
+vi.mock("@/components/mcp/MCPToolsetIcon", () => ({
+  MCPToolsetIcon: () => null,
+}));

@@ -13,8 +13,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -40,6 +42,14 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		p, ok := v.(*agent.GetPluginsPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("agent", "getPlugins", "*agent.GetPluginsPayload", v)
+		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			if !strings.Contains(head, " ") {
+				req.Header.Set("Authorization", "Bearer "+head)
+			} else {
+				req.Header.Set("Authorization", head)
+			}
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -265,6 +275,240 @@ func DecodeGetPluginsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("agent", "getPlugins", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetMyConnectionsRequest instantiates a HTTP request object with method
+// and path set to call the "agent" service "getMyConnections" endpoint
+func (c *Client) BuildGetMyConnectionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMyConnectionsAgentPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "getMyConnections", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMyConnectionsRequest returns an encoder for requests sent to the
+// agent getMyConnections server.
+func EncodeGetMyConnectionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.GetMyConnectionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "getMyConnections", "*agent.GetMyConnectionsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.Email != nil {
+			head := *p.Email
+			req.Header.Set("Gram-User-Email", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetMyConnectionsResponse returns a decoder for responses returned by
+// the agent getMyConnections endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetMyConnectionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMyConnectionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMyConnectionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+			}
+			err = ValidateGetMyConnectionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+			}
+			res := NewGetMyConnectionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMyConnectionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+			}
+			err = ValidateGetMyConnectionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+			}
+			return nil, NewGetMyConnectionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMyConnectionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+			}
+			err = ValidateGetMyConnectionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+			}
+			return nil, NewGetMyConnectionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMyConnectionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+			}
+			err = ValidateGetMyConnectionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+			}
+			return nil, NewGetMyConnectionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMyConnectionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+			}
+			err = ValidateGetMyConnectionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+			}
+			return nil, NewGetMyConnectionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMyConnectionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+			}
+			err = ValidateGetMyConnectionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+			}
+			return nil, NewGetMyConnectionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMyConnectionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+			}
+			err = ValidateGetMyConnectionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+			}
+			return nil, NewGetMyConnectionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMyConnectionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+			}
+			err = ValidateGetMyConnectionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+			}
+			return nil, NewGetMyConnectionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMyConnectionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+				}
+				err = ValidateGetMyConnectionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+				}
+				return nil, NewGetMyConnectionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMyConnectionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+				}
+				err = ValidateGetMyConnectionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+				}
+				return nil, NewGetMyConnectionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "getMyConnections", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMyConnectionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getMyConnections", err)
+			}
+			err = ValidateGetMyConnectionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getMyConnections", err)
+			}
+			return nil, NewGetMyConnectionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "getMyConnections", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -2624,6 +2868,32 @@ func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBo
 		Name:            v.Name,
 		Description:     v.Description,
 	}
+	if v.Servers != nil {
+		res.Servers = make([]*agent.AgentPluginServer, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer builds a
+// value of type *agent.AgentPluginServer from a value of type
+// *AgentPluginServerResponseBody.
+func unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer(v *AgentPluginServerResponseBody) *agent.AgentPluginServer {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AgentPluginServer{
+		ID:           v.ID,
+		Name:         *v.Name,
+		DashboardURL: v.DashboardURL,
+	}
 
 	return res
 }
@@ -2666,6 +2936,40 @@ func unmarshalAgentPollingPrincipalResponseBodyToAgentAgentPollingPrincipal(v *A
 	return res
 }
 
+// unmarshalAgentMCPServerResponseBodyToAgentAgentMCPServer builds a value of
+// type *agent.AgentMCPServer from a value of type *AgentMCPServerResponseBody.
+func unmarshalAgentMCPServerResponseBodyToAgentAgentMCPServer(v *AgentMCPServerResponseBody) *agent.AgentMCPServer {
+	res := &agent.AgentMCPServer{
+		Name:          *v.Name,
+		URL:           *v.URL,
+		TokenEndpoint: v.TokenEndpoint,
+		Audience:      v.Audience,
+		Resource:      v.Resource,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalAgentServerConnectionResponseBodyToAgentAgentServerConnection
+// builds a value of type *agent.AgentServerConnection from a value of type
+// *AgentServerConnectionResponseBody.
+func unmarshalAgentServerConnectionResponseBodyToAgentAgentServerConnection(v *AgentServerConnectionResponseBody) *agent.AgentServerConnection {
+	res := &agent.AgentServerConnection{
+		ID:               *v.ID,
+		State:            *v.State,
+		ConnectURL:       v.ConnectURL,
+		RequestAccessURL: v.RequestAccessURL,
+	}
+
+	return res
+}
+
 // unmarshalSyncedAgentUserResponseBodyToAgentSyncedAgentUser builds a value of
 // type *agent.SyncedAgentUser from a value of type
 // *SyncedAgentUserResponseBody.
@@ -2694,6 +2998,9 @@ func unmarshalAiScanTargetResponseBodyToAgentAiScanTarget(v *AiScanTargetRespons
 	}
 	res.Signatures = unmarshalAiScanTargetSignaturesResponseBodyToAgentAiScanTargetSignatures(v.Signatures)
 	res.GatewayClient = unmarshalAiScanTargetGatewayClientResponseBodyToAgentAiScanTargetGatewayClient(v.GatewayClient)
+	if v.Access != nil {
+		res.Access = unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v.Access)
+	}
 
 	return res
 }
@@ -2739,6 +3046,23 @@ func unmarshalAiScanTargetGatewayClientResponseBodyToAgentAiScanTargetGatewayCli
 	res.ClientInfoNames = make([]string, len(v.ClientInfoNames))
 	for i, val := range v.ClientInfoNames {
 		res.ClientInfoNames[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary builds a
+// value of type *types.AIToolAccessSummary from a value of type
+// *AIToolAccessSummaryResponseBody.
+func unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v *AIToolAccessSummaryResponseBody) *types.AIToolAccessSummary {
+	if v == nil {
+		return nil
+	}
+	res := &types.AIToolAccessSummary{
+		State:       *v.State,
+		Decision:    *v.Decision,
+		Enforceable: *v.Enforceable,
+		Rationale:   v.Rationale,
 	}
 
 	return res
