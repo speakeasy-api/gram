@@ -1,11 +1,12 @@
 package mcp_test
 
 import (
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestConsentAgentRequiresConnectionsBeforeConsumingChallenge(t *testing.T) {

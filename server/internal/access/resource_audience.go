@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -418,6 +419,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit resource audience").LogError(ctx, s.logger)
 	}
+	s.roleMgr.signalRoleDeliveryPublish(ctx, slices.Collect(maps.Keys(changedProjects)), ac.UserID)
 
 	entries, version, err := s.resourceAudienceEntries(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
 	if err != nil {

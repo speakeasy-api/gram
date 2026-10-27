@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -126,10 +127,14 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		if !hasMeta || !mode.Valid() {
 			return nil, oops.E(oops.CodeBadRequest, nil, "discovery_mode requires a gateway and a supported mode")
 		}
+		if mode == metamcp.DiscoveryModeCode && !s.codeModeSelection.Allows(ctx, authCtx.ActiveOrganizationID) {
+			return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+		}
 		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{
 			Resource:  "meta_mcp_server:" + target.resourceID,
 			Selection: nil,
 			Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+			Catalog:   nil,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "encode gateway connection options").LogError(ctx, s.logger)
@@ -225,8 +230,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		CredentialID:        session.ID,
 		Source:              upstreamclients.SelectionSourceIssuance,
 		// A dashboard mint has no consent page, so it picks nothing.
-		PickedMcpServerIds: []uuid.UUID{},
-		PickedClientIds:    []uuid.UUID{},
+		PickedMcpServerIds:  []uuid.UUID{},
+		PickedClientIds:     []uuid.UUID{},
+		PickedAuthClientIds: nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
 	}
@@ -268,6 +274,11 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
 	}
+	// The legacy binding below gates on the hosting state the slug fallback serves.
+	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load toolset mcp server").LogError(ctx, s.logger)
+	}
 
 	wrapper, err := mcpserversrepo.New(s.db).GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{
 		ToolsetID: toolset.ID,
@@ -295,7 +306,7 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
 	if toolset.McpSlug.String == "" {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated toolset has no mcp slug").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "the hosted MCP server has no address; add one before minting a user-session token").LogWarn(ctx, s.logger)
 	}
 
 	issuerURL, err := url.JoinPath(s.serverURL, "mcp", toolset.McpSlug.String)

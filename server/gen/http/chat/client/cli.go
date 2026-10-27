@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsAgentID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -50,6 +50,16 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 		if chatListChatsAssistantID != "" {
 			assistantID = &chatListChatsAssistantID
 			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var agentID *string
+	{
+		if chatListChatsAgentID != "" {
+			agentID = &chatListChatsAgentID
+			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -226,6 +236,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.UserID = userID
 	v.Source = source
 	v.AssistantID = assistantID
+	v.AgentID = agentID
 	v.SourceKind = sourceKind
 	v.ExcludeSourceKind = excludeSourceKind
 	v.HasRisk = hasRisk

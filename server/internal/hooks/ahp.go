@@ -41,6 +41,7 @@ func AttachAHP(mux goahttp.Muxer, s *Service) error {
 
 func (s *Service) ahpHandler() (http.Handler, error) {
 	h, err := ahpserver.NewHandler(ahpserver.Handlers{
+		Configuration: ahp.ConfigurationFunc(s.ahpResolveConfiguration),
 		Intercept: ahpserver.InterceptHandlers{ //nolint:exhaustruct // unhandled events are rejected as unsupported
 			ToolBefore: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ToolBeforeEvent, ahp.ToolBeforeCapabilities]) (ahpserver.ToolBeforeReply, error) {
 				var reply ahpserver.ToolBeforeReply
@@ -431,7 +432,7 @@ func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, ev
 		Source:           &gen.HookIngestSource{Adapter: ahpAdapter, AdapterVersion: nil, RawEventName: &rawType, Hostname: nil, UserEmail: nil},
 		Session:          nil,
 		Event:            &gen.HookIngestEvent{Type: eventType, OccurredAt: &occurredAt},
-		Data:             &gen.HookIngestData{Prompt: nil, ToolCall: nil, Mcp: nil, McpInventory: nil, McpInventoryCollected: nil, Usage: nil, Message: nil, Skill: nil, Notification: nil, McpAttribution: nil, PromptAttachments: nil},
+		Data:             &gen.HookIngestData{Prompt: nil, ToolCall: nil, Mcp: nil, McpInventory: nil, McpInventoryCollected: nil, Usage: nil, Message: nil, Skill: nil, Notification: nil, McpAttribution: nil, PromptAttachments: nil, DeliveryFailure: nil},
 		Raw:              nil,
 	}
 	if harness != nil && strings.TrimSpace(harness.Name) != "" {

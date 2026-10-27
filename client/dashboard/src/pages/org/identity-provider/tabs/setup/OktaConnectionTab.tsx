@@ -58,12 +58,12 @@ function VerificationOutcome({
   return (
     <div className="flex flex-col gap-3">
       {connection.lastError && (
-        <Alert variant="error" alignTop>
+        <Alert variant="error">
           <Text variant="small">{LAST_ERROR_LABELS[connection.lastError]}</Text>
         </Alert>
       )}
       {reasons.length > 0 && (
-        <Alert variant="warning" alignTop>
+        <Alert variant="warning">
           <div className="flex flex-col gap-1">
             <Text variant="small" className="font-medium">
               The connection needs attention

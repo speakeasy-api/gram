@@ -21,6 +21,7 @@ export function ConfirmDialog({
   error,
   confirmDisabled = false,
   confirmVariant = "destructive-primary",
+  children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,6 +57,9 @@ export function ConfirmDialog({
   // default; a lifecycle step that is safe but still worth a pause (activating
   // a key) reads wrong in red.
   confirmVariant?: "destructive-primary" | "primary";
+  // Inputs the confirmation depends on, such as a choice between two ways to
+  // perform the action, rendered between the description and the impact.
+  children?: React.ReactNode;
 }): JSX.Element {
   return (
     <Dialog
@@ -70,6 +74,7 @@ export function ConfirmDialog({
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>{description}</Dialog.Description>
         </Dialog.Header>
+        {children}
         {impact && (
           <div>
             {impact.isLoading ? (

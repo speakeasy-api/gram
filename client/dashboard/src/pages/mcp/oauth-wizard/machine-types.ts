@@ -55,6 +55,7 @@ export type Context = {
   // the manual credentials form.
   autoRegistering: boolean;
   result: { success: boolean; message: string } | null;
+  toolsetId: string;
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;
@@ -63,6 +64,7 @@ export type Context = {
 export type Input = {
   discovered: DiscoveredOAuth | null;
   initialPath?: "external";
+  toolsetId: string;
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;

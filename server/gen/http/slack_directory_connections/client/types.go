@@ -187,6 +187,10 @@ type DisconnectResponseBody struct {
 	Generation *string `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
 	// Permissions granted by Slack.
 	GrantedScopes []string `form:"granted_scopes,omitempty" json:"granted_scopes,omitempty" xml:"granted_scopes,omitempty"`
+	// Permissions Speakeasy asks for that this install has not granted.
+	// Reinstalling the app grants them. Without chat:write, approval requests do
+	// not reach approvers in Slack.
+	MissingScopes []string `form:"missing_scopes,omitempty" json:"missing_scopes,omitempty" xml:"missing_scopes,omitempty"`
 	// Bounded authorization failure code, when known.
 	LastErrorCode *string `form:"last_error_code,omitempty" json:"last_error_code,omitempty" xml:"last_error_code,omitempty"`
 	// When credentials were removed.
@@ -1868,6 +1872,10 @@ type SlackDirectoryConnectionResponseBody struct {
 	Generation *string `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
 	// Permissions granted by Slack.
 	GrantedScopes []string `form:"granted_scopes,omitempty" json:"granted_scopes,omitempty" xml:"granted_scopes,omitempty"`
+	// Permissions Speakeasy asks for that this install has not granted.
+	// Reinstalling the app grants them. Without chat:write, approval requests do
+	// not reach approvers in Slack.
+	MissingScopes []string `form:"missing_scopes,omitempty" json:"missing_scopes,omitempty" xml:"missing_scopes,omitempty"`
 	// Bounded authorization failure code, when known.
 	LastErrorCode *string `form:"last_error_code,omitempty" json:"last_error_code,omitempty" xml:"last_error_code,omitempty"`
 	// When credentials were removed.
@@ -3313,6 +3321,10 @@ func NewDisconnectSlackDirectoryConnectionOK(body *DisconnectResponseBody) *slac
 	for i, val := range body.GrantedScopes {
 		v.GrantedScopes[i] = val
 	}
+	v.MissingScopes = make([]string, len(body.MissingScopes))
+	for i, val := range body.MissingScopes {
+		v.MissingScopes[i] = val
+	}
 
 	return v
 }
@@ -3725,6 +3737,9 @@ func ValidateDisconnectResponseBody(body *DisconnectResponseBody) (err error) {
 	}
 	if body.GrantedScopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("granted_scopes", "body"))
+	}
+	if body.MissingScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_scopes", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
@@ -5909,6 +5924,9 @@ func ValidateSlackDirectoryConnectionResponseBody(body *SlackDirectoryConnection
 	}
 	if body.GrantedScopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("granted_scopes", "body"))
+	}
+	if body.MissingScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_scopes", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))

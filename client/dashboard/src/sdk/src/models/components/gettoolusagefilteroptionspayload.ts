@@ -5,6 +5,16 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  LogFilter,
+  LogFilter$Outbound,
+  LogFilter$outboundSchema,
+} from "./logfilter.js";
+import {
+  ToolUsageUserFilter,
+  ToolUsageUserFilter$Outbound,
+  ToolUsageUserFilter$outboundSchema,
+} from "./toolusageuserfilter.js";
 
 /**
  * Tool usage filter option type
@@ -22,21 +32,107 @@ export const OptionTypes = {
 export type OptionTypes = ClosedEnum<typeof OptionTypes>;
 
 /**
+ * Tool usage trace outcome
+ */
+export const GetToolUsageFilterOptionsPayloadStatuses = {
+  Error: "error",
+  Success: "success",
+  Blocked: "blocked",
+  Pending: "pending",
+} as const;
+/**
+ * Tool usage trace outcome
+ */
+export type GetToolUsageFilterOptionsPayloadStatuses = ClosedEnum<
+  typeof GetToolUsageFilterOptionsPayloadStatuses
+>;
+
+/**
+ * Tool usage target type
+ */
+export const GetToolUsageFilterOptionsPayloadTargetTypes = {
+  HostedMcpServer: "hosted_mcp_server",
+  TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
+  ShadowMcpServer: "shadow_mcp_server",
+  LocalTool: "local_tool",
+  Skill: "skill",
+} as const;
+/**
+ * Tool usage target type
+ */
+export type GetToolUsageFilterOptionsPayloadTargetTypes = ClosedEnum<
+  typeof GetToolUsageFilterOptionsPayloadTargetTypes
+>;
+
+/**
  * Payload for target-aware MCP and tool usage filter options
  */
 export type GetToolUsageFilterOptionsPayload = {
+  /**
+   * Optional account type filter ('team' or 'personal').
+   */
+  accountType?: string | undefined;
+  /**
+   * Agent identities to narrow by. Not applied to the agent user options.
+   */
+  agentIds?: Array<string> | undefined;
+  /**
+   * MCP client keys to narrow by. Not applied to the client options.
+   */
+  clientKeys?: Array<string> | undefined;
+  /**
+   * Arbitrary attribute filter conditions from the af URL param
+   */
+  filters?: Array<LogFilter> | undefined;
   /**
    * Start time in ISO 8601 format
    */
   from: Date;
   /**
+   * Hook plugin sources to narrow by.
+   */
+  hookSources?: Array<string> | undefined;
+  /**
+   * Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not applied to the server options.
+   */
+  hostedToolsetSlugs?: Array<string> | undefined;
+  /**
+   * MCP server ids to narrow by. Not applied to the server options.
+   */
+  mcpServerIds?: Array<string> | undefined;
+  /**
+   * Gateway (meta MCP server) ids to narrow by. Not applied to the server options.
+   */
+  metaMcpServerIds?: Array<string> | undefined;
+  /**
    * Filter option types to include. Empty means all option types.
    */
   optionTypes?: Array<OptionTypes> | undefined;
   /**
+   * Free-text attribute search string from the q URL param.
+   */
+  query?: string | undefined;
+  /**
+   * Shadow MCP server names to narrow by. Not applied to the server options.
+   */
+  shadowServerNames?: Array<string> | undefined;
+  /**
+   * Trace outcomes to narrow by. Empty means all.
+   */
+  statuses?: Array<GetToolUsageFilterOptionsPayloadStatuses> | undefined;
+  /**
+   * Target types to include. Empty means all target types.
+   */
+  targetTypes?: Array<GetToolUsageFilterOptionsPayloadTargetTypes> | undefined;
+  /**
    * End time in ISO 8601 format
    */
   to: Date;
+  /**
+   * Typed user identities to narrow by. Not applied to the email user options.
+   */
+  userFilters?: Array<ToolUsageUserFilter> | undefined;
 };
 
 /** @internal */
@@ -44,10 +140,35 @@ export const OptionTypes$outboundSchema: z.ZodMiniEnum<typeof OptionTypes> = z
   .enum(OptionTypes);
 
 /** @internal */
+export const GetToolUsageFilterOptionsPayloadStatuses$outboundSchema:
+  z.ZodMiniEnum<typeof GetToolUsageFilterOptionsPayloadStatuses> = z.enum(
+    GetToolUsageFilterOptionsPayloadStatuses,
+  );
+
+/** @internal */
+export const GetToolUsageFilterOptionsPayloadTargetTypes$outboundSchema:
+  z.ZodMiniEnum<typeof GetToolUsageFilterOptionsPayloadTargetTypes> = z.enum(
+    GetToolUsageFilterOptionsPayloadTargetTypes,
+  );
+
+/** @internal */
 export type GetToolUsageFilterOptionsPayload$Outbound = {
+  account_type?: string | undefined;
+  agent_ids?: Array<string> | undefined;
+  client_keys?: Array<string> | undefined;
+  filters?: Array<LogFilter$Outbound> | undefined;
   from: string;
+  hook_sources?: Array<string> | undefined;
+  hosted_toolset_slugs?: Array<string> | undefined;
+  mcp_server_ids?: Array<string> | undefined;
+  meta_mcp_server_ids?: Array<string> | undefined;
   option_types?: Array<string> | undefined;
+  query?: string | undefined;
+  shadow_server_names?: Array<string> | undefined;
+  statuses?: Array<string> | undefined;
+  target_types?: Array<string> | undefined;
   to: string;
+  user_filters?: Array<ToolUsageUserFilter$Outbound> | undefined;
 };
 
 /** @internal */
@@ -56,13 +177,40 @@ export const GetToolUsageFilterOptionsPayload$outboundSchema: z.ZodMiniType<
   GetToolUsageFilterOptionsPayload
 > = z.pipe(
   z.object({
+    accountType: z.optional(z.string()),
+    agentIds: z.optional(z.array(z.string())),
+    clientKeys: z.optional(z.array(z.string())),
+    filters: z.optional(z.array(LogFilter$outboundSchema)),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    hookSources: z.optional(z.array(z.string())),
+    hostedToolsetSlugs: z.optional(z.array(z.string())),
+    mcpServerIds: z.optional(z.array(z.string())),
+    metaMcpServerIds: z.optional(z.array(z.string())),
     optionTypes: z.optional(z.array(OptionTypes$outboundSchema)),
+    query: z.optional(z.string()),
+    shadowServerNames: z.optional(z.array(z.string())),
+    statuses: z.optional(
+      z.array(GetToolUsageFilterOptionsPayloadStatuses$outboundSchema),
+    ),
+    targetTypes: z.optional(
+      z.array(GetToolUsageFilterOptionsPayloadTargetTypes$outboundSchema),
+    ),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    userFilters: z.optional(z.array(ToolUsageUserFilter$outboundSchema)),
   }),
   z.transform((v) => {
     return remap$(v, {
+      accountType: "account_type",
+      agentIds: "agent_ids",
+      clientKeys: "client_keys",
+      hookSources: "hook_sources",
+      hostedToolsetSlugs: "hosted_toolset_slugs",
+      mcpServerIds: "mcp_server_ids",
+      metaMcpServerIds: "meta_mcp_server_ids",
       optionTypes: "option_types",
+      shadowServerNames: "shadow_server_names",
+      targetTypes: "target_types",
+      userFilters: "user_filters",
     });
   }),
 );

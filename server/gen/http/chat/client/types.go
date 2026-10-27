@@ -121,6 +121,13 @@ type LoadChatOverviewResponseBody struct {
 	// The ID of the agent the assistant acts as, when the assistant has a
 	// dedicated agent identity
 	AssistantAgentID *string `form:"assistant_agent_id,omitempty" json:"assistant_agent_id,omitempty" xml:"assistant_agent_id,omitempty"`
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -230,6 +237,13 @@ type LoadChatResponseBody struct {
 	// The ID of the agent the assistant acts as, when the assistant has a
 	// dedicated agent identity
 	AssistantAgentID *string `form:"assistant_agent_id,omitempty" json:"assistant_agent_id,omitempty" xml:"assistant_agent_id,omitempty"`
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -2908,6 +2922,13 @@ type ChatOverviewResponseBody struct {
 	// The ID of the agent the assistant acts as, when the assistant has a
 	// dedicated agent identity
 	AssistantAgentID *string `form:"assistant_agent_id,omitempty" json:"assistant_agent_id,omitempty" xml:"assistant_agent_id,omitempty"`
+	// The ID of the agent that produced this session, recorded from the
+	// authenticated actor at capture. Set for sessions an agent drove directly,
+	// such as a channel session, which has no assistant record.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The current name of the agent that produced this session. Absent when the
+	// agent has since been deleted, in which case agent_id is still reported.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -3749,6 +3770,8 @@ func NewLoadChatOverviewChatOverviewOK(body *LoadChatOverviewResponseBody) *chat
 		AssistantID:          body.AssistantID,
 		AssistantName:        body.AssistantName,
 		AssistantAgentID:     body.AssistantAgentID,
+		AgentID:              body.AgentID,
+		AgentName:            body.AgentName,
 		NumMessages:          *body.NumMessages,
 		Source:               body.Source,
 		OriginatingClient:    body.OriginatingClient,
@@ -3951,6 +3974,8 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		AssistantID:          body.AssistantID,
 		AssistantName:        body.AssistantName,
 		AssistantAgentID:     body.AssistantAgentID,
+		AgentID:              body.AgentID,
+		AgentName:            body.AgentName,
 		NumMessages:          *body.NumMessages,
 		Source:               body.Source,
 		OriginatingClient:    body.OriginatingClient,
