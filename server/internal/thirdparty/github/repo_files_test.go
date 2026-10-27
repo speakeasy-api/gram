@@ -34,6 +34,8 @@ type fakeRepo struct {
 	client    *Client
 	requested sync.Map
 	peak      atomic.Int32
+	// failSHA, when set, makes that blob's fetch return a server error.
+	failSHA string
 }
 
 // newFakeRepo serves a git tree of n blob entries ("dir-<i%2>/file-<i>") and
@@ -81,6 +83,9 @@ func newFakeRepo(t *testing.T, n int, holdUntilFull bool) *fakeRepo {
 			}
 			sha := req.URL.Path[strings.LastIndex(req.URL.Path, "/")+1:]
 			repo.requested.Store(sha, true)
+			if sha == repo.failSHA {
+				return jsonResponse(t, http.StatusInternalServerError, map[string]string{"message": "boom"}), nil
+			}
 			return jsonResponse(t, http.StatusOK, map[string]string{
 				"content":  base64.StdEncoding.EncodeToString([]byte("content-of-" + sha)),
 				"encoding": "base64",
@@ -151,4 +156,16 @@ func TestGetRepoFiles_IncludeSkipsUnwantedBlobs(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, i%2, "an excluded blob was downloaded: %s", sha)
 	}
+}
+
+func TestGetRepoFiles_BlobErrorFailsWholeFetch(t *testing.T) {
+	t.Parallel()
+
+	repo := newFakeRepo(t, 3*repoFileFetchConcurrency, false)
+	repo.failSHA = "sha-5"
+
+	files, err := repo.client.GetRepoFiles(t.Context(), 1, "owner", "repo", "main", nil)
+	require.ErrorContains(t, err, "get blob dir-1/file-5")
+	require.ErrorContains(t, err, "status 500")
+	require.Nil(t, files, "a failed fetch must not return a partial file set")
 }

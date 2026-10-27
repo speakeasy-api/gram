@@ -2914,13 +2914,27 @@ func TestPluginsService_PublishProject_HooksChangeFetchesOnlyMCPFiles(t *testing
 	require.NoError(t, err)
 	require.False(t, res.Skipped)
 
-	require.NotEmpty(t, mock.lastFetchedFiles, "carrying MCP requires fetching its files")
-	for path := range mock.lastFetchedFiles {
-		require.NotContains(t, path, "-observability", "a hooks-only publish must not fetch the hooks subtree it regenerates")
+	// The shared marketplace manifests and README are regenerated on every
+	// publish, so the fetch must cover exactly the published MCP files.
+	for _, shared := range sharedMarketplaceFiles {
+		require.Contains(t, mcpBefore, shared)
+		delete(mcpBefore, shared)
 	}
-	for path, content := range mock.lastFetchedFiles {
-		require.Equal(t, mcpBefore[path], string(content), "fetched MCP files must be the published ones")
+	require.NotEmpty(t, mcpBefore)
+	require.Equal(t, slices.Sorted(maps.Keys(mcpBefore)), slices.Sorted(maps.Keys(mock.lastFetchedFiles)), "a hooks-only publish must fetch exactly the MCP files it carries")
+	for path, content := range mcpBefore {
+		require.Equal(t, content, string(mock.lastPushedFiles[path]), "carried MCP file %s must be pushed verbatim", path)
 	}
+}
+
+// sharedMarketplaceFiles are the repo-root files generateSharedFiles writes;
+// they are regenerated on every publish and never carried.
+var sharedMarketplaceFiles = []string{
+	".claude-plugin/marketplace.json",
+	".cursor-plugin/marketplace.json",
+	".agents/plugins/marketplace.json",
+	"marketplace.json",
+	"README.md",
 }
 
 func filesWithSubstring(files map[string][]byte, substr string) map[string]string {
