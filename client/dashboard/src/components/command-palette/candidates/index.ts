@@ -33,6 +33,11 @@ import { useSourceCandidates } from "./useSourceCandidates";
  * query's `enabled` option, so nothing fetches while the palette is closed.
  * Project-scoped sources are further gated on `inProject`, and admin-only
  * sources on RBAC, mirroring the gates the resource groups applied before.
+ *
+ * Session titles are intentionally excluded: transcripts are high-volume,
+ * sensitive history, so opening the palette must not crawl their pages. The
+ * Agent Sessions page action opens the scoped search; an agent's profile links
+ * there with its agent and time-window filters. See docs/rbac.md.
  */
 export function useLauncherCandidates({
   enabled,
