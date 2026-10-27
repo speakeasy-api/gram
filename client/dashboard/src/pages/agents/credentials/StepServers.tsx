@@ -262,15 +262,18 @@ export function StepServers({
                 const refusal = refusedServers?.get(server.id);
                 const locked = allServers || (!checked && !!refusal);
                 return (
-                  <li key={server.id} className="flex items-center pr-4">
+                  <li
+                    key={server.id}
+                    className={cn(
+                      "flex items-center pr-4",
+                      !locked && checked && "bg-accent/40",
+                      !locked && !checked && "hover:bg-muted/40",
+                    )}
+                  >
                     <label
                       className={cn(
                         "flex min-w-0 flex-1 items-center gap-4 px-4 py-3",
-                        locked
-                          ? "cursor-default"
-                          : checked
-                            ? "cursor-pointer bg-accent/40"
-                            : "cursor-pointer hover:bg-muted/40",
+                        locked ? "cursor-default" : "cursor-pointer",
                       )}
                     >
                       {/* Ticked and locked under "All servers": the agent does
