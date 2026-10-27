@@ -343,3 +343,40 @@ func TestRun_EMADirectAndGatewayReachMovesAuxiliaryHeadersOntoTheEMAClient(t *te
 	require.Equal(t, []uuid.UUID{emaID}, f.links(server))
 	require.Len(t, f.headers(emaID), 1)
 }
+
+// A recorded client whose bindings come to disagree keeps its links, and a
+// server it reaches only through the gateways stays gateway-only: the direct
+// route keeps its header client and choice.
+func TestRun_KeptEMAGatewayClientKeepsADirectAuxiliaryHeaderChoice(t *testing.T) {
+	t.Parallel()
+	f, gatewayIssuer, server, headerClient, credential := directHeaderChoice(t, "X-Api-Key")
+	clientID, issuerID := f.emaClient()
+	f.binding(gatewayIssuer, issuerID, clientID, gatewayResource, []string{})
+	requireDirectChoiceKept(t, f, server, headerClient, credential)
+
+	f.binding(gatewayIssuer, issuerID, clientID, gatewayResource+"/", []string{})
+	report := f.run(false)
+	conflicting := results(report, KindEMA, OutcomeAmbiguous)
+	require.Len(t, conflicting, 1)
+	require.Equal(t, ReasonResourceVariants, conflicting[0].Reason)
+	requireDirectChoiceKept(t, f, server, headerClient, credential)
+}
+
+// Only the gateways' issuer makes a gateway-only EMA client count for a
+// choice: a credential another issuer issued, even one with its own binding
+// for the upstream, is not served by it on this server.
+func TestRun_EMAGatewayReachCountsOnlyForGatewayCredentials(t *testing.T) {
+	t.Parallel()
+	f, gatewayIssuer, server, headerClient, _ := directHeaderChoice(t, "X-Api-Key")
+	clientID, issuerID := f.emaClient()
+	other := f.userSessionIssuer()
+	f.binding(gatewayIssuer, issuerID, clientID, gatewayResource, []string{})
+	f.binding(other, issuerID, clientID, gatewayResource, []string{})
+	f.sessionIssuerID = other
+	credential := f.interactiveCredential()
+	f.noAuthSelection(credential, server)
+
+	report := f.run(true)
+	require.Empty(t, selectionGaps(report, SelectionStaleNoAuth))
+	require.Equal(t, uuid.NullUUID{UUID: headerClient, Valid: true}, f.selection(credential, server).AuthClientID)
+}

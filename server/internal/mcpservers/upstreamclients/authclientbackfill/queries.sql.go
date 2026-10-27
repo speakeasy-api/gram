@@ -2548,10 +2548,9 @@ SELECT sel.id,
                )
            ))
        )::boolean AS server_has_oauth_clients,
-       -- The issuers of the bindings through which an EMA client reaching the
-       -- server only through the gateways serves it: a choice whose credential
-       -- one of them issued reads the client as OAuth-backed, a choice made on
-       -- the direct route does not.
+       -- The gateways' issuer when an EMA client reaches the server only through
+       -- them: a choice whose credential it issued reads the client as
+       -- OAuth-backed, a choice made on the direct route does not.
        ARRAY(
          SELECT DISTINCT gb2.user_session_issuer_id
          FROM mcp_auth_clients AS ac
@@ -2567,6 +2566,20 @@ SELECT sel.id,
           AND gb2.remote_session_client_id = x.remote_session_client_id
           AND rtrim(gb2.resource, '/') = rtrim(x.resource, '/')
           AND gb2.state = 'ready'
+          AND gb2.user_session_issuer_id = (
+            -- The gateways' issuer, as ListEMABindingServers reads it.
+            SELECT (array_agg(gi.id))[1]
+            FROM user_session_issuers AS gi
+            WHERE gi.organization_id = gb2.organization_id
+              AND gi.project_id IS NULL
+              AND gi.deleted IS FALSE
+              AND EXISTS (
+                SELECT 1 FROM organization_features AS gf
+                WHERE gf.organization_id = gb2.organization_id
+                  AND gf.feature_name = 'organization_gateway_disabled'
+              )
+            HAVING count(*) = 1
+          )
          WHERE ac.organization_id = sel.organization_id
            AND ac.deleted IS FALSE
            AND ac.enabled

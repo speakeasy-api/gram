@@ -234,6 +234,10 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 		default:
 			continue
 		}
+		reachedDirectly := map[uuid.UUID]bool{}
+		for _, server := range servers {
+			reachedDirectly[server.id] = server.direct
+		}
 		// Disagreeing bindings decide nothing new, but a client already
 		// recorded for one of them keeps serving with its links until they
 		// agree again.
@@ -257,7 +261,11 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 			target := emaTarget{clientID: existing.ID, recorded: true, servers: linked}
 			for _, serverID := range linked {
 				plan.served[serverID] = true
-				plan.direct[serverID] = true
+				// A linked server the bindings reach only through the gateways
+				// stays gateway-only; one they no longer reach keeps being
+				// treated as served directly until its link retires.
+				direct, reached := reachedDirectly[serverID]
+				plan.direct[serverID] = plan.direct[serverID] || !reached || direct
 			}
 			plan.targets = append(plan.targets, target)
 		}

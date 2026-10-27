@@ -155,7 +155,7 @@ type liveCredential struct {
 // upstream OAuth client association, as GetUpstreamClientSelection reads it,
 // and the server offers no enabled OAuth-backed client, counting an EMA
 // client reached only through the gateways only for a choice whose credential
-// a binding it serves through was issued by. A choice already
+// the gateways' issuer issued. A choice already
 // naming an auth client is usable while that client is, as the typed
 // resolver reads it, whatever the legacy issuer binding. An unmapped OAuth
 // choice holds while its registration is associated with the server and
