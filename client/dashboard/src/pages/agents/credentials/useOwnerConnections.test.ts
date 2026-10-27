@@ -20,11 +20,18 @@ afterEach(() => {
 });
 
 it("keeps focus refreshes in flight until all owner reads finish", async () => {
-  let finish: () => void = () => {};
-  const pending = new Promise<void>((resolve) => {
-    finish = resolve;
+  let finishSessions: () => void = () => {};
+  let finishClients: () => void = () => {};
+  const sessionsPending = new Promise<void>((resolve) => {
+    finishSessions = resolve;
   });
-  mocks.refetch.mockReturnValue(pending);
+  const clientsPending = new Promise<void>((resolve) => {
+    finishClients = resolve;
+  });
+  mocks.refetch
+    .mockReturnValueOnce(sessionsPending)
+    .mockReturnValueOnce(clientsPending)
+    .mockResolvedValue(undefined);
   const server = {
     id: "server_example",
     projectSlug: "default",
@@ -41,7 +48,12 @@ it("keeps focus refreshes in flight until all owner reads finish", async () => {
   fireEvent(document, new Event("visibilitychange"));
   expect(mocks.refetch).toHaveBeenCalledTimes(2);
   await act(async () => {
-    finish();
+    finishSessions();
+  });
+  fireEvent(window, new Event("focus"));
+  expect(mocks.refetch).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    finishClients();
   });
   fireEvent(window, new Event("focus"));
   expect(mocks.refetch).toHaveBeenCalledTimes(4);
