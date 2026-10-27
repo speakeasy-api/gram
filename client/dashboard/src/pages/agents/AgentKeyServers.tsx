@@ -1,6 +1,6 @@
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { IdentityAvatar } from "@/components/identity-avatar";
 import { sessionAccountLabel } from "@/components/sessions/session-account-identity";
 import {
   connectionLifetime,
@@ -673,25 +673,19 @@ export function ServerAccounts({
                       "border-warning-softest bg-warning-softest/30",
                   )}
                 >
-                  <Avatar
-                    title={label}
-                    className={compact ? "hidden" : undefined}
-                  >
-                    <AvatarImage
-                      src={
-                        mine
-                          ? user.photoUrl
-                          : members?.members.find(
-                              (member) =>
-                                `user:${member.id}` === session.subjectUrn,
-                            )?.photoUrl
-                      }
-                      alt={label}
-                    />
-                    <AvatarFallback>
-                      {label.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <IdentityAvatar
+                    label={label}
+                    className={compact ? "hidden" : "size-7"}
+                    textClassName="text-xs"
+                    src={
+                      mine
+                        ? user.photoUrl
+                        : members?.members.find(
+                            (member) =>
+                              `user:${member.id}` === session.subjectUrn,
+                          )?.photoUrl
+                    }
+                  />
                   <div className="min-w-0 flex-1">
                     <Text
                       small

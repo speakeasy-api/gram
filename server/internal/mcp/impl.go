@@ -886,7 +886,10 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 	}
 	if result.Grant != nil {
 		if err := s.recordConnectionPopupGrant(r.Context(), *result.Grant); err != nil {
-			return err
+			// OAuth already committed and consumed its callback. Keep the normal
+			// redirect; attachment completion stays fail-closed and can be retried
+			// with a fresh popup instead of replaying a spent authorization code.
+			s.logger.ErrorContext(r.Context(), "record committed popup grant", attr.SlogError(err))
 		}
 
 		if deadline := s.verifyRemoteGrant(r.Context(), *result.Grant); !deadline.IsZero() {

@@ -1,3 +1,4 @@
+import { mcpServerRouteParam } from "@/lib/sources";
 import { Button } from "@/components/ui/Button";
 import {
   Popover,
@@ -49,7 +50,7 @@ export function ServerInfoPopover({
           href={
             server.kind === "Toolset" && server.toolsetSlug
               ? routes.toolset.href(server.toolsetSlug)
-              : routes.mcp.details.overview.href(server.id)
+              : routes.mcp.details.overview.href(mcpServerRouteParam(server))
           }
           target="_blank"
           rel="noopener noreferrer"

@@ -2,17 +2,8 @@ package mcp_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5"
-	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
-	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
-	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,11 +12,21 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Dashboard-started connects for remote servers must stay on the /mcp surface.
@@ -139,8 +140,18 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	rctx.URLParams.Add("mcpSlug", slug)
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect/first-party?binding_refresh_attempt="+attempt.AttemptID+"&reauthenticate_client_id="+client.String(), nil)
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+	invalid := req.Clone(req.Context())
+	invalidURL := *req.URL
+	invalid.URL = &invalidURL
+	query := invalid.URL.Query()
+	query.Set("reauthenticate_client_id", "not-a-uuid")
+	invalid.URL.RawQuery = query.Encode()
+	require.Error(t, ti.service.HandleFirstPartyConnect(httptest.NewRecorder(), invalid))
+	mock.buildAuthURLErr = errors.New("temporary identity provider failure")
+	require.Error(t, ti.service.HandleFirstPartyConnect(httptest.NewRecorder(), req))
+	mock.buildAuthURLErr = nil
 	response := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleFirstPartyConnect(response, req))
+	require.NoError(t, ti.service.HandleFirstPartyConnect(response, req), "failed setup must leave the same refresh attempt retryable")
 	initialID := mock.buildAuthURLParams.State
 	require.NotEmpty(t, initialID)
 	challenge, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+initialID)

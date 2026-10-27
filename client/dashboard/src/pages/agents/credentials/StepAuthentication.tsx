@@ -10,7 +10,7 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { IdentityAvatar } from "@/components/identity-avatar";
 import { useSession } from "@/contexts/Auth";
 import {
   connectionLifetime,
@@ -91,7 +91,11 @@ export function StepAuthentication({
                     ? "Could not check connection"
                     : "Requires connection";
           return (
-            <AccordionItem key={server.id} value={server.id} className="px-4">
+            <AccordionItem
+              key={server.id}
+              value={server.id}
+              className="px-4 data-[state=open]:bg-muted/30"
+            >
               <div
                 className={
                   session && !mine
@@ -107,27 +111,16 @@ export function StepAuthentication({
                       </span>
                     </span>
                     {session && (
-                      <Avatar
-                        title={
+                      <IdentityAvatar
+                        label={
                           session.subjectDisplayName ||
                           session.subjectEmail ||
                           "Connection owner"
                         }
-                      >
-                        <AvatarImage
-                          src={mine ? user.photoUrl : undefined}
-                          alt=""
-                        />
-                        <AvatarFallback>
-                          {(
-                            session.subjectDisplayName ||
-                            session.subjectEmail ||
-                            "?"
-                          )
-                            .slice(0, 2)
-                            .toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                        src={mine ? user.photoUrl : undefined}
+                        className="size-7"
+                        textClassName="text-xs"
+                      />
                     )}
                     <Badge
                       variant={

@@ -63,7 +63,7 @@ import {
   valuesFromSubject,
 } from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useServerInventory } from "./useServerInventory";
+import { useServerInventory, type InventoryServer } from "./useServerInventory";
 import { useOwnerConnections } from "./useOwnerConnections";
 import { StepAuthentication } from "./StepAuthentication";
 import { connectionSelectable } from "./ownerConnections";
@@ -888,11 +888,49 @@ export function CredentialsWizard({
   // click: the mark is how a glance confirms the choice landed.
   const [highlight, setHighlight] = useState<string | null>(null);
 
+  const connectionReach = (): InventoryServer[] =>
+    allServers
+      ? inventory.servers.filter((server) =>
+          reachCoversProject(allServersProjectIDs, server.projectId),
+        )
+      : selected.map((entry) => entry.server);
+
+  const attachSelectedConnections = async (
+    targetId: string,
+    reach: InventoryServer[],
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    if (offersConnections) {
+      try {
+        const missing = await attachOwnerConnections(
+          sdk,
+          targetId,
+          reach,
+          signal,
+          allServers,
+        );
+        if (missing.length)
+          toast.warning(
+            `No connection assigned for: ${missing.join(", ")}. Connect these accounts to let the agent use them.`,
+          );
+      } catch (failure) {
+        const reason = failure instanceof Error ? failure.message : "";
+        throw new Error(
+          `The agent was created, but it could not use your connection. ${reason}`.trim(),
+        );
+      }
+    }
+  };
+
   const workload = useWorkloadSetup({
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
     agentName: name.trim(),
-    ensureAgent,
+    ensureAgent: async () => {
+      const targetId = await ensureAgent();
+      await attachSelectedConnections(targetId, connectionReach());
+      return targetId;
+    },
     onConnected: setAgentID,
     // The rule this agent already holds: its own rule is not a duplicate of
     // itself, and the create step has nothing left to write.
@@ -982,36 +1020,8 @@ export function CredentialsWizard({
       // Without this the key asks for nothing: `selected` is empty under
       // "all servers", and discovery rightly answers that nothing can be
       // delegated.
-      const reach = allServers
-        ? inventory.servers.filter((server) =>
-            reachCoversProject(allServersProjectIDs, server.projectId),
-          )
-        : selected.map((entry) => entry.server);
-      // A server that signs in as a person is reached through the owner's own
-      // connection, attached before the key is cut so the key works from its
-      // first call. Attaching again on a retry keeps what is already there.
-      // An existing agent is never attached to here: it offers no connection
-      // to choose, and the agent's page connects accounts for its keys.
-      if (offersConnections) {
-        try {
-          const missing = await attachOwnerConnections(
-            sdk,
-            target.id,
-            reach,
-            controller.signal,
-            allServers,
-          );
-          if (missing.length)
-            toast.warning(
-              `No connection assigned for: ${missing.join(", ")}. Connect these accounts to let the agent use them.`,
-            );
-        } catch (failure) {
-          const reason = failure instanceof Error ? failure.message : "";
-          throw new Error(
-            `The agent was created, but it could not use your connection. ${reason}`.trim(),
-          );
-        }
-      }
+      const reach = connectionReach();
+      await attachSelectedConnections(target.id, reach, controller.signal);
       const delegable = await discoverKeyServerGrants(
         sdk.agents,
         target.id,

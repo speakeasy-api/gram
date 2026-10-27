@@ -80,9 +80,6 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		if s.bindingRefresh == nil {
 			return oops.C(oops.CodeUnavailable)
 		}
-		if err := s.bindingRefresh.Start(ctx, attemptID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID); err != nil {
-			return fmt.Errorf("start attachment refresh: %w", err)
-		}
 	}
 	reauthenticateClientID := uuid.Nil
 	if requested := r.URL.Query().Get("reauthenticate_client_id"); requested != "" {
@@ -138,29 +135,38 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		failureCode, cause := federatedFailure(err)
 		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 	}
+	idpURL := federatedURL
+	if idpURL == nil {
+		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
+		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
+		}
+		idpURL, err = s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
+			CallbackURL:     callbackURL,
+			Scope:           "",
+			State:           challengeID,
+			ScopesSupported: nil,
+			LoginHint:       "",
+			ScreenHint:      "",
+			Prompt:          "",
+		})
+		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
+		}
+	}
+	// Claim only after all validation and login setup succeeded, so a failed
+	// preparation does not consume the dashboard's one-time decision.
+	if attemptID != "" {
+		if err := s.bindingRefresh.Start(ctx, attemptID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID); err != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			return fmt.Errorf("start attachment refresh: %w", err)
+		}
+	}
 	if federatedURL != nil {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		http.Redirect(w, r, federatedURL.String(), http.StatusFound)
-		return nil
-	}
-	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
-	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
-		return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
-	}
-	idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
-		CallbackURL:     callbackURL,
-		Scope:           "",
-		State:           challengeID,
-		ScopesSupported: nil,
-		LoginHint:       "",
-		ScreenHint:      "",
-		Prompt:          "",
-	})
-	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
-		return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, "started first-party connect flow", attr.SlogOAuthFlowID(flowID))

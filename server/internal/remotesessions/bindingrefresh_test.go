@@ -2,22 +2,26 @@ package remotesessions_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/require"
+
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/stretchr/testify/require"
 )
 
 func TestBindingRefreshRequiresExactPopupGrant(t *testing.T) {
@@ -111,6 +115,18 @@ func TestBindingRefreshRequiresExactPopupGrant(t *testing.T) {
 				require.True(t, result.Completed)
 				require.NotNil(t, result.Binding)
 				require.NotEqual(t, binding.ID, result.Binding.ID)
+				require.Equal(t, binding.RemoteSession.SubjectDisplayName, result.Binding.RemoteSession.SubjectDisplayName)
+				require.Equal(t, binding.RemoteSession.SubjectEmail, result.Binding.RemoteSession.SubjectEmail)
+				lookup := repo.LockRemoteSessionGrantForBindingRefreshParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: config, ID: renewed.ID, RemoteSessionClientID: renewed.RemoteSessionClientID, SubjectUrn: renewed.SubjectUrn, GrantGeneration: renewed.GrantGeneration}
+				_, err = repo.New(ti.conn).LockRemoteSessionGrantForBindingRefresh(ctx, lookup)
+				require.NoError(t, err)
+				lookup.ProjectID = uuid.New()
+				_, err = repo.New(ti.conn).LockRemoteSessionGrantForBindingRefresh(ctx, lookup)
+				require.ErrorIs(t, err, pgx.ErrNoRows)
+				lookup.ProjectID = *auth.ProjectID
+				lookup.OrganizationID = "other-organization"
+				_, err = repo.New(ti.conn).LockRemoteSessionGrantForBindingRefresh(ctx, lookup)
+				require.ErrorIs(t, err, pgx.ErrNoRows)
 			default:
 				require.NoError(t, err)
 				require.False(t, result.Completed)
@@ -135,4 +151,26 @@ func TestBindingRefreshRequiresExactPopupGrant(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A transport failure must remain retryable rather than becoming a permission denial.
+func TestBindingRefreshStartPreservesCacheFailure(t *testing.T) {
+	t.Parallel()
+	unavailable := errors.New("cache unavailable")
+	attempts := remotesessions.NewBindingRefreshAttempts(testenv.NewLogger(t), bindingRefreshFailureCache{err: unavailable})
+	err := attempts.Start(t.Context(), uuid.NewString(), "organization", uuid.New(), uuid.New())
+	require.ErrorIs(t, err, unavailable)
+	var shareable *oops.ShareableError
+	require.NotErrorAs(t, err, &shareable)
+	attempts = remotesessions.NewBindingRefreshAttempts(testenv.NewLogger(t), bindingRefreshFailureCache{err: redisCache.ErrCacheMiss})
+	requireOopsCode(t, attempts.Start(t.Context(), uuid.NewString(), "organization", uuid.New(), uuid.New()), oops.CodeForbidden)
+}
+
+type bindingRefreshFailureCache struct {
+	cache.Cache
+	err error
+}
+
+func (c bindingRefreshFailureCache) Get(context.Context, string, any) error {
+	return fmt.Errorf("fixture cache failure: %w", c.err)
 }

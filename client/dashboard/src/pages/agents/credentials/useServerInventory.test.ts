@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useServerInventory } from "./useServerInventory";
 
 const mocks = vi.hoisted(() => ({
+  refetch: vi.fn<() => Promise<void>>(),
   activity: [] as {
     targetType: string;
     targetId: string;
@@ -13,12 +14,15 @@ const mocks = vi.hoisted(() => ({
     visibility: string;
     projectId: string;
     slug: string;
+    toolset?: { description: string };
   }[],
 }));
 
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
 vi.mock("@tanstack/react-query", () => ({
-  useQueries: () => [{ data: { activity: mocks.activity } }],
+  useQueries: () => [
+    { data: { activity: mocks.activity }, refetch: mocks.refetch },
+  ],
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
@@ -93,4 +97,20 @@ it("orders by calls in the last day, then alphabetically", () => {
     "bravo",
   ]);
   mocks.activity = [];
+});
+
+it("includes hosted descriptions and retries auxiliary reads", () => {
+  mocks.servers = [
+    {
+      id: "server",
+      visibility: "private",
+      projectId: "project",
+      slug: "example",
+      toolset: { description: "Hosted tools" },
+    },
+  ];
+  const { result } = renderHook(useServerInventory);
+  expect(result.current.servers[0]?.description).toBe("Hosted tools");
+  result.current.refetch();
+  expect(mocks.refetch).toHaveBeenCalledTimes(2);
 });

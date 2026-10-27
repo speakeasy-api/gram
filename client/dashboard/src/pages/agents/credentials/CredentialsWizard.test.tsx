@@ -1945,6 +1945,50 @@ describe("Servers that sign in as a person", () => {
     );
   });
 
+  it("attaches a personal connection before admitting a workload identity", async () => {
+    mocks.sessions.mockResolvedValue([mine]);
+    mocks.platforms.mockReturnValue([gke]);
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your cluster" });
+    for (const [label, value] of [
+      ["Project ID", "example-project"],
+      ["Location", "us-central1"],
+      ["Cluster name", "example-cluster"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your workload" });
+    fireEvent.change(screen.getByLabelText("Namespace"), {
+      target: { value: "example" },
+    });
+    fireEvent.change(screen.getByLabelText("Service account"), {
+      target: { value: "worker" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Connect GKE" }));
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledOnce());
+    expect(mocks.attach).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachBindingRequestBody: {
+          principalId: "agent_new",
+          userSessionIssuerId: "issuer_linear",
+          remoteSessionId: "session_mine",
+        },
+      }),
+      undefined,
+      expect.anything(),
+    );
+    expect(mocks.attach.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.admitSubject.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.createKey).not.toHaveBeenCalled();
+  });
+
   it("withholds a personal server when its policy grant is refused", async () => {
     mocks.sessions.mockResolvedValue([mine]);
     mocks.checkPolicyGrants.mockImplementation(

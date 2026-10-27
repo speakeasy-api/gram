@@ -12006,58 +12006,85 @@ func (q *Queries) LockRemoteSessionClientsBoundToUserSessionIssuer(ctx context.C
 }
 
 const lockRemoteSessionGrantForBindingRefresh = `-- name: LockRemoteSessionGrantForBindingRefresh :one
-SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM remote_sessions
-WHERE id = $1 AND remote_session_client_id = $2
-  AND subject_urn = $3 AND grant_generation = $4
-  AND NOT deleted
-  AND (authorization_expires_at IS NULL OR authorization_expires_at > now())
-  AND (access_expires_at IS NULL OR access_expires_at > now() OR (refresh_token_encrypted IS NOT NULL AND (refresh_expires_at IS NULL OR refresh_expires_at > now())))
-FOR UPDATE
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, u.display_name AS subject_display_name, u.email AS subject_email
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND NOT c.deleted
+JOIN remote_session_issuers AS ri ON ri.id = c.remote_session_issuer_id AND NOT ri.deleted
+JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
+JOIN user_session_issuers AS target ON target.id = $1 AND NOT target.deleted
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
+JOIN projects AS p ON p.id = $2 AND p.organization_id = $3 AND NOT p.deleted
+JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+JOIN organization_user_relationships AS membership ON membership.user_id = u.id AND membership.organization_id = p.organization_id AND membership.deleted_at IS NULL
+WHERE s.id = $4 AND s.remote_session_client_id = $5
+  AND s.subject_urn = $6 AND s.grant_generation = $7
+  AND NOT s.deleted
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (ri.project_id = p.id OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = p.organization_id)))
+  AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = p.organization_id))
+  AND (target.project_id = p.id OR (target.project_id IS NULL AND target.organization_id = p.organization_id))
+  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+  AND (s.access_expires_at IS NULL OR s.access_expires_at > now() OR (s.refresh_token_encrypted IS NOT NULL AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())))
+FOR UPDATE OF s
 `
 
 type LockRemoteSessionGrantForBindingRefreshParams struct {
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
 	ID                    uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	SubjectUrn            urn.SessionSubject
 	GrantGeneration       int64
 }
 
-func (q *Queries) LockRemoteSessionGrantForBindingRefresh(ctx context.Context, arg LockRemoteSessionGrantForBindingRefreshParams) (RemoteSession, error) {
+type LockRemoteSessionGrantForBindingRefreshRow struct {
+	RemoteSession      RemoteSession
+	SubjectDisplayName string
+	SubjectEmail       string
+}
+
+func (q *Queries) LockRemoteSessionGrantForBindingRefresh(ctx context.Context, arg LockRemoteSessionGrantForBindingRefreshParams) (LockRemoteSessionGrantForBindingRefreshRow, error) {
 	row := q.db.QueryRow(ctx, lockRemoteSessionGrantForBindingRefresh,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
 		arg.ID,
 		arg.RemoteSessionClientID,
 		arg.SubjectUrn,
 		arg.GrantGeneration,
 	)
-	var i RemoteSession
+	var i LockRemoteSessionGrantForBindingRefreshRow
 	err := row.Scan(
-		&i.ID,
-		&i.GrantGeneration,
-		&i.SubjectUrn,
-		&i.UserSessionIssuerID,
-		&i.RemoteSessionClientID,
-		&i.AccessTokenEncrypted,
-		&i.AccessExpiresAt,
-		&i.RefreshTokenEncrypted,
-		&i.AuthorizationExpiresAt,
-		&i.RefreshExpiresAt,
-		&i.Scopes,
-		&i.Resource,
-		&i.AutoRefresh,
-		&i.LastRefreshAttemptAt,
-		&i.LastUsedAt,
-		&i.UpstreamSubject,
-		&i.UpstreamEmail,
-		&i.UpstreamDisplayName,
-		&i.IdentitySource,
-		&i.Enrichment,
-		&i.LastValidatedAt,
-		&i.ValidationStatus,
-		&i.ValidationReason,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
+		&i.RemoteSession.ID,
+		&i.RemoteSession.GrantGeneration,
+		&i.RemoteSession.SubjectUrn,
+		&i.RemoteSession.UserSessionIssuerID,
+		&i.RemoteSession.RemoteSessionClientID,
+		&i.RemoteSession.AccessTokenEncrypted,
+		&i.RemoteSession.AccessExpiresAt,
+		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.AuthorizationExpiresAt,
+		&i.RemoteSession.RefreshExpiresAt,
+		&i.RemoteSession.Scopes,
+		&i.RemoteSession.Resource,
+		&i.RemoteSession.AutoRefresh,
+		&i.RemoteSession.LastRefreshAttemptAt,
+		&i.RemoteSession.LastUsedAt,
+		&i.RemoteSession.UpstreamSubject,
+		&i.RemoteSession.UpstreamEmail,
+		&i.RemoteSession.UpstreamDisplayName,
+		&i.RemoteSession.IdentitySource,
+		&i.RemoteSession.Enrichment,
+		&i.RemoteSession.LastValidatedAt,
+		&i.RemoteSession.ValidationStatus,
+		&i.RemoteSession.ValidationReason,
+		&i.RemoteSession.CreatedAt,
+		&i.RemoteSession.UpdatedAt,
+		&i.RemoteSession.DeletedAt,
+		&i.RemoteSession.Deleted,
+		&i.SubjectDisplayName,
+		&i.SubjectEmail,
 	)
 	return i, err
 }

@@ -141,6 +141,7 @@ export function useServerInventory(): ServerInventory {
       upstreamUrl: server.remoteMcpServerId
         ? upstreamUrls.get(server.remoteMcpServerId)
         : undefined,
+      description: server.toolset?.description,
       name: server.name ?? server.slug ?? "Unnamed server",
       slug: server.slug ?? "",
       projectId: server.projectId,
@@ -212,6 +213,8 @@ export function useServerInventory(): ServerInventory {
     refetch: () => {
       void toolsets.refetch();
       void servers.refetch();
+      for (const query of remoteSources) void query.refetch();
+      for (const query of activity) void query.refetch();
     },
   };
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
@@ -61,11 +62,17 @@ func (s *Service) CompleteBindingRefresh(ctx context.Context, payload *gen.Compl
 	defer func() { _ = op.tx.Rollback(ctx) }()
 	key := "bindingRefresh:" + payload.AttemptID
 	attempt, err := s.bindingRefresh.attempts.Get(ctx, key)
+	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		return nil, oops.E(oops.CodeUnexpected, err, "read connection refresh attempt")
+	}
 	if err != nil || attempt.TTL() <= 0 || attempt.OrganizationID != op.organizationID || attempt.ProjectID != op.projectID || attempt.PrincipalID != op.principalID || attempt.IssuerID != op.issuerID || attempt.Subject != op.subject {
 		return nil, oops.E(oops.CodeNotFound, nil, "connection refresh attempt is unavailable")
 	}
 	// Authenticate before consumption; an unauthorized caller cannot cancel another person's popup.
 	attempt, err = s.bindingRefresh.attempts.GetAndDelete(ctx, key)
+	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		return nil, oops.E(oops.CodeUnexpected, err, "consume connection refresh attempt")
+	}
 	if err != nil || attempt.TTL() <= 0 {
 		return nil, oops.E(oops.CodeConflict, nil, "connection refresh attempt was already completed or expired")
 	}
@@ -82,7 +89,7 @@ func (s *Service) CompleteBindingRefresh(ctx context.Context, payload *gen.Compl
 	if binding.RemoteSessionClientID != attempt.ClientID {
 		return nil, oops.C(oops.CodeConflict)
 	}
-	source, err := op.queries.LockRemoteSessionGrantForBindingRefresh(ctx, repo.LockRemoteSessionGrantForBindingRefreshParams{ID: attempt.RemoteSessionID, RemoteSessionClientID: attempt.ClientID, SubjectUrn: op.subject, GrantGeneration: attempt.GrantGeneration})
+	source, err := op.queries.LockRemoteSessionGrantForBindingRefresh(ctx, repo.LockRemoteSessionGrantForBindingRefreshParams{ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID, ID: attempt.RemoteSessionID, RemoteSessionClientID: attempt.ClientID, SubjectUrn: op.subject, GrantGeneration: attempt.GrantGeneration})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeConflict, err, "connection changed after this sign-in; reconnect to choose the account again")
 	}
@@ -92,7 +99,7 @@ func (s *Service) CompleteBindingRefresh(ctx context.Context, payload *gen.Compl
 	if _, err := op.queries.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ID: binding.ID, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "replace refreshed attachment")
 	}
-	attached, err := op.queries.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(), RemoteSessionID: source.ID})
+	attached, err := op.queries.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(), RemoteSessionID: source.RemoteSession.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeConflict, err, "refreshed connection is no longer eligible")
 	}
@@ -112,6 +119,6 @@ func (s *Service) CompleteBindingRefresh(ctx context.Context, payload *gen.Compl
 		return nil, oops.E(oops.CodeUnexpected, err, "commit refreshed attachment")
 	}
 	view := bindingView(attached.ID, attached.PrincipalID, attached.UserSessionIssuerID, attached.RemoteSessionClientID, attached.RemoteSessionID)
-	view.RemoteSession = mv.BuildRemoteSessionView(source, nil, nil)
+	view.RemoteSession = mv.BuildRemoteSessionView(source.RemoteSession, new(source.SubjectDisplayName), new(source.SubjectEmail))
 	return &gen.BindingRefreshResult{Completed: true, Binding: view}, nil
 }

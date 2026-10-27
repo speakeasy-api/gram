@@ -626,6 +626,7 @@ describe("Agent key MCP servers", () => {
             remoteSession: renewed,
           },
         ]);
+        return { completed: true };
       });
       const popup = vi.mocked(window.open).mock.results[0]?.value as {
         closed: boolean;

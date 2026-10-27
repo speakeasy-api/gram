@@ -6260,10 +6260,23 @@ WHERE id = @id AND principal_id = @principal_id AND project_id = @project_id
 FOR UPDATE;
 
 -- name: LockRemoteSessionGrantForBindingRefresh :one
-SELECT * FROM remote_sessions
-WHERE id = @id AND remote_session_client_id = @remote_session_client_id
-  AND subject_urn = @subject_urn AND grant_generation = @grant_generation
-  AND NOT deleted
-  AND (authorization_expires_at IS NULL OR authorization_expires_at > now())
-  AND (access_expires_at IS NULL OR access_expires_at > now() OR (refresh_token_encrypted IS NOT NULL AND (refresh_expires_at IS NULL OR refresh_expires_at > now())))
-FOR UPDATE;
+SELECT sqlc.embed(s), u.display_name AS subject_display_name, u.email AS subject_email
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND NOT c.deleted
+JOIN remote_session_issuers AS ri ON ri.id = c.remote_session_issuer_id AND NOT ri.deleted
+JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
+JOIN user_session_issuers AS target ON target.id = @user_session_issuer_id AND NOT target.deleted
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
+JOIN projects AS p ON p.id = @project_id AND p.organization_id = @organization_id AND NOT p.deleted
+JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+JOIN organization_user_relationships AS membership ON membership.user_id = u.id AND membership.organization_id = p.organization_id AND membership.deleted_at IS NULL
+WHERE s.id = @id AND s.remote_session_client_id = @remote_session_client_id
+  AND s.subject_urn = @subject_urn AND s.grant_generation = @grant_generation
+  AND NOT s.deleted
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (ri.project_id = p.id OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = p.organization_id)))
+  AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = p.organization_id))
+  AND (target.project_id = p.id OR (target.project_id IS NULL AND target.organization_id = p.organization_id))
+  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+  AND (s.access_expires_at IS NULL OR s.access_expires_at > now() OR (s.refresh_token_encrypted IS NOT NULL AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())))
+FOR UPDATE OF s;

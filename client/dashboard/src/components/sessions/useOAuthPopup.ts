@@ -68,7 +68,8 @@ export function useOAuthPopup(
       } else {
         // Reserve the window during the click, before asynchronous setup.
         preparing.current = true;
-        void url()
+        void Promise.resolve()
+          .then(url)
           .then((destination) => {
             if (!child.closed) child.location.href = destination;
             preparing.current = false;

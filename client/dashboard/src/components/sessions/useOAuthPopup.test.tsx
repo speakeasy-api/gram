@@ -87,3 +87,20 @@ describe("asynchronous OAuth popup setup", () => {
     expect(completed).not.toHaveBeenCalled();
   });
 });
+
+it("recovers from synchronous setup failure and allows another attempt", async () => {
+  const { child, result, completed } = setup();
+  await act(async () => {
+    result.current.open(() => {
+      throw new Error("setup failed");
+    });
+  });
+  expect(child.close).toHaveBeenCalledOnce();
+  expect(completed).not.toHaveBeenCalled();
+  await act(async () => {
+    expect(result.current.open(async () => "https://example.test/retry")).toBe(
+      true,
+    );
+  });
+  expect(child.location.href).toBe("https://example.test/retry");
+});

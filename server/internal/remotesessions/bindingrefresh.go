@@ -50,6 +50,9 @@ func NewBindingRefreshAttempts(logger *slog.Logger, adapter cache.Cache) *Bindin
 // server-owned OAuth challenge, independently of rotating challenge IDs.
 func (s *BindingRefreshAttempts) Start(ctx context.Context, id, organizationID string, projectID, issuerID uuid.UUID) error {
 	attempt, err := s.attempts.Get(ctx, "bindingRefresh:"+id)
+	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		return fmt.Errorf("read connection refresh attempt: %w", err)
+	}
 	if err != nil || attempt.TTL() <= 0 || attempt.Started || attempt.OrganizationID != organizationID || attempt.ProjectID != projectID || attempt.IssuerID != issuerID {
 		return oops.E(oops.CodeForbidden, nil, "connection refresh attempt is unavailable")
 	}
