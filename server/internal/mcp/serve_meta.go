@@ -92,6 +92,8 @@ type metaGateContext struct {
 	// unapprovedMembers are current members the catalog did not approve. They
 	// are reported by connection_status only, never discovered or executed.
 	unapprovedMembers []metaMember
+	// hiddenMembers are members the caller hid, reported but never served.
+	hiddenMembers []metaMember
 	// execute permits live credential resolution for a cached tool call.
 	execute         bool
 	discoveryMode   metamcp.DiscoveryMode
@@ -551,7 +553,7 @@ func (s *Service) callMetaServerTool(
 	var body json.RawMessage
 	switch params.Name {
 	case metamcp.ToolListServers:
-		body, err = s.handleMetaListServersCall(ctx, logger, catalogSelectedMembers(gate, members), req)
+		body, err = s.handleMetaListServersCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req)
 	case metamcp.ToolDescribeServer:
 		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req, params.Arguments)
 	case metamcp.ToolDescribeTools:
@@ -630,6 +632,7 @@ func catalogSelectedMembers(gate *metaGateContext, members []metaMember) []metaM
 func (s *Service) handleMetaListServersCall(
 	ctx context.Context,
 	logger *slog.Logger,
+	gate *metaGateContext,
 	members []metaMember,
 	req *rawRequest,
 ) (json.RawMessage, error) {
@@ -643,7 +646,15 @@ func (s *Service) handleMetaListServersCall(
 		})
 	}
 
-	structured, err := json.Marshal(metamcp.ListServersResult{Servers: servers})
+	result := metamcp.ListServersResult{Servers: servers, Hidden: nil, ConnectURL: "", Note: ""}
+	for _, member := range catalogSelectedMembers(gate, gate.hiddenMembers) {
+		result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
+	}
+	if len(result.Hidden) > 0 && gate.connectURL != "" {
+		result.ConnectURL = gate.connectURL
+		result.Note = metamcp.HiddenNote
+	}
+	structured, err := json.Marshal(result)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize list_servers result").LogError(ctx, logger)
 	}
@@ -750,6 +761,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		catalogRef:          nil,
 		authentication:      gateAuthentication,
 		unapprovedMembers:   nil,
+		hiddenMembers:       nil,
 		execute:             false,
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,

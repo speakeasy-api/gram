@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -21,7 +22,8 @@ import (
 // resolves the slug to a `/mcp`-keyed ResolvedMcpEndpoint and delegates to
 // ServeFirstPartyConnect — the dashboard's entry point for linking an
 // issuer-gated server's upstream sessions.
-func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request) (retErr error) {
+	defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -55,12 +57,17 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // On a gateway, a `server` query parameter names the server to connect, and
 // the flow lands on that server's connect page. A gateway tool call links here
 // when a server cannot be reached without the user's sign-in.
-func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
+	defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	if s.redirectToAuthorizationServer(w, r, endpoint) {
 		return nil
 	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
+	reconnect, err := s.consumeWorkloadReconnect(r, endpoint)
+	if err != nil {
+		return err
+	}
 
 	focusServer := r.URL.Query().Get("server")
 	if len(focusServer) > maxFocusServerLength {
@@ -119,6 +126,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		FirstParty:              true,
 		BindingRefreshAttemptID: attemptID,
 		ReauthenticateClientID:  reauthenticateClientID,
+		WorkloadReconnect:       reconnect,
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
 		FocusServer:     focusServer,
@@ -176,4 +184,20 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 
 func (s *Service) SetBindingRefreshAttempts(attempts *remotesessions.BindingRefreshAttempts) {
 	s.bindingRefresh = attempts
+}
+
+// firstPartyBrowserError offers a dashboard recovery action only for a known
+// first-party entry point or a challenge loaded from trusted flow state.
+func (s *Service) firstPartyBrowserError(err error) error {
+	if err == nil {
+		return nil
+	}
+	err = oops.WithBrowserClient(err, "Speakeasy dashboard")
+	if s.siteURL == nil {
+		return fmt.Errorf("recover dashboard connection: %w", err)
+	}
+	return fmt.Errorf("recover dashboard connection: %w", oops.WithBrowserRecovery(err, &oauthui.RecoveryLink{
+		URL:   s.siteURL.JoinPath("@self").String(),
+		Label: "Return to dashboard",
+	}))
 }

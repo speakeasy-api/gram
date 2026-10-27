@@ -224,6 +224,7 @@ trackedFiles:
   src/models/components/adminregistryoktaunmapped.ts: {}
   src/models/components/adminregistryoktaunmappedname.ts: {}
   src/models/components/adminregistrypage.ts: {}
+  src/models/components/adminregistrypromotionauthdiscovery.ts: {}
   src/models/components/adminregistrypromotioncandidate.ts: {}
   src/models/components/adminregistrypromotioncandidates.ts: {}
   src/models/components/adminregistrypromotionsuggestions.ts: {}

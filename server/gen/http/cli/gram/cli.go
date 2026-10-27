@@ -47,6 +47,7 @@ import (
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	gatewaysessionsc "github.com/speakeasy-api/gram/server/gen/http/gateway_sessions/client"
+	hiddenmcpserversc "github.com/speakeasy-api/gram/server/gen/http/hidden_mcp_servers/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
@@ -148,6 +149,7 @@ func UsageCommands() []string {
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|verify-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
 		"functions get-signed-asset-url",
+		"hidden-mcp-servers (list|hide|unhide)",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
@@ -914,7 +916,8 @@ func ParseEndpoint(
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
 		authCallbackFlags     = flag.NewFlagSet("callback", flag.ExitOnError)
-		authCallbackCodeFlag  = authCallbackFlags.String("code", "REQUIRED", "")
+		authCallbackCodeFlag  = authCallbackFlags.String("code", "", "")
+		authCallbackErrorFlag = authCallbackFlags.String("error", "", "")
 		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
 		authLoginFlags              = flag.NewFlagSet("login", flag.ExitOnError)
@@ -1608,6 +1611,19 @@ func ParseEndpoint(
 		functionsGetSignedAssetURLFlags             = flag.NewFlagSet("get-signed-asset-url", flag.ExitOnError)
 		functionsGetSignedAssetURLBodyFlag          = functionsGetSignedAssetURLFlags.String("body", "REQUIRED", "")
 		functionsGetSignedAssetURLFunctionTokenFlag = functionsGetSignedAssetURLFlags.String("function-token", "", "")
+
+		hiddenMcpServersFlags = flag.NewFlagSet("hidden-mcp-servers", flag.ContinueOnError)
+
+		hiddenMcpServersListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		hiddenMcpServersListSessionTokenFlag = hiddenMcpServersListFlags.String("session-token", "", "")
+
+		hiddenMcpServersHideFlags            = flag.NewFlagSet("hide", flag.ExitOnError)
+		hiddenMcpServersHideBodyFlag         = hiddenMcpServersHideFlags.String("body", "REQUIRED", "")
+		hiddenMcpServersHideSessionTokenFlag = hiddenMcpServersHideFlags.String("session-token", "", "")
+
+		hiddenMcpServersUnhideFlags            = flag.NewFlagSet("unhide", flag.ExitOnError)
+		hiddenMcpServersUnhideBodyFlag         = hiddenMcpServersUnhideFlags.String("body", "REQUIRED", "")
+		hiddenMcpServersUnhideSessionTokenFlag = hiddenMcpServersUnhideFlags.String("session-token", "", "")
 
 		hooksServerNamesFlags = flag.NewFlagSet("hooks-server-names", flag.ContinueOnError)
 
@@ -5650,6 +5666,11 @@ func ParseEndpoint(
 	functionsFlags.Usage = functionsUsage
 	functionsGetSignedAssetURLFlags.Usage = functionsGetSignedAssetURLUsage
 
+	hiddenMcpServersFlags.Usage = hiddenMcpServersUsage
+	hiddenMcpServersListFlags.Usage = hiddenMcpServersListUsage
+	hiddenMcpServersHideFlags.Usage = hiddenMcpServersHideUsage
+	hiddenMcpServersUnhideFlags.Usage = hiddenMcpServersUnhideUsage
+
 	hooksServerNamesFlags.Usage = hooksServerNamesUsage
 	hooksServerNamesListFlags.Usage = hooksServerNamesListUsage
 	hooksServerNamesUpsertFlags.Usage = hooksServerNamesUpsertUsage
@@ -6537,6 +6558,8 @@ func ParseEndpoint(
 			svcf = mcpRegistriesFlags
 		case "functions":
 			svcf = functionsFlags
+		case "hidden-mcp-servers":
+			svcf = hiddenMcpServersFlags
 		case "hooks-server-names":
 			svcf = hooksServerNamesFlags
 		case "hooks":
@@ -7572,6 +7595,19 @@ func ParseEndpoint(
 			switch epn {
 			case "get-signed-asset-url":
 				epf = functionsGetSignedAssetURLFlags
+
+			}
+
+		case "hidden-mcp-servers":
+			switch epn {
+			case "list":
+				epf = hiddenMcpServersListFlags
+
+			case "hide":
+				epf = hiddenMcpServersHideFlags
+
+			case "unhide":
+				epf = hiddenMcpServersUnhideFlags
 
 			}
 
@@ -10356,7 +10392,7 @@ func ParseEndpoint(
 			switch epn {
 			case "callback":
 				endpoint = c.Callback()
-				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackStateFlag)
+				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackErrorFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
 				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginPartnerCodeFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag)
@@ -10804,6 +10840,19 @@ func ParseEndpoint(
 			case "get-signed-asset-url":
 				endpoint = c.GetSignedAssetURL()
 				data, err = functionsc.BuildGetSignedAssetURLPayload(*functionsGetSignedAssetURLBodyFlag, *functionsGetSignedAssetURLFunctionTokenFlag)
+			}
+		case "hidden-mcp-servers":
+			c := hiddenmcpserversc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = hiddenmcpserversc.BuildListPayload(*hiddenMcpServersListSessionTokenFlag)
+			case "hide":
+				endpoint = c.Hide()
+				data, err = hiddenmcpserversc.BuildHidePayload(*hiddenMcpServersHideBodyFlag, *hiddenMcpServersHideSessionTokenFlag)
+			case "unhide":
+				endpoint = c.Unhide()
+				data, err = hiddenmcpserversc.BuildUnhidePayload(*hiddenMcpServersUnhideBodyFlag, *hiddenMcpServersUnhideSessionTokenFlag)
 			}
 		case "hooks-server-names":
 			c := hooksservernamesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16224,6 +16273,7 @@ func authCallbackUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth callback", os.Args[0])
 	fmt.Fprint(os.Stderr, " -code STRING")
+	fmt.Fprint(os.Stderr, " -error STRING")
 	fmt.Fprint(os.Stderr, " -state STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -16233,11 +16283,12 @@ func authCallbackUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -code STRING: `)
+	fmt.Fprintln(os.Stderr, `    -error STRING: `)
 	fmt.Fprintln(os.Stderr, `    -state STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"abc123\" --state \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"abc123\" --error \"abc123\" --state \"abc123\"")
 }
 
 func authLoginUsage() {
@@ -19377,6 +19428,77 @@ func functionsGetSignedAssetURLUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --body '{\n      \"asset_id\": \"abc123\"\n   }' --function-token \"abc123\"")
+}
+
+// hiddenMcpServersUsage displays the usage of the hidden-mcp-servers command
+// and its subcommands.
+func hiddenMcpServersUsage() {
+	fmt.Fprintln(os.Stderr, `MCP servers the signed-in user hid. Gateways leave hidden servers out of the user's tools and list them last on the consent page. Each user manages only their own list.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] hidden-mcp-servers COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list: List the MCP servers the signed-in user hid in the active organization.`)
+	fmt.Fprintln(os.Stderr, `    hide: Hide an MCP server for the signed-in user. Hiding a hidden server changes nothing.`)
+	fmt.Fprintln(os.Stderr, `    unhide: Show a hidden MCP server again for the signed-in user. Unhiding a server that is not hidden changes nothing.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s hidden-mcp-servers COMMAND --help\n", os.Args[0])
+}
+func hiddenMcpServersListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hidden-mcp-servers list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the MCP servers the signed-in user hid in the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hidden-mcp-servers list --session-token \"abc123\"")
+}
+
+func hiddenMcpServersHideUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hidden-mcp-servers hide", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Hide an MCP server for the signed-in user. Hiding a hidden server changes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hidden-mcp-servers hide --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func hiddenMcpServersUnhideUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hidden-mcp-servers unhide", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Show a hidden MCP server again for the signed-in user. Unhiding a server that is not hidden changes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hidden-mcp-servers unhide --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // hooksServerNamesUsage displays the usage of the hooks-server-names command

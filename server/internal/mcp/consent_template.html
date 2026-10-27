@@ -225,6 +225,8 @@
           </p>
           {{end}}
           {{if .Gateway.Servers}}
+          {{$visible := .VisibleGatewayRows}}
+          {{$hidden := .HiddenGatewayRows}}
           <details
             class="group"
             data-gateway-list
@@ -235,73 +237,43 @@
               class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
             >
               <span class="text-sm" data-gateway-summary
-                >{{.Gateway.ReadyCount}} of {{len .Gateway.Servers}} {{if eq (len .Gateway.Servers) 1}}server{{else}}servers{{end}} connected</span
+                >{{.Gateway.ReadyCount}} of {{len $visible}} {{if eq (len $visible) 1}}server{{else}}servers{{end}} connected{{if $hidden}} · {{len $hidden}} hidden{{end}}</span
               >
               <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true"
                 >Show servers</span
               >
               <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true"
-                >Hide</span
+                >Collapse</span
               >
             </summary>
             <div class="flex flex-col gap-3 px-6 pt-4 pb-6 sm:px-8">
               <p class="text-xs text-muted-foreground">
                 {{if .ShowToolsIsland}}Only servers verified at consent are included. If access or a connection changes, reload this page to review it.{{else}}Connect a server that needs you to sign in before using it.{{end}}
               </p>
-              <ul class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0">
-                {{range .Gateway.Servers}}
-                <li
-                  class="flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
-                  data-gateway-server="{{.Slug}}"
-                >
-                  <span class="flex min-w-0 flex-col gap-0.5">
-                    <span class="flex min-w-0 items-baseline gap-2">
-                      <span class="truncate text-sm">{{.Name}}</span>
-                      {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
-                    </span>
-                    <span
-                      class="text-xs {{if .NeedsAttention}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
-                      data-gateway-server-status="{{.Status}}"
-                      >{{.StatusLabel}}</span
-                    >
-                  </span>
-                  {{if .ConnectClientID}}
-                  <form
-                    method="POST"
-                    action="{{$.ConsentPath}}/remote-session"
-                    class="shrink-0"
-                  >
-                    <input type="hidden" name="state" value="{{$.State}}" />
-                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
-                    <input type="hidden" name="client_id" value="{{.ConnectClientID}}" />
-                    <button
-                      type="submit"
-                      name="action"
-                      value="connect"
-                      class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
-                      data-connect-link
-                    >
-                      {{if .NeedsAttention}}Reconnect{{else}}Connect{{end}}
-                    </button>
-                  </form>
-                  {{else if .NeedsSignIn}}
-                  <a
-                    href="{{$.ConsentPath}}?state={{$.State}}&server={{.Slug}}"
-                    class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
-                    data-gateway-server-page
-                    >{{if .Ready}}Manage{{else}}Connect{{end}} &rsaquo;</a
-                  >
-                  {{else if .NotSetUp}}
-                  <a
-                    href="{{$.ConsentPath}}?state={{$.State}}&server={{.Slug}}"
-                    class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
-                    data-gateway-server-page
-                    >View &rsaquo;</a
-                  >
-                  {{end}}
-                </li>
-                {{end}}
+              <ul
+                class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0"
+                data-gateway-visible-list
+                {{if not $visible}}hidden{{end}}
+              >
+                {{range $visible}}{{template "gatewayServerRow" .}}{{end}}
               </ul>
+              <p class="text-sm text-muted-foreground" data-gateway-all-hidden {{if $visible}}hidden{{end}}>
+                You've hidden every server on this gateway.
+              </p>
+              <p class="text-xs text-default-warning" data-gateway-visibility-error role="alert" hidden></p>
+              <details class="group/hidden" data-gateway-hidden-section {{if not $hidden}}hidden{{end}}>
+                <summary class="text-muted-foreground interact:text-foreground flex cursor-pointer list-none items-center justify-between gap-3 text-xs">
+                  <span>Hidden (<span data-gateway-hidden-count>{{len $hidden}}</span>)</span>
+                  <span class="text-eyebrow group-open/hidden:hidden" aria-hidden="true">Expand</span>
+                  <span class="text-eyebrow hidden group-open/hidden:inline" aria-hidden="true">Collapse</span>
+                </summary>
+                <p class="text-xs text-muted-foreground mt-2">
+                  Hidden servers aren't available to your AI tools. Show one to use it again.
+                </p>
+                <ul class="m-0 mt-2 flex list-none flex-col border p-0 opacity-60" data-gateway-hidden-list>
+                  {{range $hidden}}{{template "gatewayServerRow" .}}{{end}}
+                </ul>
+              </details>
             </div>
           </details>
           {{else}}
@@ -711,7 +683,7 @@
             <span
               class="text-eyebrow hidden shrink-0 group-open:inline"
               aria-hidden="true"
-              >Hide</span
+              >Collapse</span
             >
           </summary>
 
@@ -928,3 +900,74 @@
     {{end}}
   </body>
 </html>
+{{define "gatewayServerRow"}}
+<li
+  class="flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
+  data-gateway-server="{{.Slug}}"
+  data-gateway-server-ready="{{.Ready}}"
+>
+  <span class="flex min-w-0 flex-col gap-0.5">
+    <span class="flex min-w-0 items-baseline gap-2">
+      <span class="truncate text-sm">{{.Name}}</span>
+      {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
+    </span>
+    <span
+      class="text-xs {{if .NeedsAttention}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
+      data-gateway-server-status="{{.Status}}"
+      {{if .Hidden}}hidden{{end}}
+      >{{.StatusLabel}}</span
+    >
+  </span>
+  <span class="flex shrink-0 items-center gap-3">
+    <span class="flex shrink-0 items-center gap-3" data-gateway-server-actions {{if .Hidden}}hidden{{end}}>
+      {{if .ConnectClientID}}
+      <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0">
+        <input type="hidden" name="state" value="{{.State}}" />
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+        <input type="hidden" name="client_id" value="{{.ConnectClientID}}" />
+        <button
+          type="submit"
+          name="action"
+          value="connect"
+          class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
+          data-connect-link
+        >
+          {{if .NeedsAttention}}Reconnect{{else}}Connect{{end}}
+        </button>
+      </form>
+      {{else if .NeedsSignIn}}
+      <a
+        href="{{.ConsentPath}}?state={{.State}}&server={{.Slug}}"
+        class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+        data-gateway-server-page
+        >{{if .Ready}}Manage{{else}}Connect{{end}} &rsaquo;</a
+      >
+      {{else if .NotSetUp}}
+      <a
+        href="{{.ConsentPath}}?state={{.State}}&server={{.Slug}}"
+        class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+        data-gateway-server-page
+        >View &rsaquo;</a
+      >
+      {{end}}
+    </span>
+    {{if .CanHide}}
+    <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0" data-gateway-visibility-form>
+      <input type="hidden" name="state" value="{{.State}}" />
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+      <input type="hidden" name="server_id" value="{{.ServerID}}" />
+      <button
+        type="submit"
+        name="action"
+        value="{{if .Hidden}}show_server{{else}}hide_server{{end}}"
+        class="text-muted-foreground interact:text-foreground interact:bg-accent interact:border-border flex h-8 cursor-pointer items-center border border-transparent px-3 text-xs transition-colors disabled:cursor-wait disabled:opacity-60"
+        title="{{if .Hidden}}Make this server available to your tools again{{else}}Hide this server from your tools{{end}}"
+        data-gateway-visibility-toggle
+      >
+        {{if .Hidden}}Show{{else}}Hide{{end}}
+      </button>
+    </form>
+    {{end}}
+  </span>
+</li>
+{{end}}
