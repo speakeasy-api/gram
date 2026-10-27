@@ -1,5 +1,4 @@
 import { ServerInfoPopover } from "./ServerInfoPopover";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
@@ -286,9 +285,6 @@ export function StepServers({
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="truncate">{server.name}</span>
-                          <Badge variant="neutral" size="sm">
-                            {server.projectName || server.projectSlug}
-                          </Badge>
                         </span>
                         <span className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                           {server.upstreamUrl && (
