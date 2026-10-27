@@ -95,7 +95,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	assetStorage := assetstest.NewTestBlobStore(t)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 
 	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
