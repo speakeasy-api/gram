@@ -126,7 +126,7 @@ func (s *Service) BackfillShadowMCPInventoryURLs(ctx context.Context, params Bac
 		return BackfillShadowMCPInventoryURLsResult{InventoryURLCount: 0}, nil
 	}
 
-	if err := s.chRepo.UpsertShadowMCPInventoryURLs(ctx, upserts); err != nil {
+	if err := repo.New(s.chConn).UpsertShadowMCPInventoryURLs(ctx, upserts); err != nil {
 		return BackfillShadowMCPInventoryURLsResult{InventoryURLCount: 0}, oops.E(oops.CodeUnexpected, err, "upsert shadow mcp inventory urls")
 	}
 

@@ -133,7 +133,7 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	featureFlags := &feature.InMemory{}
 	coverage := telemetry.NewSupportCoverage(conn, chConn)
-	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
+	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
 
 	return ctx, &testInstance{
 		service:            svc,

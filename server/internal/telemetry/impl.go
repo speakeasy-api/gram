@@ -52,14 +52,22 @@ import (
 )
 
 type Service struct {
-	auth                  *auth.Auth
-	db                    *pgxpool.Pool
-	chatRepo              *chatRepo.Queries
-	hooksRepo             *hooksRepo.Queries
-	orgsRepo              *orgsRepo.Queries
-	projectsRepo          *projectsRepo.Queries
-	chConn                clickhouse.Conn
-	chRepo                *repo.Queries
+	auth         *auth.Auth
+	db           *pgxpool.Pool
+	chatRepo     *chatRepo.Queries
+	hooksRepo    *hooksRepo.Queries
+	orgsRepo     *orgsRepo.Queries
+	projectsRepo *projectsRepo.Queries
+
+	// chConn is the read-write ClickHouse connection. Only mutations run on
+	// it; every query goes through chRepo.
+	chConn clickhouse.Conn
+
+	// chRepo runs on the read replica, so a write surge on the primary cannot
+	// starve the dashboards this service serves. Reads are eventually
+	// consistent with chConn and nothing here reads its own write.
+	chRepo *repo.Queries
+
 	logger                *slog.Logger
 	tracer                trace.Tracer
 	posthog               PosthogClient
@@ -83,6 +91,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	chConn clickhouse.Conn,
+	chReadConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	logsEnabled FeatureChecker,
@@ -92,7 +101,7 @@ func NewService(
 	featureFlags feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
-	chRepo := repo.New(chConn)
+	chRepo := repo.New(chReadConn)
 
 	// The sessions and chatSessions parameters may be nil for callers that only need
 	// telemetry emission (e.g., Temporal workers using CreateLog). When nil, the HTTP

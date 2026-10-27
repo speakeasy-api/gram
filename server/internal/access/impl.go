@@ -51,10 +51,19 @@ type CanonicalFoldGate interface {
 }
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	chConn   driver.Conn
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+
+	// chConn is the read-write ClickHouse connection. The shadow MCP inventory
+	// catalog stays on it: renaming a server inserts a row that the next list
+	// must already see.
+	chConn driver.Conn
+
+	// chReadConn is the read replica. It serves the AI detection and challenge
+	// aggregates, which background workers write and this service only reads.
+	chReadConn driver.Conn
+
 	auth     *auth.Auth
 	authz    *authz.Engine
 	roleMgr  *RoleManager
@@ -81,6 +90,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	chConn driver.Conn,
+	chReadConn driver.Conn,
 	sessions *sessions.Manager,
 	roleMgr *RoleManager,
 	authz *authz.Engine,
@@ -92,17 +102,18 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:   logger,
-		db:       db,
-		chConn:   chConn,
-		auth:     auth.New(logger, db, sessions, authz),
-		authz:    authz,
-		roleMgr:  roleMgr,
-		audit:    auditLogger,
-		email:    emailService,
-		orgHosts: orgHosts,
-		foldGate: foldGate,
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:     logger,
+		db:         db,
+		chConn:     chConn,
+		chReadConn: chReadConn,
+		auth:       auth.New(logger, db, sessions, authz),
+		authz:      authz,
+		roleMgr:    roleMgr,
+		audit:      auditLogger,
+		email:      emailService,
+		orgHosts:   orgHosts,
+		foldGate:   foldGate,
 	}
 }
 
@@ -880,7 +891,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		attr.UserID(authCtx.UserID),
 	)
 
-	chQueries := chrepo.New(s.chConn)
+	chQueries := chrepo.New(s.chReadConn)
 
 	// Fast path: fetch specific challenges by ID (used for bucket expansion).
 	if len(payload.Ids) > 0 {
@@ -1158,7 +1169,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		Offset:               uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 	}
 
-	chQueries := chrepo.New(s.chConn)
+	chQueries := chrepo.New(s.chReadConn)
 
 	buckets, total, err := chQueries.ListChallengeBuckets(ctx, filters)
 	if err != nil {
@@ -1465,7 +1476,7 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 	// organization-qualified read below validates caller-supplied IDs and the
 	// complete selector before any PostgreSQL role mutation is attempted. A row
 	// that has not reached ClickHouse yet remains unresolved and can be retried.
-	challenges, err := chrepo.New(s.chConn).ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, challengeIDs)
+	challenges, err := chrepo.New(s.chReadConn).ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, challengeIDs)
 	if err != nil {
 		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnavailable, err, "denied challenges could not be verified yet").LogError(ctx, s.logger)
 	}

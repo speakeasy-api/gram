@@ -28,7 +28,7 @@ func TestGetObservabilityOverview_ValidatesUserFiltersBeforeCanonicalLookup(t *t
 	unavailable.Close()
 	engine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	logsEnabled := func(context.Context, string) (bool, error) { return true, nil }
-	service := telemetry.NewService(ti.logger, testenv.NewTracerProvider(t), unavailable, ti.chConn,
+	service := telemetry.NewService(ti.logger, testenv.NewTracerProvider(t), unavailable, ti.chConn, ti.chConn,
 		nil, nil, logsEnabled, logsEnabled, nil, engine, ti.featureFlags)
 	now := time.Now().UTC()
 	payload := &gen.GetObservabilityOverviewPayload{

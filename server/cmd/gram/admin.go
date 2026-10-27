@@ -433,13 +433,14 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("connect to clickhouse database: %w", err)
 			}
 			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse client", func() error { return chShutdown(ctx) })
-			billingTelemetry := telemetryrepo.New(chDB)
-
-			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
+			// Admin reads run on the read replica. chDB stays for the migration
+			// tools, which write.
+			chReadDB, chReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("connect to clickhouse read replica: %w", err)
 			}
-			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse read client", func() error { return meterReadShutdown(ctx) })
+			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse read client", func() error { return chReadShutdown(ctx) })
+			billingTelemetry := telemetryrepo.New(chReadDB)
 
 			adminEncryption, err := encryption.New(c.String("admin-encryption-key"))
 			if err != nil {
@@ -510,7 +511,7 @@ func newAdminCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
-			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), meterReadConn)
+			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), chReadDB)
 			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
 				return fmt.Errorf("initialize support matrix: %w", err)
 			}
@@ -525,10 +526,10 @@ func newAdminCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService)
 			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
-			adminService.SetHookClients(telemetry.NewHookClients(chDB))
+			adminService.SetHookClients(telemetry.NewHookClients(chReadDB))
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
