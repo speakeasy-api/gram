@@ -5,7 +5,7 @@ description: Add a user-supplied remote MCP server URL to an explicit AICP proje
 
 # Add an MCP from a remote URL
 
-If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+If this connection lists `call_platform_tool` instead of the tools this workflow names, reach each named tool through it: describe the tool with `describe_platform_tool` first, then run it with `call_platform_tool` and the same arguments. When `execute` is also listed, you may instead run a multi-step part in `execute`, using `tools.describe` and `tools.call` with the path `platform--<tool name>`.
 
 Use this workflow only through the authenticated Speakeasy AI Control Plane (AICP) Platform MCP when the user supplies a remote MCP server URL that is not in the reviewed MCP Catalogue. It follows the same guarded outcome a user completes in the AICP dashboard: inspect the URL, confirm the bounded evidence and project, register privately, finish secure setup, and verify readiness. For a reviewed catalogue entry, use `add-mcp-from-catalog` instead. The package itself grants no organization access.
 

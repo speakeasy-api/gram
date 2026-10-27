@@ -5,7 +5,7 @@ description: Create or select a narrow custom AICP MCP access role, assign it to
 
 # Manage MCP access
 
-If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+If this connection lists `call_platform_tool` instead of the tools this workflow names, reach each named tool through it: describe the tool with `describe_platform_tool` first, then run it with `call_platform_tool` and the same arguments. When `execute` is also listed, you may instead run a multi-step part in `execute`, using `tools.describe` and `tools.call` with the path `platform--<tool name>`.
 
 Use this workflow only through the authenticated Speakeasy AI Control Plane (AICP) Platform MCP. It mirrors the guarded dashboard workflow for giving one explicitly selected organization member access to one explicitly selected configured MCP through a custom role. Installing the package grants no organization or project access.
 

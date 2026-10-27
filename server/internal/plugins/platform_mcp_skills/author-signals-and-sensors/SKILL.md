@@ -5,7 +5,7 @@ description: Create or update reusable signals and message sensors in an explici
 
 # Author signals and sensors
 
-If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+If this connection lists `call_platform_tool` instead of the tools this workflow names, reach each named tool through it: describe the tool with `describe_platform_tool` first, then run it with `call_platform_tool` and the same arguments. When `execute` is also listed, you may instead run a multi-step part in `execute`, using `tools.describe` and `tools.call` with the path `platform--<tool name>`.
 
 Use this workflow when someone wants the Speakeasy AI Control Plane (AICP) to
 classify conversation messages into reusable labels, exclusive choices, or ordered

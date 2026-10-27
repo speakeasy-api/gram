@@ -306,25 +306,9 @@ func (p *Posthog) FlagVariantLocal(ctx context.Context, flag feature.Flag, disti
 		return "", nil
 	}
 
-	var phPersonProperties posthog.Properties
-	if len(personProperties) > 0 {
-		phPersonProperties = posthog.NewProperties()
-		for key, value := range personProperties {
-			phPersonProperties.Set(key, value)
-		}
-	}
-	sendFeatureFlagEvents := false
-	result, err := p.client.GetFeatureFlagResult(posthog.FeatureFlagPayload{
-		Key:                   string(flag),
-		DistinctId:            distinctID,
-		Groups:                posthogGroups(groups),
-		PersonProperties:      phPersonProperties,
-		OnlyEvaluateLocally:   true,
-		SendFeatureFlagEvents: &sendFeatureFlagEvents,
-	})
+	result, err := p.client.GetFeatureFlagResult(localFlagPayload(flag, distinctID, groups, personProperties))
 	if err != nil {
-		var inconclusive *posthog.InconclusiveMatchError
-		if errors.As(err, &inconclusive) || errors.Is(err, posthog.ErrFlagNotFound) {
+		if localFlagUndecided(err) {
 			return "", nil
 		}
 		return "", fmt.Errorf("locally get feature flag variant: %w", err)
@@ -333,6 +317,34 @@ func (p *Posthog) FlagVariantLocal(ctx context.Context, flag feature.Flag, disti
 		return "", nil
 	}
 	return feature.Variant(*result.Variant), nil
+}
+
+// localFlagPayload asks for a decision from the cached definitions only, with
+// caller-supplied person properties and no $feature_flag_called event.
+func localFlagPayload(flag feature.Flag, distinctID string, groups, personProperties map[string]string) posthog.FeatureFlagPayload {
+	var phPersonProperties posthog.Properties
+	if len(personProperties) > 0 {
+		phPersonProperties = posthog.NewProperties()
+		for key, value := range personProperties {
+			phPersonProperties.Set(key, value)
+		}
+	}
+	sendFeatureFlagEvents := false
+	return posthog.FeatureFlagPayload{
+		Key:                   string(flag),
+		DistinctId:            distinctID,
+		Groups:                posthogGroups(groups),
+		PersonProperties:      phPersonProperties,
+		OnlyEvaluateLocally:   true,
+		SendFeatureFlagEvents: &sendFeatureFlagEvents,
+	}
+}
+
+// localFlagUndecided reports a local evaluation the cached definitions cannot
+// decide, or one naming a missing flag; both read as no decision.
+func localFlagUndecided(err error) bool {
+	var inconclusive *posthog.InconclusiveMatchError
+	return errors.As(err, &inconclusive) || errors.Is(err, posthog.ErrFlagNotFound)
 }
 
 func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
@@ -344,25 +356,9 @@ func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, dis
 		return false, nil
 	}
 
-	var phPersonProperties posthog.Properties
-	if len(personProperties) > 0 {
-		phPersonProperties = posthog.NewProperties()
-		for key, value := range personProperties {
-			phPersonProperties.Set(key, value)
-		}
-	}
-	sendFeatureFlagEvents := false
-	flagState, err := p.client.IsFeatureEnabled(posthog.FeatureFlagPayload{
-		Key:                   string(flag),
-		DistinctId:            distinctID,
-		Groups:                posthogGroups(groups),
-		PersonProperties:      phPersonProperties,
-		OnlyEvaluateLocally:   true,
-		SendFeatureFlagEvents: &sendFeatureFlagEvents,
-	})
+	flagState, err := p.client.IsFeatureEnabled(localFlagPayload(flag, distinctID, groups, personProperties))
 	if err != nil {
-		var inconclusive *posthog.InconclusiveMatchError
-		if errors.As(err, &inconclusive) || errors.Is(err, posthog.ErrFlagNotFound) {
+		if localFlagUndecided(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to locally check feature flag: %w", err)

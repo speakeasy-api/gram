@@ -5,7 +5,7 @@ description: Use when migrating MCP servers already configured in a local agent 
 
 # Add existing MCP servers
 
-If this connection lists only `search_platform_tools`, `describe_platform_tool` and `call_platform_tool`, reach every tool this workflow names through them: describe the tool first, then run it with `call_platform_tool` and the same arguments.
+If this connection lists `call_platform_tool` instead of the tools this workflow names, reach each named tool through it: describe the tool with `describe_platform_tool` first, then run it with `call_platform_tool` and the same arguments. When `execute` is also listed, you may instead run a multi-step part in `execute`, using `tools.describe` and `tools.call` with the path `platform--<tool name>`.
 
 Add selected supported remote servers from the agent client you are running in to a Speakeasy AI Control Plane (AICP) project without editing local client configuration, then optionally restrict them to the organization's Tailscale private network. Installation grants no access; live authentication, entitlement, membership and administrator checks remain authoritative. All management mutations use authenticated Platform MCP tools, never direct backend APIs.
 

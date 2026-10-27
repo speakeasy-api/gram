@@ -551,7 +551,7 @@ func (b *codeBackend) List(ctx context.Context, server string) (*codemode.Catalo
 	tools := b.surface.discoverable(ctx)
 	catalog := &codemode.Catalog{Tools: make([]codemode.Tool, 0, len(tools))}
 	for _, descriptor := range tools {
-		tool, err := codeTool(descriptor)
+		tool, err := codeTool(descriptor, b.surface.runtime.registrar.guidanceFor(descriptor.Name))
 		if err != nil {
 			return nil, err
 		}
@@ -569,7 +569,7 @@ func (b *codeBackend) Describe(ctx context.Context, path string) (*codemode.Tool
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	tool, err := codeTool(descriptor)
+	tool, err := codeTool(descriptor, b.surface.runtime.registrar.guidanceFor(name))
 	if err != nil {
 		return nil, err
 	}
@@ -597,14 +597,15 @@ func (b *codeBackend) Call(ctx context.Context, path string, arguments json.RawM
 
 // codeTool projects a descriptor as a Code Mode tool. The definition is the
 // MCP tool shape describe returns, with guidance for the tool alongside.
-func codeTool(descriptor Descriptor) (codemode.Tool, error) {
+func codeTool(descriptor Descriptor, guidance []string) (codemode.Tool, error) {
 	definition, err := json.Marshal(struct {
 		Name        string               `json:"name"`
 		Title       string               `json:"title,omitempty"`
 		Description string               `json:"description"`
 		InputSchema json.RawMessage      `json:"inputSchema"`
 		Annotations *mcp.ToolAnnotations `json:"annotations,omitempty"`
-	}{Name: codeToolPrefix + descriptor.Name, Title: descriptor.Title, Description: descriptor.Description, InputSchema: descriptor.InputSchema, Annotations: descriptor.Annotations})
+		Guidance    []string             `json:"guidance,omitempty"`
+	}{Name: codeToolPrefix + descriptor.Name, Title: descriptor.Title, Description: descriptor.Description, InputSchema: descriptor.InputSchema, Annotations: descriptor.Annotations, Guidance: guidance})
 	if err != nil {
 		return codemode.Tool{}, fmt.Errorf("encode %s definition: %w", descriptor.Name, err)
 	}

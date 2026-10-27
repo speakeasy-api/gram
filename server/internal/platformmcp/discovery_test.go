@@ -229,11 +229,15 @@ func TestExecuteReachesCatalogueThroughCodeMode(t *testing.T) {
 		if err != nil {
 			return nil, fmt.Errorf("describe: %w", err)
 		}
+		readiness, err := host.Describe(ctx, codeToolPrefix+"get_mcp_readiness")
+		if err != nil {
+			return nil, fmt.Errorf("describe readiness: %w", err)
+		}
 		result, err := host.Call(ctx, codeToolPrefix+"get_platform_context", json.RawMessage(`{}`))
 		if err != nil {
 			return nil, fmt.Errorf("call: %w", err)
 		}
-		return map[string]any{"page": page, "path": description.Path, "ok": result.OK}, nil
+		return map[string]any{"page": page, "path": description.Path, "readiness": readiness.Definition, "ok": result.OK}, nil
 	}}
 	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithDiscovery(DiscoveryConfig{
 		Flags:             harnessFlags{"codex": feature.VariantPlatformMCPDiscoveryCodeMode},
@@ -247,15 +251,35 @@ func TestExecuteReachesCatalogueThroughCodeMode(t *testing.T) {
 	allowlistRPC(t, runtime.Handler(), runtime, testCodexClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
 	require.Contains(t, toolNames(list.Tools), executePlatformCodeName)
 
+	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
+	var initialized struct {
+		Instructions string `json:"instructions"`
+	}
+	allowlistRPC(t, runtime.Handler(), runtime, testCodexClientID, initialize, &initialized)
+	require.Equal(t, discoveryInstructions(discoveryCode), initialized.Instructions)
+
+	discover := `{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{"name":"test","version":"1"}}}}`
+	var discovered struct {
+		Instructions string `json:"instructions"`
+		CacheScope   string `json:"cacheScope"`
+	}
+	allowlistRPC(t, runtime.Handler(), runtime, testCodexClientID, discover, &discovered, http.Header{"Mcp-Protocol-Version": {"2026-07-28"}, "Mcp-Method": {"server/discover"}})
+	require.Equal(t, discoveryInstructions(discoveryCode), discovered.Instructions)
+	require.Equal(t, "private", discovered.CacheScope)
+
 	execution := discoveryCall[codemode.ExecutionResult](t, runtime, executePlatformCodeName, map[string]any{"code": "pass"})
 	var value struct {
-		Page codemode.SearchPage `json:"page"`
-		Path string              `json:"path"`
-		OK   bool                `json:"ok"`
+		Page      codemode.SearchPage `json:"page"`
+		Path      string              `json:"path"`
+		Readiness struct {
+			Guidance []string `json:"guidance"`
+		} `json:"readiness"`
+		OK bool `json:"ok"`
 	}
 	require.NoError(t, json.Unmarshal(execution.Value, &value))
 	require.True(t, slices.ContainsFunc(value.Page.Items, func(item codemode.Candidate) bool { return item.Path == codeToolPrefix+"get_platform_context" }))
 	require.Equal(t, codeToolPrefix+"get_platform_context", value.Path)
+	require.NotEmpty(t, value.Readiness.Guidance, "Code Mode describe carries the tool's rules")
 	require.True(t, value.OK)
 }
 
