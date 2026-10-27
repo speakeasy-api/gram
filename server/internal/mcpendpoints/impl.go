@@ -704,7 +704,7 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		_, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID.UUID, ProjectID: *authCtx.ProjectID})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return false, nil
+			return false, oops.E(oops.CodeInvalid, err, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
 		case err != nil:
 			return false, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
 		}
