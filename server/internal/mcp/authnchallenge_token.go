@@ -2029,11 +2029,7 @@ func (s *Service) issueSession(
 ) (*mintedSession, error) {
 	now := time.Now()
 	if issuance.AuthorizationExpiresAt == nil {
-		// Resolve the issuer's session_duration — the maximum absolute
-		// authorization lifetime. Microseconds-only: the issuer create handler
-		// stores via conv.PtrToPGInterval which never sets Months/Days; if we
-		// ever see those here, raw SQL bypassed the writer and the conversion
-		// is calendar-dependent — fail rather than silently approximate.
+		// The issuer's session_duration is the maximum absolute authorization lifetime.
 		issuer, err := queries.GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 			ID:             issuance.UserSessionIssuerID,
 			ProjectID:      issuance.ProjectID,
@@ -2045,13 +2041,10 @@ func (s *Service) issueSession(
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "lookup user session issuer").LogError(ctx, logger)
 		}
-		if !issuer.SessionDuration.Valid {
-			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is not set").LogError(ctx, logger)
+		maxLifetime, ok := conv.PGIntervalToDuration(issuer.SessionDuration)
+		if !ok {
+			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is unset or carries Months").LogError(ctx, logger)
 		}
-		if issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
-			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").LogError(ctx, logger)
-		}
-		maxLifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
 		if maxLifetime <= 0 {
 			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").LogError(ctx, logger)
 		}

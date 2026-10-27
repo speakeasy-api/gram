@@ -2083,6 +2083,11 @@ type RemoteSessionResponseBody struct {
 	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Absolute upstream authorization deadline; refreshing does not extend it.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
+	// Last recorded upstream request, accurate to within five minutes. Null means
+	// unknown.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
 	// action; refresh_expires_at is insufficient because an upstream may issue a
 	// non-expiring refresh token. The token itself is never returned.
@@ -2262,6 +2267,9 @@ type RemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.

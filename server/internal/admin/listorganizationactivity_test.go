@@ -334,3 +334,211 @@ func assertOopsCode(t *testing.T, err error, code oops.Code) {
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, code, shareable.Code)
 }
+
+func TestListOrganizationActivityFiltered_Predicates(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	const orgID = "org_activity_filters"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Filters", slug: "activity-filters"})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_foreign", name: "Foreign", slug: "activity-foreign"})
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Project", Slug: "project", OrganizationID: orgID})
+	require.NoError(t, err)
+	base := activitySeed{
+		organizationID: orgID, projectID: uuid.NullUUID{UUID: project.ID, Valid: true},
+		actorID: "actor-match", action: "resource:update", subjectType: "assistant", subjectID: "subject-match",
+		surface: pgtype.Text{String: "future_surface", Valid: true}, before: []byte(`{"before":true}`),
+		after: []byte(`{"after":true}`), metadata: []byte(`{"context":"unchanged"}`),
+	}
+	wanted := insertActivity(t, ctx, conn, base)
+	var otherIDs []uuid.UUID
+	for _, change := range []func(*activitySeed){
+		func(s *activitySeed) { s.projectID = uuid.NullUUID{} },
+		func(s *activitySeed) { s.actorID = "other-actor" },
+		func(s *activitySeed) { s.action = "resource:create" },
+		func(s *activitySeed) { s.subjectType = "project" },
+		func(s *activitySeed) { s.subjectID = "other-subject" },
+		func(s *activitySeed) { s.surface = pgtype.Text{} },
+	} {
+		seed := base
+		change(&seed)
+		otherIDs = append(otherIDs, insertActivity(t, ctx, conn, seed))
+	}
+	foreign := base
+	foreign.organizationID = "org_activity_foreign"
+	insertActivity(t, ctx, conn, foreign)
+	for _, tc := range []struct {
+		name   string
+		filter OrganizationActivityFilter
+		omit   int
+	}{
+		{"project", OrganizationActivityFilter{ProjectID: base.projectID}, 0},
+		{"actor", OrganizationActivityFilter{ActorID: &base.actorID}, 1},
+		{"action", OrganizationActivityFilter{Action: &base.action}, 2},
+		{"subject type", OrganizationActivityFilter{SubjectType: &base.subjectType}, 3},
+		{"subject id", OrganizationActivityFilter{SubjectID: &base.subjectID}, 4},
+		{"surface", OrganizationActivityFilter{ActingSurface: new("future_surface")}, 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.filter.OrganizationID = orgID
+			result, err := svc.ListOrganizationActivityFiltered(ctx, tc.filter)
+			require.NoError(t, err)
+			require.Len(t, result.Logs, 6)
+			for _, row := range result.Logs {
+				require.NotEqual(t, otherIDs[tc.omit].String(), row.ID)
+			}
+		})
+	}
+	combined, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{
+		OrganizationID: orgID, ProjectID: base.projectID, ActorID: &base.actorID, Action: &base.action,
+		SubjectType: &base.subjectType, SubjectID: &base.subjectID, ActingSurface: new("future_surface"),
+	})
+	require.NoError(t, err)
+	require.Len(t, combined.Logs, 1)
+	require.Equal(t, wanted.String(), combined.Logs[0].ID)
+	require.JSONEq(t, string(base.before), string(combined.Logs[0].BeforeSnapshot))
+	require.JSONEq(t, string(base.after), string(combined.Logs[0].AfterSnapshot))
+	require.Equal(t, "unchanged", combined.Logs[0].Metadata["context"])
+	unknown, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: orgID, ActingSurface: new("unknown")})
+	require.NoError(t, err)
+	require.Len(t, unknown.Logs, 1)
+	require.Equal(t, otherIDs[5].String(), unknown.Logs[0].ID)
+	missing, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: orgID, ActingSurface: new("not_recorded")})
+	require.NoError(t, err)
+	require.Empty(t, missing.Logs)
+}
+
+func TestListOrganizationActivityFiltered_ProjectIsolation(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_project", name: "Target", slug: "activity-project"})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_foreign_project", name: "Foreign", slug: "activity-foreign-project"})
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Foreign", Slug: "foreign", OrganizationID: "org_activity_foreign_project"})
+	require.NoError(t, err)
+	// Audit storage has no project foreign key; even a matching row cannot authorize the target.
+	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_project", projectID: uuid.NullUUID{UUID: project.ID, Valid: true}, subjectType: "project", action: "project:update"})
+	var targetErrors []error
+	for _, projectID := range []uuid.UUID{project.ID, uuid.New()} {
+		result, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{
+			OrganizationID: "org_activity_project", ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+		})
+		require.Nil(t, result)
+		assertOopsCode(t, err, oops.CodeNotFound)
+		targetErrors = append(targetErrors, err)
+	}
+	require.Equal(t, targetErrors[0].Error(), targetErrors[1].Error())
+	for _, orgID := range []string{"activity-project", "missing-org"} {
+		_, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: orgID})
+		assertOopsCode(t, err, oops.CodeNotFound)
+	}
+}
+
+func TestListOrganizationActivityFiltered_DeletedProject(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	const orgID = "org_activity_deleted_project"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Deleted project", slug: "activity-deleted-project"})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_other_deleted_project", name: "Other", slug: "activity-other-deleted-project"})
+	projects := projectsrepo.New(conn)
+	project, err := projects.CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Deleted", Slug: "deleted", OrganizationID: orgID})
+	require.NoError(t, err)
+	id := insertActivity(t, ctx, conn, activitySeed{
+		organizationID: orgID, projectID: uuid.NullUUID{UUID: project.ID, Valid: true},
+		subjectType: "project", subjectID: project.ID.String(), action: "project:delete",
+	})
+	_, err = projects.DeleteProject(ctx, project.ID)
+	require.NoError(t, err)
+	filter := OrganizationActivityFilter{OrganizationID: orgID, ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}}
+	result, err := svc.ListOrganizationActivityFiltered(ctx, filter)
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, id.String(), result.Logs[0].ID)
+	require.Equal(t, "project:delete", result.Logs[0].Action)
+	filter.OrganizationID = "org_activity_other_deleted_project"
+	result, err = svc.ListOrganizationActivityFiltered(ctx, filter)
+	require.Nil(t, result)
+	assertOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestListOrganizationActivityFiltered_TimeBounds(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	const orgID = "org_activity_time_filters"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Time", slug: "activity-time-filters"})
+	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+	var ids []uuid.UUID
+	for _, at := range []time.Time{from.Add(-time.Second), from, to.Add(-time.Second), to} {
+		id := insertActivity(t, ctx, conn, activitySeed{organizationID: orgID, subjectType: "assistant", action: "assistant:run"})
+		require.NoError(t, auditrepo.New(conn).UpdateAuditLogCreatedAtForTesting(ctx, auditrepo.UpdateAuditLogCreatedAtForTestingParams{
+			CreatedAt: pgtype.Timestamptz{Time: at, Valid: true}, Ids: []uuid.UUID{id},
+		}))
+		ids = append(ids, id)
+	}
+	for _, tc := range []struct {
+		name     string
+		from, to *time.Time
+		want     []uuid.UUID
+	}{
+		{"both", &from, &to, []uuid.UUID{ids[2], ids[1]}},
+		{"from only", &from, nil, []uuid.UUID{ids[3], ids[2], ids[1]}},
+		{"to only", nil, &to, []uuid.UUID{ids[2], ids[1], ids[0]}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: orgID, From: tc.from, To: tc.to})
+			require.NoError(t, err)
+			var got []uuid.UUID
+			for _, row := range result.Logs {
+				got = append(got, uuid.MustParse(row.ID))
+			}
+			require.Equal(t, tc.want, got)
+		})
+	}
+	for _, end := range []time.Time{from, from.Add(-time.Hour)} {
+		_, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: orgID, From: &from, To: &end})
+		assertOopsCode(t, err, oops.CodeBadRequest)
+	}
+}
+
+func TestListOrganizationActivityFiltered_PaginationAndDelegation(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	const orgID = "org_activity_filtered_pages"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Pages", slug: "activity-filtered-pages"})
+	var wanted, allIDs []uuid.UUID
+	for range 53 {
+		id := insertActivity(t, ctx, conn, activitySeed{organizationID: orgID, actorID: "wanted-actor", subjectType: "assistant", action: "assistant:run"})
+		wanted = append(wanted, id)
+		allIDs = append(allIDs, id, insertActivity(t, ctx, conn, activitySeed{organizationID: orgID, actorID: "other-actor", subjectType: "assistant", action: "assistant:run"}))
+	}
+	require.NoError(t, auditrepo.New(conn).UpdateAuditLogCreatedAtForTesting(ctx, auditrepo.UpdateAuditLogCreatedAtForTestingParams{
+		CreatedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}, Ids: allIDs,
+	}))
+	filter := OrganizationActivityFilter{OrganizationID: orgID, ActorID: new("wanted-actor")}
+	first, err := svc.ListOrganizationActivityFiltered(ctx, filter)
+	require.NoError(t, err)
+	require.Len(t, first.Logs, 50)
+	require.NotNil(t, first.NextCursor)
+	filter.Cursor = first.NextCursor
+	second, err := svc.ListOrganizationActivityFiltered(ctx, filter)
+	require.NoError(t, err)
+	require.Len(t, second.Logs, 3)
+	require.Nil(t, second.NextCursor)
+	for i, row := range append(first.Logs, second.Logs...) {
+		require.Equal(t, wanted[len(wanted)-1-i].String(), row.ID)
+		require.Equal(t, "assistant", row.SubjectType)
+	}
+	var cursor *string
+	for {
+		original, err := svc.ListOrganizationActivity(ctx, &gen.ListOrganizationActivityPayload{OrganizationID: orgID, Cursor: cursor})
+		require.NoError(t, err)
+		filtered, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: orgID, Cursor: cursor})
+		require.NoError(t, err)
+		require.Equal(t, original, filtered)
+		cursor = original.NextCursor
+		if cursor == nil {
+			break
+		}
+	}
+}
