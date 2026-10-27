@@ -237,7 +237,7 @@ func (a *Authorizer) requireAgent(ctx context.Context, dbtx repo.DBTX, agentID u
 // predicate; it cannot authenticate general dashboard management operations.
 func (a *Authorizer) RequireAgentOwnerForUpdate(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, predicate OwnerPredicate) (HumanContext, repo.Agent, error) {
 	authCtx, err := ordinaryHumanAuth(ctx)
-	if consent, ok := contextvalues.GetConsentBindingAuthorization(ctx); ok && predicate == OwnedAgentAuthorize && consent.AgentID == agentID {
+	if consent, ok := contextvalues.GetConsentBindingAuthorization(ctx); ok && (predicate == OwnedAgentAuthorize || predicate == OwnedAgentSetup) && consent.AgentID == agentID {
 		authCtx, _ = contextvalues.GetAuthContext(ctx)
 		err = nil
 	}

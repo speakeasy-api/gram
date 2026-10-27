@@ -15,6 +15,8 @@ import (
 
 // Client is the "remoteSessions" service client.
 type Client struct {
+	BeginBindingRefreshEndpoint               goa.Endpoint
+	CompleteBindingRefreshEndpoint            goa.Endpoint
 	ListBindingsEndpoint                      goa.Endpoint
 	AttachBindingEndpoint                     goa.Endpoint
 	DetachBindingEndpoint                     goa.Endpoint
@@ -28,8 +30,10 @@ type Client struct {
 }
 
 // NewClient initializes a "remoteSessions" service client given the endpoints.
-func NewClient(listBindings, attachBinding, detachBinding, commitServerIdentityConfiguration, getServerIdentityImpact, listServerClientAssociations, detachServerClientAssociation, listRemoteSessions, countRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
+func NewClient(beginBindingRefresh, completeBindingRefresh, listBindings, attachBinding, detachBinding, commitServerIdentityConfiguration, getServerIdentityImpact, listServerClientAssociations, detachServerClientAssociation, listRemoteSessions, countRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
 	return &Client{
+		BeginBindingRefreshEndpoint:               beginBindingRefresh,
+		CompleteBindingRefreshEndpoint:            completeBindingRefresh,
 		ListBindingsEndpoint:                      listBindings,
 		AttachBindingEndpoint:                     attachBinding,
 		DetachBindingEndpoint:                     detachBinding,
@@ -41,6 +45,52 @@ func NewClient(listBindings, attachBinding, detachBinding, commitServerIdentityC
 		CountRemoteSessionsEndpoint:               countRemoteSessions,
 		RevokeRemoteSessionEndpoint:               revokeRemoteSession,
 	}
+}
+
+// BeginBindingRefresh calls the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+// BeginBindingRefresh may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) BeginBindingRefresh(ctx context.Context, p *BeginBindingRefreshPayload) (res *BindingRefreshAttempt, err error) {
+	var ires any
+	ires, err = c.BeginBindingRefreshEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*BindingRefreshAttempt), nil
+}
+
+// CompleteBindingRefresh calls the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+// CompleteBindingRefresh may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CompleteBindingRefresh(ctx context.Context, p *CompleteBindingRefreshPayload) (res *BindingRefreshResult, err error) {
+	var ires any
+	ires, err = c.CompleteBindingRefreshEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*BindingRefreshResult), nil
 }
 
 // ListBindings calls the "listBindings" endpoint of the "remoteSessions"

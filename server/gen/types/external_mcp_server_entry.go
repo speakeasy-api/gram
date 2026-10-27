@@ -34,9 +34,15 @@ type ExternalMCPServerEntry struct {
 	// Whether every tool on the server is read-only
 	IsReadOnly bool
 	// Whether the server's OAuth authorization server advertises a dynamic client
-	// registration endpoint (RFC 7591). When false, connecting requires manual
-	// setup (static OAuth client credentials or API keys).
+	// registration endpoint (RFC 7591). False alone does not establish that manual
+	// setup is required.
 	SupportsDcr bool
+	// Whether issuer metadata advertises compatible Client ID Metadata Document
+	// support.
+	SupportsCimd *bool
+	// Advertised authentication setup; unknown means evidence is insufficient, not
+	// that manual setup is required.
+	AuthSetup *string
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemote
 	// The source repository the registry links for this server, when it declares

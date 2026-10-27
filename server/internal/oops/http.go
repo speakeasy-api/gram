@@ -65,10 +65,16 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 		}
 		if browser {
 			reason := oauthui.ReasonDefault
+			clientName := ""
+			var recovery *oauthui.RecoveryLink
 			if presentation, ok := errors.AsType[*browserError](err); ok {
 				reason = presentation.reason
+				clientName = presentation.clientName
+				recovery = presentation.recovery
 			}
 			page := oauthui.AuthorizationError{
+				Recovery:       recovery,
+				Setup:          false,
 				Status:         code,
 				Reason:         reason,
 				Approval:       false,
@@ -76,7 +82,7 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 				Code:           payload.Name,
 				Description:    payload.Message,
 				CallbackURL:    "",
-				ClientName:     "",
+				ClientName:     clientName,
 				ClientID:       "",
 				ClientIDOrigin: "",
 				ServerName:     "",
@@ -103,6 +109,12 @@ type browserError struct {
 
 	// reason selects actionable browser copy.
 	reason oauthui.Reason
+
+	// clientName is a display name from validated flow state.
+	clientName string
+
+	// recovery is a caller-controlled destination for restarting the flow.
+	recovery *oauthui.RecoveryLink
 }
 
 func (e *browserError) Error() string { return e.cause.Error() }
@@ -114,5 +126,38 @@ func WithBrowserReason(err error, reason oauthui.Reason) error {
 	if err == nil {
 		return nil
 	}
-	return &browserError{cause: err, reason: reason}
+	presentation := browserPresentation(err)
+	presentation.reason = reason
+	return presentation
+}
+
+// WithBrowserClient identifies the client to restart from without adding a redirect.
+// Callers must use a fixed label or a name from validated flow state.
+func WithBrowserClient(err error, name string) error {
+	if err == nil {
+		return nil
+	}
+	presentation := browserPresentation(err)
+	presentation.clientName = name
+	return presentation
+}
+
+// WithBrowserRecovery adds an explicit recovery action to browser failures.
+// Callers must use a trusted destination, never a callback or request URL.
+func WithBrowserRecovery(err error, recovery *oauthui.RecoveryLink) error {
+	if err == nil {
+		return nil
+	}
+	presentation := browserPresentation(err)
+	presentation.recovery = recovery
+	return presentation
+}
+
+func browserPresentation(err error) *browserError {
+	presentation := &browserError{cause: err, reason: oauthui.ReasonDefault, clientName: "", recovery: nil}
+	if existing, ok := errors.AsType[*browserError](err); ok {
+		*presentation = *existing
+		presentation.cause = err
+	}
+	return presentation
 }

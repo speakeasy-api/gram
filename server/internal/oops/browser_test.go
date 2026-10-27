@@ -17,18 +17,19 @@ import (
 func TestBrowserErrHandlePreservesPublicError(t *testing.T) {
 	t.Parallel()
 	public := oops.E(oops.CodeForbidden, errors.New("private database detail"), "public refusal")
-	annotated := oops.WithBrowserReason(public, oauthui.ReasonExpired)
+	annotated := oops.WithBrowserClient(oops.WithBrowserReason(oops.WithBrowserRecovery(public, &oauthui.RecoveryLink{URL: "https://app.example.test/@self", Label: "Return to dashboard"}), oauthui.ReasonExpired), "Example Client")
 	handler := func(http.ResponseWriter, *http.Request) error { return fmt.Errorf("validate request: %w", annotated) }
 	logger := testenv.NewLogger(t)
 	request := httptest.NewRequest(http.MethodGet, "/connect", nil)
 	request.Header.Set("Accept", "application/json")
 	browser := httptest.NewRecorder()
 	oops.BrowserErrHandle(logger, handler).ServeHTTP(browser, request)
-	body := oauthtest.RequireAuthorizationErrorPage(t, browser, http.StatusForbidden)
+	body := oauthtest.RequireAuthorizationErrorRecovery(t, browser, http.StatusForbidden, "https://app.example.test/@self")
 	require.Equal(t, string(oops.CodeForbidden), body.Code)
 	require.Equal(t, "public refusal", body.Description)
 	require.Contains(t, browser.Body.String(), public.AsGoa(t.Context()).ID)
 	require.Contains(t, browser.Body.String(), "link expired or was already used")
+	require.Contains(t, browser.Body.String(), "Example Client")
 	require.NotContains(t, browser.Body.String(), "private database detail")
 
 	machine := httptest.NewRecorder()
@@ -63,4 +64,27 @@ func TestBrowserErrHandleDoesNotAppendAfterResponse(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, response.Code)
 	require.Equal(t, "/safe", response.Header().Get("Location"))
 	require.NotContains(t, response.Body.String(), "Technical details")
+}
+
+func TestBrowserErrorAnnotationsCompose(t *testing.T) {
+	t.Parallel()
+	recovery := &oauthui.RecoveryLink{URL: "https://app.example.test/@self", Label: "Return to dashboard"}
+	annotations := []func(error) error{
+		func(err error) error { return oops.WithBrowserReason(err, oauthui.ReasonCanceled) },
+		func(err error) error { return oops.WithBrowserClient(err, "Speakeasy dashboard") },
+		func(err error) error { return oops.WithBrowserRecovery(err, recovery) },
+	}
+	for _, order := range [][]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}} {
+		var err error = oops.E(oops.CodeForbidden, nil, "declined")
+		for _, index := range order {
+			require.NoError(t, annotations[index](nil))
+			err = fmt.Errorf("wrapped: %w", annotations[index](err))
+		}
+		response := httptest.NewRecorder()
+		oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error { return err }).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/callback", nil))
+		require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, response, http.StatusForbidden, recovery.URL).Code)
+		require.Contains(t, response.Body.String(), "Sign-in was canceled")
+		require.NotContains(t, response.Body.String(), "Close this tab")
+		require.Contains(t, response.Body.String(), "Speakeasy dashboard")
+	}
 }

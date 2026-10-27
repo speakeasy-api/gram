@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"mime"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -50,17 +51,37 @@ type ClientOptions struct {
 	// this, an unreachable server can take minutes to report as such instead
 	// of the ~10s the probe intends.
 	DisableRetries bool
-	// MaxResponseBytes caps each HTTP response when greater than zero. It is
-	// intended for short-lived, untrusted probes; the long-lived gateway path
-	// leaves this at zero.
+	// MaxResponseBytes caps the total size of each HTTP response body,
+	// including a whole SSE stream, when greater than zero. It is intended for
+	// short-lived, untrusted probes; the long-lived gateway path leaves this at
+	// zero so a stream is not cut off by an aggregate budget.
 	MaxResponseBytes int64
+
+	// MaxMessageBytes caps each discrete upstream message: a whole non-SSE
+	// response body (results and error bodies alike) or a single SSE event.
+	// Zero or below selects defaultMaxMessageBytes. The cap cannot be disabled
+	// because the MCP SDK buffers every message in full before parsing it.
+	MaxMessageBytes int64
 }
+
+// defaultMaxMessageBytes bounds one upstream MCP message when the caller sets
+// no cap. Tool results carrying inline images or files are the largest
+// realistic messages and sit well under it, while it keeps a hostile server
+// from growing the shared API or worker process without bound.
+const defaultMaxMessageBytes = 16 << 20 // 16 MiB
 
 var ErrResponseTooLarge = errors.New("external mcp response body exceeds the configured read limit")
 
 type bodyLimitRoundTripper struct {
-	base    http.RoundTripper
-	limit   int64
+	base http.RoundTripper
+
+	// messageLimit caps each non-SSE body and each SSE event.
+	messageLimit int64
+
+	// totalLimit caps each whole response body when greater than zero.
+	totalLimit int64
+
+	// tripped records that a limit rejected a response since the last request.
 	tripped atomic.Bool
 }
 
@@ -69,8 +90,73 @@ func (rt *bodyLimitRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 	if err != nil || resp == nil || resp.Body == nil {
 		return resp, err //nolint:wrapcheck // preserve the base transport's error
 	}
-	resp.Body = &limitedBody{ReadCloser: http.MaxBytesReader(nil, resp.Body, rt.limit), tripped: &rt.tripped}
+	body := resp.Body
+	if rt.totalLimit > 0 {
+		body = http.MaxBytesReader(nil, body, rt.totalLimit)
+	}
+	if isEventStream(resp) {
+		body = &sseEventLimiter{ReadCloser: body, limit: rt.messageLimit, eventBytes: 0, lineBlank: true, err: nil}
+	} else {
+		body = http.MaxBytesReader(nil, body, rt.messageLimit)
+	}
+	resp.Body = &limitedBody{ReadCloser: body, tripped: &rt.tripped}
 	return resp, nil
+}
+
+// isEventStream mirrors the SDK's dispatch: only a successful response whose
+// media type is text/event-stream is consumed event by event. The SDK buffers
+// every other body it reads, error bodies included, in full.
+func isEventStream(resp *http.Response) bool {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	return err == nil && mediaType == "text/event-stream"
+}
+
+// sseEventLimiter fails a text/event-stream body once a single event exceeds
+// limit bytes, so a long-lived stream stays usable while no one event can grow
+// the SDK's per-event buffer without bound. Like the SDK's scanner, it splits
+// lines on LF only and treats a line holding nothing but CR bytes as the blank
+// line that ends an event. Every byte since the previous blank line counts,
+// comment and field lines included.
+type sseEventLimiter struct {
+	io.ReadCloser
+
+	limit int64
+
+	// eventBytes counts the bytes read since the last blank line.
+	eventBytes int64
+
+	// lineBlank reports whether the current line holds only CR bytes so far.
+	lineBlank bool
+
+	// err is sticky: once the limit trips, every later read fails too.
+	err error
+}
+
+func (l *sseEventLimiter) Read(p []byte) (int, error) {
+	if l.err != nil {
+		return 0, l.err
+	}
+	n, err := l.ReadCloser.Read(p)
+	for i, b := range p[:n] {
+		l.eventBytes++
+		if l.eventBytes > l.limit {
+			l.err = &http.MaxBytesError{Limit: l.limit}
+			return i, l.err
+		}
+		switch {
+		case b == '\n':
+			if l.lineBlank {
+				l.eventBytes = 0
+			}
+			l.lineBlank = true
+		case b != '\r':
+			l.lineBlank = false
+		}
+	}
+	return n, err //nolint:wrapcheck // io.EOF must be returned unchanged
 }
 
 type limitedBody struct {
@@ -105,7 +191,7 @@ func classifyRequestError(op, remoteURL string, authRT *authRoundTripper, bodyLi
 	if authRT.authRejected {
 		return &AuthRejectedError{RemoteURL: remoteURL, StatusCode: authRT.statusCode, WWWAuthenticate: authRT.wwwAuthenticate}
 	}
-	if bodyLimitRT != nil && bodyLimitRT.tripped.Load() {
+	if bodyLimitRT.tripped.Load() {
 		return fmt.Errorf("%s: %w", op, ErrResponseTooLarge)
 	}
 	// SDK response decoding may include raw numeric values or remote field
@@ -122,9 +208,7 @@ func classifyRequestError(op, remoteURL string, authRT *authRoundTripper, bodyLi
 }
 
 func (c *Client) beginRequest() {
-	if c.bodyLimitRT != nil {
-		c.bodyLimitRT.tripped.Store(false)
-	}
+	c.bodyLimitRT.tripped.Store(false)
 }
 
 // NewClient creates a new client connection to an external MCP server.
@@ -137,6 +221,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 			Headers:          nil,
 			DisableRetries:   false,
 			MaxResponseBytes: 0,
+			MaxMessageBytes:  0,
 		}
 	}
 
@@ -165,13 +250,13 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 		statusCode:      0,
 		wwwAuthenticate: "",
 	}
-	httpClient.Transport = authRT
-	var bodyLimitRT *bodyLimitRoundTripper
-	if opts.MaxResponseBytes > 0 {
-		//nolint:exhaustruct // atomic.Bool must retain its documented zero value.
-		bodyLimitRT = &bodyLimitRoundTripper{base: authRT, limit: opts.MaxResponseBytes}
-		httpClient.Transport = bodyLimitRT
+	messageLimit := opts.MaxMessageBytes
+	if messageLimit <= 0 {
+		messageLimit = defaultMaxMessageBytes
 	}
+	//nolint:exhaustruct // atomic.Bool must retain its documented zero value.
+	bodyLimitRT := &bodyLimitRoundTripper{base: authRT, messageLimit: messageLimit, totalLimit: opts.MaxResponseBytes}
+	httpClient.Transport = bodyLimitRT
 
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:        "gram-server",
