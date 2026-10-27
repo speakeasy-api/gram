@@ -296,6 +296,9 @@ type remoteSessionCard struct {
 	CanRefresh   bool
 	// IdentityReconnect marks a connected grant lacking openid while a reconnect would request it.
 	IdentityReconnect bool
+
+	// AttachmentReconnect requires this popup to produce a fresh grant for an agent attachment.
+	AttachmentReconnect bool
 	// Access expiry describes the current credential. Refresh expiry is kept
 	// separate because a renewable one-hour access token is not a connection
 	// with "no expiry." Empty values mean the provider omitted that lifetime.
@@ -380,7 +383,7 @@ type cardPanel struct {
 
 // Panel decides the detail lines from the card's state.
 func (c remoteSessionCard) Panel() cardPanel {
-	reconnect := c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect
+	reconnect := c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
 	hasGrant := c.Connected || c.Expired || c.Unroutable
 	p := cardPanel{
 		GrantLive:            c.Connected && !reconnect,
@@ -714,9 +717,38 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// link opens it, goes straight on to that server's provider. A server
 	// picked from the gateway's list shows its page first, which says what
 	// connecting does.
+	autoConnectCards := cards
+	if challengeState.FirstParty && challengeState.Subject != nil {
+		pendingClient := challengeState.ReauthenticateClientID
+		if s.bindingRefresh != nil && challengeState.BindingRefreshAttemptID != "" {
+			client, err := s.bindingRefresh.PendingClient(ctx, challengeState.BindingRefreshAttemptID, *challengeState.Subject)
+			if err != nil {
+				return fmt.Errorf("read attachment reconnect requirement: %w", err)
+			}
+			if client != uuid.Nil {
+				pendingClient = client
+			}
+		}
+		if pendingClient != uuid.Nil {
+			found := false
+			for i := range cards {
+				if cards[i].ClientID == pendingClient.String() {
+					cards[i].AttachmentReconnect = true
+					target := cards[i]
+					target.Connected = false
+					autoConnectCards = []remoteSessionCard{target}
+					found = true
+					break
+				}
+			}
+			if !found {
+				return oops.E(oops.CodeForbidden, nil, "requested reconnect client is not available on this server")
+			}
+		}
+	}
 	autoConnect := gateway == nil || (gateway.Focus != nil && challengeState.FirstParty && challengeState.FocusServer == gateway.Focus.Slug)
 	if len(agentOptions) == 0 && autoConnect {
-		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, cards, focusServer); err != nil {
+		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, autoConnectCards, focusServer); err != nil {
 			return err
 		} else if redirected {
 			return nil
@@ -789,7 +821,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 				if errors.Is(err, errConsentCaptureSuperseded) {
 					approvalError.Message = "This page was replaced by a newer one. Reload the page to continue."
 				}
-			} else if gateway.ReadyCount == 0 {
+			} else if !gateway.AnyReady() {
 				approvalError = &consentApprovalError{Message: "No servers could be verified. Resolve the server statuses above before approving access.", ActionURL: "", ActionLabel: ""}
 			}
 		}
@@ -1497,7 +1529,7 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 	for _, c := range cards {
 		// Keep actionable reconnect and verification states visible instead of
 		// closing the tab before the person can act on them.
-		if !c.Connected || c.IdentityReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
+		if !c.Connected || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
 			return false
 		}
 	}
@@ -1902,6 +1934,7 @@ func (s *Service) buildRemoteSessionCards(
 			ChainMessage:           "",
 			CanRefresh:             state.CanRefresh,
 			IdentityReconnect:      identityReconnect,
+			AttachmentReconnect:    false,
 			AccessExpiresAt:        accessExpiresAt,
 			AccessExpiresIn:        accessExpiresIn,
 			RefreshExpiresAt:       refreshExpiresAt,

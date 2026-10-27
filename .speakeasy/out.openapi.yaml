@@ -27073,6 +27073,256 @@ paths:
       x-speakeasy-name-override: listFacets
       x-speakeasy-react-hook:
         name: GatewaySessionFacets
+  /rpc/hiddenMcpServers.hide:
+    post:
+      description: Hide an MCP server for the signed-in user. Hiding a hidden server changes nothing.
+      operationId: hideMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HideMcpServerRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: hide hiddenMcpServers
+      tags:
+        - hiddenMcpServers
+      x-speakeasy-name-override: hide
+      x-speakeasy-react-hook:
+        name: HideMcpServer
+  /rpc/hiddenMcpServers.list:
+    get:
+      description: List the MCP servers the signed-in user hid in the active organization.
+      operationId: listHiddenMcpServers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListHiddenMcpServersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: list hiddenMcpServers
+      tags:
+        - hiddenMcpServers
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: HiddenMcpServers
+  /rpc/hiddenMcpServers.unhide:
+    post:
+      description: Show a hidden MCP server again for the signed-in user. Unhiding a server that is not hidden changes nothing.
+      operationId: unhideMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnhideMcpServerRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: unhide hiddenMcpServers
+      tags:
+        - hiddenMcpServers
+      x-speakeasy-name-override: unhide
+      x-speakeasy-react-hook:
+        name: UnhideMcpServer
   /rpc/hooks.claude:
     post:
       tags:
@@ -55302,7 +55552,7 @@ paths:
         name: UpdateRemoteSessionIssuer
   /rpc/remoteSessions.attachBinding:
     post:
-      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      description: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
       operationId: attachBinding
       parameters:
         - allowEmptyValue: true
@@ -55394,6 +55644,100 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: attachBinding
+  /rpc/remoteSessions.beginBindingRefresh:
+    post:
+      description: Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.
+      operationId: beginBindingRefresh
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeginBindingRefreshRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingRefreshAttempt'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: beginBindingRefresh remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: beginBindingRefresh
   /rpc/remoteSessions.commitServerIdentityConfiguration:
     post:
       description: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
@@ -55499,6 +55843,100 @@ paths:
       x-speakeasy-name-override: commitServerIdentityConfiguration
       x-speakeasy-react-hook:
         name: CommitServerIdentityConfiguration
+  /rpc/remoteSessions.completeBindingRefresh:
+    post:
+      description: Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.
+      operationId: completeBindingRefresh
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteBindingRefreshRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingRefreshResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: completeBindingRefresh remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: completeBindingRefresh
   /rpc/remoteSessions.count:
     get:
       description: 'Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller''s project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.'
@@ -55609,7 +56047,7 @@ paths:
         name: RemoteSessionsCount
   /rpc/remoteSessions.detachBinding:
     post:
-      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      description: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
       operationId: detachBinding
       parameters:
         - allowEmptyValue: true
@@ -55944,7 +56382,7 @@ paths:
         name: ServerIdentityImpact
   /rpc/remoteSessions.list:
     get:
-      description: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+      description: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).
       operationId: listRemoteSessions
       parameters:
         - allowEmptyValue: true
@@ -56097,7 +56535,7 @@ paths:
         name: RemoteSessions
   /rpc/remoteSessions.listBindings:
     get:
-      description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+      description: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
       operationId: listBindings
       parameters:
         - allowEmptyValue: true
@@ -87258,6 +87696,22 @@ components:
         - name
         - created_at
         - updated_at
+    BeginBindingRefreshRequestBody:
+      type: object
+      properties:
+        binding_id:
+          type: string
+          format: uuid
+        principal_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - principal_id
+        - user_session_issuer_id
+        - binding_id
     BeginResponseBody:
       type: object
       properties:
@@ -87281,6 +87735,24 @@ components:
           description: The configured billing notification email. Omitted when organization administrators receive billing notifications.
           format: email
           nullable: true
+    BindingRefreshAttempt:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+      required:
+        - attempt_id
+    BindingRefreshResult:
+      type: object
+      properties:
+        binding:
+          $ref: '#/components/schemas/PrincipalRemoteSessionBinding'
+        completed:
+          type: boolean
+          description: Whether this popup committed an exact grant and replaced the attachment. False means no matching callback completed; the attempt is consumed without changing the attachment.
+      required:
+        - completed
     BlockAgentOnConnectionForm:
       type: object
       properties:
@@ -88756,6 +89228,22 @@ components:
       description: The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.
       required:
         - manual_setup_required
+    CompleteBindingRefreshRequestBody:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+        principal_id:
+          type: string
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - principal_id
+        - user_session_issuer_id
+        - attempt_id
     ConfirmOktaResourceConnectionsRequestBody:
       type: object
       properties:
@@ -95684,6 +96172,45 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    HiddenMcpServer:
+      type: object
+      properties:
+        hidden_at:
+          type: string
+          description: When the user hid the server.
+          format: date-time
+        mcp_server_id:
+          type: string
+          description: The hidden MCP server.
+          format: uuid
+        name:
+          type: string
+          description: The server's display name, when it has one.
+        project_id:
+          type: string
+          description: The server's project.
+          format: uuid
+        project_slug:
+          type: string
+          description: The server's project slug.
+        slug:
+          type: string
+          description: The server's slug, when it has one.
+      description: An MCP server the signed-in user hid.
+      required:
+        - mcp_server_id
+        - project_id
+        - project_slug
+        - hidden_at
+    HideMcpServerRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+      required:
+        - mcp_server_id
     HookDeliveryFailureData:
       type: object
       properties:
@@ -98479,6 +99006,16 @@ components:
       description: Result type for the platform-administrator global issuer listing.
       required:
         - items
+    ListHiddenMcpServersResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/HiddenMcpServer'
+          description: Hidden servers, oldest first.
+      required:
+        - servers
     ListHooksTracesPayload:
       type: object
       properties:
@@ -100330,6 +100867,9 @@ components:
     ManagedAgent:
       type: object
       properties:
+        connection_needs_refresh:
+          type: boolean
+          description: An assigned connection has expired or is no longer available; an authorized editor must reconnect their own account and assign it again
         created_at:
           type: string
           format: date-time
@@ -105458,7 +105998,7 @@ components:
           format: date-time
         authorization_expires_at:
           type: string
-          description: Absolute upstream authorization deadline; refreshing does not extend it.
+          description: Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.
           format: date-time
         created_at:
           type: string
@@ -115703,6 +116243,15 @@ components:
         plugin_id: 550e8400-e29b-41d4-a716-446655440001
       required:
         - id
+    UnhideMcpServerRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+      required:
+        - mcp_server_id
     UnknownSkillActivation:
       type: object
       properties:
@@ -119661,6 +120210,8 @@ tags:
     description: External MCP registry operations
   - name: functions
     description: Endpoints for working with functions.
+  - name: hiddenMcpServers
+    description: MCP servers the signed-in user hid. Gateways leave hidden servers out of the user's tools and list them last on the consent page. Each user manages only their own list.
   - name: hooksServerNames
     description: Manages display name overrides for hooks servers.
   - name: hooks

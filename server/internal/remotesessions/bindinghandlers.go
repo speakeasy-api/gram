@@ -23,9 +23,9 @@ import (
 // SetBindingAuthorizer wires the human-only agent management authorizer without
 // creating an import cycle with agentmanagement's session revocation support.
 // Configure before serving requests. The callback must use the supplied transaction
-// to RequireAgentOwnerForUpdate with OwnedAgentAuthorize, retaining its membership
+// to require agent write permission for mutations and authorize or write for reads, retaining membership
 // and agent locks through commit. An unconfigured service fails closed.
-func (s *Service) SetBindingAuthorizer(authorize func(context.Context, pgx.Tx, uuid.UUID) error) {
+func (s *Service) SetBindingAuthorizer(authorize func(context.Context, pgx.Tx, uuid.UUID, bool) error) {
 	s.bindingAuthorizer = authorize
 }
 
@@ -66,7 +66,7 @@ func bindingHuman(ctx context.Context) (*contextvalues.AuthContext, error) {
 	return auth, nil
 }
 
-func (s *Service) beginBindingOperation(ctx context.Context, principal, issuer string) (*bindingOperation, error) {
+func (s *Service) beginBindingOperation(ctx context.Context, principal, issuer string, write bool) (*bindingOperation, error) {
 	auth, err := bindingHuman(ctx)
 	if err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func (s *Service) beginBindingOperation(ctx context.Context, principal, issuer s
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin remote session attachment operation")
 	}
-	if err := s.bindingAuthorizer(ctx, tx, principalID); err != nil {
+	if err := s.bindingAuthorizer(ctx, tx, principalID, write); err != nil {
 		_ = tx.Rollback(ctx)
 		return nil, err
 	}
@@ -108,33 +108,32 @@ func (op *bindingOperation) candidates(ctx context.Context) ([]repo.ListPrincipa
 }
 
 func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPayload) (*gen.ListBindingsResult, error) {
-	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID)
+	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, false)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = op.tx.Rollback(ctx) }()
 	rows, err := op.queries.ListPrincipalRemoteSessionBindings(ctx, repo.ListPrincipalRemoteSessionBindingsParams{
-		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(),
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session attachments")
 	}
-	// Eligibility is shared with attachment candidates. Unavailable bindings
-	// retain only their identifiers so the owner can detach without exposing
-	// identity from a revoked, inaccessible, or replaced upstream grant.
-	candidates, err := op.candidates(ctx)
+	sources, err := op.queries.ListEligiblePrincipalRemoteSessionBindings(ctx, repo.ListEligiblePrincipalRemoteSessionBindingsParams{
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve available attachment views")
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve attached connections")
 	}
-	available := make(map[uuid.UUID]repo.ListPrincipalRemoteSessionCandidatesRow, len(candidates))
-	for _, candidate := range candidates {
-		available[candidate.RemoteSession.ID] = candidate
+	available := make(map[uuid.UUID]repo.RemoteSession, len(sources))
+	for _, source := range sources {
+		available[source.ID] = source
 	}
 	items := make([]*gen.PrincipalRemoteSessionBinding, 0, len(rows))
 	for _, row := range rows {
 		view := bindingView(row.ID, row.PrincipalID, row.UserSessionIssuerID, row.RemoteSessionClientID, row.RemoteSessionID)
-		if candidate, ok := available[row.RemoteSessionID]; ok && candidate.RemoteSession.GrantGeneration == row.GrantGeneration {
-			view.RemoteSession = mv.BuildRemoteSessionView(candidate.RemoteSession, conv.FromPGText[string](candidate.SubjectDisplayName), conv.FromPGText[string](candidate.SubjectEmail))
+		if source, ok := available[row.RemoteSessionID]; ok && source.GrantGeneration == row.GrantGeneration {
+			view.RemoteSession = mv.BuildRemoteSessionView(source, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail))
 		}
 		items = append(items, view)
 	}
@@ -142,7 +141,7 @@ func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPay
 }
 
 func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingPayload) (*gen.PrincipalRemoteSessionBinding, error) {
-	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID)
+	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +190,7 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 }
 
 func (s *Service) DetachBinding(ctx context.Context, payload *gen.DetachBindingPayload) error {
-	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID)
+	op, err := s.beginBindingOperation(ctx, payload.PrincipalID, payload.UserSessionIssuerID, true)
 	if err != nil {
 		return err
 	}
@@ -201,7 +200,7 @@ func (s *Service) DetachBinding(ctx context.Context, payload *gen.DetachBindingP
 		return oops.E(oops.CodeBadRequest, err, "invalid binding id")
 	}
 	row, err := op.queries.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{
-		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(), ID: id,
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, ID: id,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil

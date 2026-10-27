@@ -126,7 +126,7 @@ var _ = Service("remoteSessions", func() {
 	})
 
 	Method("listRemoteSessions", func() {
-		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).")
+		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).")
 
 		Payload(func() {
 			Attribute("principal_id", String, "Owned agent whose eligible sessions to list; requires user_session_issuer_id.", func() { Format(FormatUUID) })
@@ -511,7 +511,9 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("refresh_expires_at", String, "Upstream refresh-token expiry. Null when the session has no refresh token.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("authorization_expires_at", String, "Absolute upstream authorization deadline; refreshing does not extend it.", func() { Format(FormatDateTime) })
+	Attribute("authorization_expires_at", String, "Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.", func() {
+		Format(FormatDateTime)
+	})
 	Attribute("last_used_at", String, "Last recorded upstream request, accurate to within five minutes. Null means unknown.", func() { Format(FormatDateTime) })
 
 	Attribute("has_refresh_token", Boolean, "Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.")

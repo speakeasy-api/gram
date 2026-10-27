@@ -78,6 +78,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
@@ -1777,6 +1778,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("registry validator: %w", err)
 			}
+			hiddenmcpservers.Attach(mux, hiddenmcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			oktaserversuggestions.Attach(mux, oktaserversuggestions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, registryValidator))
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
@@ -1814,17 +1816,28 @@ func newStartCommand() *cli.Command {
 			remoteSessionsService.SetFeatureFlags(featureFlags)
 			remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())
 			remoteSessionsService.SetSpeakeasyReadiness(identitychaining.SpeakeasyReadiness(logger, issuerGate, issuerSigner, featureFlags))
-			remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+			remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 				authCtx, ok := contextvalues.GetAuthContext(ctx)
 				if !ok || authCtx == nil {
 					return oops.C(oops.CodeNotFound)
 				}
-				_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+				predicate := agentmanagement.OwnedAgentAuthorize
+				if write {
+					predicate = agentmanagement.OwnedAgentSetup
+				}
+				authorizer := agentmanagement.NewAuthorizer(authzEngine)
+				_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+				if err != nil && !write {
+					_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
+				}
 				if err != nil {
 					return fmt.Errorf("authorize attachment owner: %w", err)
 				}
 				return nil
 			})
+			bindingRefreshAttempts := remotesessions.NewBindingRefreshAttempts(logger, cache.NewRedisCacheAdapter(redisClient))
+			remoteSessionsService.SetBindingRefreshAttempts(bindingRefreshAttempts)
+			mcpService.SetBindingRefreshAttempts(bindingRefreshAttempts)
 			mcpService.SetConsentBindingService(remoteSessionsService)
 			remotesessions.Attach(mux, remoteSessionsService)
 			remoteMcpService := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService, featureFlags).WithServerURL(serverURL).

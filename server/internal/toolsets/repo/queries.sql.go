@@ -796,12 +796,18 @@ func (q *Queries) GetToolsetByMCPSlug(ctx context.Context, arg GetToolsetByMCPSl
 const getToolsetByMcpSlug = `-- name: GetToolsetByMcpSlug :one
 SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
-WHERE mcp_slug = $1
-  AND deleted IS FALSE
-ORDER BY (custom_domain_id IS NULL) DESC
-LIMIT 1
+WHERE id = (
+    SELECT t.id
+    FROM toolsets t
+    WHERE t.mcp_slug = $1
+      AND t.deleted IS FALSE
+    ORDER BY (t.custom_domain_id IS NULL) DESC
+    LIMIT 1
+  )
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE)
 `
 
+// A winning row in a deleted project still owns the slug, so it yields no row rather than a fallback.
 func (q *Queries) GetToolsetByMcpSlug(ctx context.Context, mcpSlug pgtype.Text) (Toolset, error) {
 	row := q.db.QueryRow(ctx, getToolsetByMcpSlug, mcpSlug)
 	var i Toolset
@@ -835,6 +841,7 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id = $2
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE)
 `
 
 type GetToolsetByMcpSlugAndCustomDomainParams struct {
@@ -875,6 +882,7 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND project_id = $2
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE)
 `
 
 type GetToolsetByMcpSlugAndProjectParams struct {
@@ -961,6 +969,7 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id IS NULL
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE)
 `
 
 func (q *Queries) GetToolsetByPlatformMcpSlug(ctx context.Context, mcpSlug pgtype.Text) (Toolset, error) {
