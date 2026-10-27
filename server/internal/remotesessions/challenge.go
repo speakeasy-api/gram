@@ -745,11 +745,7 @@ func ResourceScopesFromRow(row *remotemcprepo.RemoteProtectedResource, useDiscov
 // elsewhere, or unqualified because an owning sibling holds the resource,
 // is decided by its own authorization server, not this resource's row.
 func (m *ChallengeManager) ResourceAppliesToClient(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, resourceURL string) (bool, error) {
-	resource, err := m.ResourceForClientAtUpstream(ctx, organizationID, clientID, siblingIDs, resourceURL)
-	if err != nil {
-		return false, err
-	}
-	return resource != "" && sameUpstream(resource, resourceURL), nil
+	return ResourceAppliesAtUpstream(ctx, m.refresher.db, organizationID, clientID, siblingIDs, resourceURL)
 }
 
 // ResourceAppliesToClients is ResourceAppliesToClient for every client bound
