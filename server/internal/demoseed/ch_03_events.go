@@ -134,6 +134,16 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 			settings: "",
 			msg:      "demo seed postflight: hook-observed gateway calls missing",
 		},
+		// Hooks sent with an agent key: without them the Tool Logs agent
+		// filter only ever matches gateway calls.
+		{
+			cond: `(SELECT uniqExact(trace_id) FROM trace_summaries
+   WHERE gram_project_id = toUUID(@proj)
+     AND event_source = 'hook'
+     AND agent_id != '') < 80`,
+			settings: "",
+			msg:      "demo seed postflight: agent-sent hook calls missing",
+		},
 		{
 			cond:     `(SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id = toUUID(@proj)) < 180`,
 			settings: "",
