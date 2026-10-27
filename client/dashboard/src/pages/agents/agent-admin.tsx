@@ -481,15 +481,10 @@ function LifecycleBadge({
 export function AgentStatus({ agent }: { agent: ManagedAgent }): JSX.Element {
   if (agent.lifecycle === "active" && agent.connectionNeedsRefresh) {
     return (
-      <span className="flex flex-wrap items-center gap-2">
-        <Badge variant="neutral" size="sm">
-          Active
-        </Badge>
-        <Badge variant="warning" size="sm">
-          <AlertTriangle className="mr-1 size-3" aria-hidden="true" />
-          Connection needs refresh
-        </Badge>
-      </span>
+      <Badge variant="warning" size="sm">
+        <AlertTriangle className="mr-1 size-3" aria-hidden="true" />
+        Needs refresh
+      </Badge>
     );
   }
   return <LifecycleBadge lifecycle={agent.lifecycle} />;
