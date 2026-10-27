@@ -330,6 +330,7 @@ func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.Mc
 		toolVariationsGroupID: groupID,
 		mcpServerID:           &serverID,
 		mcpEndpointID:         &endpointID,
+		toolsetHosting:        nil,
 	}
 }
 

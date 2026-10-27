@@ -13,8 +13,7 @@ import (
 )
 
 // LockUserIssuer verifies exact ownership and serializes issuer mutation with
-// binding preparation. The caller must retain tx through mutation and compare
-// binding-sensitive fields only after this lock.
+// binding preparation. The caller must retain tx through mutation.
 func LockUserIssuer(ctx context.Context, tx pgx.Tx, organizationID string, projectID, id uuid.UUID) error {
 	q := repo.New(tx)
 	if err := verifyUserIssuerEMAScope(ctx, q, organizationID, projectID, id); err != nil {
@@ -41,8 +40,10 @@ func LockUserIssuer(ctx context.Context, tx pgx.Tx, organizationID string, proje
 	return nil
 }
 
-// GuardEMABindings protects issuer mutation, including automatic
-// orphan cleanup by other services. The caller must retain tx through mutation.
+// GuardEMABindings protects issuer deletion, including automatic orphan
+// cleanup by other services. Settings updates do not need it: identity
+// chaining reads the issuer's trusted pair live and nothing else from it. The
+// caller must retain tx through mutation.
 func GuardEMABindings(ctx context.Context, tx pgx.Tx, organizationID string, projectID, id uuid.UUID) error {
 	if err := LockUserIssuer(ctx, tx, organizationID, projectID, id); err != nil {
 		return err

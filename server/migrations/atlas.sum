@@ -1,4 +1,4 @@
-h1:rXHiLZew5KxroMsQ8WsE/H/3znsWS52hSbR1fHQ5vaE=
+h1:NpImXlhFvF+1U+cTNSnDUOAR9bXaBQJQeQyDUEVrXKo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -506,3 +506,4 @@ h1:rXHiLZew5KxroMsQ8WsE/H/3znsWS52hSbR1fHQ5vaE=
 20261026155809_drop-mcp-collection-tables.sql h1:mWc7H6PlVhhNW7F6klcOZXl4/tzOqClfmZUQy2VwSPQ=
 20261026171559_drop-toolsets-oauth-proxy-server-id.sql h1:sflrCZKyOony9i3JXkSZ5cOiT9p/sBijLjMqXguQNR0=
 20261027171608_user-hidden-mcp-servers.sql h1:nYTpEh5t0ZpPeBvwUwRpMNaMhsfTsklT1Dr2x7DNBCw=
+20261027215826_okta-connections-drop-issuer-url-key.sql h1:StNVCCZLo0UHL8YlY33RJvmxiglTRFjjuWiAi75PiLI=

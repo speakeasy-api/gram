@@ -1738,9 +1738,9 @@ ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
 LIMIT @page_size::int;
 
 -- name: ListSelectionMappings :many
--- Every live user session choice for a live server in the organization after
--- the cursor, or the one named by only_id, with what mapping it onto a typed
--- auth client decides from.
+-- Every live user session choice in the organization after the cursor, or the
+-- one named by only_id, with what mapping it onto a typed auth client decides
+-- from.
 --
 -- What the upstream client choice reads today (GetUpstreamClientSelection):
 -- whether the server has any upstream OAuth client association, whether the
@@ -2001,14 +2001,6 @@ FROM upstream_client_selections AS sel
 WHERE sel.organization_id = @organization_id::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
-  -- A choice for a deleted server is kept as history but is never served
-  -- again, so it is not live coverage.
-  AND EXISTS (
-    SELECT 1
-    FROM mcp_servers AS live_server
-    WHERE live_server.id = sel.mcp_server_id
-      AND live_server.deleted IS FALSE
-  )
   AND sel.id > @cursor::uuid
   AND (sqlc.narg('only_id')::uuid IS NULL OR sel.id = sqlc.narg('only_id')::uuid)
 ORDER BY sel.id
@@ -2587,9 +2579,6 @@ WHERE credential_id = @credential_id AND mcp_server_id = @mcp_server_id;
 -- name: SoftDeleteAttachmentUserSessionIssuerFixture :exec
 UPDATE user_session_issuers SET deleted_at = clock_timestamp()
 WHERE id = (SELECT user_session_issuer_id FROM principal_remote_session_bindings WHERE principal_remote_session_bindings.id = @binding_id);
-
--- name: SoftDeleteMCPServerFixture :exec
-UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = @id;
 
 -- name: SoftDeleteProjectFixture :exec
 UPDATE projects SET deleted_at = clock_timestamp() WHERE id = @id;

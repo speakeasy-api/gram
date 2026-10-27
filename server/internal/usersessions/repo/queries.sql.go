@@ -6502,6 +6502,14 @@ FROM projects AS project
 WHERE toolset.user_session_issuer_id = $2
   AND project.id = toolset.project_id
   AND project.organization_id = $3::text
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS wrapper
+    WHERE wrapper.id = toolset.id
+      AND wrapper.toolset_id = toolset.id
+      AND wrapper.project_id = toolset.project_id
+      AND wrapper.deleted IS FALSE
+  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -6521,7 +6529,7 @@ type UpdateToolsetsToUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
-// Wrapped toolsets keep their issuer column equal to their canonical server's for pods that still read it.
+// Toolsets without a canonical wrapper still serve from their issuer column; wrapped ones keep it frozen.
 func (q *Queries) UpdateToolsetsToUserSessionIssuer(ctx context.Context, arg UpdateToolsetsToUserSessionIssuerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateToolsetsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {

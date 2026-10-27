@@ -128,9 +128,6 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo hosted toolset endpoints: %w", err)
 	}
-	if err := s.q.ServersMirrorHostedToolsets(ctx, proj); err != nil {
-		return fmt.Errorf("mirror demo hosted toolsets: %w", err)
-	}
 
 	if err := s.q.ServersInsertGitHubContractorsBlock(ctx, repo.ServersInsertGitHubContractorsBlockParams{
 		ID:             s.det("github-contractors-block"),
