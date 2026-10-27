@@ -14,7 +14,7 @@ type inferenceRuntimeContextKey struct{}
 
 // InferenceTranscriptOwned reports a trusted runtime whose ACP transcript owns persistence.
 func InferenceTranscriptOwned(ctx context.Context) bool {
-	_, ok := ctx.Value(inferenceContextKey{}).(assistantidentity.Identity)
+	_, ok := ctx.Value(inferenceContextKey{}).(assistantidentity.RuntimeIdentity)
 	return ok
 }
 

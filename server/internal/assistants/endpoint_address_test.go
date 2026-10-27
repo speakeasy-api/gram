@@ -41,7 +41,7 @@ func (f hostedAttachmentFixture) moveHostedToDomain(t *testing.T, domainID uuid.
 	})
 	require.NoError(t, err)
 	tx := testenv.BeginTx(t, t.Context(), f.db)
-	_, err = hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), ts, nil)
+	_, err = hostedmcp.BackfillSync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), ts)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 }

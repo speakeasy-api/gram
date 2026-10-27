@@ -33,6 +33,7 @@
 @source "../../../../server/internal/consentpage/logo.html";
 @source "../../../../server/internal/platformmcp/oauth_page.html";
 @source "../../../../server/internal/oauthui/authorization_error.html";
+@source "../../../../server/internal/oauthui/authorization_error_fallback.html";
 @source "../../../../server/internal/mcp/consent_script.js";
 
 @import "../components/ui/styles/base.css";

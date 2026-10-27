@@ -763,7 +763,6 @@ trackedFiles:
   src/funcs/tokenExchangeExchange.ts: {}
   src/funcs/toolsList.ts: {}
   src/funcs/toolsetsAddExternalOAuthServer.ts: {}
-  src/funcs/toolsetsCheckMCPSlugAvailability.ts: {}
   src/funcs/toolsetsCloneBySlug.ts: {}
   src/funcs/toolsetsCreate.ts: {}
   src/funcs/toolsetsDeleteBySlug.ts: {}
@@ -1295,6 +1294,7 @@ trackedFiles:
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
+  src/models/components/hookdeliveryfailuredata.ts: {}
   src/models/components/hookingestdata.ts: {}
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
@@ -2212,7 +2212,6 @@ trackedFiles:
   src/models/operations/checkagentpolicygrants.ts: {}
   src/models/operations/checkdomainhealth.ts: {}
   src/models/operations/checkmcpendpointslugavailability.ts: {}
-  src/models/operations/checkmcpslugavailability.ts: {}
   src/models/operations/checknetworkingresshealth.ts: {}
   src/models/operations/clearmcpregistrycache.ts: {}
   src/models/operations/cliauthauthorize.ts: {}
@@ -3116,8 +3115,6 @@ trackedFiles:
   src/react-query/chatSubmitFeedback.ts: {}
   src/react-query/checkAgentPolicyGrants.ts: {}
   src/react-query/checkDomainHealth.ts: {}
-  src/react-query/checkMCPSlugAvailability.core.ts: {}
-  src/react-query/checkMCPSlugAvailability.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.core.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.ts: {}
   src/react-query/cimdClientPresets.core.ts: {}
@@ -8519,7 +8516,7 @@ examples:
   getToolUsageFilterOptions:
     speakeasy-default-get-tool-usage-filter-options:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"clients": [{"client_key": "<value>", "client_label": "<value>", "event_count": 411092}], "gateways": [{"event_count": 411092, "meta_mcp_server_id": "<id>", "name": "<value>"}], "hosted_servers": [{"event_count": 411092, "toolset_name": "<value>", "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}

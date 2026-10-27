@@ -23,6 +23,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -172,7 +173,12 @@ func revokeCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, to
 
 func requireAuthorizeErrorDescription(t *testing.T, w *httptest.ResponseRecorder, wantSubstring string) {
 	t.Helper()
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusBadRequest)
+	require.Contains(t, body.Description, wantSubstring)
+}
 
+func requireTokenErrorDescription(t *testing.T, w *httptest.ResponseRecorder, wantSubstring string) {
+	t.Helper()
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Contains(t, body["error_description"], wantSubstring)
@@ -655,7 +661,7 @@ func TestCIMDAdmission_TokenRejectsWhenDisabled(t *testing.T) {
 	w := doCIMDToken(t, ti, mcpSlug, ds.clientID)
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	requireTokenOAuthError(t, w, "unauthorized_client")
-	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
+	requireTokenErrorDescription(t, w, "does not accept client ID metadata documents")
 }
 
 // TestCIMDAdmission_TokenAllowsWhenPresetsNoLongerListsClient is the other
@@ -724,5 +730,5 @@ func TestCIMDAdmission_RefreshRejectsWhenDisabled(t *testing.T) {
 	w := postForm(t, ti, mcpSlug, "token", url.Values{"grant_type": {"refresh_token"}, "client_id": {ds.clientID}, "refresh_token": {"unused-refresh-token"}})
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	requireTokenOAuthError(t, w, "invalid_grant")
-	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
+	requireTokenErrorDescription(t, w, "does not accept client ID metadata documents")
 }

@@ -252,7 +252,7 @@ export function createWizardServices(
 
       await linkToolsetUserSessionIssuer(
         client,
-        { id: input.toolsetId, slug: input.toolsetSlug },
+        { id: input.toolsetId },
         issuer.id,
         opts.options,
       );

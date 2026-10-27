@@ -12,13 +12,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // KitLocalCompositionConfig is an explicit local-only opt-in. This first
@@ -26,13 +23,15 @@ import (
 // Built-in platform endpoints are intentionally unsupported: no human token or
 // inference bearer is ever substituted for their missing machine-auth contract.
 type KitLocalCompositionConfig struct {
+	// Derived only from the exact persisted attachment during bootstrap.
+	mcpEnvironment string
 	// PersistedMCP derives production machine connections from the assistant attachment.
 	PersistedMCP                                              bool
 	Environment, Image, ExtraCACertFile, Network              string
 	Origin                                                    *url.URL
 	AllowInsecureInference                                    bool
 	MCPResource, MCPIssuer                                    *url.URL
-	MCPUserSessionIssuerID, RootTriggerID                     uuid.UUID
+	MCPUserSessionIssuerID                                    uuid.UUID
 	WorkloadIssuerURL, WorkloadSubject, WorkloadAssertionFile string
 	WorkloadJWKSURL                                           string
 	WorkloadNamespace, WorkloadIssuerBaseURL                  string
@@ -220,7 +219,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	assistant := assistantRecordFromGetRow(row)
 	attachments, err := q.LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
 	for _, attached := range attachments {
-		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: pgtype.Text{String: "", Valid: false}, ToolsetSlug: pgtype.Text{String: "", Valid: false}, DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, EnvironmentSlug: pgtype.Text{String: "", Valid: false}, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug, EndpointDomain: attached.EndpointDomain})
+		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: attached.ServerSlug, ToolsetSlug: attached.ToolsetSlug, DefaultEnvironmentSlug: attached.DefaultEnvironmentSlug, EnvironmentID: attached.EnvironmentID, EnvironmentSlug: attached.EnvironmentSlug, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug, EndpointDomain: attached.EndpointDomain})
 	}
 	if err != nil {
 		return zero, fmt.Errorf("load Kit assistant MCP servers: %w", err)
@@ -234,37 +233,22 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if !kitResourceAttached(assistant, s.serverURL, c.MCPResource) {
 		return zero, errors.New("configured Kit MCP resource is not an enabled attachment of this assistant")
 	}
-	trigger := c.RootTriggerID
-	if c.PersistedMCP {
-		trigger = uuid.Nil // Production selects only this assistant's persisted root.
-	}
-	if trigger == uuid.Nil {
-		roots, err := usersessionsrepo.New(db).ListAssistantWorkloadRuntimeRoots(ctx, usersessionsrepo.ListAssistantWorkloadRuntimeRootsParams{ProjectID: r.ProjectID, OrganizationID: assistant.OrganizationID, AssistantID: r.AssistantID})
-		if err != nil {
-			return zero, fmt.Errorf("compose local kit runtime: %w", err)
+	c.mcpEnvironment = ""
+	for _, attached := range assistant.MCPServers {
+		if attached.Visibility != "disabled" && attached.endpointURL(s.serverURL).String() == c.MCPResource.String() {
+			c.mcpEnvironment = assistantMCPEnvironment(attached)
+			break
 		}
-		if len(roots) != 1 {
-			return zero, errors.New("kit startup requires an explicit root trigger when multiple roots exist")
-		}
-		trigger = roots[0]
 	}
-	var resolved assistantidentity.Resolution
-	if r.LifecycleTx != nil {
-		resolved, err = s.identities.ResolveLocked(ctx, r.LifecycleTx, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
-	} else {
-		resolved, err = s.identities.Resolve(ctx, s.db, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
-	}
-	if err != nil {
-		return zero, fmt.Errorf("compose local kit runtime: %w", err)
-	}
-	if resolved.State != assistantidentity.Active || resolved.Identity == nil {
-		return zero, assistantidentity.ErrInvalidIdentity
-	}
-	// GKE commits cleanup evidence even when startup fails. Keep trust provisioning
-	// atomic so a failed bootstrap cannot leave an admission without metadata.
 	if r.LifecycleTx == nil {
 		return zero, errors.New("kit bootstrap requires the runtime admission lock")
 	}
+	identity, err := s.identities.ResolveRuntimeLocked(ctx, r.LifecycleTx, assistant.OrganizationID, r.ProjectID, r.AssistantID)
+	if err != nil {
+		return zero, fmt.Errorf("compose kit runtime: %w", err)
+	}
+	// GKE commits cleanup evidence even when startup fails. Keep trust provisioning
+	// atomic so a failed bootstrap cannot leave an admission without metadata.
 	tx, err := r.LifecycleTx.Begin(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("begin kit bootstrap savepoint: %w", err)
@@ -275,7 +259,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if err != nil {
 		return zero, err
 	}
-	workload, err := s.provisionKitWorkload(ctx, r, c, *resolved.Identity, gateway)
+	workload, err := s.provisionKitWorkload(ctx, r, c, identity, gateway)
 	if err != nil {
 		return zero, err
 	}
@@ -284,7 +268,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, err
 	}
 
-	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n\nUse the configured independent workload MCP connection. Built-in platform endpoints and human-delegated sign-in are unavailable in this runtime. Never request or substitute a user's credentials.\n")
+	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n")
 	bootstrap := KitLocalBootstrap{Model: assistant.Model, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: c.Origin.String() + "/chat/completions"}
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return zero, err
@@ -302,9 +286,8 @@ func kitResourceAttached(a assistantRecord, serverURL, resource *url.URL) bool {
 	// Endpoint slugs are deployment-local, not authority for an arbitrary origin.
 	// Match the same canonical URL used by resolveAssistantMCPServers before
 	// provisioning any workload credentials.
-	slug := strings.TrimPrefix(resource.Path, "/mcp/")
 	for _, attached := range a.MCPServers {
-		if attached.EndpointSlug == slug && attached.Visibility != "disabled" &&
+		if attached.EndpointSlug != "" && attached.Visibility != "disabled" &&
 			resource.String() == attached.endpointURL(serverURL).String() {
 			return true
 		}
@@ -316,8 +299,12 @@ func kitCompositionMCP(c KitLocalCompositionConfig, binding *KitWorkloadBinding)
 		return nil, errors.New("kit MCP requires workload binding and resource")
 	}
 	path := KitWorkloadAssertionPath
+	headers := map[string]string{}
+	if c.mcpEnvironment != "" {
+		headers["Gram-Environment"] = c.mcpEnvironment
+	}
 	data, err := json.Marshal(map[string]any{"mcpServers": map[string]any{"workload": map[string]any{
-		"type": "streamable-http", "url": c.MCPResource.String(), "auth": map[string]any{
+		"type": "streamable-http", "url": c.MCPResource.String(), "headers": headers, "auth": map[string]any{
 			"type": "workload_identity", "tokenFile": path, "endpointMode": "explicit", "grant": "jwtBearer",
 			"tokenEndpoint": binding.Audience + "/token", "resource": c.MCPResource.String(), "scope": "mcp:connect",
 		},

@@ -201,6 +201,30 @@ func revokeAgentHooks(t *testing.T, ctx context.Context, ti *testInstance, workl
 	require.NoError(t, err)
 }
 
+// A workload sends hooks as its agent, so like an agent key it needs the
+// agent's hooks grant on the project it names and not project:read there.
+func TestCodexAndIngest_WorkloadNeedsNoProjectRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	selectors, err := authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
+		OrganizationID: workload.organizationID,
+		PrincipalUrn:   workload.actor,
+		Scope:          string(authz.ScopeProjectRead),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+
+	_, err = authenticateWorkload(t, ti, "codex", workload.token, workload.projectSlug)
+	require.NoError(t, err)
+	_, err = ti.service.Ingest(context.Background(), workloadIngestPayload(workload, workload.projectSlug))
+	require.NoError(t, err)
+}
+
 // grantAgentHooksFor replaces the agent's organization-wide hooks grant with
 // one bounded to projectID.
 func grantAgentHooksFor(t *testing.T, ctx context.Context, ti *testInstance, workload hooksWorkload, projectID uuid.UUID) {

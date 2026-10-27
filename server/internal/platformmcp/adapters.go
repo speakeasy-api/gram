@@ -1118,8 +1118,8 @@ func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
 	if len(mcps) == 0 {
 		return mcps
 	}
-	if mcps[0].ID == query || strings.EqualFold(mcps[0].Name, query) || strings.EqualFold(mcps[0].Slug, query) {
-		if len(mcps) == 1 || (mcps[1].ID != query && !strings.EqualFold(mcps[1].Name, query) && !strings.EqualFold(mcps[1].Slug, query)) {
+	if inventoryExactMatch(mcps[0], query) {
+		if len(mcps) == 1 || !inventoryExactMatch(mcps[1], query) {
 			return mcps[:1]
 		}
 	}
@@ -1132,4 +1132,8 @@ func (r *PostgresReader) WithGatewaySessions(service GatewaySessionManagement) *
 		r.gatewaySessions = service
 	}
 	return r
+}
+
+func inventoryExactMatch(mcp MCP, query string) bool {
+	return mcp.ID == query || strings.EqualFold(mcp.Name, query) || strings.EqualFold(mcp.Slug, query) || strings.EqualFold(mcp.Source.Reference, query)
 }
