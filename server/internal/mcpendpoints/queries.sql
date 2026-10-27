@@ -252,6 +252,10 @@ SELECT
     'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
   ));
 
+-- name: TryLockPlatformSlugScope :one
+-- LockSlugScope's platform lock without waiting, for a write that already holds another slug's lock.
+SELECT pg_try_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0))::boolean AS locked;
+
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
 -- Soft-delete all endpoints that point at a given mcp server. Used when the
 -- parent server is soft-deleted so callers don't end up with endpoints pointing
