@@ -3,10 +3,12 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -18,11 +20,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -44,10 +48,19 @@ func seedConnectionMutationFixture(t *testing.T, name string, eligibility networ
 	t.Helper()
 	ctx, gateway := seedGatewayFixture(t, name)
 	orgSlug := projectOrganizationSlug(ctx, gateway.conn, gateway.principal.OrganizationID)
-	endpoint, err := mcpendpointsrepo.New(gateway.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID: gateway.project.ID, McpServerID: uuid.NullUUID{UUID: gateway.toolsetID, Valid: true}, Slug: orgSlug + "-hosted",
+	// testenv.SetHostedMCP may already have given the hosted server this endpoint.
+	endpoint, err := mcpendpointsrepo.New(gateway.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug: orgSlug + "-hosted", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		endpoint, err = mcpendpointsrepo.New(gateway.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+			ProjectID: gateway.project.ID, McpServerID: uuid.NullUUID{UUID: gateway.toolsetID, Valid: true}, Slug: orgSlug + "-hosted",
+		})
+	}
 	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: gateway.toolsetID, Valid: true}, endpoint.McpServerID)
+	// A legacy toolset whose alias follows its endpoint.
+	testenv.SetLegacyAlias(t, ctx, gateway.conn, gateway.project.ID, gateway.toolsetID, endpoint.Slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	redisClient, err := platformMCPInfra.NewRedisClient(t, 0)
@@ -201,9 +214,9 @@ func TestSetMCPAddressHostedAddsEndpointsAndReplays(t *testing.T) {
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, out.Settings.Version, "", "unprefixed-slug", "", true)
 	requireConnectionRefusal(t, err, "invalid_request", "organization slug")
 
-	toolset, err := toolsetsrepo.New(f.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.hostedID, ProjectID: f.project.ID})
+	toolset, err := legacyalias.Get(ctx, f.conn, f.project.ID, f.hostedID)
 	require.NoError(t, err)
-	require.Equal(t, f.orgSlug+"-hosted", toolset.McpSlug.String, "the alias keeps the endpoint that still holds it")
+	require.Equal(t, f.orgSlug+"-hosted", toolset.Slug.String, "the alias keeps the endpoint that still holds it")
 }
 
 func TestSetMCPAddressHostedChangesEndpointInPlace(t *testing.T) {
@@ -219,9 +232,9 @@ func TestSetMCPAddressHostedChangesEndpointInPlace(t *testing.T) {
 	require.Equal(t, f.orgSlug+"-renamed", out.Settings.Endpoints[0].Slug)
 	require.Equal(t, audits+1, countAudit(t, ctx, f, audit.ActionMcpEndpointUpdate))
 
-	toolset, err := toolsetsrepo.New(f.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.hostedID, ProjectID: f.project.ID})
+	toolset, err := legacyalias.Get(ctx, f.conn, f.project.ID, f.hostedID)
 	require.NoError(t, err)
-	require.Equal(t, f.orgSlug+"-renamed", toolset.McpSlug.String, "the alias follows its endpoint")
+	require.Equal(t, f.orgSlug+"-renamed", toolset.Slug.String, "the alias follows its endpoint")
 }
 
 func TestSetMCPAddressHostedCustomDomainMustBeLiveAndVerified(t *testing.T) {
@@ -373,4 +386,33 @@ func TestSetMCPNetworkAccessChecksEntitlementAndIngress(t *testing.T) {
 	out, err = setMode(ctx, f, MCPConnectionSettingsGateway, uuid.MustParse(gateway.Gateway.ID), "dual", true)
 	require.NoError(t, err)
 	require.Equal(t, "dual", out.Settings.NetworkMode)
+}
+
+func TestSetMCPAddressRefusesCustomDomainAliasOfOtherProject(t *testing.T) {
+	t.Parallel()
+	ctx, f := seedConnectionMutationFixture(t, "platform_mcp_set_address_legacy_alias", allowConnectionNetworkAccess{})
+	suffix := uuid.NewString()[:8]
+	project, err := projectsrepo.New(f.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "victim-" + suffix, Slug: "victim-" + suffix, OrganizationID: f.principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	victim, err := toolsetsrepo.New(f.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: f.principal.OrganizationID, ProjectID: project.ID, Name: "victim-" + suffix, Slug: "victim-" + suffix,
+	})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(f.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: victim.ID, ProjectID: project.ID, ToolsetID: uuid.NullUUID{UUID: victim.ID, Valid: true}, Visibility: "public",
+	})
+	require.NoError(t, err)
+	slug := f.orgSlug + "-legacy-" + suffix
+	testenv.SetLegacyAlias(t, ctx, f.conn, project.ID, victim.ID, slug, uuid.NullUUID{UUID: f.seedDomain(t, ctx, f.principal.OrganizationID, true, true), Valid: true})
+
+	before := f.settings(t, ctx, MCPConnectionSettingsMCPServer, f.hostedID)
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", slug, "", true)
+	require.Error(t, err, "the Speakeasy domain still serves that custom-domain alias")
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, f.hostedEndpoint.String(), slug, "", true)
+	require.Error(t, err)
+	require.Len(t, f.settings(t, ctx, MCPConnectionSettingsMCPServer, f.hostedID).Endpoints, 1)
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", f.orgSlug+"-free-"+suffix, "", true)
+	require.NoError(t, err, "a free slug is accepted with the same inputs")
 }

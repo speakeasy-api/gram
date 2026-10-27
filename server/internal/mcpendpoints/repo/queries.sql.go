@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const checkUnifiedSlugAvailability = `-- name: CheckUnifiedSlugAvailability :one
+const checkEndpointSlugAvailability = `-- name: CheckEndpointSlugAvailability :one
 SELECT (
   $1::boolean
   OR $2::uuid IS NULL
@@ -38,52 +38,31 @@ SELECT (
           AND s.toolset_id = $5::uuid
       )
     )
-) AND NOT EXISTS (
-  SELECT 1
-  FROM toolsets t
-  WHERE t.mcp_slug = $4
-    AND t.custom_domain_id IS NOT DISTINCT FROM $2::uuid
-    AND t.deleted IS FALSE
-    AND (
-      $5::uuid IS NULL
-      OR t.id <> $5::uuid
-    )
-    AND (
-      $6::uuid IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM mcp_servers s
-        WHERE s.id = $6::uuid
-          AND s.toolset_id = t.id
-      )
-    )
 )
 `
 
-type CheckUnifiedSlugAvailabilityParams struct {
-	SkipDomainCheck    bool
-	CustomDomainID     uuid.NullUUID
-	OrganizationID     string
-	Slug               string
-	ExcludeToolsetID   uuid.NullUUID
-	ExcludeMcpServerID uuid.NullUUID
+type CheckEndpointSlugAvailabilityParams struct {
+	SkipDomainCheck  bool
+	CustomDomainID   uuid.NullUUID
+	OrganizationID   string
+	Slug             string
+	ExcludeToolsetID uuid.NullUUID
 }
 
-// True when no live mcp_endpoints.slug or toolsets.mcp_slug holds the slug in
-// the namespace (platform when custom_domain_id is NULL, else that domain).
-// Not project-scoped, mirroring the partial unique indexes. Owner exclusions:
-// exclude_toolset_id discounts that toolset's row and its wrapper's endpoints;
-// exclude_mcp_server_id discounts the toolset backing that server. Unless
+// True when no live mcp_endpoints.slug holds the slug in the namespace
+// (platform when custom_domain_id is NULL, else that domain). Callers also
+// check the legacy toolset alias (legacyalias.Taken).
+// Not project-scoped, mirroring the partial unique index. exclude_toolset_id
+// discounts the endpoints of servers backed by that toolset. Unless
 // skip_domain_check, a supplied domain must be live and owned by
 // organization_id or the result is false (blocks probing foreign domains).
-func (q *Queries) CheckUnifiedSlugAvailability(ctx context.Context, arg CheckUnifiedSlugAvailabilityParams) (pgtype.Bool, error) {
-	row := q.db.QueryRow(ctx, checkUnifiedSlugAvailability,
+func (q *Queries) CheckEndpointSlugAvailability(ctx context.Context, arg CheckEndpointSlugAvailabilityParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, checkEndpointSlugAvailability,
 		arg.SkipDomainCheck,
 		arg.CustomDomainID,
 		arg.OrganizationID,
 		arg.Slug,
 		arg.ExcludeToolsetID,
-		arg.ExcludeMcpServerID,
 	)
 	var column_1 pgtype.Bool
 	err := row.Scan(&column_1)
@@ -1053,21 +1032,24 @@ func (q *Queries) LockRootMCPEndpointsByMCPServerID(ctx context.Context, arg Loc
 }
 
 const lockSlugScope = `-- name: LockSlugScope :exec
-SELECT pg_advisory_xact_lock(hashtextextended(
-  'mcp_slug:' || coalesce($1::uuid::text, 'platform') || '/' || $2::text, 0
-))
+SELECT
+  pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || $1::text, 0)),
+  pg_advisory_xact_lock(hashtextextended(
+    'mcp_slug:' || coalesce($2::uuid::text, 'platform') || '/' || $1::text, 0
+  ))
 `
 
 type LockSlugScopeParams struct {
-	CustomDomainID uuid.NullUUID
 	Slug           string
+	CustomDomainID uuid.NullUUID
 }
 
 // Serializes competing claims on one (namespace, slug) address for the rest of
 // the caller's transaction; the per-table unique indexes cannot see
-// cross-table collisions.
+// cross-table collisions. The platform lock comes first, also for a
+// custom-domain claim, since the platform host serves custom-domain aliases.
 func (q *Queries) LockSlugScope(ctx context.Context, arg LockSlugScopeParams) error {
-	_, err := q.db.Exec(ctx, lockSlugScope, arg.CustomDomainID, arg.Slug)
+	_, err := q.db.Exec(ctx, lockSlugScope, arg.Slug, arg.CustomDomainID)
 	return err
 }
 

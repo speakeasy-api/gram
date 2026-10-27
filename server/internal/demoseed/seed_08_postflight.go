@@ -416,7 +416,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "hosted toolset wrappers",
 			count: byProject(s.q.PostflightCountHostedToolsetDrift),
-			fail:  postflightMustBeZero("%d toolsets carry hosting columns or have a canonical wrapper out of step with them"),
+			fail:  postflightMustBeZero("%d toolsets have a canonical wrapper out of step with them"),
 		},
 		{
 			what:  "canonical wrappers",

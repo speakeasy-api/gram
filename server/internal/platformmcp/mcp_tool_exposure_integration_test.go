@@ -79,14 +79,14 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: principal.OrganizationID, ProjectID: project.ID,
 		Name: "Hosted MCP", Slug: "hosted-" + uuid.NewString()[:8],
-		McpSlug: conv.ToPGText(orgSlug + "-hosted"), McpEnabled: true,
 	})
 	require.NoError(t, err)
 	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: project.ID, Name: conv.ToPGText(toolset.Name), Slug: toolset.McpSlug,
+		ID: toolset.ID, ProjectID: project.ID, Name: conv.ToPGText(toolset.Name), Slug: conv.ToPGText(orgSlug + "-hosted"),
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
 	})
 	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, conn, project.ID, toolset.ID, testenv.HostedMCP{Slug: orgSlug + "-hosted"})
 
 	fixtures := testrepo.New(conn)
 	assetID, deploymentID, functionID := uuid.New(), uuid.New(), uuid.New()
@@ -145,9 +145,9 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 		// is not MCP-enabled is reported as needing no index.
 		target, err := toolsetsrepo.New(conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: indexedToolset, ProjectID: indexedProject})
 		require.NoError(t, err)
-		target, _, err = hostedmcp.LoadServerState(ctx, conn, target)
+		hosting, _, err := hostedmcp.LoadServerState(ctx, conn, target)
 		require.NoError(t, err)
-		if !target.McpEnabled {
+		if !hosting.Enabled {
 			return toolsets.ErrToolsetIndexNotRequired
 		}
 		return nil
@@ -556,7 +556,7 @@ func TestChangeMCPToolsPinsTheServerToolsetBindingBeforeDeciding(t *testing.T) {
 	// A second toolset in the same project for the server to be moved onto.
 	other, err := toolsetsrepo.New(fixture.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID,
-		Name: "Moved target", Slug: "moved-" + uuid.NewString()[:8], McpEnabled: true,
+		Name: "Moved target", Slug: "moved-" + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)
 

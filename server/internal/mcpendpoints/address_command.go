@@ -17,7 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -127,7 +127,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation")
 	}
 	if hostedServer != nil {
-		if err := hostingstate.FollowAlias(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServer.ID); err != nil {
+		if err := legacyalias.FollowAlias(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServer.ID); err != nil {
 			return nil, err //nolint:wrapcheck // oops errors pass through.
 		}
 	}

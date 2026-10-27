@@ -1,5 +1,5 @@
 // OAuth authorization code exchange handlers for MCP clients. Issuer-gated
-// toolsets (toolsets.user_session_issuer_id set) flow through the OAuth 2.1
+// servers (mcp_servers.user_session_issuer_id set) flow through the OAuth 2.1
 // + RFC 7591 / RFC 9728 handlers in this package; toolsets without an
 // issuer fall through to the legacy paths in wellknown.Resolve*.
 //

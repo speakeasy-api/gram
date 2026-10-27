@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -838,12 +839,16 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			}
 			return nil, oops.E(oops.CodeUnexpected, tErr, "verify toolset").LogError(ctx, s.logger)
 		}
-		toolset, wrapper, wErr := hostedmcp.LoadServerState(ctx, s.db, toolset)
+		hosting, wrapper, wErr := hostedmcp.LoadServerState(ctx, s.db, toolset)
 		if wErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, wErr, "verify toolset mcp server").LogError(ctx, s.logger)
 		}
-		hosted := toolset.McpEnabled && toolset.McpSlug.Valid && toolset.McpSlug.String != ""
-		if wrapper != nil && toolset.McpEnabled && !hosted {
+		alias, aErr := legacyalias.Get(ctx, s.db, *ac.ProjectID, toolset.ID)
+		if aErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, aErr, "verify toolset mcp server").LogError(ctx, s.logger)
+		}
+		hosted := hosting.Enabled && alias.Slug.Valid && alias.Slug.String != ""
+		if wrapper != nil && hosting.Enabled && !hosted {
 			// Without the legacy slug alias the server needs an endpoint of its own.
 			server, mcpErr := s.repo.GetMcpServerForPluginServer(ctx, repo.GetMcpServerForPluginServerParams{McpServerID: wrapper.ID, ProjectID: *ac.ProjectID})
 			if mcpErr != nil && !errors.Is(mcpErr, pgx.ErrNoRows) {
@@ -852,7 +857,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			hosted = mcpErr == nil && server.HasEndpoint
 		}
 		switch {
-		case !hosted && toolset.McpEnabled:
+		case !hosted && hosting.Enabled:
 			return nil, oops.E(oops.CodeBadRequest, nil, "toolset has no published MCP endpoint")
 		case !hosted:
 			return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
@@ -3278,7 +3283,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	if err != nil {
 		return nil, "", oops.E(oops.CodeUnexpected, err, "list active plugins").LogError(ctx, s.logger)
 	}
-	mcpRows, err := lockedRepo.ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	mcpRows, err := listPluginMCPServers(ctx, tx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, "", oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}

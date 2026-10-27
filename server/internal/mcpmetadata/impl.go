@@ -47,6 +47,7 @@ import (
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -607,20 +608,24 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		return nil, err
 	}
 
-	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
+	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	if !toolset.McpEnabled {
+	if !hosting.Enabled {
 		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
 	}
 
-	// Resolve custom domain from the toolset's organization if not already set
-	// Only use domains that are both activated and verified
-	if !toolset.CustomDomainID.Valid {
+	// An alias on the platform domain is exported under the organization's activated, verified custom domain.
+	alias, err := legacyalias.Get(ctx, s.db, toolset.ProjectID, toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server alias").LogError(ctx, s.logger)
+	}
+	aliasDomain := alias.CustomDomainID
+	if !aliasDomain.Valid {
 		domainRecord, err := s.domainsRepo.GetCustomDomainByOrganization(ctx, toolset.OrganizationID)
 		if err == nil && domainRecord.Activated && domainRecord.Verified {
-			toolset.CustomDomainID = uuid.NullUUID{UUID: domainRecord.ID, Valid: true}
+			aliasDomain = uuid.NullUUID{UUID: domainRecord.ID, Valid: true}
 		}
 		// Ignore errors - custom domain is optional
 	}
@@ -672,13 +677,13 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		s.logger.WarnContext(ctx, "failed to load MCP metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
 	}
 
-	mcpURL, err := s.resolveMCPURLFromContext(ctx, toolset, s.serverURL.String())
+	mcpURL, err := s.resolveMCPURLFromContext(ctx, toolset, legacyalias.Alias{Slug: alias.Slug, CustomDomainID: aliasDomain}, s.serverURL.String())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve MCP URL").LogError(ctx, s.logger)
 	}
 
 	// Collect security inputs
-	securityMode := s.resolveSecurityMode(&toolset, nil)
+	securityMode := s.resolveSecurityMode(&toolset, hosting, nil)
 	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, variableProvidedBy)
 
 	// Build tools list
@@ -724,10 +729,7 @@ func (s *Service) resolveExportToolset(ctx context.Context, projectID uuid.UUID,
 	case mcpSlugProvided:
 		mcpSlug := conv.ToLower(string(*payload.McpSlug))
 		// A toolset's frozen alias keeps naming that toolset; otherwise the slug names an endpoint's server.
-		toolset, err := s.toolsetRepo.GetToolsetByMcpSlugAndProject(ctx, toolsets_repo.GetToolsetByMcpSlugAndProjectParams{
-			McpSlug:   conv.ToPGText(mcpSlug),
-			ProjectID: projectID,
-		})
+		toolset, _, err := legacyalias.FindInProject(ctx, s.db, projectID, mcpSlug)
 		switch {
 		case err == nil:
 			return toolset, []uuid.UUID{toolset.ID}, nil
@@ -840,7 +842,9 @@ func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.To
 // scoped to the caller's project via toolsets.get; the mcp server is scoped via
 // the (id, project_id) IDOR check on mcp_servers.get_by_id.
 type resolvedMetadataBackend struct {
-	toolset   *toolsets_repo.Toolset
+	toolset *toolsets_repo.Toolset
+	// hosting is the toolset's hosting state; set only with toolset.
+	hosting   hostingstate.Hosting
 	mcpServer *mcpservers_repo.McpServer
 }
 
@@ -932,13 +936,16 @@ func resolveMetadataBackend(
 			}
 		}
 		wrapper, err := mcpServerQueries.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: projectID})
+		var hosting hostingstate.Hosting
 		switch {
 		case err == nil:
-			toolset = hostedmcp.WithServerState(toolset, &wrapper)
-		case !errors.Is(err, pgx.ErrNoRows):
+			hosting = hostedmcp.ServerHosting(toolset, &wrapper)
+		case errors.Is(err, pgx.ErrNoRows):
+			hosting = hostedmcp.ServerHosting(toolset, nil)
+		default:
 			return nil, oops.E(oops.CodeUnexpected, err, "fetch toolset mcp server").LogError(ctx, logger, attr.SlogToolsetSlug(slug))
 		}
-		return &resolvedMetadataBackend{toolset: &toolset, mcpServer: nil}, nil
+		return &resolvedMetadataBackend{toolset: &toolset, hosting: hosting, mcpServer: nil}, nil
 	default:
 		parsedID, err := uuid.Parse(*mcpServerID)
 		if err != nil {
@@ -954,7 +961,7 @@ func resolveMetadataBackend(
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "fetch mcp server").LogError(ctx, logger, attr.SlogMcpServerID(parsedID.String()))
 		}
-		return &resolvedMetadataBackend{toolset: nil, mcpServer: &server}, nil
+		return &resolvedMetadataBackend{toolset: nil, hosting: hostingstate.NotHosted(), mcpServer: &server}, nil
 	}
 }
 
@@ -1112,7 +1119,9 @@ func appendTagsQuery(mcpURL, tag string) string {
 // mcp_endpoints resolution path and supplies the public install URL when the
 // renderer is Remote-MCP-flavored.
 type installContext struct {
-	toolset        *toolsets_repo.Toolset
+	toolset *toolsets_repo.Toolset
+	// toolsetHosting is the hosting state of a toolset reached through its legacy slug, without mcpServer.
+	toolsetHosting hostingstate.Hosting
 	mcpServer      *mcpservers_repo.McpServer
 	metaServer     *metamcp_repo.MetaMcpServer
 	mcpEndpoint    *mcpendpoints_repo.McpEndpoint
@@ -1122,15 +1131,15 @@ type installContext struct {
 
 // isPublic returns true when the install page is accessible without auth.
 // When resolution went through an mcp_servers row — any backend, hosted
-// (toolset-backed) included — that row's visibility is authoritative; the
-// toolset's McpIsPublic flag only decides for pure legacy toolset routing
-// where no wrapper exists. Gateways (meta_mcp_servers) have no public
+// (toolset-backed) included — that row's visibility is authoritative; a
+// legacy slug route uses the hosting state of the toolset's canonical
+// server. Gateways (meta_mcp_servers) have no public
 // visibility, so their install page is always session-gated.
 func (ic *installContext) isPublic() bool {
 	if ic.mcpServer != nil {
 		return ic.mcpServer.Visibility == mcpservers.VisibilityPublic
 	}
-	return ic.toolset != nil && ic.toolset.McpIsPublic
+	return ic.toolset != nil && ic.toolsetHosting.Public
 }
 
 // organizationID returns the organization that owns the install. Toolsets
@@ -1331,6 +1340,7 @@ func (s *Service) resolvePrivateInstallContext(ctx context.Context, mcpSlug, org
 
 	return &installContext{
 		toolset:        bridgeToolset,
+		toolsetHosting: hostingstate.NotHosted(),
 		mcpServer:      result.Server,
 		metaServer:     result.MetaServer,
 		mcpEndpoint:    result.Endpoint,
@@ -1356,7 +1366,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		return s.endpointInstallContext(ctx, endpoint, server, metaServer, "")
 	}
 
-	toolset, hasWrapper, err := s.loadToolsetFromContextAndSlug(ctx, mcpSlug)
+	toolset, hosting, alias, hasWrapper, err := s.loadToolsetFromContextAndSlug(ctx, mcpSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -1367,7 +1377,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		ProjectID:           toolset.ProjectID,
 		CustomDomainHost:    customdomains.FromContext(ctx) != nil,
 		CanonicalWrapper:    hasWrapper,
-		ToolsetCustomDomain: ToolsetCustomDomainState(ctx, s.domainsRepo, toolset),
+		ToolsetCustomDomain: ToolsetCustomDomainState(ctx, s.domainsRepo, toolset.OrganizationID, alias.CustomDomainID),
 	})
 	org, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
 	if err != nil {
@@ -1375,6 +1385,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	}
 	return &installContext{
 		toolset:        toolset,
+		toolsetHosting: hosting,
 		mcpServer:      nil,
 		metaServer:     nil,
 		mcpEndpoint:    nil,
@@ -1383,15 +1394,15 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	}, nil
 }
 
-// ToolsetCustomDomainState classifies the toolset's custom domain binding for fallback attribution.
-func ToolsetCustomDomainState(ctx context.Context, domains *customdomains_repo.Queries, toolset *toolsets_repo.Toolset) mcpmetrics.ToolsetCustomDomainState {
-	if !toolset.CustomDomainID.Valid {
+// ToolsetCustomDomainState classifies the custom domain of a toolset's legacy alias for fallback attribution.
+func ToolsetCustomDomainState(ctx context.Context, domains *customdomains_repo.Queries, organizationID string, aliasDomain uuid.NullUUID) mcpmetrics.ToolsetCustomDomainState {
+	if !aliasDomain.Valid {
 		return mcpmetrics.ToolsetCustomDomainNone
 	}
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil && domainCtx.DomainID == toolset.CustomDomainID.UUID {
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil && domainCtx.DomainID == aliasDomain.UUID {
 		return mcpmetrics.ToolsetCustomDomainLive
 	}
-	domain, err := domains.GetCustomDomainByIDAndOrganization(ctx, customdomains_repo.GetCustomDomainByIDAndOrganizationParams{ID: toolset.CustomDomainID.UUID, OrganizationID: toolset.OrganizationID})
+	domain, err := domains.GetCustomDomainByIDAndOrganization(ctx, customdomains_repo.GetCustomDomainByIDAndOrganizationParams{ID: aliasDomain.UUID, OrganizationID: organizationID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return mcpmetrics.ToolsetCustomDomainDeleted
@@ -1446,6 +1457,7 @@ func (s *Service) endpointInstallContext(ctx context.Context, endpoint *mcpendpo
 		}
 		return &installContext{
 			toolset:        nil,
+			toolsetHosting: hostingstate.NotHosted(),
 			mcpServer:      nil,
 			metaServer:     metaServer,
 			mcpEndpoint:    endpoint,
@@ -1478,6 +1490,7 @@ func (s *Service) endpointInstallContext(ctx context.Context, endpoint *mcpendpo
 	}
 	return &installContext{
 		toolset:        bridgeToolset,
+		toolsetHosting: hostingstate.NotHosted(),
 		mcpServer:      server,
 		metaServer:     nil,
 		mcpEndpoint:    endpoint,
@@ -1615,7 +1628,7 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 		}
 	}
 
-	securityMode := s.resolveSecurityMode(toolset, ic.mcpServer)
+	securityMode := s.resolveSecurityMode(toolset, ic.toolsetHosting, ic.mcpServer)
 	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, variableProvidedBy)
 
 	tools := []toolInfo{}
@@ -1705,7 +1718,11 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 	// to the toolset's own mcp_slug for legacy routing.
 	publicSlug := mcpSlug
 	if publicSlug == "" {
-		publicSlug = toolset.McpSlug.String
+		alias, err := legacyalias.Get(ctx, s.db, toolset.ProjectID, toolset.ID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load toolset alias").LogError(ctx, s.logger)
+		}
+		publicSlug = alias.Slug.String
 	}
 
 	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
@@ -1977,7 +1994,11 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 // custom-domain context during migration, but it is not URL authority.
 func (s *Service) resolveToolsetMCPURL(ctx context.Context, toolset toolsets_repo.Toolset, mcpSlug string) (string, error) {
 	if mcpSlug == "" {
-		return s.resolveMCPURLFromContext(ctx, toolset, s.serverURL.String())
+		alias, err := legacyalias.Get(ctx, s.db, toolset.ProjectID, toolset.ID)
+		if err != nil {
+			return "", fmt.Errorf("load toolset alias: %w", err)
+		}
+		return s.resolveMCPURLFromContext(ctx, toolset, alias, s.serverURL.String())
 	}
 	baseURL := requestorigin.BaseURL(ctx, s.serverURL.String())
 	mcpURL, err := url.JoinPath(baseURL, "mcp", mcpSlug)
@@ -2076,22 +2097,23 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 	return template.URL(u.String()), nil // #nosec G203 // This has been checked and escaped
 }
 
-func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, serverUrl string) (string, error) {
-	// The canonical server's address wins: its platform endpoint first, else its oldest endpoint on a live custom
-	// domain; the toolset's frozen alias stands only when it has neither.
+// resolveMCPURLFromContext builds a toolset's MCP URL. The canonical server's address wins: its platform endpoint
+// first, else its oldest endpoint on a live custom domain; the toolset's frozen alias stands only when it has
+// neither.
+func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, alias legacyalias.Alias, serverUrl string) (string, error) {
 	hosting, err := hostingstate.Load(ctx, s.db, toolset.OrganizationID, []uuid.UUID{toolset.ID})
 	if err != nil {
 		return "", fmt.Errorf("load hosted MCP address: %w", err)
 	}
+	address := hostingstate.Address{Slug: alias.Slug, CustomDomainID: alias.CustomDomainID}
 	if row := hostingstate.For(hosting, toolset.ID); row != nil && row.Canonical && row.HasEndpoint {
-		toolset.McpSlug = pgtype.Text{String: row.EndpointSlug, Valid: true}
-		toolset.CustomDomainID = row.EndpointCustomDomainID
+		address = hostingstate.Address{Slug: pgtype.Text{String: row.EndpointSlug, Valid: true}, CustomDomainID: row.EndpointCustomDomainID}
 	}
 
 	baseURL := serverUrl + "/mcp"
 
-	if toolset.CustomDomainID.Valid {
-		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, toolset.CustomDomainID.UUID)
+	if address.CustomDomainID.Valid {
+		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, address.CustomDomainID.UUID)
 		if err != nil {
 			return "", fmt.Errorf("failed to get custom domain: %w", err)
 		}
@@ -2099,7 +2121,7 @@ func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets
 		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
 	}
 
-	MCPURL, err := url.JoinPath(baseURL, toolset.McpSlug.String)
+	MCPURL, err := url.JoinPath(baseURL, address.Slug.String)
 	if err != nil {
 		return "", fmt.Errorf("failed to join URL path: %w", err)
 	}
@@ -2126,16 +2148,14 @@ func (s *Service) resolveDomainIDFromContext(ctx context.Context) *uuid.UUID {
 }
 
 // loadToolsetFromContextAndSlug resolves a legacy toolsets.mcp_slug and reports whether a canonical wrapper governs it.
-func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, bool, error) {
+func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, hostingstate.Hosting, legacyalias.Alias, bool, error) {
 	var toolset toolsets_repo.Toolset
+	var alias legacyalias.Alias
 	var toolsetErr error
 	isCustomDomainRequest := customdomains.FromContext(ctx) != nil
 	domainID := s.resolveDomainIDFromContext(ctx)
 	if domainID != nil {
-		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
-			McpSlug:        conv.ToPGText(mcpSlug),
-			CustomDomainID: uuid.NullUUID{UUID: *domainID, Valid: true},
-		})
+		toolset, alias, toolsetErr = legacyalias.Find(ctx, s.db, mcpSlug, uuid.NullUUID{UUID: *domainID, Valid: true}, false)
 	}
 
 	// Fall back to slug-only lookup when the request did not arrive through a
@@ -2144,38 +2164,37 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 	// still preventing cross-domain toolset leakage for actual custom-domain
 	// requests.
 	if domainID == nil || (!isCustomDomainRequest && toolsetErr != nil) {
-		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
+		toolset, alias, toolsetErr = legacyalias.Find(ctx, s.db, mcpSlug, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, false)
 	}
 
 	switch {
 	case errors.Is(toolsetErr, pgx.ErrNoRows):
-		return nil, false, fmt.Errorf("%w: %w", errToolsetNotFound, toolsetErr)
+		return nil, hostingstate.NotHosted(), legacyalias.None(), false, fmt.Errorf("%w: %w", errToolsetNotFound, toolsetErr)
 	case toolsetErr != nil:
-		return nil, false, fmt.Errorf("lookup toolset: %w", toolsetErr)
+		return nil, hostingstate.NotHosted(), legacyalias.None(), false, fmt.Errorf("lookup toolset: %w", toolsetErr)
 	}
 
 	server, err := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		if !toolset.McpEnabled {
-			return nil, false, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
-		}
-		return &toolset, false, nil
+		s.logger.WarnContext(ctx, "legacy MCP alias names a toolset without a hosted MCP server; not serving it",
+			attr.SlogToolsetID(toolset.ID.String()), attr.SlogProjectID(toolset.ProjectID.String()))
+		return nil, hostingstate.NotHosted(), legacyalias.None(), false, fmt.Errorf("%w: no hosted MCP server", errToolsetNotFound)
 	case err != nil:
-		return nil, false, fmt.Errorf("load hosted MCP network policy: %w", err)
+		return nil, hostingstate.NotHosted(), legacyalias.None(), false, fmt.Errorf("load hosted MCP network policy: %w", err)
 	case !hostedmcp.IsCanonical(&server, toolset.ID):
-		return nil, false, fmt.Errorf("%w: hosted MCP identity belongs to another server", errToolsetNotFound)
+		return nil, hostingstate.NotHosted(), legacyalias.None(), false, fmt.Errorf("%w: hosted MCP identity belongs to another server", errToolsetNotFound)
 	}
 	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.
-	toolset = hostedmcp.WithServerState(toolset, &server)
-	if !toolset.McpEnabled {
-		return nil, false, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
+	hosting := hostedmcp.ServerHosting(toolset, &server)
+	if !hosting.Enabled {
+		return nil, hostingstate.NotHosted(), legacyalias.None(), false, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
 	}
 	mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
 	if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) {
-		return nil, false, fmt.Errorf("%w: hosted MCP policy denies public access", errToolsetNotFound)
+		return nil, hostingstate.NotHosted(), legacyalias.None(), false, fmt.Errorf("%w: hosted MCP policy denies public access", errToolsetNotFound)
 	}
-	return &toolset, true, nil
+	return &toolset, hosting, alias, true, nil
 }
 
 // resolveSecurityMode determines the security mode based on toolset and
@@ -2186,9 +2205,9 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 // When an mcp_servers row is present (server non-nil) it governs: OAuth is
 // decided by the wrapper's user_session_issuer with the toolset's external
 // OAuth reference as the only toolset input, and publicness comes from the
-// wrapper's visibility. The legacy toolset flags decide only for pure toolset
-// routing where no wrapper exists.
-func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mcpservers_repo.McpServer) securityMode {
+// wrapper's visibility. Legacy slug routing passes the canonical server's
+// hosting state instead.
+func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, hosting hostingstate.Hosting, server *mcpservers_repo.McpServer) securityMode {
 	if server != nil {
 		sessionGated := server.UserSessionIssuerID.Valid ||
 			(toolset != nil && toolset.ExternalOauthServerID.Valid)
@@ -2203,12 +2222,12 @@ func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mc
 	}
 
 	oauthRequired := toolset.ExternalOauthServerID.Valid ||
-		toolset.UserSessionIssuerID.Valid
+		hosting.UserSessionIssuerID.Valid
 	if oauthRequired {
 		return securityModeOAuth
 	}
 
-	if toolset.McpIsPublic {
+	if hosting.Public {
 		return securityModePublic
 	}
 

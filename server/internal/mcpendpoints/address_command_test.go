@@ -15,12 +15,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestTransactionalEndpointWritesApplyHostedRules(t *testing.T) {
@@ -80,9 +80,9 @@ func TestTransactionalEndpointWritesApplyHostedRules(t *testing.T) {
 	require.Equal(t, endpoint.ID.String(), updated.ID, "the endpoint keeps its identity")
 	require.NoError(t, tx.Commit(ctx))
 
-	stored, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: *authCtx.ProjectID})
+	stored, err := legacyalias.Get(ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
 	require.NoError(t, err)
-	require.Equal(t, authCtx.OrganizationSlug+"-renamed", stored.McpSlug.String, "the alias follows its endpoint")
+	require.Equal(t, authCtx.OrganizationSlug+"-renamed", stored.Slug.String, "the alias follows its endpoint")
 	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: serverID})
 	require.NoError(t, err)
 	require.Len(t, endpoints, 2)
