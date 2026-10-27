@@ -4,10 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -15,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -261,6 +264,55 @@ func TestLoadChat_RBAC_AgentOwnerReadsAgentSession(t *testing.T) {
 	require.Equal(t, owned.String(), overview.ID)
 
 	_, err = ti.service.LoadChat(selfCtx, loadPayload(foreign.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// A session that carries a human identity stays that human's even when an
+// agent the caller owns was stamped onto it: owning the agent does not open it.
+func TestLoadChat_RBAC_AgentOwnerCannotReadHumanSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	agentID := seedAgent(t, ctx, ti, authCtx.UserID, "My Agent")
+	selfCtx := authztest.WithExactGrants(t, ctx)
+	for name, chatID := range map[string]uuid.UUID{
+		"user_id":          seedChat(t, ctx, ti, "other-user-id", "", "human session"),
+		"external_user_id": seedChat(t, ctx, ti, "", "someone@example.com", "external session"),
+	} {
+		linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
+			AgentID:   uuid.NullUUID{UUID: agentID, Valid: true},
+			ID:        chatID,
+			ProjectID: ti.projectID,
+		})
+		require.NoError(t, err, name)
+		require.Equal(t, int64(1), linked, name)
+
+		_, err = ti.service.LoadChat(selfCtx, loadPayload(chatID.String()))
+		requireOopsCode(t, err, oops.CodeForbidden)
+	}
+}
+
+// An owner whose agent is latched for reassignment no longer answers for it,
+// so its sessions stop opening for them on the load path too.
+func TestLoadChat_RBAC_LatchedAgentOwnerCannotReadAgentSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	chatID := seedAgentChat(t, ctx, ti, seedAgent(t, ctx, ti, authCtx.UserID, "Latched Agent"), "latched agent's session")
+	_, err := agentrepo.New(ti.conn).LatchAgentsForOwnerLossByMembership(ctx, agentrepo.LatchAgentsForOwnerLossByMembershipParams{
+		OwnerReassignmentReason: conv.ToPGText("membership_loss"),
+		OrganizationID:          ti.orgID,
+		OwnerUserID:             authCtx.UserID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.LoadChat(authztest.WithExactGrants(t, ctx), loadPayload(chatID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 

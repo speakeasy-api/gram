@@ -296,7 +296,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	// managed-assistant runtime see all project sessions (optionally narrowed by
 	// the external user id and user id filters); everyone else is restricted to
 	// their own sessions and those of the agents they own.
-	visibility, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID, payload.UserID, true)
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID, payload.UserID, withOwnedAgentSessions)
 	if err != nil {
 		return nil, err
 	}
@@ -545,7 +545,7 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 		return nil, oops.E(oops.CodeBadRequest, nil, "from must be at or before to")
 	}
 
-	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, false)
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, humanSessionsOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -804,7 +804,7 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, true)
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, withOwnedAgentSessions)
 	if err != nil {
 		return nil, err
 	}
@@ -839,7 +839,7 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, true)
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, withOwnedAgentSessions)
 	if err != nil {
 		return nil, err
 	}
@@ -938,6 +938,15 @@ type chatVisibility struct {
 	OwnedAgentIDs []uuid.UUID
 }
 
+// agentSessionScope says whether a visibility scope also covers the sessions of
+// the agents the caller owns.
+type agentSessionScope bool
+
+const (
+	withOwnedAgentSessions agentSessionScope = true
+	humanSessionsOnly      agentSessionScope = false
+)
+
 // chatVisibilityScope resolves the scoping shared by the chat listing
 // endpoints. Callers holding an unrestricted chat:read grant (only admins do)
 // and the managed-assistant runtime see all project sessions (optionally
@@ -947,7 +956,7 @@ type chatVisibility struct {
 // sessions; assistant summaries consume only the human visibility scope.
 // Visibility is never a hard gate on the route — when the chat:read check
 // can't be made we fall back to own-sessions rather than failing.
-func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID, payloadUserID *string, includeOwnedAgents bool) (chatVisibility, error) {
+func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID, payloadUserID *string, agentSessions agentSessionScope) (chatVisibility, error) {
 	// An assistant principal is set only on the assistant runtime path and only
 	// the managed-assistant platform toolset surfaces chat tools, so treat it as
 	// admin-equivalent for project-wide visibility.
@@ -999,7 +1008,7 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 		if authCtx.UserID == "" {
 			return chatVisibility{}, oops.C(oops.CodeUnauthorized)
 		}
-		if !includeOwnedAgents {
+		if agentSessions == humanSessionsOnly {
 			return chatVisibility{ExternalUserID: "", UserID: authCtx.UserID, OwnedAgentIDs: nil}, nil
 		}
 		ownedAgentIDs, err := s.repo.ListOwnedAgentIDs(ctx, repo.ListOwnedAgentIDsParams{
@@ -1102,10 +1111,12 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// holds. The managed-assistant runtime is exempt — it consumes transcripts
 	// programmatically, not as a reviewer.
 	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
-	// An agent's session has no user owner, so the agent's owner stands in for
-	// one — for reading only. Deleting or otherwise mutating what the agent did
-	// still needs chat:write.
-	if !isAssistantCall && !isOwner && access == chatAccessRead && authCtx.UserID != "" && chat.AgentID.Valid {
+	// An agent's session has no human owner, so the agent's owner stands in for
+	// one — for reading only. A session that also carries a human identity
+	// (user_id or external_user_id) stays that human's, whatever agent_id says.
+	// Deleting or otherwise mutating what the agent did still needs chat:write.
+	agentOnlySession := chat.AgentID.Valid && !chat.UserID.Valid && (!chat.ExternalUserID.Valid || chat.ExternalUserID.String == "")
+	if !isAssistantCall && !isOwner && access == chatAccessRead && authCtx.UserID != "" && agentOnlySession {
 		owns, err := s.repo.IsAgentOwner(ctx, repo.IsAgentOwnerParams{
 			AgentID:        chat.AgentID.UUID,
 			OrganizationID: chat.OrganizationID,
@@ -1197,7 +1208,7 @@ func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOve
 	if len(rows) == 0 {
 		return nil, oops.C(oops.CodeNotFound)
 	}
-	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, true)
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, withOwnedAgentSessions)
 	if err != nil {
 		return nil, err
 	}
@@ -1578,7 +1589,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	for _, message := range resultMessages {
 		message.Participants = messageParticipants[message.ID]
 	}
-	channelVisibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, true)
+	channelVisibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, withOwnedAgentSessions)
 	if err != nil {
 		return nil, err
 	}
