@@ -447,6 +447,7 @@ describe("Agent key MCP servers", () => {
     expect(ready).not.toHaveBeenCalledWith(true);
     mocks.bindings.mockResolvedValue([
       {
+        id: "binding_example",
         remoteSessionId: "account_example",
         remoteSessionClientId: "client_example",
         remoteSession: {
