@@ -22,6 +22,7 @@ export default defineConfig({
     __GRAM_DEV_BRANCH_ASK__: JSON.stringify(""),
   },
   test: {
+    fsModuleCache: true,
     environment: "happy-dom",
     setupFiles: ["./src/test/setup.ts"],
   },
