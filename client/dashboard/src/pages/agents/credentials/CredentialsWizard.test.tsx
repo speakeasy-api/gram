@@ -845,31 +845,35 @@ describe("Connecting a GKE cluster", () => {
     mcpHost: "app.example.test",
   };
 
-  /** Connects a cluster for an agent that reaches GitHub, then shows the pod step. */
-  async function reachPodStep() {
+  const githubServer = {
+    id: "server_one",
+    name: "GitHub",
+    slug: "github",
+    platformEndpointSlug: "github-mcp",
+    projectId: "project_one",
+    toolsetId: "toolset_one",
+    visibility: "private",
+    networkAccessMode: "dual",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  /** Connects a cluster for an agent that reaches these servers, then shows the pod step. */
+  async function reachPodStep(
+    servers: (typeof githubServer)[] = [githubServer],
+  ) {
     mocks.platforms.mockReturnValue([gke]);
-    mocks.mcpServers.mockResolvedValue({
-      mcpServers: [
-        {
-          id: "server_one",
-          name: "GitHub",
-          slug: "github",
-          platformEndpointSlug: "github-mcp",
-          projectId: "project_one",
-          toolsetId: "toolset_one",
-          visibility: "private",
-          networkAccessMode: "dual",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ],
-    });
+    mocks.mcpServers.mockResolvedValue({ mcpServers: servers });
     setup();
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Review Agent" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    for (const server of servers) {
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: server.name }),
+      );
+    }
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await continueFromAuthentication();
     fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
@@ -918,8 +922,9 @@ describe("Connecting a GKE cluster", () => {
     ).toBeGreaterThan(0);
     expect(screen.getAllByText(serverUrl).length).toBeGreaterThan(0);
     const text = document.body.textContent ?? "";
-    expect(text).toContain(`TOKEN_ENDPOINT=${sharedServer.tokenEndpoint}`);
-    expect(text).toContain(`MCP_URL=${serverUrl}`);
+    // Quoted, so nothing in a value is read as shell syntax.
+    expect(text).toContain(`TOKEN_ENDPOINT='${sharedServer.tokenEndpoint}'`);
+    expect(text).toContain(`MCP_URL='${serverUrl}'`);
     // The token endpoint refuses an exchange that names no server.
     expect(text).toContain('--data-urlencode "resource=$MCP_URL"');
     expect(text).not.toContain("SPEAKEASY_TOKEN_ENDPOINT");
@@ -929,7 +934,7 @@ describe("Connecting a GKE cluster", () => {
     await reachPodStep();
 
     expect(
-      screen.getByText(/no shared Speakeasy authorization server/),
+      screen.getByText(/usable shared Speakeasy authorization server/),
     ).toBeTruthy();
     expect(document.body.textContent).toContain("audience: SPEAKEASY_AUDIENCE");
     expect(
@@ -941,11 +946,76 @@ describe("Connecting a GKE cluster", () => {
       name: "Exchange the token and call the server",
     });
     expect(
-      screen.getByText(/no shared Speakeasy authorization server/),
+      screen.getByText(/usable shared Speakeasy authorization server/),
     ).toBeTruthy();
     expect(document.body.textContent).toContain(
-      "TOKEN_ENDPOINT=SPEAKEASY_TOKEN_ENDPOINT",
+      "TOKEN_ENDPOINT='SPEAKEASY_TOKEN_ENDPOINT'",
     );
+  });
+
+  async function reachExchangeStep(servers: (typeof githubServer)[]) {
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    await reachPodStep(servers);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", {
+      name: "Exchange the token and call the server",
+    });
+  }
+
+  it("targets the server picked from the agent's servers, at its own public URL", async () => {
+    // Radix Select reads pointer capture and scrolls options into view, which
+    // jsdom does not implement.
+    for (const [name, value] of [
+      ["hasPointerCapture", () => false],
+      ["releasePointerCapture", () => undefined],
+      ["scrollIntoView", () => undefined],
+    ] as const) {
+      if (!(name in Element.prototype)) {
+        Object.defineProperty(Element.prototype, name, {
+          value,
+          configurable: true,
+        });
+      }
+    }
+    const linearUrl = "https://mcp.example.test/mcp/linear";
+    await reachExchangeStep([
+      githubServer,
+      {
+        ...githubServer,
+        id: "server_two",
+        name: "Linear",
+        slug: "linear",
+        toolsetId: "toolset_two",
+        platformEndpointSlug: "linear-platform",
+        primaryEndpointUrl: linearUrl,
+      } as typeof githubServer,
+    ]);
+
+    const githubUrl = new URL("/mcp/github-mcp", window.location.origin).href;
+    expect(document.body.textContent).toContain(`MCP_URL='${githubUrl}'`);
+
+    const picker = screen.getByRole("combobox", { name: "MCP server" });
+    fireEvent.keyDown(picker, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Linear" }));
+
+    await screen.findByText("Call Linear with the access token");
+    expect(screen.getAllByText(linearUrl).length).toBeGreaterThan(0);
+    // Its own public URL wins over its platform route.
+    expect(document.body.textContent).toContain(`MCP_URL='${linearUrl}'`);
+    expect(document.body.textContent).not.toContain("linear-platform");
+  });
+
+  it("withholds a server URL that would carry the access token over plaintext", async () => {
+    await reachExchangeStep([
+      {
+        ...githubServer,
+        primaryEndpointUrl: "http://mcp.example.test/mcp/github",
+      } as typeof githubServer,
+    ]);
+
+    expect(screen.getByText(/only served over plaintext HTTP/)).toBeTruthy();
+    expect(document.body.textContent).not.toContain("http://mcp.example.test");
+    expect(document.body.textContent).toContain("MCP_URL='MCP_SERVER_URL'");
   });
 });
 

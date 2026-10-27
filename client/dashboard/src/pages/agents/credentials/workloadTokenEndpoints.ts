@@ -133,7 +133,7 @@ function unavailableReason(
     return "No shared Speakeasy authorization server is available for this project or organization.";
   }
   if (count === 0) {
-    return "This organization has no shared Speakeasy authorization server yet, so Speakeasy can't fill in these values. Ask your Speakeasy contact to turn one on for your organization or a project.";
+    return "No usable shared Speakeasy authorization server is available for this organization yet, so Speakeasy can't fill in these values. Ask your Speakeasy contact to set one up for your organization or a project.";
   }
   return null;
 }

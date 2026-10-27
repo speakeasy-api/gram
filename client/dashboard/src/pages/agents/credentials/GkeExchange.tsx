@@ -11,8 +11,18 @@ import { Text } from "@/components/ui/Text";
 import { useState, type JSX, type ReactNode } from "react";
 import { CodeBlock } from "./CodeBlock";
 import { ConsoleRow } from "./ConsoleRow";
+import { isCredentialSafe } from "./gateway";
 import { PendingValues } from "./SetupFields";
 import type { SetupServer } from "./setupInstructions";
+
+/**
+ * A value as one single-quoted shell word. The values come from the server,
+ * but the script is pasted into a shell, so nothing in them may be read as
+ * shell syntax.
+ */
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
 
 /**
  * The exchange, run inside the pod each time it needs a Speakeasy token. The
@@ -21,8 +31,8 @@ import type { SetupServer } from "./setupInstructions";
  */
 function exchangeScript(tokenEndpoint?: string, mcpUrl?: string) {
   return [
-    `TOKEN_ENDPOINT=${tokenEndpoint || "SPEAKEASY_TOKEN_ENDPOINT"}`,
-    `MCP_URL=${mcpUrl || "MCP_SERVER_URL"}`,
+    `TOKEN_ENDPOINT=${shellQuote(tokenEndpoint || "SPEAKEASY_TOKEN_ENDPOINT")}`,
+    `MCP_URL=${shellQuote(mcpUrl || "MCP_SERVER_URL")}`,
     "",
     "# Read the file each time: Kubernetes replaces the token before it expires.",
     'response=$(curl -sS "$TOKEN_ENDPOINT" \\',
@@ -56,7 +66,10 @@ export function ExchangeValues({
   issuerPicker: ReactNode;
 }): JSX.Element {
   const [chosenId, setChosenId] = useState("");
-  const server = servers.find((s) => s.id === chosenId) ?? servers[0];
+  // The call carries the access token as a bearer credential, so a server
+  // only reachable over plaintext HTTP is never offered as a target.
+  const reachable = servers.filter((s) => isCredentialSafe(s.mcpUrl));
+  const server = reachable.find((s) => s.id === chosenId) ?? reachable[0];
   const placeholders = [
     ...(tokenEndpoint ? [] : ["SPEAKEASY_TOKEN_ENDPOINT"]),
     ...(server ? [] : ["MCP_SERVER_URL"]),
@@ -67,7 +80,7 @@ export function ExchangeValues({
         Before calling an MCP server, the workload exchanges its token for a
         Speakeasy access token for that server.
       </p>
-      {servers.length > 1 && server !== undefined && (
+      {reachable.length > 1 && server !== undefined && (
         <Stack gap={2}>
           <Label htmlFor="gke-exchange-server">MCP server</Label>
           <Select value={server.id} onValueChange={setChosenId}>
@@ -75,7 +88,7 @@ export function ExchangeValues({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {servers.map((option) => (
+              {reachable.map((option) => (
                 <SelectItem key={option.id} value={option.id}>
                   {option.name}
                 </SelectItem>
@@ -109,9 +122,11 @@ export function ExchangeValues({
             },
           ]}
           hint={
-            server === undefined
-              ? "This agent can't reach any MCP servers yet. Go back to MCP selection and choose at least one."
-              : undefined
+            server !== undefined
+              ? undefined
+              : servers.length > 0
+                ? "This agent's servers are only served over plaintext HTTP, so their URLs are withheld: the access token would cross the network unencrypted. Serve them over HTTPS and reload."
+                : "This agent can't reach any MCP servers yet. Go back to MCP selection and choose at least one."
           }
         />
       </ol>

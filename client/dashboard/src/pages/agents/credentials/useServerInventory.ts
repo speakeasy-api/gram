@@ -150,9 +150,13 @@ export function useServerInventory(): ServerInventory {
           ? `${getServerURL()}/mcp/${server.platformEndpointSlug}`
           : server.primaryEndpointUrl,
       ),
-      mcpUrl: server.platformEndpointSlug
-        ? platformMcpUrl(server.platformEndpointSlug)
-        : server.primaryEndpointUrl,
+      // The server's own public URL first: on a custom domain it is the one
+      // the server answers on, and a lockdown can refuse the platform host.
+      mcpUrl:
+        server.primaryEndpointUrl ??
+        (server.platformEndpointSlug
+          ? platformMcpUrl(server.platformEndpointSlug)
+          : undefined),
       activityTarget: server.toolsetId
         ? `hosted_mcp_server:${toolsets.data?.toolsets?.find((toolset) => toolset.id === server.toolsetId)?.slug ?? ""}`
         : `tunneled_mcp_server:${server.slug ?? ""}`,
