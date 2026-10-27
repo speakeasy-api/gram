@@ -118,8 +118,7 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
     if (mode === "canvas") rememberCanvasPath(path);
   }, [mode, path]);
 
-  // Only organization admins see this entry point, matching the Headless
-  // page's own authorization check.
+  // Only organization admins see this entry point.
   if (!enabled) return null;
 
   const hrefs: Record<Mode, string> = {

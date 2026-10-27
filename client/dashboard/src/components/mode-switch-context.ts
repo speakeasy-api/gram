@@ -161,8 +161,7 @@ export function useModeSwitch(): StageValue {
 
 /** Whether the current user should see the mode switcher. */
 export function useModeSwitcherEnabled(): boolean {
-  // Headless mode is an organization-admin surface (its content carries the
-  // same gate), so members get neither the entry point nor its reserved height.
+  // Reserve the mode switcher entry point and its height for organization admins.
   const { hasScope } = useRBAC();
   return hasScope("org:admin");
 }
