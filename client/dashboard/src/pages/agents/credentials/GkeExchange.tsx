@@ -17,9 +17,12 @@ import { PendingValues } from "./SetupFields";
 import type { SetupServer } from "./setupInstructions";
 
 /**
- * The exchange, run inside the pod each time it needs a Speakeasy token. The
- * access token is scoped to one server, so the exchange names it as the
- * resource and the call goes to that same URL.
+ * The exchange, run inside the pod each time it needs a Speakeasy token. It
+ * names no resource: the shared authorization server then issues one access
+ * token for every MCP server of its issuer, and the agent's policy decides
+ * which of them answer. Naming one would bind the token to that server, and
+ * the pod's identity token is accepted once, so a second server's exchange
+ * would be refused until Kubernetes rotates it.
  */
 function exchangeScript(tokenEndpoint?: string, mcpUrl?: string) {
   return [
@@ -29,8 +32,7 @@ function exchangeScript(tokenEndpoint?: string, mcpUrl?: string) {
     "# Read the file each time: Kubernetes replaces the token before it expires.",
     'response=$(curl -sS "$TOKEN_ENDPOINT" \\',
     '  --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \\',
-    '  --data-urlencode "assertion=$(cat "$SPEAKEASY_TOKEN_FILE")" \\',
-    '  --data-urlencode "resource=$MCP_URL")',
+    '  --data-urlencode "assertion=$(cat "$SPEAKEASY_TOKEN_FILE")")',
     "token=$(printf '%s' \"$response\" | jq -r '.access_token // empty')",
     'if [ -z "$token" ]; then echo "Exchange failed: $response" >&2; exit 1; fi',
     "",
@@ -44,9 +46,9 @@ function exchangeScript(tokenEndpoint?: string, mcpUrl?: string) {
 }
 
 /**
- * The exchange step's values: where to exchange the pod's token, and the
- * server the access token is for. An access token reaches one server, so the
- * reader picks which of the agent's servers the snippet targets.
+ * The exchange step's values: where to exchange the pod's token, and a server
+ * to call with the access token. One access token reaches all of the agent's
+ * servers, so the reader picks which one the example calls.
  */
 export function ExchangeValues({
   tokenEndpoint,
@@ -69,8 +71,9 @@ export function ExchangeValues({
   return (
     <>
       <p className="text-sm">
-        Before calling an MCP server, the workload exchanges its token for a
-        Speakeasy access token for that server.
+        Before calling MCP servers, the workload exchanges its token for a
+        Speakeasy access token. One access token works at every server this
+        agent may reach.
       </p>
       {reachable.length > 1 && server !== undefined && (
         <Stack gap={2}>
@@ -88,8 +91,8 @@ export function ExchangeValues({
             </SelectContent>
           </Select>
           <Text muted small>
-            Each access token reaches one server. Exchange once for each server
-            the workload calls.
+            The example below calls this server. The same access token works at
+            the others.
           </Text>
         </Stack>
       )}
@@ -110,7 +113,6 @@ export function ExchangeValues({
             {
               label: "MCP server URL",
               value: server?.mcpUrl ?? "",
-              hint: "The exchange also names it as the resource, so the access token is issued for this server.",
             },
           ]}
           hint={

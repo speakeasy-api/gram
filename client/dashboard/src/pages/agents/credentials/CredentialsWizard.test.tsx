@@ -925,8 +925,10 @@ describe("Connecting a GKE cluster", () => {
     // Quoted, so nothing in a value is read as shell syntax.
     expect(text).toContain(`TOKEN_ENDPOINT='${sharedServer.tokenEndpoint}'`);
     expect(text).toContain(`MCP_URL='${serverUrl}'`);
-    // The token endpoint refuses an exchange that names no server.
-    expect(text).toContain('--data-urlencode "resource=$MCP_URL"');
+    // No resource: the shared authorization server then issues one token for
+    // all of the agent's servers. Naming one would bind the token to it, and
+    // the pod's identity token is accepted only once.
+    expect(text).not.toContain("resource=");
     expect(text).not.toContain("SPEAKEASY_TOKEN_ENDPOINT");
   });
 
@@ -1016,6 +1018,21 @@ describe("Connecting a GKE cluster", () => {
     expect(screen.getByText(/only served over plaintext HTTP/)).toBeTruthy();
     expect(document.body.textContent).not.toContain("http://mcp.example.test");
     expect(document.body.textContent).toContain("MCP_URL='MCP_SERVER_URL'");
+  });
+
+  it("calls a server served at the root of its domain, without naming it as a resource", async () => {
+    const domainRoot = "https://mcp.example.test";
+    await reachExchangeStep([
+      {
+        ...githubServer,
+        primaryEndpointUrl: domainRoot,
+      } as typeof githubServer,
+    ]);
+
+    expect(screen.getAllByText(domainRoot).length).toBeGreaterThan(0);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(`MCP_URL='${domainRoot}'`);
+    expect(text).not.toContain("resource=");
   });
 });
 
