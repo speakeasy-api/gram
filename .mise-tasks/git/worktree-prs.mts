@@ -23,6 +23,7 @@ export function createPRLookup(query = queryGitHub, now = Date.now) {
 
   return async (branches: string[]): Promise<Map<string, PrInfo>> => {
     const next = new Map<string, PrInfo>();
+    const observed = new Set<number>();
     const read = async (state: string, limit: string, branch?: string) => {
       const prs: GitHubPR[] = JSON.parse(
         await query([
@@ -38,6 +39,7 @@ export function createPRLookup(query = queryGitHub, now = Date.now) {
         ]),
       );
       for (const pr of prs) {
+        observed.add(pr.number);
         const state: PRState =
           pr.state === "OPEN"
             ? pr.isDraft
@@ -68,6 +70,7 @@ export function createPRLookup(query = queryGitHub, now = Date.now) {
       for (let i = 0; i < pending.length; i += 4) {
         await Promise.allSettled(
           pending.slice(i, i + 4).map(async (branch) => {
+            const checkedRanks = new Set<number>();
             try {
               for (const state of ["open", "merged", "closed"] as const) {
                 const pr = next.get(branch);
@@ -75,12 +78,22 @@ export function createPRLookup(query = queryGitHub, now = Date.now) {
                 // One result per state avoids truncating away an older preferred
                 // PR, including when the bulk window contains a newer closed PR.
                 await read(state, "1", branch);
+                checkedRanks.add(PR_RANK[state]);
               }
               if (!next.has(branch))
                 emptyUntil.set(branch, now() + EMPTY_TTL_MS);
             } catch {
               const cached = previous.get(branch);
-              if (cached && !next.has(branch)) next.set(branch, cached);
+              const current = next.get(branch);
+              // Preserve a preferred result only when we couldn't verify it.
+              // Fresh PR states and successful empty state queries win over cache.
+              if (
+                cached &&
+                !observed.has(cached.number) &&
+                !checkedRanks.has(PR_RANK[cached.state]) &&
+                (!current || PR_RANK[cached.state] < PR_RANK[current.state])
+              )
+                next.set(branch, cached);
               // Failed requests aren't evidence that a branch has no PR.
             }
           }),

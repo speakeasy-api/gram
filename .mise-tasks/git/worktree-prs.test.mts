@@ -33,7 +33,11 @@ function fixture() {
       const state = args[args.indexOf("--state") + 1]!;
       const limit = Number(args[args.indexOf("--limit") + 1]);
       data.calls.push({ branch, state });
-      if (data.failures.has(branch ?? "bulk")) throw new Error("offline");
+      if (
+        data.failures.has(branch ?? "bulk") ||
+        data.failures.has(`${branch}:${state}`)
+      )
+        throw new Error("offline");
       const matches = branch
         ? data.history.filter(
             (p) => p.headRefName === branch && p.state.toLowerCase() === state,
@@ -111,6 +115,39 @@ test("failed lookups retain previous results and aren't cached as misses", async
   assert.equal(refreshed.get("other")?.number, 3);
   data.failures.add("bulk");
   assert.deepEqual(await lookup(["topic", "other"]), refreshed);
+});
+
+test("failed preferred-state lookup preserves a cached open PR over another closed PR", async () => {
+  const { data, lookup } = fixture();
+  data.history = [pr(1, "OPEN")];
+  await lookup(["topic"]);
+  data.bulk = [pr(2, "CLOSED")];
+  data.failures.add("topic:open");
+  assert.equal((await lookup(["topic"])).get("topic")?.number, 1);
+});
+
+test("fresh bulk state for the cached PR overrides its stale open state", async () => {
+  const { data, lookup } = fixture();
+  data.history = [pr(1, "OPEN")];
+  await lookup(["topic"]);
+  // The changed PR can appear after a newer PR of the same rank in the bulk list.
+  data.bulk = [pr(2, "CLOSED"), pr(1, "CLOSED")];
+  data.failures.add("topic:open");
+  const result = (await lookup(["topic"])).get("topic");
+  assert.equal(result?.number, 2);
+  assert.equal(result?.state, "closed");
+});
+
+test("confirmed absence of open PRs isn't undone by a failed merged lookup", async () => {
+  const { data, lookup } = fixture();
+  data.history = [pr(1, "OPEN")];
+  await lookup(["topic"]);
+  data.history = [];
+  data.bulk = [pr(2, "CLOSED")];
+  data.failures.add("topic:merged");
+  const result = (await lookup(["topic"])).get("topic");
+  assert.equal(result?.number, 2);
+  assert.equal(result?.state, "closed");
 });
 
 test("limits concurrent fallback requests to four and deduplicates branches", async () => {
