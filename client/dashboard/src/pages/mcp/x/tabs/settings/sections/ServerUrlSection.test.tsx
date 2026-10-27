@@ -242,6 +242,20 @@ describe("ServerUrlSection", () => {
     expect(screen.queryByText("No hosted address")).toBeNull();
     expect(screen.getByText(/\/mcp\/example$/)).toBeTruthy();
     expect(screen.getByLabelText("Add hosted address")).toBeTruthy();
+    cleanup();
+
+    renderSection(
+      server({
+        id: "server-2",
+        toolsetId: "toolset-1",
+        legacyPlatformSlug: "example",
+      }),
+      [customEndpoint],
+    );
+    expect(
+      screen.queryByText(/\/mcp\/example$/),
+      "only the canonical server shows the legacy address",
+    ).toBeNull();
   });
 
   it("lets a hosted server add another platform address", () => {
