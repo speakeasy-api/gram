@@ -27,7 +27,8 @@ type CreateIssuerRequestBody struct {
 	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
 	// Organization-level remote_session_client Speakeasy uses with the trusted
-	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
+	// issuer for browser sign-in. Requires trusted_remote_session_issuer_id; the
+	// issuer alone accepts its identity assertions without changing sign-in.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 }
 
@@ -39,8 +40,8 @@ type UpdateIssuerRequestBody struct {
 	// link.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
 	// Organization-level remote_session_client Speakeasy uses with the trusted
-	// issuer. Omit to leave unchanged; pass an empty string to clear the link. The
-	// resulting issuer and client must either both be configured or both be absent.
+	// issuer. Omit to leave unchanged; pass an empty string to clear the link. A
+	// client requires a trusted issuer; an issuer may be trusted without one.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	// The user_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
