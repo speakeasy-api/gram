@@ -26,8 +26,8 @@ const state = vi.hoisted(() => ({
   available: true,
   on: false as boolean | undefined,
 }));
-vi.mock("@/components/connections/GatewayConnectionsTab", () => ({
-  GatewayConnectionsTab: () => {
+vi.mock("@/components/sessions/ClientsAndSessionsTab", () => ({
+  ClientsAndSessionsTab: () => {
     const [params] = useSearchParams();
     return (
       <div>

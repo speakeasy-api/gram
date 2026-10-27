@@ -1,4 +1,4 @@
-import { GatewayConnectionsTab } from "@/components/connections/GatewayConnectionsTab";
+import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import {
   BRAND_MESH_SURFACE_CLASS,
   BrandMeshLayers,
@@ -205,7 +205,7 @@ function OrganizationGatewayContent({
             )}
           </TabsContent>
           <TabsContent value="connections" className="mt-6">
-            <GatewayConnectionsTab />
+            <ClientsAndSessionsTab gateway={{}} issuerId={undefined} />
           </TabsContent>
           <TabsContent value="assignments" className="mt-6">
             <RequireScope scope="org:admin" level="section">

@@ -1,6 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { GatewayConnectionsTab } from "@/components/connections/GatewayConnectionsTab";
+import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { useRoutes } from "@/routes";
 import { useGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
@@ -94,9 +94,8 @@ export default function GatewayDetails(): JSX.Element {
       case "sessions":
         return (
           <RequireScope scope="project:read" level="page">
-            <GatewayConnectionsTab
-              gatewayId={metaMcpServer.id}
-              projectId={metaMcpServer.projectId}
+            <ClientsAndSessionsTab
+              gateway={{ id: metaMcpServer.id }}
               issuerId={metaMcpServer.userSessionIssuerId}
             />
           </RequireScope>
