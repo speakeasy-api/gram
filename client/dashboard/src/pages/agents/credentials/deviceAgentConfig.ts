@@ -24,6 +24,10 @@ export function deviceAgentManagedConfig({
     v: 1,
     mcp_credential: mcpCredential,
     agent_id: agentID,
+    // What the device agent recommends for an unattended host: attribute it
+    // as a server, and never restart it to self-update unprompted.
+    environment: "server",
+    auto_update: "notify",
   };
   // Only a deployment other than the default one (local development, a
   // self-hosted install) needs to say where the device agent should connect.

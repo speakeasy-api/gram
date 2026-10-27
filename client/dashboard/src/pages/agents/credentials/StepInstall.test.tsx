@@ -69,14 +69,23 @@ describe("Device Agent tab", () => {
     expect(await blockText("Move it to /etc/speakeasy/managed.json")).toContain(
       "-m 0640 managed.json /etc/speakeasy/managed.json",
     );
+    const service = await blockText(
+      "Set the account, then install and start the service",
+    );
+    expect(service).toContain("s/REPLACE_WITH_TOOL_ACCOUNT/<account>/g");
+    expect(service).toContain(
+      "sudo install -m 0644 com.speakeasy.daemon.service /etc/systemd/system/com.speakeasy.daemon.service",
+    );
+    expect(service).toContain(
+      "sudo systemctl enable --now com.speakeasy.daemon",
+    );
     expect(
-      await blockText(
-        "3 · Configure the tools — as the account that runs them",
-      ),
-    ).toBe("/opt/speakeasy/bin/speakeasy sync");
-    expect(
-      screen.getByText("~/.local/state/speakeasy/bin/speakeasy"),
-    ).toBeTruthy();
+      screen
+        .getByRole("link", { name: /com\.speakeasy\.daemon\.service/ })
+        .getAttribute("href"),
+    ).toBe(
+      "https://github.com/speakeasy-api/device-agent/blob/main/installer/linux/com.speakeasy.daemon.service",
+    );
     expect(screen.getByText(/Plugin sync and hooks are not/)).toBeTruthy();
     expect(
       screen.getByText(/written into those tools' MCP settings/),
@@ -90,6 +99,8 @@ describe("Device Agent tab", () => {
       v: 1,
       mcp_credential: KEY,
       agent_id: AGENT_ID,
+      environment: "server",
+      auto_update: "notify",
     });
   });
 
@@ -102,6 +113,8 @@ describe("Device Agent tab", () => {
       v: 1,
       mcp_credential: KEY,
       agent_id: AGENT_ID,
+      environment: "server",
+      auto_update: "notify",
       _control_plane_url: "https://speakeasy.example.test",
     });
   });

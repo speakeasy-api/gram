@@ -30,3 +30,9 @@ export const MANAGED_CONFIG_PATHS = [
     owner: "SYSTEM",
   },
 ] as const;
+
+// The systemd system unit for an unattended host, pinned to the account the AI
+// tools run as (`speakeasyd -service install` only writes a per-user unit). Its
+// header documents the install steps; the agent connect screen points at it.
+export const LINUX_SYSTEM_UNIT_URL =
+  "https://github.com/speakeasy-api/device-agent/blob/main/installer/linux/com.speakeasy.daemon.service";

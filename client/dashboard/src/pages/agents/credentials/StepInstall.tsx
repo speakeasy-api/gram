@@ -21,9 +21,11 @@ import { WizardStepHeader } from "./WizardChrome";
 import { isCredentialSafe } from "./gateway";
 import { deviceAgentManagedConfig } from "./deviceAgentConfig";
 import {
+  LINUX_SYSTEM_UNIT_URL,
   MANAGED_CONFIG_PATHS,
   SANDBOX_INSTALL_SCRIPT_URL,
 } from "@/pages/device-agent/release-paths";
+import { Link as ExternalLink } from "@/components/ui/Link";
 
 /**
  * The step that hands the runtime its credential. One command for a machine
@@ -32,6 +34,13 @@ import {
  */
 
 const KEY_ENV = "SPEAKEASY_AGENT_KEY";
+
+// Installs the system unit, with User= and Group= set, and starts it.
+const SERVICE_COMMANDS = [
+  "sed -i 's/REPLACE_WITH_TOOL_ACCOUNT/<account>/g' com.speakeasy.daemon.service",
+  "sudo install -m 0644 com.speakeasy.daemon.service /etc/systemd/system/com.speakeasy.daemon.service",
+  "sudo systemctl daemon-reload && sudo systemctl enable --now com.speakeasy.daemon",
+].join("\n");
 
 // A headless machine is a Linux box: a VPS, a CI runner, a sandbox.
 const LINUX_MANAGED_CONFIG_PATH =
@@ -456,21 +465,39 @@ export function StepInstall({
                   </Text>
                 </div>
                 <div className="space-y-2">
+                  <Text small className="block">
+                    3 · Run the device agent as the account that runs the AI
+                    tools. Download{" "}
+                    <ExternalLink
+                      href={LINUX_SYSTEM_UNIT_URL}
+                      target="_blank"
+                      iconSuffixName="external-link"
+                    >
+                      com.speakeasy.daemon.service
+                    </ExternalLink>
+                    , then set its <code className="text-xs">User=</code> and{" "}
+                    <code className="text-xs">Group=</code> to that account.
+                  </Text>
+                  <Text small className="block font-medium">
+                    Use the same account the AI tools run as, not root: the
+                    device agent writes their MCP settings into that
+                    account&apos;s home.
+                  </Text>
                   <CodeBlock
-                    value="/opt/speakeasy/bin/speakeasy sync"
-                    label="3 · Configure the tools — as the account that runs them"
+                    value={SERVICE_COMMANDS}
+                    label="Set the account, then install and start the service"
                     language="shell"
                   />
                   <Text muted small>
-                    The device agent&apos;s CLI is installed off PATH, so call
-                    it by its full path. Installed without sudo, it is at{" "}
+                    Replace <code className="text-xs">&lt;account&gt;</code>{" "}
+                    with that account. Then{" "}
                     <code className="text-xs">
-                      ~/.local/state/speakeasy/bin/speakeasy
-                    </code>
-                    . Then <code className="text-xs">claude mcp list</code>{" "}
+                      sudo -u &lt;account&gt; claude mcp list
+                    </code>{" "}
                     should show{" "}
                     <code className="text-xs">speakeasy-gateway</code> as
-                    connected.
+                    connected. The service keeps those settings current while it
+                    runs.
                   </Text>
                 </div>
                 <div className="space-y-2">
