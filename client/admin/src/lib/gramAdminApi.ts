@@ -529,6 +529,8 @@ export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
   url: string;
+  name: string;
+  slug: string;
   ownership_confirmed: boolean;
 };
 

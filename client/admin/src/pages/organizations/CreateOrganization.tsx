@@ -29,13 +29,14 @@ import {
 } from "@/lib/gramAdminApi";
 
 import type { WriteReporter } from "./OrganizationActions";
-import { organizationUrlPreview } from "./organizationUrl";
+import {
+  organizationSuggestionsFromHostname,
+  organizationUrlPreview,
+} from "./organizationUrl";
 
 /**
- * Creates one organization from an operator-confirmed domain.
- *
- * The confirmation is worded from the response, because the server normalises
- * the name it stores.
+ * Creates one organization from an operator-confirmed domain, with editable
+ * suggestions for its display name and URL slug.
  */
 export function CreateOrganization({
   reporter,
@@ -47,12 +48,20 @@ export function CreateOrganization({
   const { announce, showFailure } = reporter;
   const qc = useQueryClient();
   const urlField = useId();
+  const nameField = useId();
+  const nameHintID = useId();
+  const slugField = useId();
+  const slugHintID = useId();
   const ownershipField = useId();
   const previewID = useId();
   const messageID = useId();
 
   const [open, setOpen] = useState(false);
   const [url, setURL] = useState("");
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [nameEdited, setNameEdited] = useState(false);
+  const [slugEdited, setSlugEdited] = useState(false);
   const [ownershipConfirmed, setOwnershipConfirmed] = useState(false);
   // What the toolbar shows after a create lands. It is spoken through the
   // page's region, which is the only live region on this page.
@@ -74,6 +83,10 @@ export function CreateOrganization({
       // in is never a question.
       setOpen(false);
       setURL("");
+      setName("");
+      setSlug("");
+      setNameEdited(false);
+      setSlugEdited(false);
       setOwnershipConfirmed(false);
       // The page's banner belongs to the last write that failed, and this one
       // succeeded. Every sibling write clears it the same way.
@@ -97,8 +110,16 @@ export function CreateOrganization({
   });
 
   const preview = organizationUrlPreview(url);
+  const slugValid =
+    slug.length >= 2 &&
+    slug.length <= 100 &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
   const canSubmit =
-    Boolean(preview.hostname) && ownershipConfirmed && !create.isPending;
+    Boolean(preview.hostname) &&
+    Boolean(name.trim()) &&
+    slugValid &&
+    ownershipConfirmed &&
+    !create.isPending;
   const failure = create.error
     ? create.error instanceof GramAdminError && create.error.status < 500
       ? errorMessage(create.error)
@@ -110,7 +131,12 @@ export function CreateOrganization({
     // Not the button's `disabled` alone: Enter in the field submits the form,
     // so a second press mid-write would create a second organization.
     if (!canSubmit) return;
-    create.mutate({ url: url.trim(), ownership_confirmed: ownershipConfirmed });
+    create.mutate({
+      url: url.trim(),
+      name: name.trim(),
+      slug,
+      ownership_confirmed: ownershipConfirmed,
+    });
   };
 
   return (
@@ -132,6 +158,10 @@ export function CreateOrganization({
           if (!next && create.isPending) return;
           if (next) {
             setURL("");
+            setName("");
+            setSlug("");
+            setNameEdited(false);
+            setSlugEdited(false);
             setOwnershipConfirmed(false);
             create.reset();
             // The last create's confirmation would otherwise sit beside this
@@ -177,7 +207,14 @@ export function CreateOrganization({
                   failure ? `${previewID} ${messageID}` : previewID
                 }
                 onChange={(event) => {
-                  setURL(event.target.value);
+                  const nextURL = event.target.value;
+                  const nextPreview = organizationUrlPreview(nextURL);
+                  const suggestions = organizationSuggestionsFromHostname(
+                    nextPreview.hostname,
+                  );
+                  setURL(nextURL);
+                  if (!nameEdited) setName(suggestions.name);
+                  if (!slugEdited) setSlug(suggestions.slug);
                   setOwnershipConfirmed(false);
                   create.reset();
                 }}
@@ -189,6 +226,74 @@ export function CreateOrganization({
                 </p>
                 <p>Invitations must match this domain exactly.</p>
               </div>
+            </div>
+
+            <div className="my-4 grid gap-2">
+              <label htmlFor={nameField} className="text-sm font-medium">
+                Organization name
+              </label>
+              <Input
+                id={nameField}
+                value={name}
+                type="text"
+                disabled={create.isPending}
+                required
+                maxLength={100}
+                autoComplete="off"
+                aria-invalid={Boolean(failure)}
+                aria-describedby={
+                  failure ? `${nameHintID} ${messageID}` : nameHintID
+                }
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setNameEdited(true);
+                  create.reset();
+                }}
+              />
+              <p id={nameHintID} className="text-muted-foreground text-sm">
+                Suggested from the company domain. Edit it if the customer uses
+                a different name.
+              </p>
+            </div>
+
+            <div className="my-4 grid gap-2">
+              <label htmlFor={slugField} className="text-sm font-medium">
+                Organization slug
+              </label>
+              <Input
+                id={slugField}
+                value={slug}
+                type="text"
+                disabled={create.isPending}
+                required
+                minLength={2}
+                maxLength={100}
+                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                aria-invalid={Boolean(failure) || (Boolean(slug) && !slugValid)}
+                aria-describedby={
+                  failure ? `${slugHintID} ${messageID}` : slugHintID
+                }
+                onChange={(event) => {
+                  setSlug(event.target.value);
+                  setSlugEdited(true);
+                  create.reset();
+                }}
+              />
+              <p
+                id={slugHintID}
+                className={
+                  slug && !slugValid
+                    ? "text-destructive text-sm"
+                    : "text-muted-foreground text-sm"
+                }
+              >
+                {slug && !slugValid
+                  ? "Use 2–100 lowercase letters, numbers or single hyphens between words."
+                  : "Suggested from the company domain. If unavailable, a short suffix is added."}
+              </p>
             </div>
 
             <div className="my-4 grid gap-2">

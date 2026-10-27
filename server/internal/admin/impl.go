@@ -1531,9 +1531,21 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		return nil, err
 	}
 
-	name, err := orgprovision.ValidateName(orgprovision.NameFromHostname(hostname))
+	requestedName := orgprovision.NameFromHostname(hostname)
+	if payload.Name != nil {
+		requestedName = *payload.Name
+	}
+	name, err := orgprovision.ValidateName(requestedName)
 	if err != nil {
 		return nil, err
+	}
+
+	requestedSlug := ""
+	if payload.Slug != nil {
+		requestedSlug, err = validateOrganizationSlug(*payload.Slug)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, name, hostname)
@@ -1571,10 +1583,39 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 	// organization's URL, and re-deriving one would find the base taken by that
 	// very row and write a suffixed variant over it.
 	uniqueSlug := ""
+	if requestedSlug != "" {
+		if lockErr := queries.LockOrganizationSlug(ctx, requestedSlug); lockErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("lock requested organization slug: %w", lockErr), organizationCreationUncertain).LogError(ctx, logger)
+		}
+
+		atRequestedSlug, lookupErr := queries.GetOrganizationMetadataBySlug(ctx, requestedSlug)
+		switch {
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			uniqueSlug = requestedSlug
+		case lookupErr == nil && atRequestedSlug.ID == created.GramOrganizationID:
+			// The webhook can have inserted this same organization while the
+			// WorkOS request was in flight. In that case the requested slug is
+			// already ours, not a collision that needs a suffix.
+			uniqueSlug = requestedSlug
+		case lookupErr == nil:
+			found, findErr := orgslug.FindUnique(ctx, queries, requestedSlug)
+			if findErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find unique requested organization slug: %w", findErr), organizationCreationUncertain).LogError(ctx, logger)
+			}
+			uniqueSlug = found
+		default:
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up requested organization slug: %w", lookupErr), organizationCreationUncertain).LogError(ctx, logger)
+		}
+	}
+
 	existing, err := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
 	switch {
-	case err == nil:
+	case err == nil && uniqueSlug == "":
 		uniqueSlug = existing.Slug
+	case (err == nil || errors.Is(err, pgx.ErrNoRows)) && uniqueSlug != "":
+		// The explicit slug wins over a row inserted by the WorkOS webhook for
+		// this same create. That row derived its slug from the display name and
+		// has not represented an operator choice yet.
 	case errors.Is(err, pgx.ErrNoRows):
 		// Seeded with the WorkOS organization ID rather than randomness so a
 		// retry of the same create competes for one advisory-lock key instead

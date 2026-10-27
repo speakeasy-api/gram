@@ -87,8 +87,15 @@ type ExtendTrialRequestBody struct {
 // "createOrganization" endpoint HTTP request body.
 type CreateOrganizationRequestBody struct {
 	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
-	// the name and verified email domain.
+	// the verified email domain.
 	URL string `form:"url" json:"url" xml:"url"`
+	// Organization display name. When omitted, a name is derived from the
+	// registrable company domain.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Preferred organization URL slug. When omitted, a unique slug is derived from
+	// the organization name. Explicit slugs use lowercase letters, numbers, and
+	// hyphens.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The operator confirms that domain ownership was established outside this
 	// form.
 	OwnershipConfirmed bool `form:"ownership_confirmed" json:"ownership_confirmed" xml:"ownership_confirmed"`
@@ -23873,6 +23880,8 @@ func NewExtendTrialRequestBody(p *admin.ExtendTrialPayload) *ExtendTrialRequestB
 func NewCreateOrganizationRequestBody(p *admin.CreateOrganizationPayload) *CreateOrganizationRequestBody {
 	body := &CreateOrganizationRequestBody{
 		URL:                p.URL,
+		Name:               p.Name,
+		Slug:               p.Slug,
 		OwnershipConfirmed: p.OwnershipConfirmed,
 	}
 	return body

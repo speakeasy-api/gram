@@ -92,6 +92,14 @@ function nameField(): HTMLInputElement {
   return screen.getByLabelText("Company URL") as HTMLInputElement;
 }
 
+function organizationNameField(): HTMLInputElement {
+  return screen.getByLabelText("Organization name") as HTMLInputElement;
+}
+
+function slugField(): HTMLInputElement {
+  return screen.getByLabelText("Organization slug") as HTMLInputElement;
+}
+
 function submitButton(): HTMLButtonElement {
   return screen.getByRole("button", { name: /^(Create|Creating\.\.\.)$/ });
 }
@@ -173,12 +181,53 @@ describe("creating an organization", () => {
     await waitFor(() => {
       expect(mocks.createOrganization).toHaveBeenCalledWith({
         url: "example.com",
+        name: "example",
+        slug: "example",
         ownership_confirmed: true,
       });
     });
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
+  });
+
+  it("suggests an editable name and slug from the registrable domain", async () => {
+    await open();
+    type("https://www.example.co.uk/about");
+
+    expect(organizationNameField().value).toBe("example");
+    expect(slugField().value).toBe("example");
+
+    fireEvent.change(organizationNameField(), {
+      target: { value: "Example Customer" },
+    });
+    fireEvent.change(slugField(), {
+      target: { value: "example-customer" },
+    });
+    confirmOwnership();
+    submitForm();
+
+    await waitFor(() => {
+      expect(mocks.createOrganization).toHaveBeenCalledWith({
+        url: "https://www.example.co.uk/about",
+        name: "Example Customer",
+        slug: "example-customer",
+        ownership_confirmed: true,
+      });
+    });
+  });
+
+  it("does not overwrite edited suggestions when the URL changes", async () => {
+    await open();
+    type("example.com");
+    fireEvent.change(organizationNameField(), {
+      target: { value: "Customer-facing name" },
+    });
+
+    type("acme.io");
+
+    expect(organizationNameField().value).toBe("Customer-facing name");
+    expect(slugField().value).toBe("acme");
   });
 
   it("names the organization it created, on screen and out loud", async () => {
@@ -239,6 +288,8 @@ describe("creating an organization", () => {
     await waitFor(() => {
       expect(mocks.createOrganization).toHaveBeenCalledWith({
         url: "https://example.com/path",
+        name: "example",
+        slug: "example",
         ownership_confirmed: true,
       });
     });
@@ -372,6 +423,8 @@ describe("a write in flight", () => {
     expect((cancel as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     expect(nameField().disabled).toBe(true);
+    expect(organizationNameField().disabled).toBe(true);
+    expect(slugField().disabled).toBe(true);
     expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(true);
     expect(nameField().value).toBe("example.com");
 
@@ -476,6 +529,8 @@ describe("a refusal", () => {
     await waitFor(() => {
       expect(mocks.createOrganization).toHaveBeenLastCalledWith({
         url: "newer.example.com",
+        name: "example",
+        slug: "example",
         ownership_confirmed: true,
       });
     });
@@ -518,6 +573,8 @@ describe("a refusal", () => {
 
     expect(screen.queryByRole("alert")).toBeNull();
     expect(nameField().value).toBe("");
+    expect(organizationNameField().value).toBe("");
+    expect(slugField().value).toBe("");
     expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe(
       "false",
     );
