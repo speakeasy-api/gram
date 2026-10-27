@@ -20,8 +20,10 @@ const InstrumentMCPRequestRejected = "mcp.request.rejected"
 
 // InstrumentOAuthIDJAGExchange is the OTel instrument name for the counter of
 // ID-JAG token exchanges by outcome and rejection reason. Only exchanges that
-// reach the jwt-bearer grant handler are counted: refusals during client
-// authentication, client admission, or AI tool blocking happen earlier.
+// reach the jwt-bearer grant handler are counted, plus a shared token
+// endpoint's refusal of one naming no resource. Refusals during client
+// authentication, client admission, AI tool blocking, or another shared
+// resource check happen earlier and are not counted.
 const InstrumentOAuthIDJAGExchange = "oauth.id_jag.exchange"
 
 // RequestRejectionReason is the closed set of reasons [Metrics] records on
@@ -280,7 +282,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 
 	oauthIDJAGExchangeCounter, err := meter.Int64Counter(
 		InstrumentOAuthIDJAGExchange,
-		metric.WithDescription("ID-JAG token exchanges reaching Speakeasy's jwt-bearer grant handler, by user session issuer, outcome, and rejection reason; refusals during client authentication, client admission, or AI tool blocking happen earlier and are not counted"),
+		metric.WithDescription("ID-JAG token exchanges reaching Speakeasy's jwt-bearer grant handler, by user session issuer, outcome, and rejection reason; refusals during client authentication, client admission, AI tool blocking, or a shared token endpoint's resource check happen earlier and are not counted, except a request naming no resource"),
 		metric.WithUnit("{exchange}"),
 	)
 	if err != nil {

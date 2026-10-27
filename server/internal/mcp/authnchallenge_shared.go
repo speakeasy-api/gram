@@ -474,6 +474,12 @@ func (s *Service) sharedResourceContext(ctx context.Context, host string) (conte
 // unknown issuers are refused before their resource is read, so the metric's
 // issuer dimension only ever carries ids of real shared issuers.
 func (s *Service) recordSharedResourceRejection(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, stage mcpmetrics.OAuthFlowStage, rejection sharedResourceRejection, resources []string) {
+	s.recordSharedResourceRejectionAs(ctx, logger, "shared authorization server refused resource indicator", issuerID, stage, rejection, resources)
+}
+
+// recordSharedResourceRejectionAs is recordSharedResourceRejection under
+// message, with extra attributes on its one log line.
+func (s *Service) recordSharedResourceRejectionAs(ctx context.Context, logger *slog.Logger, message string, issuerID uuid.UUID, stage mcpmetrics.OAuthFlowStage, rejection sharedResourceRejection, resources []string, extra ...slog.Attr) {
 	redacted := make([]string, 0, len(resources))
 	for _, resource := range resources {
 		redacted = append(redacted, redactResourceForLog(resource))
@@ -482,11 +488,15 @@ func (s *Service) recordSharedResourceRejection(ctx context.Context, logger *slo
 	if len(logged) > sharedResourceLogMaxBytes {
 		logged = strings.ToValidUTF8(logged[:sharedResourceLogMaxBytes], "")
 	}
-	logger.InfoContext(ctx, "shared authorization server refused resource indicator",
+	args := []any{
 		attr.SlogOAuthFailureReason(string(rejection)),
 		attr.SlogOAuthFlowStage(string(stage)),
 		attr.SlogOAuthResource(logged),
-	)
+	}
+	for _, a := range extra {
+		args = append(args, a)
+	}
+	logger.InfoContext(ctx, message, args...)
 	s.metrics.RecordOAuthResourceRejected(ctx, issuerID.String(), string(rejection), stage)
 }
 

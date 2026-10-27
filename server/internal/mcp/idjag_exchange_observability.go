@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
@@ -50,4 +52,14 @@ func (e *idJAGExchange) accept() {
 
 func (e *idJAGExchange) record(ctx context.Context) {
 	e.metrics.RecordIDJAGExchange(ctx, e.issuerID, e.outcome, e.reason)
+}
+
+// recordSharedIDJAGResourceMissing records an ID-JAG exchange the shared
+// token endpoint refused before the grant handler because the request named
+// no resource: one rejection log line, counted as an ID-JAG exchange.
+func (s *Service) recordSharedIDJAGResourceMissing(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, resources []string) {
+	exchange := &idJAGExchange{metrics: s.metrics, issuerID: issuerID.String(), outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}
+	attrs := exchange.reject(mcpmetrics.IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated), nil)
+	s.recordSharedResourceRejectionAs(ctx, logger, "oauth ID-JAG token request rejected", issuerID, mcpmetrics.OAuthFlowStageToken, sharedResourceMissing, resources, attrs...)
+	exchange.record(ctx)
 }
