@@ -463,7 +463,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		logger.InfoContext(ctx, "shutting down mcp server")
 		// Listen streams never finish on their own, so end them first and
 		// let their clients reconnect to a replica that is still serving.
-		mcpService.StartDrain()
+		mcpService.StartDrain(relayedRequestInterruptAfter)
 		drainHTTPServer(ctx, logger, srv, cancelRequests, shutdownDrainTimeout, "failed to shutdown mcp server")
 		// Handlers are drained; the automatic remote-session probes they
 		// detached still write verdicts, so give them their own budget before

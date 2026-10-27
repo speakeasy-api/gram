@@ -1435,8 +1435,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 
 	var selectedEnvironment string
 	ctx = withMandatoryAdmission(ctx)
-	authorizedCtx, authenticated, err := s.authorizeHostedRequest(ctx, toolset, cfg, connect)
-	s.newMandatoryShadow(authorizedCtx, toolset.OrganizationID).shadowRequire(authorizedCtx, mandatorySurfaceHostedConnect, err, connect)
+	authorizedCtx, authenticated, err := s.admitHostedRequest(ctx, toolset, cfg, connect)
 	if err != nil {
 		return err
 	}
@@ -1609,6 +1608,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	return nil
+}
+
+// admitHostedRequest applies today's access decision for a hosted server and
+// shadows it as server admission under the server's visibility.
+func (s *Service) admitHostedRequest(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing, connect authz.Check) (context.Context, bool, error) {
+	authorizedCtx, authenticated, err := s.authorizeHostedRequest(ctx, toolset, cfg, connect)
+	s.newMandatoryShadow(authorizedCtx, toolset.OrganizationID).shadowRequireServer(authorizedCtx, mandatorySurfaceHostedConnect, err, mandatoryVisibility(cfg.isPublic), connect)
+	return authorizedCtx, authenticated, err
 }
 
 // authorizeHostedRequest applies today's access decision for a hosted

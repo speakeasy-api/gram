@@ -456,7 +456,7 @@ func (s *Service) admitMetaMembers(
 		connect := authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), candidate.projectID.String())
 		switch candidate.visibility {
 		case mcpservers.VisibilityPublic:
-			shadow.record(ctx, surface, true, connect)
+			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
 		case mcpservers.VisibilityPrivate:
 			if err := s.authz.Require(ctx, connect); err != nil {
 				// Forbidden and Unauthorized (anonymous callers on an ungated
@@ -464,12 +464,12 @@ func (s *Service) admitMetaMembers(
 				// member. Anything else is an evaluation failure.
 				var oopsErr *oops.ShareableError
 				if errors.As(err, &oopsErr) && (oopsErr.Code == oops.CodeForbidden || oopsErr.Code == oops.CodeUnauthorized) {
-					shadow.record(ctx, surface, false, connect)
+					shadow.recordServer(ctx, surface, false, authz.MandatoryServerPrivate, connect)
 					continue
 				}
 				return ctx, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
 			}
-			shadow.record(ctx, surface, true, connect)
+			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPrivate, connect)
 		default:
 			continue
 		}
