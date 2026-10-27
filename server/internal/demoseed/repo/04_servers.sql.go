@@ -1773,7 +1773,7 @@ type ServersInsertUserSessionIssuersParams struct {
 // (mcp_servers_issuer_required_check); the gateway gets its own so clients
 // authenticate to it rather than to a member.
 // session_duration must be a Microseconds-only interval: the user-session
-// mint rejects Months/Days components (see usersessions/minthandler.go).
+// mint rejects Months components (see conv.PGIntervalToDuration).
 // The workforce issuer serves one shared authorization server for its MCP
 // servers at /oauth/usi/{id}. It is left unpinned: this seed runs against
 // every deployment, and an unpinned issuer URL follows the deployment's own

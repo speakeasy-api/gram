@@ -394,6 +394,15 @@ func (s *seeder) chToolName(i, k int) string {
 	return toolNames[chClientToolSlots[cidx-1][hash64("toolslot", i-1, k)%16]-1]
 }
 
+// chChatAgentID is the managed agent that drove chat i, or "" when a person
+// did. Every row a chat's calls produce, gateway or hook, names the same one.
+func (s *seeder) chChatAgentID(i int) string {
+	if i%4 != 0 {
+		return ""
+	}
+	return s.det("managed-agent-" + strconv.Itoa(1+i%3)).String()
+}
+
 // chToolCallRows are the tool-execution rows: 3-12 per chat (hash-picked, so
 // busy chats and quick ones both exist). gram.toolset.slug makes the Insights
 // CTE's direct branch classify each trace as hosted MCP traffic; unique
@@ -414,7 +423,7 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 		clientName := chClientNames[cidx-1]
 		clientVersion := chClientVersions[cidx-1][s.chChatByte(i, 16)%5]
 		clientSeen := hash64("cliseen", i-1)%8 > 0
-		managedAgentID := s.det("managed-agent-" + strconv.Itoa(1+i%3)).String()
+		managedAgentID := s.chChatAgentID(i)
 		dayOff := s.chatDayOff(i)
 
 		for k := 1; k <= calls; k++ {
@@ -449,7 +458,7 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 			// of <person>". Not every agent call has one: a key or a
 			// federated platform signs the agent in as itself, so a third of
 			// them deliberately carry no authorizer.
-			if i%4 == 0 {
+			if managedAgentID != "" {
 				attrs += `,"gram.event.source":"tool_call","gram.authorization.actor.type":"agent","gram.authorization.actor.id":"` + managedAgentID + `"`
 				if hash64("authz", i)%3 != 0 {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
@@ -993,11 +1002,18 @@ func (s *seeder) chCursorUsageRows() []chTelemetryRow {
 // Insights hook branch as shadow-MCP-sourced traffic; result/error attrs
 // drive success/failure classification. Even chats ran in Cursor, so the
 // client (and the tool draw) is the Cursor pair's.
+//
+// In an agent's chat the hooks were sent with that agent's key, so the row
+// names the agent as its actor and carries no user.email: the hooks service
+// stamps the one and strips the other.
 func (s *seeder) chCursorHookRows() []chTelemetryRow {
 	var rows []chTelemetryRow
 	for i := 2; i <= bulkChats; i += 2 {
 		uidx := s.chChatOwnerIdx(i)
-		email := s.email(demoUsers[uidx].handle)
+		sender := `,"user.email":"` + s.email(demoUsers[uidx].handle) + `"`
+		if agentID := s.chChatAgentID(i); agentID != "" {
+			sender = `,"gram.authorization.actor.type":"agent","gram.authorization.actor.id":"` + agentID + `"`
+		}
 		chatID := s.chatID(i).String()
 		nano := s.chatTS(i).UnixNano()
 		for k := 1; k <= 2; k++ {
@@ -1019,7 +1035,7 @@ func (s *seeder) chCursorHookRows() []chTelemetryRow {
 					`,"gen_ai.tool.call.id":"call_demo_` + strconv.Itoa(i) + `_` + strconv.Itoa(k) + `"` +
 					`,"gen_ai.conversation.id":"` + chatID + `"` +
 					`,"gram.project.id":"` + s.projectID().String() + `"` +
-					`,"user.email":"` + email + `"` +
+					sender +
 					chIdentityAttrs(uidx) + `}`,
 				resource: s.chResource(),
 				urn:      "",

@@ -216,11 +216,13 @@ func NewProxyManager(
 	}
 }
 
-// StartDrain ends the relayed streams that only carry server-initiated
-// messages, now and for any opened afterwards, so clients reconnect to a
-// replica that is still serving. Call it when the server starts shutting down.
-func (f *ProxyManager) StartDrain() {
-	f.drain.Start()
+// StartDrain starts the shutdown drain for every stream this manager's
+// proxies relay: streams that only carry server-initiated messages end now so
+// clients reconnect to a replica that is still serving, and requests still
+// waiting on a remote MCP server after interruptAfter are answered with a
+// JSON-RPC error. Call it when the server starts shutting down.
+func (f *ProxyManager) StartDrain(interruptAfter time.Duration) {
+	f.drain.Start(interruptAfter)
 }
 
 // Build constructs a configured [*proxy.Proxy] for a single request against
