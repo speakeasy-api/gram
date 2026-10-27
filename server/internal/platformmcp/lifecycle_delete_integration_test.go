@@ -199,9 +199,9 @@ func TestDeleteMCPTurnsOffAHostedToolsetServer(t *testing.T) {
 	stored, err := mcpserversrepo.New(fixture.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: server.ID, ProjectID: fixture.project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "disabled", stored.Visibility)
-	toolset, err := toolsetsrepo.New(fixture.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: fixture.project.ID})
-	require.NoError(t, err)
-	require.False(t, toolset.McpEnabled, "the toolset turns its server off, as the dashboard delete does")
+	// The server row holds the hosting state; the toolset itself stays.
+	_, err = toolsetsrepo.New(fixture.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err, "turning a hosted server off keeps its toolset")
 
 	// Audited exactly as the dashboard audits it: the server is turned off, not
 	// deleted, so it is an update to disabled.
