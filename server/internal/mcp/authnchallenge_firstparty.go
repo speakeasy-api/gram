@@ -59,6 +59,10 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
+	reconnect, err := s.consumeWorkloadReconnect(r, endpoint)
+	if err != nil {
+		return err
+	}
 
 	focusServer := r.URL.Query().Get("server")
 	if len(focusServer) > maxFocusServerLength {
@@ -98,9 +102,10 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		CSRFToken:                csrfToken,
 
 		// Subject is stamped by HandleIDPCallback from authoritative IDP claims.
-		Subject:    nil,
-		CreatedAt:  time.Now(),
-		FirstParty: true,
+		Subject:           nil,
+		CreatedAt:         time.Now(),
+		FirstParty:        true,
+		WorkloadReconnect: reconnect,
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
 		FocusServer:     focusServer,

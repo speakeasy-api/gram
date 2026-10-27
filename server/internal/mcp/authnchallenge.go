@@ -200,6 +200,8 @@ type AuthnChallengeState struct {
 	// upstream providers, but there is no client to approve or redirect back to
 	// — completing the connections is terminal.
 	FirstParty bool `json:"first_party,omitempty"`
+	// WorkloadReconnect binds a workload-started first-party flow to its owner.
+	WorkloadReconnect *WorkloadReconnectBinding `json:"workload_reconnect,omitempty"`
 	// AutoConnectDone records that the consent page has already sent this
 	// challenge straight to an upstream provider without the user clicking
 	// Connect (see maybeAutoConnect). It is a latch, not a success flag: it is
@@ -1006,6 +1008,9 @@ type issuerGateAuthentication struct {
 	// act on invalid_token by refreshing and then reauthorizing.
 	refreshableUserSession bool
 
+	// directWorkloadHandoff is enabled only by direct proxy dispatch.
+	directWorkloadHandoff bool
+
 	// chosenClient narrows upstream resolution to the one client the
 	// credential chose for the endpoint's server; invalid resolves every
 	// client the issuer binds unless chosenNoAuth is set.
@@ -1150,6 +1155,7 @@ func (s *Service) authenticateIssuerGate(
 		subject:              *subject,
 
 		refreshableUserSession: refreshableUserSession,
+		directWorkloadHandoff:  false,
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
 		authClient:             nil,
@@ -1221,6 +1227,10 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, "", remoteSessionMisconfiguredDescription)
 		return writeChallenge(w, header, remoteSessionMisconfiguredDescription)
 	case errors.Is(err, remotesessions.ErrNoValidToken):
+		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
+			return errWorkloadReconnectRequired
+		}
+
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession)
 		return writeRemoteSessionReconnectChallenge(w, authentication)
 	default:

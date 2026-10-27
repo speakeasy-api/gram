@@ -27,6 +27,10 @@ type ChallengeBrowserBinding struct {
 }
 
 func validateChallengeBrowser(r *http.Request, state AuthnChallengeState, callback bool) error {
+	if err := validateWorkloadReconnectBinding(state); err != nil {
+		return err
+	}
+
 	if state.Browser == nil {
 		if state.Federation != nil {
 			return errors.New("missing federated browser binding")
@@ -120,6 +124,9 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	}
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return errors.New("remote login parent mismatch")
+	}
+	if err := validateWorkloadReconnectBinding(parent); err != nil {
+		return err
 	}
 	// A login on another callback host carries its own browser binding, set
 	// there by the bind stop of the remote login browser hop.

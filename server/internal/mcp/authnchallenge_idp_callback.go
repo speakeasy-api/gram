@@ -465,6 +465,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// Mint a fresh state ID so the /connect URL we redirect to is NOT the
 	// same value that just bounced through the IDP. The IDP-returned state
 	// is consumed; the new ID is what /connect's GetAndDelete will burn.
+	if err := challengeState.WorkloadReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
+		return err
+	}
 	subject := urn.NewUserSubject(gramUserID)
 	// Rotate only the cache-key ID (replay protection). challengeState.FlowID
 	// is deliberately left untouched so the flow stays correlatable across the
