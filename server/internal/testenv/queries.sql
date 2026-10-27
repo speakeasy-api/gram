@@ -2307,3 +2307,8 @@ SELECT EXISTS (
       AND wait_event_type = 'Lock'
       AND query LIKE '%LockWorkloadIssuerForWrite%'
 )::boolean;
+
+-- name: SetDeviceJoinTokenOrderingFixture :execrows
+UPDATE workload_device_join_tokens
+SET id = @replacement_id, created_at = @created_at
+WHERE organization_id = @organization_id AND id = @id;

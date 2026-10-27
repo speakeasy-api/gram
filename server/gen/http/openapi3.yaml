@@ -90044,6 +90044,145 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: WorkloadIdentities
+    /rpc/workloadIdentities.listDeviceJoinTokens:
+        get:
+            description: List the organization's device join tokens, newest first, optionally for one agent. Revoked tokens are included. Each carries its status but never the token or its hash, which cannot be shown again. Requires workload:read.
+            operationId: listWorkloadDeviceJoinTokens
+            parameters:
+                - allowEmptyValue: true
+                  description: Only this exact token, without returning its secret.
+                  in: query
+                  name: token_id
+                  schema:
+                    description: Only this exact token, without returning its secret.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Only tokens that enroll devices under this agent.
+                  in: query
+                  name: agent_id
+                  schema:
+                    description: Only tokens that enroll devices under this agent.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor from a previous page.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor from a previous page.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size. Defaults to 50, maximum 200.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Page size. Defaults to 50, maximum 200.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadDeviceJoinTokenList'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listDeviceJoinTokens workloadIdentities
+            tags:
+                - workloadIdentities
+            x-speakeasy-name-override: listDeviceJoinTokens
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: WorkloadDeviceJoinTokens
     /rpc/workloadIdentities.listPlatforms:
         get:
             description: 'List the platforms the catalog offers to trust without looking anything up, each with the policy that trusting it writes: the issuer and signing keys it is recognised by, the values the operator supplies, and the access rule it produces. How the setup is explained belongs to the dashboard. The same for every organization. Requires workload:read.'
@@ -90416,6 +90555,112 @@ paths:
             x-speakeasy-name-override: registerIssuer
             x-speakeasy-react-hook:
                 name: RegisterWorkloadIssuer
+    /rpc/workloadIdentities.revokeDeviceJoinToken:
+        delete:
+            description: 'Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; withdraw the enrolled device instead when a token was redeemed. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token''s agent or agent:authorize on it, as creating one does.'
+            operationId: revokeWorkloadDeviceJoinToken
+            parameters:
+                - allowEmptyValue: true
+                  description: The join token id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The join token id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadDeviceJoinTokenSummary'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: revokeDeviceJoinToken workloadIdentities
+            tags:
+                - workloadIdentities
+            x-speakeasy-name-override: revokeDeviceJoinToken
+            x-speakeasy-react-hook:
+                name: RevokeWorkloadDeviceJoinToken
     /rpc/workloadIdentities.updateIssuer:
         post:
             description: Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
@@ -131349,12 +131594,78 @@ components:
                     type: string
                     description: When the token stops being redeemable.
                     format: date-time
+                id:
+                    type: string
+                    description: The unique token id used to track or revoke this issuance without its secret.
+                    format: uuid
                 token:
                     type: string
                     description: The join token. Shown once; only its hash is stored.
             required:
+                - id
                 - token
                 - expires_at
+        WorkloadDeviceJoinTokenList:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadDeviceJoinTokenSummary'
+                    description: Join tokens, newest first.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page. Omitted on the last page.
+            required:
+                - items
+        WorkloadDeviceJoinTokenSummary:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: The agent a device enrolled with this token inherits its policy from.
+                    format: uuid
+                consumed_at:
+                    type: string
+                    description: When a device redeemed the token. Absent until redeemed.
+                    format: date-time
+                consumed_by_subject:
+                    type: string
+                    description: The workload subject, device:<uuid>, of the device that redeemed the token. Absent until redeemed.
+                created_at:
+                    type: string
+                    format: date-time
+                created_by_user_id:
+                    type: string
+                    description: The person who created the token.
+                expires_at:
+                    type: string
+                    description: When the token stops being redeemable.
+                    format: date-time
+                id:
+                    type: string
+                    description: The join token id.
+                    format: uuid
+                revoked_at:
+                    type: string
+                    description: When the token was revoked. Absent unless revoked.
+                    format: date-time
+                status:
+                    type: string
+                    description: 'Derived in this order: revoked when revoked_at is set, redeemed when consumed_at is set, expired when expires_at has passed, otherwise active. Only an active token can enroll a device.'
+                    enum:
+                        - active
+                        - redeemed
+                        - expired
+                        - revoked
+            description: A device join token's management metadata. The token and its hash are never included.
+            required:
+                - id
+                - agent_id
+                - created_by_user_id
+                - created_at
+                - expires_at
+                - status
         WorkloadDeviceRegistration:
             type: object
             properties:

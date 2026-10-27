@@ -344,6 +344,7 @@ export const AUDIT_ACTIONS = [
   "workload-admission:withdraw",
   "workload-device-join-token:create",
   "workload-device-join-token:redeem",
+  "workload-device-join-token:revoke",
   "workload-issuer:create",
   "workload-issuer:delete",
   "workload-issuer:update",
@@ -1096,9 +1097,11 @@ export function staticActionPhrase(action: AuditAction): string {
     case "workload-admission:withdraw":
       return "withdrew workload";
     case "workload-device-join-token:create":
-      return "created a device join token for";
+      return "created a bootstrap token for";
     case "workload-device-join-token:redeem":
-      return "enrolled a device with a join token for";
+      return "enrolled a device with a bootstrap token for";
+    case "workload-device-join-token:revoke":
+      return "revoked a bootstrap token for";
 
     default:
       return assertNever(action);

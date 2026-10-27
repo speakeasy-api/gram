@@ -5632,7 +5632,7 @@ webhooks:
                 required: true
     audit_log.workload_device_join_token_event_v1:
         post:
-            description: Emitted when a device join token is created or redeemed to enroll a device as a workload
+            description: Emitted when a device join token is created, redeemed to enroll a device as a workload, or revoked
             operationId: audit_log.workload_device_join_token_event_v1
             requestBody:
                 content:

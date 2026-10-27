@@ -5821,6 +5821,32 @@ func (q *Queries) SetDeviceIntegrationSyncPushDigestFixture(ctx context.Context,
 	return err
 }
 
+const setDeviceJoinTokenOrderingFixture = `-- name: SetDeviceJoinTokenOrderingFixture :execrows
+UPDATE workload_device_join_tokens
+SET id = $1, created_at = $2
+WHERE organization_id = $3 AND id = $4
+`
+
+type SetDeviceJoinTokenOrderingFixtureParams struct {
+	ReplacementID  uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) SetDeviceJoinTokenOrderingFixture(ctx context.Context, arg SetDeviceJoinTokenOrderingFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setDeviceJoinTokenOrderingFixture,
+		arg.ReplacementID,
+		arg.CreatedAt,
+		arg.OrganizationID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setDirectoryGroupWorkOSDeletedFixture = `-- name: SetDirectoryGroupWorkOSDeletedFixture :exec
 UPDATE directory_groups
 SET workos_deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() END,

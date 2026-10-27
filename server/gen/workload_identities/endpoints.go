@@ -27,6 +27,8 @@ type Endpoints struct {
 	UpdateSubject         goa.Endpoint
 	WithdrawSubject       goa.Endpoint
 	CreateDeviceJoinToken goa.Endpoint
+	ListDeviceJoinTokens  goa.Endpoint
+	RevokeDeviceJoinToken goa.Endpoint
 	RegisterDevice        goa.Endpoint
 }
 
@@ -47,6 +49,8 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateSubject:         NewUpdateSubjectEndpoint(s, a.APIKeyAuth),
 		WithdrawSubject:       NewWithdrawSubjectEndpoint(s, a.APIKeyAuth),
 		CreateDeviceJoinToken: NewCreateDeviceJoinTokenEndpoint(s, a.APIKeyAuth),
+		ListDeviceJoinTokens:  NewListDeviceJoinTokensEndpoint(s, a.APIKeyAuth),
+		RevokeDeviceJoinToken: NewRevokeDeviceJoinTokenEndpoint(s, a.APIKeyAuth),
 		RegisterDevice:        NewRegisterDeviceEndpoint(s),
 	}
 }
@@ -65,6 +69,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateSubject = m(e.UpdateSubject)
 	e.WithdrawSubject = m(e.WithdrawSubject)
 	e.CreateDeviceJoinToken = m(e.CreateDeviceJoinToken)
+	e.ListDeviceJoinTokens = m(e.ListDeviceJoinTokens)
+	e.RevokeDeviceJoinToken = m(e.RevokeDeviceJoinToken)
 	e.RegisterDevice = m(e.RegisterDevice)
 }
 
@@ -582,6 +588,100 @@ func NewCreateDeviceJoinTokenEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.CreateDeviceJoinToken(ctx, p)
+	}
+}
+
+// NewListDeviceJoinTokensEndpoint returns an endpoint function that calls the
+// method "listDeviceJoinTokens" of service "workloadIdentities".
+func NewListDeviceJoinTokensEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListDeviceJoinTokensPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListDeviceJoinTokens(ctx, p)
+	}
+}
+
+// NewRevokeDeviceJoinTokenEndpoint returns an endpoint function that calls the
+// method "revokeDeviceJoinToken" of service "workloadIdentities".
+func NewRevokeDeviceJoinTokenEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeDeviceJoinTokenPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RevokeDeviceJoinToken(ctx, p)
 	}
 }
 

@@ -14,9 +14,11 @@ import (
 
 const (
 	// Creating a join token hands out the right to enroll one machine under an
-	// agent, and redeeming it is that enrollment.
+	// agent, redeeming it is that enrollment, and revoking it withdraws that
+	// right before any machine used it.
 	ActionWorkloadDeviceJoinTokenCreate Action = "workload-device-join-token:create"
 	ActionWorkloadDeviceJoinTokenRedeem Action = "workload-device-join-token:redeem"
+	ActionWorkloadDeviceJoinTokenRevoke Action = "workload-device-join-token:revoke"
 )
 
 // WorkloadDeviceJoinTokenSnapshot is the audited state of one join token. The
@@ -127,6 +129,53 @@ func (l *Logger) LogWorkloadDeviceJoinTokenRedeem(ctx context.Context, dbtx repo
 		Metadata:       nil,
 		BeforeSnapshot: before,
 		AfterSnapshot:  after,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.WorkloadDeviceJoinTokenV1})
+}
+
+type LogWorkloadDeviceJoinTokenRevokeEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	JoinTokenURN         urn.WorkloadDeviceJoinToken
+	JoinTokenDisplayName string
+
+	// The unspent token as it stood when revoked. A revoked token has no
+	// state after, as with any delete.
+	JoinTokenSnapshotBefore *WorkloadDeviceJoinTokenSnapshot
+}
+
+func (l *Logger) LogWorkloadDeviceJoinTokenRevoke(ctx context.Context, dbtx repo.DBTX, event LogWorkloadDeviceJoinTokenRevokeEvent) error {
+	action := ActionWorkloadDeviceJoinTokenRevoke
+
+	before, err := marshalAuditPayload(event.JoinTokenSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.JoinTokenURN.ID.String(),
+		SubjectType:        string(subjectTypeWorkloadDeviceJoinToken),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.JoinTokenDisplayName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		Metadata:       nil,
+		BeforeSnapshot: before,
+		AfterSnapshot:  nil,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.WorkloadDeviceJoinTokenV1})

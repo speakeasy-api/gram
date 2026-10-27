@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -2669,6 +2670,499 @@ func DecodeCreateDeviceJoinTokenResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildListDeviceJoinTokensRequest instantiates a HTTP request object with
+// method and path set to call the "workloadIdentities" service
+// "listDeviceJoinTokens" endpoint
+func (c *Client) BuildListDeviceJoinTokensRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDeviceJoinTokensWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "listDeviceJoinTokens", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListDeviceJoinTokensRequest returns an encoder for requests sent to
+// the workloadIdentities listDeviceJoinTokens server.
+func EncodeListDeviceJoinTokensRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.ListDeviceJoinTokensPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "listDeviceJoinTokens", "*workloadidentities.ListDeviceJoinTokensPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.TokenID != nil {
+			values.Add("token_id", *p.TokenID)
+		}
+		if p.AgentID != nil {
+			values.Add("agent_id", *p.AgentID)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListDeviceJoinTokensResponse returns a decoder for responses returned
+// by the workloadIdentities listDeviceJoinTokens endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListDeviceJoinTokensResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListDeviceJoinTokensResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListDeviceJoinTokensResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			err = ValidateListDeviceJoinTokensResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			res := NewListDeviceJoinTokensWorkloadDeviceJoinTokenListOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDeviceJoinTokensUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			err = ValidateListDeviceJoinTokensUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			return nil, NewListDeviceJoinTokensUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDeviceJoinTokensForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			err = ValidateListDeviceJoinTokensForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			return nil, NewListDeviceJoinTokensForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDeviceJoinTokensBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			err = ValidateListDeviceJoinTokensBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			return nil, NewListDeviceJoinTokensBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDeviceJoinTokensNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			err = ValidateListDeviceJoinTokensNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			return nil, NewListDeviceJoinTokensNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListDeviceJoinTokensConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			err = ValidateListDeviceJoinTokensConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			return nil, NewListDeviceJoinTokensConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDeviceJoinTokensUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			err = ValidateListDeviceJoinTokensUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			return nil, NewListDeviceJoinTokensUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDeviceJoinTokensInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			err = ValidateListDeviceJoinTokensInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			return nil, NewListDeviceJoinTokensInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDeviceJoinTokensInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+				}
+				err = ValidateListDeviceJoinTokensInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+				}
+				return nil, NewListDeviceJoinTokensInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDeviceJoinTokensUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+				}
+				err = ValidateListDeviceJoinTokensUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+				}
+				return nil, NewListDeviceJoinTokensUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listDeviceJoinTokens", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListDeviceJoinTokensGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			err = ValidateListDeviceJoinTokensGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listDeviceJoinTokens", err)
+			}
+			return nil, NewListDeviceJoinTokensGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listDeviceJoinTokens", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRevokeDeviceJoinTokenRequest instantiates a HTTP request object with
+// method and path set to call the "workloadIdentities" service
+// "revokeDeviceJoinToken" endpoint
+func (c *Client) BuildRevokeDeviceJoinTokenRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevokeDeviceJoinTokenWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "revokeDeviceJoinToken", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRevokeDeviceJoinTokenRequest returns an encoder for requests sent to
+// the workloadIdentities revokeDeviceJoinToken server.
+func EncodeRevokeDeviceJoinTokenRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.RevokeDeviceJoinTokenPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "revokeDeviceJoinToken", "*workloadidentities.RevokeDeviceJoinTokenPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeRevokeDeviceJoinTokenResponse returns a decoder for responses returned
+// by the workloadIdentities revokeDeviceJoinToken endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRevokeDeviceJoinTokenResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRevokeDeviceJoinTokenResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RevokeDeviceJoinTokenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			err = ValidateRevokeDeviceJoinTokenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			res := NewRevokeDeviceJoinTokenWorkloadDeviceJoinTokenSummaryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RevokeDeviceJoinTokenUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			err = ValidateRevokeDeviceJoinTokenUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			return nil, NewRevokeDeviceJoinTokenUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RevokeDeviceJoinTokenForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			err = ValidateRevokeDeviceJoinTokenForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			return nil, NewRevokeDeviceJoinTokenForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RevokeDeviceJoinTokenBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			err = ValidateRevokeDeviceJoinTokenBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			return nil, NewRevokeDeviceJoinTokenBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RevokeDeviceJoinTokenNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			err = ValidateRevokeDeviceJoinTokenNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			return nil, NewRevokeDeviceJoinTokenNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RevokeDeviceJoinTokenConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			err = ValidateRevokeDeviceJoinTokenConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			return nil, NewRevokeDeviceJoinTokenConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RevokeDeviceJoinTokenUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			err = ValidateRevokeDeviceJoinTokenUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			return nil, NewRevokeDeviceJoinTokenUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RevokeDeviceJoinTokenInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			err = ValidateRevokeDeviceJoinTokenInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			return nil, NewRevokeDeviceJoinTokenInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RevokeDeviceJoinTokenInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+				}
+				err = ValidateRevokeDeviceJoinTokenInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+				}
+				return nil, NewRevokeDeviceJoinTokenInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RevokeDeviceJoinTokenUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+				}
+				err = ValidateRevokeDeviceJoinTokenUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+				}
+				return nil, NewRevokeDeviceJoinTokenUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "revokeDeviceJoinToken", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RevokeDeviceJoinTokenGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			err = ValidateRevokeDeviceJoinTokenGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "revokeDeviceJoinToken", err)
+			}
+			return nil, NewRevokeDeviceJoinTokenGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "revokeDeviceJoinToken", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRegisterDeviceRequest instantiates a HTTP request object with method
 // and path set to call the "workloadIdentities" service "registerDevice"
 // endpoint
@@ -3093,6 +3587,25 @@ func unmarshalWorkloadTokenEndpointResponseBodyToTypesWorkloadTokenEndpoint(v *W
 		Issuer:                *v.Issuer,
 		TokenEndpoint:         *v.TokenEndpoint,
 		McpHost:               *v.McpHost,
+	}
+
+	return res
+}
+
+// unmarshalWorkloadDeviceJoinTokenSummaryResponseBodyToWorkloadidentitiesWorkloadDeviceJoinTokenSummary
+// builds a value of type *workloadidentities.WorkloadDeviceJoinTokenSummary
+// from a value of type *WorkloadDeviceJoinTokenSummaryResponseBody.
+func unmarshalWorkloadDeviceJoinTokenSummaryResponseBodyToWorkloadidentitiesWorkloadDeviceJoinTokenSummary(v *WorkloadDeviceJoinTokenSummaryResponseBody) *workloadidentities.WorkloadDeviceJoinTokenSummary {
+	res := &workloadidentities.WorkloadDeviceJoinTokenSummary{
+		ID:                *v.ID,
+		AgentID:           *v.AgentID,
+		CreatedByUserID:   *v.CreatedByUserID,
+		CreatedAt:         *v.CreatedAt,
+		ExpiresAt:         *v.ExpiresAt,
+		ConsumedAt:        v.ConsumedAt,
+		ConsumedBySubject: v.ConsumedBySubject,
+		RevokedAt:         v.RevokedAt,
+		Status:            *v.Status,
 	}
 
 	return res

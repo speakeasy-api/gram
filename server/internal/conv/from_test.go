@@ -137,6 +137,22 @@ func TestFromPGTimestamptz_Invalid(t *testing.T) {
 	require.Empty(t, conv.FromPGTimestamptz(pgtype.Timestamptz{}))
 }
 
+func TestPtrFromPGTimestamptz_Valid(t *testing.T) {
+	t.Parallel()
+
+	input := pgtype.Timestamptz{Time: time.Date(2024, 11, 15, 15, 4, 5, 0, time.FixedZone("test", 2*60*60)), Valid: true}
+
+	result := conv.PtrFromPGTimestamptz(input)
+	require.NotNil(t, result)
+	require.Equal(t, "2024-11-15T13:04:05Z", *result)
+}
+
+func TestPtrFromPGTimestamptz_Invalid(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, conv.PtrFromPGTimestamptz(pgtype.Timestamptz{}))
+}
+
 func TestURLToSlug_HostAndPath(t *testing.T) {
 	t.Parallel()
 
