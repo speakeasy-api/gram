@@ -8,21 +8,13 @@ import {
 } from "@/components/ui/Select";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { shellQuote } from "@/lib/shell";
 import { useState, type JSX, type ReactNode } from "react";
 import { CodeBlock } from "./CodeBlock";
 import { ConsoleRow } from "./ConsoleRow";
 import { isCredentialSafe } from "./gateway";
 import { PendingValues } from "./SetupFields";
 import type { SetupServer } from "./setupInstructions";
-
-/**
- * A value as one single-quoted shell word. The values come from the server,
- * but the script is pasted into a shell, so nothing in them may be read as
- * shell syntax.
- */
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
 
 /**
  * The exchange, run inside the pod each time it needs a Speakeasy token. The
