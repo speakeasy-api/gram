@@ -519,6 +519,7 @@ func TestIDJAGRejectionFromValidator_MapsUnknownReasonsGenerically(t *testing.T)
 	t.Parallel()
 
 	require.Equal(t, IDJAGRejectionReason(idjag.ReasonAudienceMismatch), IDJAGRejectionFromValidator(idjag.ReasonAudienceMismatch))
+	require.Equal(t, IDJAGRejectionReason(idjag.ReasonResourceNotIndicated), IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated))
 	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(idjag.Reason("a_reason_added_later")))
 	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(""))
 }

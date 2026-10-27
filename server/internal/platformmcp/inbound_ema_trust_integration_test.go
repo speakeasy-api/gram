@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	orgremotegen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -42,6 +43,8 @@ import (
 
 type inboundEMAServicesFixture struct {
 	conn      *pgxpool.Pool
+	project   ResolvedProject
+	remote    *remotesessions.Service
 	principal Principal
 	service   *InboundEMATrustService
 	issuerID  uuid.UUID
@@ -64,7 +67,7 @@ func newInboundEMAServicesFixture(t *testing.T, maxConns int32) (context.Context
 	}
 	redisClient, err := platformMCPInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	logger, tracer, meter := testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t)
 
 	var metadata atomic.Pointer[[]byte]
@@ -118,7 +121,7 @@ func newInboundEMAServicesFixture(t *testing.T, maxConns int32) (context.Context
 	ctx = contextWithPrincipal(ctx, principal)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID), authz.NewGrant(authz.ScopeOrgRead, principal.OrganizationID)})
 	service := NewPostgresReader(logger, conn).WithInboundEMATrust(users, remote).inboundEMATrust
-	return ctx, inboundEMAServicesFixture{conn: conn, principal: principal, service: service, issuerID: issuer.ID, idpURL: idp.URL}
+	return ctx, inboundEMAServicesFixture{conn: conn, project: project, remote: remote, principal: principal, service: service, issuerID: issuer.ID, idpURL: idp.URL}
 }
 
 // The tools act through the real organization issuer management services, so
@@ -214,3 +217,38 @@ func TestInboundEMATrustConcurrentConfirmationsOnSmallPool(t *testing.T) {
 // inboundEMASmallPoolDeadline bounds the small-pool test; a starved pool
 // would hang until it.
 const inboundEMASmallPoolDeadline = 30 * time.Second
+
+// An inbound-only link is not read by outbound chaining, so an issuer with
+// active EMA bindings can still gain and lose one.
+func TestInboundEMATrustIgnoresEMABindingsForInboundOnlyLink(t *testing.T) {
+	t.Parallel()
+	ctx, f := newInboundEMAServicesFixture(t, 0)
+	vendor, err := f.remote.CreateIssuer(ctx, &orgremotegen.CreateIssuerPayload{Slug: "vendor-" + uuid.NewString()[:8], Issuer: "https://vendor.example.test"})
+	require.NoError(t, err)
+	_, err = testrepo.New(f.conn).InsertRemoteSessionEMABindingFixture(ctx, testrepo.InsertRemoteSessionEMABindingFixtureParams{
+		ProjectID:             f.project.ID,
+		OrganizationID:        f.principal.OrganizationID,
+		UserSessionIssuerID:   f.issuerID,
+		RemoteSessionIssuerID: uuid.MustParse(vendor.ID),
+		Resource:              "https://vendor.example.test/mcp",
+		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	preview, err := f.service.Trust(ctx, f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL})
+	require.NoError(t, err)
+	require.True(t, preview.Changed)
+	trusted, err := f.service.Trust(ctx, f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	require.NoError(t, err)
+	require.True(t, trusted.Applied)
+	require.NotNil(t, trusted.Issuer.TrustedIdentityProvider)
+
+	untrusted, err := f.service.Untrust(ctx, f.principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), ExpectedTrustedRemoteSessionIssuerID: trusted.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	require.NoError(t, err)
+	require.True(t, untrusted.Applied)
+	require.Nil(t, untrusted.Issuer.TrustedIdentityProvider)
+
+	bindings, err := remotesessionsrepo.New(f.conn).CountActiveEMABindingsForUserIssuer(ctx, remotesessionsrepo.CountActiveEMABindingsForUserIssuerParams{IssuerID: f.issuerID, OrganizationID: f.principal.OrganizationID, ProjectID: uuid.Nil})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, bindings, "the binding is left as it was")
+}

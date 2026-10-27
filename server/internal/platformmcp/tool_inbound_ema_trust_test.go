@@ -464,3 +464,32 @@ func TestInboundEMATrustSaysCreatedProviderWasKeptWhenTrustIsRefused(t *testing.
 	require.Len(t, f.remote.created, 1)
 	require.Contains(t, refusal.Message, "was created and kept")
 }
+
+// The preview refuses what the confirmation would, so nothing is created for
+// a change the management update is certain to refuse.
+func TestInboundEMATrustPreviewReportsWhatConfirmationWouldRefuse(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	keyless := uuid.NewString()
+	f.remote.records[keyless] = &types.RemoteSessionIssuer{ID: keyless, OrganizationID: f.principal.OrganizationID, Issuer: inboundEMATestIDP}
+	f.remote.matches = []*types.RemoteSessionIssuerDuplicateMatch{{ID: keyless, Issuer: inboundEMATestIDP, Tier: remoteIssuerTierOrganization}}
+	for _, confirmed := range []bool{false, true} {
+		_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: confirmed})
+		var refusal *InboundEMATrustRefusalError
+		require.ErrorAs(t, err, &refusal)
+		require.Equal(t, inboundEMARefusalNoKeySet, refusal.Code)
+	}
+
+	federated := newInboundEMAFixture(t, 1)
+	federated.users.issuers[federated.issuerID].TrustedRemoteSessionIssuerID = new(uuid.NewString())
+	federated.users.issuers[federated.issuerID].TrustedRemoteSessionClientID = new(uuid.NewString())
+	_, err := federated.service.Trust(t.Context(), federated.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: federated.issuerID, IssuerURL: inboundEMATestIDP})
+	var refusal *InboundEMATrustRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, inboundEMARefusalBrowserSignIn, refusal.Code)
+
+	require.Empty(t, f.remote.created)
+	require.Empty(t, f.users.updates)
+	require.Empty(t, federated.remote.created)
+	require.Empty(t, federated.users.updates)
+}
