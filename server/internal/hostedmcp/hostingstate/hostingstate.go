@@ -175,6 +175,19 @@ func FollowAlias(ctx context.Context, tx toolsetsrepo.DBTX, organizationID strin
 	if slug == toolset.McpSlug && domainID == toolset.CustomDomainID {
 		return nil
 	}
+	if domainID.Valid && slug.Valid {
+		// The platform host also serves custom-domain aliases, so the move must not contend with another one there.
+		if err := mcpendpointsrepo.New(tx).LockSlugScope(ctx, mcpendpointsrepo.LockSlugScopeParams{CustomDomainID: domainID, Slug: slug.String}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock hosted MCP alias address")
+		}
+		served, err := toolsetsrepo.New(tx).OtherCustomDomainAliasServedOnPlatform(ctx, toolsetsrepo.OtherCustomDomainAliasServedOnPlatformParams{Slug: slug, ToolsetID: toolsetID})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check hosted MCP alias address")
+		}
+		if served {
+			return oops.E(oops.CodeConflict, nil, "this address is already taken by another toolset")
+		}
+	}
 	if err := toolsetsrepo.New(tx).MoveToolsetMCPAlias(ctx, toolsetsrepo.MoveToolsetMCPAliasParams{McpSlug: slug, CustomDomainID: domainID, ID: toolsetID, ProjectID: projectID}); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {

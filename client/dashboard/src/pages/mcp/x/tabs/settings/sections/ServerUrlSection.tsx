@@ -664,8 +664,9 @@ function LegacyAddressRow({ slug }: { slug: string }): JSX.Element {
         <CopyButton text={url} size="xs" tooltip="Copy hosted address" />
       </div>
       <Text muted small>
-        An older address on the Speakeasy domain. It serves the same path as
-        your custom address, so existing clients keep working.
+        An older Speakeasy address with the same name as your custom address.
+        Clients that already use it connect here while this server is enabled
+        and public access is on.
       </Text>
     </Field>
   );

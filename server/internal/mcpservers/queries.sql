@@ -886,6 +886,14 @@ WHERE t.id = ANY(@mcp_server_ids::uuid[])
     SELECT 1
     FROM toolsets o
     WHERE o.mcp_slug = t.mcp_slug
+      AND o.custom_domain_id IS NULL
+      AND o.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM toolsets o
+    WHERE o.mcp_slug = t.mcp_slug
+      AND o.custom_domain_id IS NOT NULL
       AND o.id <> t.id
       AND o.deleted IS FALSE
   )

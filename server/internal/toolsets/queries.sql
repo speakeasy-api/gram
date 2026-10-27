@@ -293,6 +293,28 @@ WHERE slug = @slug
   AND external_oauth_server_id IS NULL
 RETURNING *;
 
+-- name: OtherCustomDomainAliasServedOnPlatform :one
+-- Whether another live-project toolset's custom-domain alias holds the slug while no platform alias does: the
+-- loose platform lookup serves that alias, so a second custom-domain alias with the slug would contend for it.
+SELECT (
+  NOT EXISTS (
+    SELECT 1
+    FROM toolsets pa
+    WHERE pa.mcp_slug = @slug
+      AND pa.custom_domain_id IS NULL
+      AND pa.deleted IS FALSE
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM toolsets t
+    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+    WHERE t.mcp_slug = @slug
+      AND t.custom_domain_id IS NOT NULL
+      AND t.deleted IS FALSE
+      AND t.id <> @toolset_id
+  )
+)::boolean AS served;
+
 -- name: MoveToolsetMCPAlias :exec
 -- Moves a legacy toolset's MCP alias to the hosted endpoint that now holds its address.
 UPDATE toolsets

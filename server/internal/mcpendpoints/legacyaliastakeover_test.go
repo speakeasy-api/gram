@@ -31,7 +31,8 @@ func seedCustomDomainAliasInOtherProject(t *testing.T, ctx context.Context, ti *
 	require.NoError(t, err)
 
 	slug := authCtx.OrganizationSlug + "-legacy-" + suffix
-	domainID := seedCustomDomain(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	// The alias's domain row may belong to any organization; only one live domain per organization is allowed.
+	domainID := seedCustomDomain(t, ctx, ti.conn, "org-alias-"+suffix)
 	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, project.ID, slug)
 	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, domainID)
 	seedCanonicalToolsetWrapper(t, ctx, ti.conn, project.ID, toolset.ID)
@@ -75,6 +76,7 @@ func TestCustomDomainAliasHoldsPlatformSlugAgainstOtherProjects(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, err.Error(), "already")
 
 	created, err := ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
 		McpServerID: conv.PtrEmpty(serverID.String()),
@@ -88,6 +90,7 @@ func TestCustomDomainAliasHoldsPlatformSlugAgainstOtherProjects(t *testing.T) {
 	})
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, err.Error(), "already")
 }
 
 func TestCustomDomainAliasPlatformSlugOwnerExceptions(t *testing.T) {
@@ -143,9 +146,41 @@ func TestHostedAddressCannotTakeCustomDomainAliasOfOtherProject(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, err.Error(), "already")
 
 	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(slug)})
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, err.Error(), "already")
 	require.Len(t, f.endpoints(t, ctx), 1)
+}
+
+func TestHostedAliasCannotMoveOntoAnotherCustomDomainAliasSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newHostedAddressFixture(t, "pro")
+	_, err := toolsetsrepo.New(f.ti.conn).UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
+		Name: f.toolset.Name, Description: f.toolset.Description, DefaultEnvironmentSlug: f.toolset.DefaultEnvironmentSlug,
+		McpSlug: conv.ToPGText(f.endpoint.Slug), McpIsPublic: false, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpEnabled: true, ToolSelectionMode: f.toolset.ToolSelectionMode, Slug: f.toolset.Slug, ProjectID: f.projectID,
+	})
+	require.NoError(t, err)
+	_, _, slug := seedCustomDomainAliasInOtherProject(t, ctx, f.ti)
+	domain := f.activeDomain(t, ctx, "own-"+uuid.NewString()[:8]+".example.com")
+
+	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+		McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(slug), CustomDomainID: new(domain.ID.String()),
+	})
+	require.NoError(t, err, "the custom-domain endpoint itself does not touch the platform")
+
+	// Removing the platform endpoint would move the alias onto that slug, where the platform host would serve two.
+	err = f.ti.service.DeleteMcpEndpoint(ctx, &gen.DeleteMcpEndpointPayload{ID: f.endpoint.ID.String()})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, err.Error(), "already taken")
+	stored, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Equal(t, f.endpoint.Slug, stored.McpSlug.String)
+	require.False(t, stored.CustomDomainID.Valid)
 }

@@ -101060,7 +101060,7 @@ components:
           format: uuid
         legacy_platform_slug:
           type: string
-          description: 'The slug of a legacy Speakeasy-hosted address that still serves this hosted server: its custom-domain address, which the Speakeasy domain also answers until the server takes a platform endpoint with that slug. Absent otherwise.'
+          description: 'The slug of an older Speakeasy-hosted address of this hosted server: its legacy custom-domain address, which the Speakeasy domain also answers under the same access rules. Absent when a platform endpoint or another alias holds that slug.'
         name:
           type: string
           description: A human-readable display name for the server
