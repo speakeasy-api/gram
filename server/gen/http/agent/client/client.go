@@ -25,6 +25,14 @@ type Client struct {
 	// getMyConnections endpoint.
 	GetMyConnectionsDoer goahttp.Doer
 
+	// HideMcpServer Doer is the HTTP client used to make requests to the
+	// hideMcpServer endpoint.
+	HideMcpServerDoer goahttp.Doer
+
+	// UnhideMcpServer Doer is the HTTP client used to make requests to the
+	// unhideMcpServer endpoint.
+	UnhideMcpServerDoer goahttp.Doer
+
 	// ListSyncedUsers Doer is the HTTP client used to make requests to the
 	// listSyncedUsers endpoint.
 	ListSyncedUsersDoer goahttp.Doer
@@ -87,6 +95,8 @@ func NewClient(
 	return &Client{
 		GetPluginsDoer:           doer,
 		GetMyConnectionsDoer:     doer,
+		HideMcpServerDoer:        doer,
+		UnhideMcpServerDoer:      doer,
 		ListSyncedUsersDoer:      doer,
 		GetConfigurationDoer:     doer,
 		UpdateConfigurationDoer:  doer,
@@ -148,6 +158,54 @@ func (c *Client) GetMyConnections() goa.Endpoint {
 		resp, err := c.GetMyConnectionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "getMyConnections", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// HideMcpServer returns an endpoint that makes HTTP requests to the agent
+// service hideMcpServer server.
+func (c *Client) HideMcpServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeHideMcpServerRequest(c.encoder)
+		decodeResponse = DecodeHideMcpServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildHideMcpServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.HideMcpServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "hideMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UnhideMcpServer returns an endpoint that makes HTTP requests to the agent
+// service unhideMcpServer server.
+func (c *Client) UnhideMcpServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUnhideMcpServerRequest(c.encoder)
+		decodeResponse = DecodeUnhideMcpServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUnhideMcpServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UnhideMcpServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "unhideMcpServer", err)
 		}
 		return decodeResponse(resp)
 	}
