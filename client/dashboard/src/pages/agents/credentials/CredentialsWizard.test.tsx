@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   toolsets: vi.fn(),
   fetch: vi.fn(),
   platforms: vi.fn(),
+  tokenEndpoints: vi.fn(),
   platformsStatus: "success" as "success" | "pending" | "error",
   registerIssuer: vi.fn(),
   admitSubject: vi.fn(),
@@ -153,7 +154,7 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
 }));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
   useWorkloadTokenEndpoints: () => ({
-    data: { items: [] },
+    data: { items: mocks.tokenEndpoints() },
     isPending: false,
     isError: false,
   }),
@@ -204,6 +205,13 @@ vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
 vi.mock("../agent-policy-grants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../agent-policy-grants")>()),
   invalidateAgentPolicy: vi.fn(),
+}));
+// Highlighting is asynchronous and splits code into token elements; the
+// snippet's text is what these tests read.
+vi.mock("./CodeBlock", () => ({
+  CodeBlock: ({ value, label }: { value: string; label: string }) => (
+    <pre aria-label={label}>{value}</pre>
+  ),
 }));
 
 const grant = {
@@ -301,6 +309,7 @@ beforeEach(() => {
   mocks.canReadWorkloads = true;
   mocks.platformsStatus = "success";
   mocks.platforms.mockReturnValue([]);
+  mocks.tokenEndpoints.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
   mocks.renameAgent.mockResolvedValue({});
   mocks.createGrant.mockResolvedValue({});
@@ -824,6 +833,119 @@ describe("Connecting a GKE cluster", () => {
       agentId: "agent_new",
       tags: [],
     });
+  });
+
+  const sharedServer = {
+    userSessionIssuerId: "usi_shared",
+    userSessionIssuerSlug: "shared",
+    projectId: "",
+    projectName: "",
+    issuer: "https://app.example.test/oauth/usi/usi_shared",
+    tokenEndpoint: "https://app.example.test/oauth/usi/usi_shared/token",
+    mcpHost: "app.example.test",
+  };
+
+  /** Connects a cluster for an agent that reaches GitHub, then shows the pod step. */
+  async function reachPodStep() {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        {
+          id: "server_one",
+          name: "GitHub",
+          slug: "github",
+          platformEndpointSlug: "github-mcp",
+          projectId: "project_one",
+          toolsetId: "toolset_one",
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your cluster" });
+    for (const [label, value] of [
+      ["Project ID", "example-project"],
+      ["Location", "us-west1"],
+      ["Cluster name", "example-cluster"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your workload" });
+    fireEvent.change(screen.getByLabelText("Namespace"), {
+      target: { value: "pr-review" },
+    });
+    fireEvent.change(screen.getByLabelText("Service account"), {
+      target: { value: "review-agent" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Connect GKE" }));
+    await screen.findByRole("heading", {
+      name: "Give the pod a Speakeasy token",
+    });
+  }
+
+  it("names the audience, token endpoint and server URL the pod needs", async () => {
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    await reachPodStep();
+
+    expect(screen.getByText("Audience")).toBeTruthy();
+    expect(screen.getAllByText(sharedServer.issuer).length).toBeGreaterThan(0);
+    expect(document.body.textContent).toContain(
+      `audience: ${sharedServer.issuer}`,
+    );
+    expect(document.body.textContent).not.toContain("SPEAKEASY_AUDIENCE");
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", {
+      name: "Exchange the token and call the server",
+    });
+    const serverUrl = new URL("/mcp/github-mcp", window.location.origin).href;
+    expect(screen.getByText("Call GitHub with the access token")).toBeTruthy();
+    expect(
+      screen.getAllByText(sharedServer.tokenEndpoint).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(serverUrl).length).toBeGreaterThan(0);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(`TOKEN_ENDPOINT=${sharedServer.tokenEndpoint}`);
+    expect(text).toContain(`MCP_URL=${serverUrl}`);
+    // The token endpoint refuses an exchange that names no server.
+    expect(text).toContain('--data-urlencode "resource=$MCP_URL"');
+    expect(text).not.toContain("SPEAKEASY_TOKEN_ENDPOINT");
+  });
+
+  it("says why the values are missing and which placeholders stand in", async () => {
+    await reachPodStep();
+
+    expect(
+      screen.getByText(/no shared Speakeasy authorization server/),
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain("audience: SPEAKEASY_AUDIENCE");
+    expect(
+      screen.getByText(/Until then, the snippet below shows/),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", {
+      name: "Exchange the token and call the server",
+    });
+    expect(
+      screen.getByText(/no shared Speakeasy authorization server/),
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain(
+      "TOKEN_ENDPOINT=SPEAKEASY_TOKEN_ENDPOINT",
+    );
   });
 });
 
