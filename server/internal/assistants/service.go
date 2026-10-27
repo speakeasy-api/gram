@@ -1345,13 +1345,16 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 // the caller cannot write.
 var errMCPEnableForbidden = errors.New("attaching a toolset with MCP disabled requires mcp:write on it")
 
+// errMCPEnableUnavailable rejects attaching a toolset whose hosted server cannot be re-enabled as it is configured.
+var errMCPEnableUnavailable = errors.New("the toolset's hosted MCP server cannot be enabled as configured: it needs an address, and private network access needs an online network ingress")
+
 // errToolsetNoMCPServer rejects attaching a toolset that has no canonical MCP server.
 var errToolsetNoMCPServer = errors.New(hostedmcp.NoServerMessage)
 
-// enableAssistantToolsets turns MCP on for newly attached toolsets that have it
-// off, so every attached hosted server is reachable at runtime, and syncs their
-// canonical wrappers. Toolsets in alreadyAttached keep their MCP state. Toolset
-// rows are already locked FOR NO KEY UPDATE, so EnablesMCP is current.
+// enableAssistantToolsets turns newly attached toolsets' disabled canonical
+// wrappers private, so every attached hosted server is reachable at runtime.
+// Toolsets in alreadyAttached keep their MCP state. Toolset rows are already
+// locked FOR NO KEY UPDATE, which serializes this with other hosted writes.
 func enableAssistantToolsets(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -1375,21 +1378,18 @@ func enableAssistantToolsets(
 	if len(toolsetIDs) == 0 {
 		return nil
 	}
-	enabled, err := assistantrepo.New(tx).EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
-		ToolsetIds: toolsetIDs,
-		ProjectID:  projectID,
-	})
-	if err != nil {
-		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
-	}
-	slices.SortFunc(enabled, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
-	for _, id := range enabled {
+	slices.SortFunc(toolsetIDs, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	for _, id := range toolsetIDs {
 		toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: id, ProjectID: projectID})
 		if err != nil {
-			return fmt.Errorf("load enabled assistant toolset: %w", err)
+			return fmt.Errorf("load assistant toolset: %w", err)
 		}
-		if _, err := hostedmcp.Sync(ctx, tx, auditLogger, actor, toolset, nil); err != nil {
-			return fmt.Errorf("sync hosted mcp for assistant toolset: %w", err)
+		if _, err := hostedmcp.Enable(ctx, tx, auditLogger, actor, toolset); err != nil {
+			var shareable *oops.ShareableError
+			if errors.As(err, &shareable) && shareable.Code == oops.CodeInvalid {
+				return fmt.Errorf("toolset %q: %w: %w", toolset.Slug, errMCPEnableUnavailable, err)
+			}
+			return fmt.Errorf("enable hosted mcp for assistant toolset: %w", err)
 		}
 	}
 	return nil

@@ -3060,9 +3060,12 @@ func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
 			req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 			rr := httptest.NewRecorder()
 			require.NoError(t, ti.service.ServeInstallPage(rr, req))
-			if visibility == mcpservers.VisibilityPublic {
+			switch visibility {
+			case mcpservers.VisibilityPublic:
 				require.Equal(t, http.StatusOK, rr.Code)
-			} else {
+			case mcpservers.VisibilityPrivate:
+				require.Equal(t, http.StatusFound, rr.Code, "a private wrapper sends the visitor to sign in")
+			default:
 				require.Equal(t, http.StatusNotFound, rr.Code)
 			}
 		})

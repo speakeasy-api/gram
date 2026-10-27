@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,11 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
+	"golang.org/x/sync/errgroup"
+
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -29,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/identity"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcpRepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -42,10 +49,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
-	"go.opentelemetry.io/otel/trace"
-	goahttp "goa.design/goa/v3/http"
-	"goa.design/goa/v3/security"
-	"golang.org/x/sync/errgroup"
 )
 
 type Service struct {
@@ -4167,6 +4170,18 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	if err != nil {
 		return nil, nil, fmt.Errorf("list project toolsets: %w", err)
 	}
+	toolsetIDs := make([]uuid.UUID, len(toolsets))
+	for i, toolset := range toolsets {
+		toolsetIDs[i] = toolset.ID
+	}
+	organizationID := ""
+	if len(toolsets) > 0 {
+		organizationID = toolsets[0].OrganizationID
+	}
+	hosting, err := hostingstate.Load(ctx, db, organizationID, toolsetIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load hosted MCP state: %w", err)
+	}
 
 	// Include soft-deleted servers: tool_source on telemetry rows is the
 	// backend remote/tunneled server id, which outlives the mcp_servers row.
@@ -4185,9 +4200,20 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	}
 	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
 	for _, toolset := range toolsets {
-		// The slug is the legacy alias; whether it serves is the server's state, so the slug matches either way.
-		if !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
-			// No alias, but its past calls still need their server id.
+		// Traffic can arrive through the frozen alias or any of the canonical server's endpoints.
+		var slugs []string
+		if toolset.McpSlug.Valid && toolset.McpSlug.String != "" {
+			slugs = append(slugs, toolset.McpSlug.String)
+		}
+		if row := hostingstate.For(hosting, toolset.ID); row != nil && row.Canonical {
+			for _, slug := range row.EndpointSlugs {
+				if !slices.Contains(slugs, slug) {
+					slugs = append(slugs, slug)
+				}
+			}
+		}
+		if len(slugs) == 0 {
+			// No address, but its past calls still need their server id.
 			if serverID := toolsetServerIDs[toolset.ID]; serverID != "" {
 				hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
 					ToolsetSlug: toolset.Slug,
@@ -4198,12 +4224,14 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 			}
 			continue
 		}
-		hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
-			ToolsetSlug: toolset.Slug,
-			ToolsetName: toolset.Name,
-			McpSlug:     toolset.McpSlug.String,
-			MCPServerID: toolsetServerIDs[toolset.ID],
-		})
+		for _, slug := range slugs {
+			hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
+				ToolsetSlug: toolset.Slug,
+				ToolsetName: toolset.Name,
+				McpSlug:     slug,
+				MCPServerID: toolsetServerIDs[toolset.ID],
+			})
+		}
 	}
 
 	serverMatchers := make([]repo.MCPServerMatcher, 0, len(servers))
