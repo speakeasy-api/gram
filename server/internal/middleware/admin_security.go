@@ -95,6 +95,8 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 			proposal = proposal && proposalID != "" && !strings.Contains(proposalID, "/")
 			if r.URL.Path == "/admin-mcp/connect" || proposal {
 				_ = oauthui.WriteAuthorizationError(r.Context(), w, oauthui.AuthorizationError{
+					Recovery:       nil,
+					Setup:          false,
 					Status:         http.StatusForbidden,
 					Reason:         oauthui.ReasonSessionChanged,
 					Approval:       proposal,

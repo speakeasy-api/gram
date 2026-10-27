@@ -123,33 +123,40 @@ function renderStep(onComplete: () => void) {
 }
 
 describe("DistributeServersStep", () => {
-  it("surfaces a blocked install instead of spinning forever", async () => {
-    serverState.catalog.data.servers = [
-      {
-        registryId: "registry-1",
-        registrySpecifier: "example/server",
-        title: "Example Server",
-        description: "Example description",
-        supportsDcr: true,
-        remotes: [
-          { url: "https://example.com/mcp", transportType: "streamable-http" },
-        ],
-      },
-    ];
-    serverState.workflow.installBlockedReason =
-      "Could not load the organization's issuers.";
-    renderStep(() => {});
+  it.each(["dcr", "cimd"])(
+    "offers %s servers and surfaces blocked installs",
+    async (method) => {
+      serverState.catalog.data.servers = [
+        {
+          registryId: "registry-1",
+          registrySpecifier: "example/server",
+          title: "Example Server",
+          description: "Example description",
+          supportsDcr: method === "dcr",
+          supportsCimd: method === "cimd",
+          remotes: [
+            {
+              url: "https://example.com/mcp",
+              transportType: "streamable-http",
+            },
+          ],
+        },
+      ];
+      serverState.workflow.installBlockedReason =
+        "Could not load the organization's issuers.";
+      renderStep(() => {});
 
-    fireEvent.click(screen.getByRole("button", { name: /Example Server/ }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Distribute 1 server" }),
-    );
+      fireEvent.click(screen.getByRole("button", { name: /Example Server/ }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Distribute 1 server" }),
+      );
 
-    expect(
-      await screen.findByText("Could not load the organization's issuers."),
-    ).toBeTruthy();
-    expect(serverState.workflow.startInstall).not.toHaveBeenCalled();
-  });
+      expect(
+        await screen.findByText("Could not load the organization's issuers."),
+      ).toBeTruthy();
+      expect(serverState.workflow.startInstall).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps successful deployment instructions visible until Finish completes the step", async () => {
     serverState.catalog.data.servers = [
