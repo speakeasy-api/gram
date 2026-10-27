@@ -14942,8 +14942,8 @@ CREATE TABLE IF NOT EXISTS user_hidden_mcp_servers (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT user_hidden_mcp_servers_pkey PRIMARY KEY (organization_id, user_id, mcp_server_id),
   CONSTRAINT user_hidden_mcp_servers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT user_hidden_mcp_servers_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
-  CONSTRAINT user_hidden_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT user_hidden_mcp_servers_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT user_hidden_mcp_servers_mcp_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN user_hidden_mcp_servers.organization_id IS '@access: confidential';
@@ -14953,13 +14953,9 @@ COMMENT ON COLUMN user_hidden_mcp_servers.project_id IS '@access: confidential';
 COMMENT ON COLUMN user_hidden_mcp_servers.created_at IS '@access: confidential';
 COMMENT ON COLUMN user_hidden_mcp_servers.updated_at IS '@access: confidential';
 
--- Serves the cascade from mcp_servers.
-CREATE INDEX IF NOT EXISTS user_hidden_mcp_servers_mcp_server_id_idx
-ON user_hidden_mcp_servers (mcp_server_id);
-
--- Serves the cascade from projects.
-CREATE INDEX IF NOT EXISTS user_hidden_mcp_servers_project_id_idx
-ON user_hidden_mcp_servers (project_id);
+-- Serves the cascades from projects and mcp_servers.
+CREATE INDEX IF NOT EXISTS user_hidden_mcp_servers_project_id_mcp_server_id_idx
+ON user_hidden_mcp_servers (project_id, mcp_server_id);
 
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
