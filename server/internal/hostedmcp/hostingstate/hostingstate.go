@@ -24,51 +24,99 @@ import (
 // Row is the server row holding a toolset's id, as ListCanonicalHostingByToolsetIDs returns it.
 type Row = toolsetsrepo.ListCanonicalHostingByToolsetIDsRow
 
-// ApplyServer sets toolset's enabled, public and issuer state from its canonical wrapper's visibility and issuer.
-// A disabled server reads as the visibility it re-enables to.
-func ApplyServer(toolset toolsetsrepo.Toolset, serverVisibility string, issuer uuid.NullUUID) toolsetsrepo.Toolset {
-	toolset.McpEnabled = serverVisibility == visibility.Public || serverVisibility == visibility.Private
-	if serverVisibility == visibility.Disabled {
-		toolset.McpIsPublic = ReEnableVisibility(toolset) == visibility.Public
-	} else {
-		toolset.McpIsPublic = serverVisibility == visibility.Public
+// Hosting is a toolset's MCP hosting state.
+type Hosting struct {
+	// Enabled reports whether the hosted server serves at all.
+	Enabled bool
+
+	// Public reports whether the hosted server serves without authentication.
+	Public bool
+
+	// UserSessionIssuerID is the issuer the hosted server authenticates against.
+	UserSessionIssuerID uuid.NullUUID
+}
+
+// Address is a toolset's preferred MCP address; an invalid Slug means it has none.
+type Address struct {
+	Slug pgtype.Text
+
+	// CustomDomainID is the custom domain Slug lives on; invalid means the platform domain.
+	CustomDomainID uuid.NullUUID
+}
+
+// NotHosted is the hosting state of a toolset nothing serves.
+func NotHosted() Hosting {
+	return Hosting{Enabled: false, Public: false, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+}
+
+// LegacyAlias is the legacy /mcp/<slug> address a toolset created before hosted servers owned their endpoints still
+// answers on (AIM-670). Hosting readers use it instead of reading the toolset's address columns directly.
+func LegacyAlias(toolset toolsetsrepo.Toolset) Address {
+	return Address{Slug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID}
+}
+
+// Columns are a toolset's own hosting columns. Hosting stands only without a canonical wrapper; Address also stands
+// when the wrapper has no servable endpoint.
+type Columns struct {
+	Hosting
+	Address
+}
+
+// ToolsetColumns reads toolset's own hosting columns.
+func ToolsetColumns(toolset toolsetsrepo.Toolset) Columns {
+	return Columns{
+		Hosting: Hosting{Enabled: toolset.McpEnabled, Public: toolset.McpIsPublic, UserSessionIssuerID: toolset.UserSessionIssuerID},
+		Address: LegacyAlias(toolset),
 	}
-	toolset.UserSessionIssuerID = issuer
-	return toolset
+}
+
+// FromServer is the hosting state of a canonical wrapper with the given visibility and issuer. A disabled server
+// reads as the visibility it re-enables to, which depends on the toolset's external OAuth server.
+func FromServer(externalOAuthServerID uuid.NullUUID, serverVisibility string, issuer uuid.NullUUID) Hosting {
+	public := serverVisibility == visibility.Public
+	if serverVisibility == visibility.Disabled {
+		public = reEnableVisibility(externalOAuthServerID) == visibility.Public
+	}
+	return Hosting{
+		Enabled:             serverVisibility == visibility.Public || serverVisibility == visibility.Private,
+		Public:              public,
+		UserSessionIssuerID: issuer,
+	}
 }
 
 // ReEnableVisibility is the visibility a disabled hosted server comes back with: public only when it carries
 // external OAuth, which a private server cannot, and private otherwise. The frozen toolset public flag does not
 // count, since nothing updates it, and neither does the retired OAuth proxy link.
 func ReEnableVisibility(toolset toolsetsrepo.Toolset) string {
-	if toolset.ExternalOauthServerID.Valid {
+	return reEnableVisibility(toolset.ExternalOauthServerID)
+}
+
+func reEnableVisibility(externalOAuthServerID uuid.NullUUID) string {
+	if externalOAuthServerID.Valid {
 		return visibility.Public
 	}
 	return visibility.Private
 }
 
-// ApplyKept marks a toolset whose id a non-canonical server kept after leaving it: nothing serves it.
-func ApplyKept(toolset toolsetsrepo.Toolset) toolsetsrepo.Toolset {
-	toolset.McpEnabled = false
-	toolset.McpIsPublic = false
-	return toolset
+// Kept is the hosting state of a toolset whose id a non-canonical server kept after leaving it: nothing serves it.
+func Kept(issuer uuid.NullUUID) Hosting {
+	return Hosting{Enabled: false, Public: false, UserSessionIssuerID: issuer}
 }
 
-// Apply derives toolset's hosting state, and its address when the wrapper has a servable endpoint; a nil row
-// leaves the toolset columns standing.
-func Apply(toolset toolsetsrepo.Toolset, row *Row) toolsetsrepo.Toolset {
+// Derive is a toolset's hosting state and preferred address given the server row holding its id. A nil row leaves
+// the toolset columns standing; a canonical wrapper without a servable endpoint keeps the toolset's address.
+func Derive(columns Columns, externalOAuthServerID uuid.NullUUID, row *Row) (Hosting, Address) {
 	switch {
 	case row == nil:
-		return toolset
+		return columns.Hosting, columns.Address
 	case !row.Canonical:
-		return ApplyKept(toolset)
+		return Kept(columns.UserSessionIssuerID), columns.Address
 	}
-	toolset = ApplyServer(toolset, row.Visibility, row.UserSessionIssuerID)
-	if row.HasEndpoint {
-		toolset.McpSlug = pgtype.Text{String: row.EndpointSlug, Valid: true}
-		toolset.CustomDomainID = row.EndpointCustomDomainID
+	hosting := FromServer(externalOAuthServerID, row.Visibility, row.UserSessionIssuerID)
+	if !row.HasEndpoint {
+		return hosting, columns.Address
 	}
-	return toolset
+	return hosting, Address{Slug: pgtype.Text{String: row.EndpointSlug, Valid: true}, CustomDomainID: row.EndpointCustomDomainID}
 }
 
 // Load returns the server rows holding the given toolsets' ids in one query, keyed by toolset id.
@@ -129,12 +177,13 @@ func CheckPrivateIngress(ctx context.Context, db networkingressrepo.DBTX, organi
 // current address while an endpoint still holds it, else the platform endpoint, else the oldest one. With no live
 // endpoint the alias stays. This is the address rule pods that mirror the toolset columns apply, so both agree.
 func AliasAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
+	alias := LegacyAlias(toolset)
 	var preferred *mcpendpointsrepo.McpEndpoint
 	for i := range endpoints {
 		candidate := &endpoints[i]
 		switch {
-		case toolset.McpSlug.Valid && candidate.Slug == toolset.McpSlug.String && candidate.CustomDomainID == toolset.CustomDomainID:
-			return toolset.McpSlug, toolset.CustomDomainID
+		case alias.Slug.Valid && candidate.Slug == alias.Slug.String && candidate.CustomDomainID == alias.CustomDomainID:
+			return alias.Slug, alias.CustomDomainID
 		case preferred == nil:
 			preferred = candidate
 		case !candidate.CustomDomainID.Valid && preferred.CustomDomainID.Valid:
@@ -144,7 +193,7 @@ func AliasAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.Mcp
 		}
 	}
 	if preferred == nil {
-		return toolset.McpSlug, toolset.CustomDomainID
+		return alias.Slug, alias.CustomDomainID
 	}
 	return pgtype.Text{String: preferred.Slug, Valid: true}, preferred.CustomDomainID
 }
@@ -158,7 +207,9 @@ func FollowAlias(ctx context.Context, tx toolsetsrepo.DBTX, organizationID strin
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "load hosted toolset")
-	case !toolset.McpSlug.Valid || toolset.McpSlug.String == "":
+	}
+	alias := LegacyAlias(toolset)
+	if !alias.Slug.Valid || alias.Slug.String == "" {
 		return nil
 	}
 	rows, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
@@ -172,7 +223,7 @@ func FollowAlias(ctx context.Context, tx toolsetsrepo.DBTX, organizationID strin
 		live = append(live, row.McpEndpoint)
 	}
 	slug, domainID := AliasAddress(toolset, live)
-	if slug == toolset.McpSlug && domainID == toolset.CustomDomainID {
+	if slug == alias.Slug && domainID == alias.CustomDomainID {
 		return nil
 	}
 	if domainID.Valid && slug.Valid {

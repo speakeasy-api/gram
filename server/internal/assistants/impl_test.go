@@ -367,7 +367,7 @@ func (f mcpEnableFixture) requireMCPEnabled(t *testing.T, toolsetID uuid.UUID, w
 	require.NoError(t, err)
 	served, _, err := hostedmcp.LoadServerState(t.Context(), f.conn, reloaded)
 	require.NoError(t, err)
-	require.Equal(t, want, served.McpEnabled)
+	require.Equal(t, want, served.Enabled)
 }
 
 func requireMCPEnableForbidden(t *testing.T, err error) {
