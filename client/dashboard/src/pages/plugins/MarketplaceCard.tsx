@@ -129,7 +129,7 @@ export function MarketplaceCard({
                 }
               >
                 {hasUnpublishedChanges
-                  ? "Not up to date. Click 'Sync changes' to publish"
+                  ? "Not up to date yet. Changes sync automatically, or click 'Sync changes' to publish now"
                   : "Marketplace set up"}
               </span>
             </span>

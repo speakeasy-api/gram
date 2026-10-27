@@ -34,6 +34,10 @@ const deletion = vi.hoisted(() => ({
   invalidate: vi.fn(),
 }));
 const adminQuery = vi.hoisted(() => vi.fn());
+const toastSuccess = vi.hoisted(() => vi.fn());
+vi.mock("sonner", () => ({
+  toast: Object.assign(vi.fn(), { success: toastSuccess, error: vi.fn() }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     isLoading: state.loading,
@@ -204,6 +208,12 @@ describe("plugin detail permission boundary", () => {
     expect(deletion.invalidate).toHaveBeenCalledWith(expect.any(QueryClient), {
       refetchType: "none",
     });
+    // A connected marketplace republishes on its own, so the toast must not
+    // ask for a manual publish.
+    expect(toastSuccess).toHaveBeenCalledWith("Plugin deleted", {
+      description: "Changes sync to your marketplace automatically.",
+    });
+    expect(publish).not.toHaveBeenCalled();
   });
   it("allows writer-only edit and delete actions", () => {
     state.pluginWrite = true;

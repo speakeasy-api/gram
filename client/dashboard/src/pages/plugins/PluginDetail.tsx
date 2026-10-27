@@ -354,10 +354,9 @@ function PluginDetailContent({
   // the fresh-per-render wrapper object (mirrors Plugins.tsx).
   const { mutate: publishMutate } = publishMutation;
   // Mirror the in-flight flag into a ref so detached callbacks can gate on the
-  // current pending state. The "Publish now" toast action closure is created
-  // when offerPublish runs (before any publish starts), so it can't read a live
-  // isPending — without this guard, stacking edits into multiple toasts lets a
-  // user fire concurrent publishes that the disabled buttons prevent.
+  // current pending state: a callback captured before a publish started can't
+  // read a live isPending, and without this guard could fire a concurrent
+  // publish that the disabled buttons prevent.
   const isPublishingRef = useRef(publishMutation.isPending);
   isPublishingRef.current = publishMutation.isPending;
   const handlePublish = useCallback(
@@ -383,33 +382,27 @@ function PluginDetailContent({
     [canPublish, publishMutate],
   );
 
-  // Nudge the user to publish straight after an edit instead of hunting for
-  // Sync on the marketplace banner. A connected project republishes in one
-  // click; a configured-but-unconnected project needs the first-publish dialog
-  // (it collects collaborators). Unconfigured projects get no nudge — there's
-  // nowhere to publish to.
+  // A connected marketplace republishes on its own after every plugin change,
+  // so say so rather than asking for a manual sync. A configured-but-unconnected
+  // project still needs the first-publish dialog (it collects collaborators).
+  // Unconfigured projects get no nudge — there's nowhere to publish to.
   const offerPublish = useCallback(
     (message: string) => {
       if (!canPublish || !publishStatus?.configured) return;
+      if (publishStatus.connected) {
+        toast.success(message, {
+          description: "Changes sync to your marketplace automatically.",
+        });
+        return;
+      }
       toast.success(message, {
         action: {
           label: "Publish now",
-          onClick: () => {
-            if (publishStatus.connected) {
-              handlePublish([]);
-            } else {
-              setIsPublishDialogOpen(true);
-            }
-          },
+          onClick: () => setIsPublishDialogOpen(true),
         },
       });
     },
-    [
-      canPublish,
-      publishStatus?.configured,
-      publishStatus?.connected,
-      handlePublish,
-    ],
+    [canPublish, publishStatus?.configured, publishStatus?.connected],
   );
 
   const updateMutation = useUpdatePluginMutation({
