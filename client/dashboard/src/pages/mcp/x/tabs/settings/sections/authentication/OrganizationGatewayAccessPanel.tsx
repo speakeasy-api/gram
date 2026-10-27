@@ -12,13 +12,21 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { AuthRow } from "./AuthRow";
 
+export type GatewaySignInClient = {
+  client: RemoteSessionClient;
+  /** How many other servers share this client and so change with it. */
+  otherServers: number;
+};
+
 /**
  * Whether people can reach this server through the organization gateway.
  *
- * A server that signs people in upstream is offered on the gateway only when
- * its sign-in client is attached to the gateway's own issuer; otherwise the
- * gateway leaves it out entirely. The switch makes that attachment, so it
- * applies to every server using the same client.
+ * A server that signs people in upstream is offered on the gateway when one of
+ * its sign-in clients is attached to the gateway's own issuer; otherwise the
+ * gateway leaves it out entirely. The gateway's issuer holds one client per
+ * upstream, so offering attaches a single client, and withdrawing detaches
+ * every one that is attached. An attachment applies to every server using
+ * that client.
  *
  * It saves as soon as it is flipped, so it sits in its own panel rather than
  * beside the identity fields that wait for Save.
@@ -26,15 +34,15 @@ import { AuthRow } from "./AuthRow";
 export function OrganizationGatewayAccessPanel({
   serverUserSessionIssuerId,
   clients,
-  otherServerCounts,
+  preferredClientId,
   canWrite,
 }: {
   /** The issuer this server signs people in through. */
   serverUserSessionIssuerId: string;
   /** The per-person sign-in clients attached to this server. */
-  clients: RemoteSessionClient[];
-  /** For each client, how many other servers share it and so change with it. */
-  otherServerCounts: number[];
+  clients: GatewaySignInClient[];
+  /** The client to offer when there is a choice: the one people connect with. */
+  preferredClientId: string | null;
   canWrite: boolean;
 }): JSX.Element | null {
   const queryClient = useQueryClient();
@@ -57,10 +65,22 @@ export function OrganizationGatewayAccessPanel({
     return null;
   }
 
+  const attached = clients.filter(({ client }) =>
+    client.userSessionIssuerIds.includes(gatewayIssuerId),
+  );
+  const offered = attached.length > 0;
+  const toOffer =
+    clients.find(({ client }) => client.id === preferredClientId) ??
+    clients[0]!;
+  // The clients the next flip changes, and so the servers it reaches.
+  const changing = offered ? attached : [toOffer];
+
   // Counts are per client, without the servers behind them, so servers shared
   // by two clients cannot be told apart: with more than one client sharing,
   // the largest single count is the most that can be stated.
-  const sharingCounts = otherServerCounts.filter((count) => count > 0);
+  const sharingCounts = changing
+    .map(({ otherServers }) => otherServers)
+    .filter((count) => count > 0);
   const otherServers = Math.max(0, ...sharingCounts);
   const otherServersLabel = `${sharingCounts.length > 1 ? "at least " : ""}${
     otherServers === 1
@@ -68,16 +88,10 @@ export function OrganizationGatewayAccessPanel({
       : `${otherServers} other MCP servers`
   }`;
 
-  const offered = clients.every((client) =>
-    client.userSessionIssuerIds.includes(gatewayIssuerId),
-  );
-
   const setOffered = async (next: boolean): Promise<void> => {
     setPending(true);
     try {
-      for (const client of clients) {
-        const attached = client.userSessionIssuerIds.includes(gatewayIssuerId);
-        if (next === attached) continue;
+      for (const { client } of next ? [toOffer] : attached) {
         const request = {
           attachUserSessionIssuerForm: {
             id: client.id,

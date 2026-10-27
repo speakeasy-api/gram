@@ -8,7 +8,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OrganizationGatewayAccessPanel } from "./OrganizationGatewayAccessPanel";
+import {
+  OrganizationGatewayAccessPanel,
+  type GatewaySignInClient,
+} from "./OrganizationGatewayAccessPanel";
 
 const GATEWAY_ISSUER = "11111111-1111-4111-8111-111111111111";
 const SERVER_ISSUER = "22222222-2222-4222-8222-222222222222";
@@ -40,8 +43,12 @@ vi.mock("@/lib/errors", () => ({ handleError: mocks.handleError }));
 function client(
   id: string,
   userSessionIssuerIds: string[],
-): RemoteSessionClient {
-  return { id, userSessionIssuerIds } as unknown as RemoteSessionClient;
+  otherServers = 0,
+): GatewaySignInClient {
+  return {
+    client: { id, userSessionIssuerIds } as unknown as RemoteSessionClient,
+    otherServers,
+  };
 }
 
 function renderPanel(
@@ -52,7 +59,7 @@ function renderPanel(
       <OrganizationGatewayAccessPanel
         serverUserSessionIssuerId={SERVER_ISSUER}
         clients={[client("client-a", [SERVER_ISSUER])]}
-        otherServerCounts={[0]}
+        preferredClientId={null}
         canWrite
         {...props}
       />
@@ -81,6 +88,17 @@ afterEach(() => {
 });
 
 describe("OrganizationGatewayAccessPanel", () => {
+  function attachRequest(id: string) {
+    return {
+      request: {
+        attachUserSessionIssuerForm: {
+          id,
+          userSessionIssuerId: GATEWAY_ISSUER,
+        },
+      },
+    };
+  }
+
   it("offers a server whose sign-in is not on the gateway yet", async () => {
     renderPanel();
 
@@ -88,59 +106,55 @@ describe("OrganizationGatewayAccessPanel", () => {
     fireEvent.click(gatewaySwitch());
 
     await waitFor(() => {
-      expect(mocks.attach).toHaveBeenCalledWith({
-        request: {
-          attachUserSessionIssuerForm: {
-            id: "client-a",
-            userSessionIssuerId: GATEWAY_ISSUER,
-          },
-        },
-      });
+      expect(mocks.attach).toHaveBeenCalledWith(attachRequest("client-a"));
     });
     expect(mocks.detach).not.toHaveBeenCalled();
   });
 
-  it("stops offering a server already on the gateway", async () => {
+  it("offers one client when the server has several, preferring the connected one", async () => {
     renderPanel({
-      clients: [client("client-a", [SERVER_ISSUER, GATEWAY_ISSUER])],
+      clients: [
+        client("client-a", [SERVER_ISSUER]),
+        client("client-b", [SERVER_ISSUER]),
+      ],
+      preferredClientId: "client-b",
+    });
+
+    fireEvent.click(gatewaySwitch());
+
+    await waitFor(() => expect(mocks.attach).toHaveBeenCalledTimes(1));
+    expect(mocks.attach).toHaveBeenCalledWith(attachRequest("client-b"));
+  });
+
+  it("reads as offered when any client is on the gateway", () => {
+    renderPanel({
+      clients: [
+        client("client-a", [SERVER_ISSUER]),
+        client("client-b", [SERVER_ISSUER, GATEWAY_ISSUER]),
+      ],
     });
 
     expect(gatewaySwitch().getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(gatewaySwitch());
-
-    await waitFor(() => {
-      expect(mocks.detach).toHaveBeenCalledWith({
-        request: {
-          attachUserSessionIssuerForm: {
-            id: "client-a",
-            userSessionIssuerId: GATEWAY_ISSUER,
-          },
-        },
-      });
-    });
-    expect(mocks.attach).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Offered on the organization gateway"),
+    ).toBeDefined();
   });
 
-  it("attaches only the clients that are missing", async () => {
+  it("withdraws every client that is on the gateway", async () => {
     renderPanel({
       clients: [
         client("client-a", [SERVER_ISSUER, GATEWAY_ISSUER]),
         client("client-b", [SERVER_ISSUER]),
+        client("client-c", [SERVER_ISSUER, GATEWAY_ISSUER]),
       ],
     });
 
-    expect(gatewaySwitch().getAttribute("aria-checked")).toBe("false");
     fireEvent.click(gatewaySwitch());
 
-    await waitFor(() => expect(mocks.attach).toHaveBeenCalledTimes(1));
-    expect(mocks.attach).toHaveBeenCalledWith({
-      request: {
-        attachUserSessionIssuerForm: {
-          id: "client-b",
-          userSessionIssuerId: GATEWAY_ISSUER,
-        },
-      },
-    });
+    await waitFor(() => expect(mocks.detach).toHaveBeenCalledTimes(2));
+    expect(mocks.detach).toHaveBeenCalledWith(attachRequest("client-a"));
+    expect(mocks.detach).toHaveBeenCalledWith(attachRequest("client-c"));
+    expect(mocks.attach).not.toHaveBeenCalled();
   });
 
   it("reports a refused change", async () => {
@@ -157,8 +171,14 @@ describe("OrganizationGatewayAccessPanel", () => {
     });
   });
 
-  it("names the other servers that share the sign-in", () => {
-    renderPanel({ otherServerCounts: [2] });
+  it("names the other servers the client being offered signs in", () => {
+    renderPanel({
+      clients: [
+        client("client-a", [SERVER_ISSUER], 0),
+        client("client-b", [SERVER_ISSUER], 2),
+      ],
+      preferredClientId: "client-b",
+    });
 
     expect(
       screen.getByText(
@@ -167,29 +187,12 @@ describe("OrganizationGatewayAccessPanel", () => {
     ).toBeDefined();
   });
 
-  it("counts every client the switch changes, not only the first", () => {
+  it("states a lower bound when several shared clients would be withdrawn", () => {
     renderPanel({
       clients: [
-        client("client-a", [SERVER_ISSUER]),
-        client("client-b", [SERVER_ISSUER]),
+        client("client-a", [SERVER_ISSUER, GATEWAY_ISSUER], 1),
+        client("client-b", [SERVER_ISSUER, GATEWAY_ISSUER], 3),
       ],
-      otherServerCounts: [0, 3],
-    });
-
-    expect(
-      screen.getByText(
-        "This sign-in is shared, so the change also applies to 3 other MCP servers.",
-      ),
-    ).toBeDefined();
-  });
-
-  it("states a lower bound when several clients are shared", () => {
-    renderPanel({
-      clients: [
-        client("client-a", [SERVER_ISSUER]),
-        client("client-b", [SERVER_ISSUER]),
-      ],
-      otherServerCounts: [1, 3],
     });
 
     expect(
