@@ -165,6 +165,16 @@ func (r *RiskFindingListRow) scanTargets() []any {
 	}
 }
 
+// externalUserIDsCond matches whole external user ids, ignoring case: agents
+// report the same person's id in whatever case they were configured with.
+func externalUserIDsCond(ids []string) squirrel.Sqlizer {
+	lowered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		lowered = append(lowered, strings.ToLower(id))
+	}
+	return squirrel.Expr("lower(external_user_id) IN (?)", lowered)
+}
+
 // listRiskFindingsBase applies the filters shared by the list and count reads
 // that are immutable across an id's copies: tenancy, dead-letter sentinels,
 // the shadow marker and the visible-policy pushdown. Suppression state is
@@ -288,11 +298,7 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		sb = sb.Where("positionCaseInsensitive(external_user_id, ?) > 0", p.UserIDSubstr)
 	}
 	if len(p.ExternalUserIDs) > 0 {
-		lowered := make([]string, 0, len(p.ExternalUserIDs))
-		for _, id := range p.ExternalUserIDs {
-			lowered = append(lowered, strings.ToLower(id))
-		}
-		sb = sb.Where("lower(external_user_id) IN (?)", lowered)
+		sb = sb.Where(externalUserIDsCond(p.ExternalUserIDs))
 	}
 	if p.AssistantID != "" {
 		sb = sb.Where("assistant_id = ?", p.AssistantID)

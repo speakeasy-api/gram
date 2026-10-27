@@ -1758,11 +1758,6 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	return s.getRiskOverviewFromClickHouse(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, from, to)
 }
 
-type riskOverviewWindow struct {
-	from pgtype.Timestamptz
-	to   pgtype.Timestamptz
-}
-
 const maxRiskOverviewWindow = 31 * 24 * time.Hour
 
 func resolveRiskOverviewWindow(rawFrom, rawTo *string) (time.Time, time.Time, error) {
@@ -1793,13 +1788,6 @@ func resolveRiskOverviewWindow(rawFrom, rawTo *string) (time.Time, time.Time, er
 	}
 
 	return from, to, nil
-}
-
-func riskOverviewWindowParams(from, to time.Time) riskOverviewWindow {
-	return riskOverviewWindow{
-		from: pgtype.Timestamptz{Time: from, InfinityModifier: pgtype.Finite, Valid: true},
-		to:   pgtype.Timestamptz{Time: to, InfinityModifier: pgtype.Finite, Valid: true},
-	}
 }
 
 // topCategoriesFromCounts ranks per-category totals and drops empty ones.
@@ -1941,44 +1929,49 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid window").LogError(ctx, s.logger)
 	}
-	window := riskOverviewWindowParams(from, to)
 
-	categoryRows, err := s.repo.ListRiskUserCategoryBreakdown(ctx, repo.ListRiskUserCategoryBreakdownParams{
-		ProjectID:      *authCtx.ProjectID,
-		FromTime:       window.from,
-		ToTime:         window.to,
-		ExternalUserID: payload.ExternalUserID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list user category breakdown").LogError(ctx, s.logger)
+	if s.findingsCH == nil {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "risk user breakdown requires the ClickHouse findings store").LogError(ctx, s.logger)
 	}
 
-	ruleRows, err := s.repo.ListRiskUserRuleBreakdown(ctx, repo.ListRiskUserRuleBreakdownParams{
-		ProjectID:      *authCtx.ProjectID,
-		FromTime:       window.from,
-		ToTime:         window.to,
-		ExternalUserID: payload.ExternalUserID,
-	})
+	policyIDs, err := s.enabledPolicyIDs(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve enabled risk policies").LogError(ctx, s.logger)
+	}
+	if len(policyIDs) == 0 {
+		return &gen.RiskUserBreakdownResult{
+			From:           from.UTC().Format(time.RFC3339),
+			To:             to.UTC().Format(time.RFC3339),
+			ExternalUserID: payload.ExternalUserID,
+			Findings:       0,
+			Categories:     []*gen.RiskOverviewCategory{},
+			Rules:          []*gen.RiskRuleBreakdownEntry{},
+		}, nil
+	}
+
+	chWindow := chrepo.RiskOverviewWindowParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      authCtx.ProjectID.String(),
+		From:           from,
+		To:             to,
+		MCPServerID:    "",
+	}
+	ruleRows, err := s.findingsCH.ListRiskUserRuleBreakdown(ctx, chWindow, payload.ExternalUserID, policyIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user rule breakdown").LogError(ctx, s.logger)
 	}
 
-	categories := make([]*gen.RiskOverviewCategory, 0, len(categoryRows))
-	var total int64
-	for _, row := range categoryRows {
-		categories = append(categories, &gen.RiskOverviewCategory{
-			Category: row.Category,
-			Findings: row.Findings,
-		})
-		total += row.Findings
-	}
-
+	categoryCounts := make(map[string]int64)
 	rules := make([]*gen.RiskRuleBreakdownEntry, 0, len(ruleRows))
+	var total int64
 	for _, row := range ruleRows {
+		findings := safeCount(row.Findings)
+		categoryCounts[string(categories.Classify(row.Source, row.RuleID))] += findings
+		total += findings
 		rules = append(rules, &gen.RiskRuleBreakdownEntry{
 			RuleID:   row.RuleID,
 			Source:   row.Source,
-			Findings: row.Findings,
+			Findings: findings,
 		})
 	}
 
@@ -1987,7 +1980,7 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 		To:             to.UTC().Format(time.RFC3339),
 		ExternalUserID: payload.ExternalUserID,
 		Findings:       total,
-		Categories:     categories,
+		Categories:     topCategoriesFromCounts(categoryCounts, len(categoryCounts)),
 		Rules:          rules,
 	}, nil
 }

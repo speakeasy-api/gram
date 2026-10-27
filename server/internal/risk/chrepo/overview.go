@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/Masterminds/squirrel"
+
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // RiskOverviewWindowParams scopes every overview read to one tenant and a
@@ -39,6 +41,17 @@ type RiskOverviewWindowParams struct {
 // The shadow marker is immutable across copies, so it is filtered with the
 // tenancy scope before the dedup.
 func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.SelectBuilder {
+	return overviewFindingsWhere(p, nil, columns...)
+}
+
+// overviewFindingsWhere is overviewFindings with extra conditions applied
+// before the dedup. They must only test columns every copy of an id shares,
+// or a dismissal copy could be filtered out while its finding copy survives.
+// Suppression copies project these from the copy they supersede, and the
+// attribution columns hold as long as the writer stamps the same attribution
+// on a redelivered finding, the same assumption the findings list's user
+// filter makes.
+func overviewFindingsWhere(p RiskOverviewWindowParams, preDedup squirrel.And, columns ...string) squirrel.SelectBuilder {
 	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn").
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
@@ -46,6 +59,9 @@ func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.Se
 		Where(notShadowCond).
 		Where("created_at >= ?", p.From).
 		Where("created_at < ?", p.To)
+	if len(preDedup) > 0 {
+		latest = latest.Where(preDedup)
+	}
 
 	sb := sq.Select(columns...).
 		FromSelect(latest, "latest").
@@ -109,35 +125,40 @@ type RiskOverviewRuleCount struct {
 // ListRiskOverviewTopRules returns per-(rule_id, source) finding counts,
 // most findings first.
 func (q *Queries) ListRiskOverviewTopRules(ctx context.Context, p RiskOverviewWindowParams, limit uint64) ([]RiskOverviewRuleCount, error) {
-	query, args, err := overviewFindings(p,
+	return q.queryRuleCounts(ctx, "risk overview top rules", overviewFindings(p,
 		"rule_id",
 		"source",
 		"uniqExact(id) AS findings",
 	).
 		GroupBy("rule_id", "source").
 		OrderBy("findings DESC", "rule_id ASC").
-		Limit(limit).
-		ToSql()
+		Limit(limit))
+}
+
+// queryRuleCounts runs a (rule_id, source, findings) aggregate and scans its
+// rows. readName labels the read in error messages.
+func (q *Queries) queryRuleCounts(ctx context.Context, readName string, sb squirrel.SelectBuilder) ([]RiskOverviewRuleCount, error) {
+	query, args, err := sb.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("build risk overview top rules query: %w", err)
+		return nil, fmt.Errorf("build %s query: %w", readName, err)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query risk overview top rules: %w", err)
+		return nil, fmt.Errorf("query %s: %w", readName, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
 
 	var out []RiskOverviewRuleCount
 	for rows.Next() {
 		var row RiskOverviewRuleCount
 		if err := rows.Scan(&row.RuleID, &row.Source, &row.Findings); err != nil {
-			return nil, fmt.Errorf("scan risk overview top rules row: %w", err)
+			return nil, fmt.Errorf("scan %s row: %w", readName, err)
 		}
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read risk overview top rules: %w", err)
+		return nil, fmt.Errorf("read %s: %w", readName, err)
 	}
 
 	return out, nil
@@ -234,4 +255,24 @@ func (q *Queries) ListRiskOverviewTopUsers(ctx context.Context, p RiskOverviewWi
 	}
 
 	return out, nil
+}
+
+// ListRiskUserRuleBreakdown returns per-(rule_id, source) finding counts for
+// one external user.
+func (q *Queries) ListRiskUserRuleBreakdown(ctx context.Context, p RiskOverviewWindowParams, externalUserID string, policyIDs []string) ([]RiskOverviewRuleCount, error) {
+	if len(policyIDs) == 0 {
+		return nil, errEmptyPolicyIDs
+	}
+
+	return q.queryRuleCounts(ctx, "risk user rule breakdown", overviewFindingsWhere(p,
+		squirrel.And{
+			externalUserIDsCond([]string{externalUserID}),
+			squirrel.Eq{"risk_policy_id": policyIDs},
+		},
+		"rule_id",
+		"source",
+		"uniqExact(id) AS findings",
+	).
+		GroupBy("rule_id", "source").
+		OrderBy("findings DESC", "rule_id ASC", "source ASC"))
 }
