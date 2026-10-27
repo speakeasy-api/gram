@@ -633,3 +633,13 @@ WHERE i.organization_id = @org_id::text AND i.id = @issuer_id::uuid
   AND agent_grant.selectors = jsonb_build_object(
     'resource_kind', 'inference', 'resource_id', '*', 'project_id', ag.project_id::text)
   AND owner_grant.selectors = agent_grant.selectors;
+
+-- name: PostflightIDEMAJWTBearerClient :one
+SELECT count(*) FROM user_session_clients cli
+JOIN user_session_issuers iss ON iss.id = cli.user_session_issuer_id
+WHERE cli.id = @client_id::uuid
+  AND cli.organization_id = @org_id::text
+  AND iss.project_id IS NULL AND iss.organization_id = @org_id::text
+  AND cli.deleted IS FALSE
+  AND cardinality(cli.redirect_uris) = 0
+  AND cli.token_endpoint_auth_method = 'client_secret_basic';

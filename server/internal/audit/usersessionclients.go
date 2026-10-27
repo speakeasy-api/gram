@@ -2,9 +2,11 @@ package audit
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -12,9 +14,58 @@ import (
 )
 
 const (
+	ActionUserSessionClientCreate      Action = "user-session-client:create"
 	ActionUserSessionClientRevoke      Action = "user-session-client:revoke"
 	ActionUserSessionClientCIMDRefresh Action = "user-session-client:cimd-refresh"
 )
+
+// LogUserSessionClientCreateEvent records an administrator registering a
+// client through the management API. The snapshot never carries the secret.
+type LogUserSessionClientCreateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	UserSessionClientURN           urn.UserSessionClient
+	ClientID                       string //nolint:glint // auditeventurnnaming: RFC 7591 client_id, distinct from the resource's URN/UUID.
+	ClientName                     string
+	UserSessionClientSnapshotAfter *types.UserSessionClient
+}
+
+func (l *Logger) LogUserSessionClientCreate(ctx context.Context, dbtx repo.DBTX, event LogUserSessionClientCreateEvent) error {
+	action := ActionUserSessionClientCreate
+
+	afterSnapshot, err := marshalAuditPayload(event.UserSessionClientSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.UserSessionClientURN.ID.String(),
+		SubjectType:        string(subjectTypeUserSessionClient),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ClientName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.ClientID),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionClientV1})
+}
 
 type LogUserSessionClientRevokeEvent struct {
 	OrganizationID string

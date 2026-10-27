@@ -32,6 +32,7 @@ type Endpoints struct {
 	ListCimdClients             goa.Endpoint
 	GetCimdClient               goa.Endpoint
 	DeleteCimdClient            goa.Endpoint
+	CreateJWTBearerClient       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizationUserSessionIssuers"
@@ -56,6 +57,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListCimdClients:             NewListCimdClientsEndpoint(s, a.APIKeyAuth),
 		GetCimdClient:               NewGetCimdClientEndpoint(s, a.APIKeyAuth),
 		DeleteCimdClient:            NewDeleteCimdClientEndpoint(s, a.APIKeyAuth),
+		CreateJWTBearerClient:       NewCreateJWTBearerClientEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -78,6 +80,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListCimdClients = m(e.ListCimdClients)
 	e.GetCimdClient = m(e.GetCimdClient)
 	e.DeleteCimdClient = m(e.DeleteCimdClient)
+	e.CreateJWTBearerClient = m(e.CreateJWTBearerClient)
 }
 
 // NewCreateIssuerEndpoint returns an endpoint function that calls the method
@@ -448,5 +451,28 @@ func NewDeleteCimdClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return nil, s.DeleteCimdClient(ctx, p)
+	}
+}
+
+// NewCreateJWTBearerClientEndpoint returns an endpoint function that calls the
+// method "createJwtBearerClient" of service "organizationUserSessionIssuers".
+func NewCreateJWTBearerClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateJWTBearerClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateJWTBearerClient(ctx, p)
 	}
 }

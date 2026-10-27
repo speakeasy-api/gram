@@ -6,24 +6,18 @@ package mcp
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"mime"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -117,49 +111,11 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		return oops.E(oops.CodeUnexpected, err, "validate DCR request").LogError(ctx, logger)
 	}
 
-	clientID := "client_" + uuid.NewString()
-
-	// What credential the client gets is decided by an explicit list of the
-	// methods that carry a secret, not by "anything but none": an asymmetric
-	// client must not be handed a secret it never asked for, since a stored
-	// hash would make the token endpoint demand it on every request. The
-	// default arm is unreachable after Validate, and refuses rather than
-	// mints if a method is ever added to the accepted set without being
-	// classified here.
-	var clientSecret string
-	var clientSecretHash pgtype.Text
-	switch req.TokenEndpointAuthMethod {
-	case oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost:
-		var err error
-		clientSecret, err = generateClientSecret()
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to generate client secret").LogError(ctx, logger)
-		}
-		hashed, hashErr := bcrypt.GenerateFromPassword([]byte(clientSecret), bcrypt.DefaultCost)
-		if hashErr != nil {
-			return oops.E(oops.CodeUnexpected, hashErr, "failed to hash client secret").LogError(ctx, logger)
-		}
-		clientSecretHash = pgtype.Text{String: string(hashed), Valid: true}
-	case oauthwire.AuthMethodNone, oauthwire.AuthMethodPrivateKeyJWT:
-		// Public clients prove PKCE possession; asymmetric clients prove
-		// possession of a key the server never holds. Neither gets a secret.
-	default:
-		return writeDCRError(ctx, w, logger, "invalid_client_metadata", fmt.Sprintf("unsupported token_endpoint_auth_method %q", req.TokenEndpointAuthMethod))
-	}
-
-	row, err := usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            clientID,
-		ClientSecretHash:    clientSecretHash,
-		ClientName:          req.ClientName,
-		RedirectUris:        req.RedirectURIs,
-		// RFC 7591 §3.2.1 expires_at=0 = non-expiring; we leave the Postgres column NULL.
-		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
-		TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
-		ClientJwks:              req.JWKS,
-		ClientJwksUri:           conv.ToPGTextEmpty(req.JWKSURI),
-	})
+	registered, err := usersessions.CreateClientRegistration(ctx, usersessions_repo.New(s.db), issuerID, req)
 	if err != nil {
+		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
+			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
+		}
 		// The insert re-reads the issuer under lock, so a registration that
 		// resolved the endpoint before a migration or delete retired its
 		// issuer lands here instead of on a tombstone.
@@ -168,6 +124,10 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").LogError(ctx, logger)
 	}
+	row := registered.Row
+	clientID := row.ClientID
+	clientSecret := registered.ClientSecret
+	clientSecretHash := row.ClientSecretHash
 
 	logger.InfoContext(ctx, "user session client registered",
 		attr.SlogOAuthClientID(clientID),
@@ -243,14 +203,4 @@ func writeDCRError(ctx context.Context, w http.ResponseWriter, logger *slog.Logg
 		return oops.E(oops.CodeUnexpected, werr, "failed to write DCR error body").LogError(ctx, logger)
 	}
 	return nil
-}
-
-// generateClientSecret produces 32 bytes of cryptographically random data
-// and base64url-encodes them.
-func generateClientSecret() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("read random bytes: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }

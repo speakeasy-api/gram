@@ -94,6 +94,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDInertUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
 		}, 6, "demo seed postflight: expected 6 inert validated-spread upstream sessions, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDEMAJWTBearerClient(ctx, repo.PostflightIDEMAJWTBearerClientParams{ClientID: s.det("usc-ema-jwt-bearer"), OrgID: org})
+		}, 1, "demo seed postflight: expected one assertion-only client on the organization issuer, found %d"},
 		{byOrg(s.q.PostflightIDAgents), 6, "demo seed postflight: expected 6 managed agents, found %d"},
 		{byOrg(s.q.PostflightIDAgentSessions), 1, "demo seed postflight: expected 1 managed agent session, found %d"},
 		// This External OAuth row drives the metadata recommendation. Keep its

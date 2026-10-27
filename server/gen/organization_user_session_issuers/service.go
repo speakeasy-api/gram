@@ -84,6 +84,16 @@ type Service interface {
 	// Remove a custom CIMD document URL from an organization-owned
 	// user_session_issuer. Requires org:admin.
 	DeleteCimdClient(context.Context, *DeleteCimdClientPayload) (err error)
+	// Register an MCP client on an organization-owned user_session_issuer for
+	// enterprise-managed authorization: the client redeems identity assertion
+	// grants (ID-JAG) from the organization's identity provider with the
+	// jwt-bearer grant. The client has no redirect URIs and cannot use the
+	// authorization code flow. For client_secret_basic and client_secret_post, a
+	// client secret is generated and returned once, in this response; Speakeasy
+	// stores only its hash. Registering a client does not make the exchange work
+	// by itself: the issuer must also trust the identity provider that issues the
+	// assertions. Requires org:admin.
+	CreateJWTBearerClient(context.Context, *CreateJWTBearerClientPayload) (res *CreateOrganizationUserSessionIssuerJWTBearerClientResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -106,7 +116,7 @@ const ServiceName = "organizationUserSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "listMcpServers", "getAuthenticationHostImpact", "setAuthenticationHost", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
+var MethodNames = [17]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "listMcpServers", "getAuthenticationHostImpact", "setAuthenticationHost", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient", "createJwtBearerClient"}
 
 // CreateCimdClientPayload is the payload type of the
 // organizationUserSessionIssuers service createCimdClient method.
@@ -137,6 +147,40 @@ type CreateIssuerPayload struct {
 	// Organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
 	TrustedRemoteSessionClientID *string
+}
+
+// CreateJWTBearerClientPayload is the payload type of the
+// organizationUserSessionIssuers service createJwtBearerClient method.
+type CreateJWTBearerClientPayload struct {
+	SessionToken *string
+	// The organization-owned user_session_issuer the client is registered on.
+	UserSessionIssuerID string
+	// Display name for the client, such as the MCP client application it
+	// configures.
+	ClientName string
+	// How the client authenticates at the token endpoint. 'none' registers a
+	// public client with no secret. 'client_secret_basic' and 'client_secret_post'
+	// register a confidential client and generate its secret.
+	TokenEndpointAuthMethod string
+}
+
+// CreateOrganizationUserSessionIssuerJWTBearerClientResult is the result type
+// of the organizationUserSessionIssuers service createJwtBearerClient method.
+type CreateOrganizationUserSessionIssuerJWTBearerClientResult struct {
+	// The registered client. client.client_id is the value the identity provider
+	// must put in the ID-JAG client_id claim and the MCP client must present at
+	// the token endpoint.
+	Client *types.UserSessionClient
+	// The client secret. Present only for client_secret_basic and
+	// client_secret_post, and only in this response: it cannot be read again.
+	ClientSecret *string
+	// The issuer the client is registered on. For a shared issuer, issuer_url is
+	// the ID-JAG audience and token_endpoint is where the client redeems it;
+	// otherwise each MCP server announces its own authorization server.
+	Issuer *types.UserSessionIssuer
+	// Whether the issuer trusts an identity provider's assertions. While false,
+	// the token endpoint rejects every ID-JAG this client presents.
+	TrustedIdentityProviderConfigured bool
 }
 
 // CreateUserSessionIssuerCimdClientResult is the result type of the

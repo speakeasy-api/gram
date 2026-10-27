@@ -36,6 +36,7 @@ type Server struct {
 	ListCimdClients             http.Handler
 	GetCimdClient               http.Handler
 	DeleteCimdClient            http.Handler
+	CreateJWTBearerClient       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -81,6 +82,7 @@ func New(
 			{"ListCimdClients", "GET", "/rpc/organizationUserSessionIssuers.listCimdClients"},
 			{"GetCimdClient", "GET", "/rpc/organizationUserSessionIssuers.getCimdClient"},
 			{"DeleteCimdClient", "DELETE", "/rpc/organizationUserSessionIssuers.deleteCimdClient"},
+			{"CreateJWTBearerClient", "POST", "/rpc/organizationUserSessionIssuers.createJwtBearerClient"},
 		},
 		CreateIssuer:                NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
 		ListIssuers:                 NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
@@ -98,6 +100,7 @@ func New(
 		ListCimdClients:             NewListCimdClientsHandler(e.ListCimdClients, mux, decoder, encoder, errhandler, formatter),
 		GetCimdClient:               NewGetCimdClientHandler(e.GetCimdClient, mux, decoder, encoder, errhandler, formatter),
 		DeleteCimdClient:            NewDeleteCimdClientHandler(e.DeleteCimdClient, mux, decoder, encoder, errhandler, formatter),
+		CreateJWTBearerClient:       NewCreateJWTBearerClientHandler(e.CreateJWTBearerClient, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -122,6 +125,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListCimdClients = m(s.ListCimdClients)
 	s.GetCimdClient = m(s.GetCimdClient)
 	s.DeleteCimdClient = m(s.DeleteCimdClient)
+	s.CreateJWTBearerClient = m(s.CreateJWTBearerClient)
 }
 
 // MethodNames returns the methods served.
@@ -146,6 +150,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListCimdClientsHandler(mux, h.ListCimdClients)
 	MountGetCimdClientHandler(mux, h.GetCimdClient)
 	MountDeleteCimdClientHandler(mux, h.DeleteCimdClient)
+	MountCreateJWTBearerClientHandler(mux, h.CreateJWTBearerClient)
 }
 
 // Mount configures the mux to serve the organizationUserSessionIssuers
@@ -995,6 +1000,60 @@ func NewDeleteCimdClientHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteCimdClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateJWTBearerClientHandler configures the mux to serve the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint.
+func MountCreateJWTBearerClientHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizationUserSessionIssuers.createJwtBearerClient", f)
+}
+
+// NewCreateJWTBearerClientHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizationUserSessionIssuers" service
+// "createJwtBearerClient" endpoint.
+func NewCreateJWTBearerClientHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateJWTBearerClientRequest(mux, decoder)
+		encodeResponse = EncodeCreateJWTBearerClientResponse(encoder)
+		encodeError    = EncodeCreateJWTBearerClientError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createJwtBearerClient")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

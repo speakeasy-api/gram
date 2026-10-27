@@ -468,6 +468,7 @@ trackedFiles:
   src/funcs/organizationRemoteSessionsRevokeAll.ts: {}
   src/funcs/organizationUserSessionIssuersCreate.ts: {}
   src/funcs/organizationUserSessionIssuersCreateCimdClient.ts: {}
+  src/funcs/organizationUserSessionIssuersCreateJwtBearerClient.ts: {}
   src/funcs/organizationUserSessionIssuersDelete.ts: {}
   src/funcs/organizationUserSessionIssuersDeleteCimdClient.ts: {}
   src/funcs/organizationUserSessionIssuersGet.ts: {}
@@ -1078,6 +1079,8 @@ trackedFiles:
   src/models/components/createmetamcpserverform.ts: {}
   src/models/components/createorganizationremotesessionclientform.ts: {}
   src/models/components/createorganizationusersessionissuerform.ts: {}
+  src/models/components/createorganizationusersessionissuerjwtbearerclientform.ts: {}
+  src/models/components/createorganizationusersessionissuerjwtbearerclientresult.ts: {}
   src/models/components/createoteldestinationheaderinput.ts: {}
   src/models/components/createoteldestinationinput.ts: {}
   src/models/components/createpackageform.ts: {}
@@ -2272,6 +2275,7 @@ trackedFiles:
   src/models/operations/createorganizationremotesessionissuer.ts: {}
   src/models/operations/createorganizationusersessionissuer.ts: {}
   src/models/operations/createorganizationusersessionissuercimdclient.ts: {}
+  src/models/operations/createorganizationusersessionissuerjwtbearerclient.ts: {}
   src/models/operations/createpackage.ts: {}
   src/models/operations/createplugin.ts: {}
   src/models/operations/createportalsession.ts: {}
@@ -3176,6 +3180,7 @@ trackedFiles:
   src/react-query/createOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/createOrganizationUserSessionIssuer.ts: {}
   src/react-query/createOrganizationUserSessionIssuerCimdClient.ts: {}
+  src/react-query/createOrganizationUserSessionIssuerJwtBearerClient.ts: {}
   src/react-query/createPackage.ts: {}
   src/react-query/createPlugin.ts: {}
   src/react-query/createPortalSession.ts: {}
@@ -5413,6 +5418,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createOrganizationUserSessionIssuerJwtBearerClient:
+    speakeasy-default-create-organization-user-session-issuer-jwt-bearer-client:
+      requestBody:
+        application/json: {"client_name": "<value>", "token_endpoint_auth_method": "client_secret_basic", "user_session_issuer_id": "d8bd10c8-9fc5-471c-ac82-24980fa22d37"}
+      responses:
+        "200":
+          application/json: {"client": {"active_session_count": 562213, "client_id": "<id>", "client_id_issued_at": "2026-09-23T21:30:53.019Z", "client_name": "<value>", "created_at": "2026-12-08T11:33:35.809Z", "credential_kind": "key", "id": "b94b883e-de10-40a7-a640-0dc83bdb9a6a", "redirect_uris": ["<value 1>"], "updated_at": "2026-08-25T17:31:18.611Z", "user_session_issuer_id": "30405e82-3448-4905-984e-83b4c626bc85"}, "issuer": {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "reporting", "created_at": "2026-07-31T18:21:37.692Z", "id": "a6fd33c7-0a47-458a-92fa-3aff7fa481b7", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 172848, "slug": "<value>", "updated_at": "2024-10-02T02:10:33.710Z", "use_authentication_host": false}, "trusted_identity_provider_configured": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createOtelDestination:
     speakeasy-default-create-otel-destination:
       requestBody:

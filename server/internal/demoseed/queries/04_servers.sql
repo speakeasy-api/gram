@@ -809,6 +809,16 @@ INSERT INTO user_session_clients
 VALUES (@id::uuid, NULL, @org_id::text, @issuer_id::uuid,
  (@id::uuid)::text, 'Example desktop client', ARRAY['http://127.0.0.1:41296/callback'], now(), 'none');
 
+-- An assertion-only client an administrator registered for enterprise-managed
+-- authorization: no redirect URIs, and an inert placeholder secret hash.
+-- name: ServersInsertEMAJWTBearerClient :exec
+INSERT INTO user_session_clients
+ (id, project_id, organization_id, user_session_issuer_id, client_id, client_secret_hash,
+ client_name, redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+VALUES (@id::uuid, NULL, @org_id::text, @issuer_id::uuid,
+ 'client_' || (@id::uuid)::text, @client_secret_hash::text, 'Codex', ARRAY[]::text[],
+ now() - interval '3 days', 'client_secret_basic');
+
 -- name: ServersInsertOrganizationGatewaySession :exec
 -- Inert authorizations remain visible while the gateway is disabled.
 -- Access tokens expired one hour ago; refresh authorization has its own deadline.

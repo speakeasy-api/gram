@@ -347,6 +347,11 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert organization gateway client: %w", err)
 	}
+	if err := s.q.ServersInsertEMAJWTBearerClient(ctx, repo.ServersInsertEMAJWTBearerClientParams{
+		ID: s.det("usc-ema-jwt-bearer"), OrgID: org, IssuerID: s.det("issuer-workforce"), ClientSecretHash: demoSecretHash,
+	}); err != nil {
+		return fmt.Errorf("insert ema jwt-bearer client: %w", err)
+	}
 	for i, userNumber := range []int{1, 6, 4} {
 		days := int32(i + 1)
 		if i == 2 {

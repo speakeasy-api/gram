@@ -212,7 +212,7 @@ func UsageCommands() []string {
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
-		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
+		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client|create-jwt-bearer-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"gateway-sessions (list-gateway-sessions|list-gateway-session-facets)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
@@ -5174,6 +5174,10 @@ func ParseEndpoint(
 		organizationUserSessionIssuersDeleteCimdClientIDFlag           = organizationUserSessionIssuersDeleteCimdClientFlags.String("id", "REQUIRED", "")
 		organizationUserSessionIssuersDeleteCimdClientSessionTokenFlag = organizationUserSessionIssuersDeleteCimdClientFlags.String("session-token", "", "")
 
+		organizationUserSessionIssuersCreateJWTBearerClientFlags            = flag.NewFlagSet("create-jwt-bearer-client", flag.ExitOnError)
+		organizationUserSessionIssuersCreateJWTBearerClientBodyFlag         = organizationUserSessionIssuersCreateJWTBearerClientFlags.String("body", "REQUIRED", "")
+		organizationUserSessionIssuersCreateJWTBearerClientSessionTokenFlag = organizationUserSessionIssuersCreateJWTBearerClientFlags.String("session-token", "", "")
+
 		userSessionsFlags = flag.NewFlagSet("user-sessions", flag.ContinueOnError)
 
 		userSessionsListUserSessionsFlags                   = flag.NewFlagSet("list-user-sessions", flag.ExitOnError)
@@ -6445,6 +6449,7 @@ func ParseEndpoint(
 	organizationUserSessionIssuersListCimdClientsFlags.Usage = organizationUserSessionIssuersListCimdClientsUsage
 	organizationUserSessionIssuersGetCimdClientFlags.Usage = organizationUserSessionIssuersGetCimdClientUsage
 	organizationUserSessionIssuersDeleteCimdClientFlags.Usage = organizationUserSessionIssuersDeleteCimdClientUsage
+	organizationUserSessionIssuersCreateJWTBearerClientFlags.Usage = organizationUserSessionIssuersCreateJWTBearerClientUsage
 
 	userSessionsFlags.Usage = userSessionsUsage
 	userSessionsListUserSessionsFlags.Usage = userSessionsListUserSessionsUsage
@@ -9808,6 +9813,9 @@ func ParseEndpoint(
 			case "delete-cimd-client":
 				epf = organizationUserSessionIssuersDeleteCimdClientFlags
 
+			case "create-jwt-bearer-client":
+				epf = organizationUserSessionIssuersCreateJWTBearerClientFlags
+
 			}
 
 		case "user-sessions":
@@ -13066,6 +13074,9 @@ func ParseEndpoint(
 			case "delete-cimd-client":
 				endpoint = c.DeleteCimdClient()
 				data, err = organizationusersessionissuersc.BuildDeleteCimdClientPayload(*organizationUserSessionIssuersDeleteCimdClientIDFlag, *organizationUserSessionIssuersDeleteCimdClientSessionTokenFlag)
+			case "create-jwt-bearer-client":
+				endpoint = c.CreateJWTBearerClient()
+				data, err = organizationusersessionissuersc.BuildCreateJWTBearerClientPayload(*organizationUserSessionIssuersCreateJWTBearerClientBodyFlag, *organizationUserSessionIssuersCreateJWTBearerClientSessionTokenFlag)
 			}
 		case "user-sessions":
 			c := usersessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -35103,6 +35114,7 @@ func organizationUserSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    list-cimd-clients: List custom CIMD document URLs on an organization-owned user_session_issuer. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-cimd-client: Get a custom CIMD document URL on an organization-owned user_session_issuer. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    delete-cimd-client: Remove a custom CIMD document URL from an organization-owned user_session_issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    create-jwt-bearer-client: Register an MCP client on an organization-owned user_session_issuer for enterprise-managed authorization: the client redeems identity assertion grants (ID-JAG) from the organization's identity provider with the jwt-bearer grant. The client has no redirect URIs and cannot use the authorization code flow. For client_secret_basic and client_secret_post, a client secret is generated and returned once, in this response; Speakeasy stores only its hash. Registering a client does not make the exchange work by itself: the issuer must also trust the identity provider that issues the assertions. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s organization-user-session-issuers COMMAND --help\n", os.Args[0])
@@ -35441,6 +35453,26 @@ func organizationUserSessionIssuersDeleteCimdClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers delete-cimd-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func organizationUserSessionIssuersCreateJWTBearerClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-user-session-issuers create-jwt-bearer-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Register an MCP client on an organization-owned user_session_issuer for enterprise-managed authorization: the client redeems identity assertion grants (ID-JAG) from the organization's identity provider with the jwt-bearer grant. The client has no redirect URIs and cannot use the authorization code flow. For client_secret_basic and client_secret_post, a client secret is generated and returned once, in this response; Speakeasy stores only its hash. Registering a client does not make the exchange work by itself: the issuer must also trust the identity provider that issues the assertions. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers create-jwt-bearer-client --body '{\n      \"client_name\": \"aa\",\n      \"token_endpoint_auth_method\": \"client_secret_basic\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // userSessionsUsage displays the usage of the user-sessions command and its

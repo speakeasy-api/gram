@@ -50980,6 +50980,93 @@ paths:
             x-speakeasy-name-override: createCimdClient
             x-speakeasy-react-hook:
                 name: CreateOrganizationUserSessionIssuerCimdClient
+    /rpc/organizationUserSessionIssuers.createJwtBearerClient:
+        post:
+            description: 'Register an MCP client on an organization-owned user_session_issuer for enterprise-managed authorization: the client redeems identity assertion grants (ID-JAG) from the organization''s identity provider with the jwt-bearer grant. The client has no redirect URIs and cannot use the authorization code flow. For client_secret_basic and client_secret_post, a client secret is generated and returned once, in this response; Speakeasy stores only its hash. Registering a client does not make the exchange work by itself: the issuer must also trust the identity provider that issues the assertions. Requires org:admin.'
+            operationId: createOrganizationUserSessionIssuerJwtBearerClient
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateOrganizationUserSessionIssuerJWTBearerClientForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateOrganizationUserSessionIssuerJWTBearerClientResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createJwtBearerClient organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: createJwtBearerClient
+            x-speakeasy-react-hook:
+                name: CreateOrganizationUserSessionIssuerJwtBearerClient
     /rpc/organizationUserSessionIssuers.delete:
         delete:
             description: Soft-delete an organization-owned user_session_issuer. Refuses while a live MCP server or toolset references it. Requires org:admin.
@@ -100925,6 +101012,48 @@ components:
                 - slug
                 - authn_challenge_mode
                 - session_duration_hours
+        CreateOrganizationUserSessionIssuerJWTBearerClientForm:
+            type: object
+            properties:
+                client_name:
+                    type: string
+                    description: Display name for the client, such as the MCP client application it configures.
+                    minLength: 1
+                    maxLength: 255
+                token_endpoint_auth_method:
+                    type: string
+                    description: How the client authenticates at the token endpoint. 'none' registers a public client with no secret. 'client_secret_basic' and 'client_secret_post' register a confidential client and generate its secret.
+                    enum:
+                        - none
+                        - client_secret_basic
+                        - client_secret_post
+                user_session_issuer_id:
+                    type: string
+                    description: The organization-owned user_session_issuer the client is registered on.
+                    format: uuid
+            description: Form for registering a jwt-bearer (ID-JAG) client on an organization-owned user_session_issuer.
+            required:
+                - user_session_issuer_id
+                - client_name
+                - token_endpoint_auth_method
+        CreateOrganizationUserSessionIssuerJWTBearerClientResult:
+            type: object
+            properties:
+                client:
+                    $ref: '#/components/schemas/UserSessionClient'
+                client_secret:
+                    type: string
+                    description: 'The client secret. Present only for client_secret_basic and client_secret_post, and only in this response: it cannot be read again.'
+                issuer:
+                    $ref: '#/components/schemas/UserSessionIssuer'
+                trusted_identity_provider_configured:
+                    type: boolean
+                    description: Whether the issuer trusts an identity provider's assertions. While false, the token endpoint rejects every ID-JAG this client presents.
+            description: A newly registered jwt-bearer client and the issuer it belongs to.
+            required:
+                - client
+                - issuer
+                - trusted_identity_provider_configured
         CreateOtelDestinationHeaderInput:
             type: object
             properties:

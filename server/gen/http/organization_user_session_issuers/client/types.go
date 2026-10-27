@@ -100,6 +100,21 @@ type CreateCimdClientRequestBody struct {
 	ClientIDMetadataURI string `form:"client_id_metadata_uri" json:"client_id_metadata_uri" xml:"client_id_metadata_uri"`
 }
 
+// CreateJWTBearerClientRequestBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP request body.
+type CreateJWTBearerClientRequestBody struct {
+	// The organization-owned user_session_issuer the client is registered on.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// Display name for the client, such as the MCP client application it
+	// configures.
+	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
+	// How the client authenticates at the token endpoint. 'none' registers a
+	// public client with no secret. 'client_secret_basic' and 'client_secret_post'
+	// register a confidential client and generate its secret.
+	TokenEndpointAuthMethod string `form:"token_endpoint_auth_method" json:"token_endpoint_auth_method" xml:"token_endpoint_auth_method"`
+}
+
 // CreateIssuerResponseBody is the type of the "organizationUserSessionIssuers"
 // service "createIssuer" endpoint HTTP response body.
 type CreateIssuerResponseBody struct {
@@ -623,6 +638,26 @@ type GetCimdClientResponseBody struct {
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	CreatedAt           *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt           *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// CreateJWTBearerClientResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body.
+type CreateJWTBearerClientResponseBody struct {
+	// The registered client. client.client_id is the value the identity provider
+	// must put in the ID-JAG client_id claim and the MCP client must present at
+	// the token endpoint.
+	Client *UserSessionClientResponseBody `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// The client secret. Present only for client_secret_basic and
+	// client_secret_post, and only in this response: it cannot be read again.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// The issuer the client is registered on. For a shared issuer, issuer_url is
+	// the ID-JAG audience and token_endpoint is where the client redeems it;
+	// otherwise each MCP server announces its own authorization server.
+	Issuer *UserSessionIssuerResponseBody `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Whether the issuer trusts an identity provider's assertions. While false,
+	// the token endpoint rejects every ID-JAG this client presents.
+	TrustedIdentityProviderConfigured *bool `form:"trusted_identity_provider_configured,omitempty" json:"trusted_identity_provider_configured,omitempty" xml:"trusted_identity_provider_configured,omitempty"`
 }
 
 // CreateIssuerUnauthorizedResponseBody is the type of the
@@ -3665,6 +3700,196 @@ type DeleteCimdClientGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateJWTBearerClientUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "unauthorized" error.
+type CreateJWTBearerClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateJWTBearerClientForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "forbidden" error.
+type CreateJWTBearerClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateJWTBearerClientBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "bad_request" error.
+type CreateJWTBearerClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateJWTBearerClientNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "not_found" error.
+type CreateJWTBearerClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateJWTBearerClientConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "conflict" error.
+type CreateJWTBearerClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateJWTBearerClientUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "unsupported_media" error.
+type CreateJWTBearerClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateJWTBearerClientInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "invalid" error.
+type CreateJWTBearerClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateJWTBearerClientInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "invariant_violation" error.
+type CreateJWTBearerClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateJWTBearerClientUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "unexpected" error.
+type CreateJWTBearerClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateJWTBearerClientGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createJwtBearerClient" endpoint
+// HTTP response body for the "gateway_error" error.
+type CreateJWTBearerClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UserSessionIssuerResponseBody is used to define fields on response body
 // types.
 type UserSessionIssuerResponseBody struct {
@@ -3797,6 +4022,62 @@ type UserSessionIssuerCimdClientResponseBody struct {
 	UpdatedAt           *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// UserSessionClientResponseBody is used to define fields on response body
+// types.
+type UserSessionClientResponseBody struct {
+	// The user_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning user_session_issuer id.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The client_id. Minted by Speakeasy for a DCR registration; for a CIMD client
+	// it is the metadata document URL and equals client_id_metadata_uri.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// When the metadata document was last successfully read. A 304 revalidation
+	// counts as a read, so this is not necessarily when the body was last fetched.
+	// Null for DCR clients.
+	ClientIDMetadataFetchedAt *string `form:"client_id_metadata_fetched_at,omitempty" json:"client_id_metadata_fetched_at,omitempty" xml:"client_id_metadata_fetched_at,omitempty"`
+	// When the cached metadata document lapses and the next /authorize revalidates
+	// it against the host. Null for DCR clients, and null after a refresh purge
+	// until the re-read lands.
+	ClientIDMetadataCacheExpiresAt *string `form:"client_id_metadata_cache_expires_at,omitempty" json:"client_id_metadata_cache_expires_at,omitempty" xml:"client_id_metadata_cache_expires_at,omitempty"`
+	// ETag the document host returned on the last full read; sent as If-None-Match
+	// when revalidating. Null when the host offers no validator, and null for DCR
+	// clients.
+	ClientIDMetadataEtag *string `form:"client_id_metadata_etag,omitempty" json:"client_id_metadata_etag,omitempty" xml:"client_id_metadata_etag,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
+	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// What the client must present to authenticate: 'public' (nothing), 'secret'
+	// (a client secret), 'key' (an assertion signed by its published key), or
+	// 'misconfigured'. Derived by the same rule the token endpoint enforces, so it
+	// reads what the client will actually be held to rather than what it declared.
+	// 'misconfigured' means the registration contradicts itself and the client
+	// cannot authenticate at all.
+	CredentialKind *string `form:"credential_kind,omitempty" json:"credential_kind,omitempty" xml:"credential_kind,omitempty"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null for a client registered before the value
+	// was recorded, which is not the same as declaring 'none' -- credential_kind
+	// resolves both cases and is what should be displayed.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Validated on every /authorize.
+	RedirectUris     []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
+	ClientIDIssuedAt *string  `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount *int `form:"active_session_count,omitempty" json:"active_session_count,omitempty" xml:"active_session_count,omitempty"`
+}
+
 // NewCreateIssuerRequestBody builds the HTTP request body from the payload of
 // the "createIssuer" endpoint of the "organizationUserSessionIssuers" service.
 func NewCreateIssuerRequestBody(p *organizationusersessionissuers.CreateIssuerPayload) *CreateIssuerRequestBody {
@@ -3864,6 +4145,18 @@ func NewCreateCimdClientRequestBody(p *organizationusersessionissuers.CreateCimd
 	body := &CreateCimdClientRequestBody{
 		UserSessionIssuerID: p.UserSessionIssuerID,
 		ClientIDMetadataURI: p.ClientIDMetadataURI,
+	}
+	return body
+}
+
+// NewCreateJWTBearerClientRequestBody builds the HTTP request body from the
+// payload of the "createJwtBearerClient" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateJWTBearerClientRequestBody(p *organizationusersessionissuers.CreateJWTBearerClientPayload) *CreateJWTBearerClientRequestBody {
+	body := &CreateJWTBearerClientRequestBody{
+		UserSessionIssuerID:     p.UserSessionIssuerID,
+		ClientName:              p.ClientName,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
 	}
 	return body
 }
@@ -6615,6 +6908,172 @@ func NewDeleteCimdClientGatewayError(body *DeleteCimdClientGatewayErrorResponseB
 	return v
 }
 
+// NewCreateJWTBearerClientCreateOrganizationUserSessionIssuerJWTBearerClientResultOK
+// builds a "organizationUserSessionIssuers" service "createJwtBearerClient"
+// endpoint result from a HTTP "OK" response.
+func NewCreateJWTBearerClientCreateOrganizationUserSessionIssuerJWTBearerClientResultOK(body *CreateJWTBearerClientResponseBody) *organizationusersessionissuers.CreateOrganizationUserSessionIssuerJWTBearerClientResult {
+	v := &organizationusersessionissuers.CreateOrganizationUserSessionIssuerJWTBearerClientResult{
+		ClientSecret:                      body.ClientSecret,
+		TrustedIdentityProviderConfigured: *body.TrustedIdentityProviderConfigured,
+	}
+	v.Client = unmarshalUserSessionClientResponseBodyToTypesUserSessionClient(body.Client)
+	v.Issuer = unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(body.Issuer)
+
+	return v
+}
+
+// NewCreateJWTBearerClientUnauthorized builds a organizationUserSessionIssuers
+// service createJwtBearerClient endpoint unauthorized error.
+func NewCreateJWTBearerClientUnauthorized(body *CreateJWTBearerClientUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateJWTBearerClientForbidden builds a organizationUserSessionIssuers
+// service createJwtBearerClient endpoint forbidden error.
+func NewCreateJWTBearerClientForbidden(body *CreateJWTBearerClientForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateJWTBearerClientBadRequest builds a organizationUserSessionIssuers
+// service createJwtBearerClient endpoint bad_request error.
+func NewCreateJWTBearerClientBadRequest(body *CreateJWTBearerClientBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateJWTBearerClientNotFound builds a organizationUserSessionIssuers
+// service createJwtBearerClient endpoint not_found error.
+func NewCreateJWTBearerClientNotFound(body *CreateJWTBearerClientNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateJWTBearerClientConflict builds a organizationUserSessionIssuers
+// service createJwtBearerClient endpoint conflict error.
+func NewCreateJWTBearerClientConflict(body *CreateJWTBearerClientConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateJWTBearerClientUnsupportedMedia builds a
+// organizationUserSessionIssuers service createJwtBearerClient endpoint
+// unsupported_media error.
+func NewCreateJWTBearerClientUnsupportedMedia(body *CreateJWTBearerClientUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateJWTBearerClientInvalid builds a organizationUserSessionIssuers
+// service createJwtBearerClient endpoint invalid error.
+func NewCreateJWTBearerClientInvalid(body *CreateJWTBearerClientInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateJWTBearerClientInvariantViolation builds a
+// organizationUserSessionIssuers service createJwtBearerClient endpoint
+// invariant_violation error.
+func NewCreateJWTBearerClientInvariantViolation(body *CreateJWTBearerClientInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateJWTBearerClientUnexpected builds a organizationUserSessionIssuers
+// service createJwtBearerClient endpoint unexpected error.
+func NewCreateJWTBearerClientUnexpected(body *CreateJWTBearerClientUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateJWTBearerClientGatewayError builds a organizationUserSessionIssuers
+// service createJwtBearerClient endpoint gateway_error error.
+func NewCreateJWTBearerClientGatewayError(body *CreateJWTBearerClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateCreateIssuerResponseBody runs the validations defined on
 // CreateIssuerResponseBody
 func ValidateCreateIssuerResponseBody(body *CreateIssuerResponseBody) (err error) {
@@ -7220,6 +7679,31 @@ func ValidateGetCimdClientResponseBody(body *GetCimdClientResponseBody) (err err
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientResponseBody runs the validations defined on
+// CreateJwtBearerClientResponseBody
+func ValidateCreateJWTBearerClientResponseBody(body *CreateJWTBearerClientResponseBody) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.TrustedIdentityProviderConfigured == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trusted_identity_provider_configured", "body"))
+	}
+	if body.Client != nil {
+		if err2 := ValidateUserSessionClientResponseBody(body.Client); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Issuer != nil {
+		if err2 := ValidateUserSessionIssuerResponseBody(body.Issuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -11072,6 +11556,247 @@ func ValidateDeleteCimdClientGatewayErrorResponseBody(body *DeleteCimdClientGate
 	return
 }
 
+// ValidateCreateJWTBearerClientUnauthorizedResponseBody runs the validations
+// defined on createJwtBearerClient_unauthorized_response_body
+func ValidateCreateJWTBearerClientUnauthorizedResponseBody(body *CreateJWTBearerClientUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientForbiddenResponseBody runs the validations
+// defined on createJwtBearerClient_forbidden_response_body
+func ValidateCreateJWTBearerClientForbiddenResponseBody(body *CreateJWTBearerClientForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientBadRequestResponseBody runs the validations
+// defined on createJwtBearerClient_bad_request_response_body
+func ValidateCreateJWTBearerClientBadRequestResponseBody(body *CreateJWTBearerClientBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientNotFoundResponseBody runs the validations
+// defined on createJwtBearerClient_not_found_response_body
+func ValidateCreateJWTBearerClientNotFoundResponseBody(body *CreateJWTBearerClientNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientConflictResponseBody runs the validations
+// defined on createJwtBearerClient_conflict_response_body
+func ValidateCreateJWTBearerClientConflictResponseBody(body *CreateJWTBearerClientConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientUnsupportedMediaResponseBody runs the
+// validations defined on createJwtBearerClient_unsupported_media_response_body
+func ValidateCreateJWTBearerClientUnsupportedMediaResponseBody(body *CreateJWTBearerClientUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientInvalidResponseBody runs the validations
+// defined on createJwtBearerClient_invalid_response_body
+func ValidateCreateJWTBearerClientInvalidResponseBody(body *CreateJWTBearerClientInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientInvariantViolationResponseBody runs the
+// validations defined on
+// createJwtBearerClient_invariant_violation_response_body
+func ValidateCreateJWTBearerClientInvariantViolationResponseBody(body *CreateJWTBearerClientInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientUnexpectedResponseBody runs the validations
+// defined on createJwtBearerClient_unexpected_response_body
+func ValidateCreateJWTBearerClientUnexpectedResponseBody(body *CreateJWTBearerClientUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateJWTBearerClientGatewayErrorResponseBody runs the validations
+// defined on createJwtBearerClient_gateway_error_response_body
+func ValidateCreateJWTBearerClientGatewayErrorResponseBody(body *CreateJWTBearerClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUserSessionIssuerResponseBody runs the validations defined on
 // UserSessionIssuerResponseBody
 func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) (err error) {
@@ -11244,6 +11969,71 @@ func ValidateUserSessionIssuerCimdClientResponseBody(body *UserSessionIssuerCimd
 	}
 	if body.UserSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUserSessionClientResponseBody runs the validations defined on
+// UserSessionClientResponseBody
+func ValidateUserSessionClientResponseBody(body *UserSessionClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_name", "body"))
+	}
+	if body.CredentialKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_kind", "body"))
+	}
+	if body.RedirectUris == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("redirect_uris", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ActiveSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_session_count", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataFetchedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_metadata_fetched_at", *body.ClientIDMetadataFetchedAt, goa.FormatDateTime))
+	}
+	if body.ClientIDMetadataCacheExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_metadata_cache_expires_at", *body.ClientIDMetadataCacheExpiresAt, goa.FormatDateTime))
+	}
+	if body.CredentialKind != nil {
+		if !(*body.CredentialKind == "public" || *body.CredentialKind == "secret" || *body.CredentialKind == "key" || *body.CredentialKind == "misconfigured") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_kind", *body.CredentialKind, []any{"public", "secret", "key", "misconfigured"}))
+		}
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/design/usersessionclients"
 	cimddesign "github.com/speakeasy-api/gram/server/design/usersessionissuerscimdclients"
 )
 
@@ -520,6 +521,45 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteCimdClient")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteOrganizationUserSessionIssuerCimdClient"}`)
 	})
+
+	Method("createJwtBearerClient", func() {
+		Description("Register an MCP client on an organization-owned user_session_issuer for enterprise-managed authorization: the client redeems identity assertion grants (ID-JAG) from the organization's identity provider with the jwt-bearer grant. The client has no redirect URIs and cannot use the authorization code flow. For client_secret_basic and client_secret_post, a client secret is generated and returned once, in this response; Speakeasy stores only its hash. Registering a client does not make the exchange work by itself: the issuer must also trust the identity provider that issues the assertions. Requires org:admin.")
+		Payload(func() {
+			Extend(CreateOrganizationUserSessionIssuerJwtBearerClientForm)
+			security.SessionPayload()
+		})
+		Result(CreateOrganizationUserSessionIssuerJwtBearerClientResult)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.createJwtBearerClient")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "createOrganizationUserSessionIssuerJwtBearerClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "createJwtBearerClient")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateOrganizationUserSessionIssuerJwtBearerClient"}`)
+	})
+})
+
+var CreateOrganizationUserSessionIssuerJwtBearerClientForm = Type("CreateOrganizationUserSessionIssuerJwtBearerClientForm", func() {
+	Description("Form for registering a jwt-bearer (ID-JAG) client on an organization-owned user_session_issuer.")
+	Attribute("user_session_issuer_id", String, "The organization-owned user_session_issuer the client is registered on.", func() { Format(FormatUUID) })
+	Attribute("client_name", String, "Display name for the client, such as the MCP client application it configures.", func() {
+		MinLength(1)
+		MaxLength(255)
+	})
+	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the token endpoint. 'none' registers a public client with no secret. 'client_secret_basic' and 'client_secret_post' register a confidential client and generate its secret.", func() {
+		Enum("none", "client_secret_basic", "client_secret_post")
+	})
+	Required("user_session_issuer_id", "client_name", "token_endpoint_auth_method")
+})
+
+var CreateOrganizationUserSessionIssuerJwtBearerClientResult = Type("CreateOrganizationUserSessionIssuerJwtBearerClientResult", func() {
+	Description("A newly registered jwt-bearer client and the issuer it belongs to.")
+	Attribute("client", usersessionclients.UserSessionClient, "The registered client. client.client_id is the value the identity provider must put in the ID-JAG client_id claim and the MCP client must present at the token endpoint.")
+	Attribute("client_secret", String, "The client secret. Present only for client_secret_basic and client_secret_post, and only in this response: it cannot be read again.")
+	Attribute("issuer", UserSessionIssuer, "The issuer the client is registered on. For a shared issuer, issuer_url is the ID-JAG audience and token_endpoint is where the client redeems it; otherwise each MCP server announces its own authorization server.")
+	Attribute("trusted_identity_provider_configured", Boolean, "Whether the issuer trusts an identity provider's assertions. While false, the token endpoint rejects every ID-JAG this client presents.")
+	Required("client", "issuer", "trusted_identity_provider_configured")
 })
 
 var CreateUserSessionIssuerForm = Type("CreateUserSessionIssuerForm", func() {

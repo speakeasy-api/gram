@@ -324,6 +324,29 @@ func (q *Queries) PostflightIDEMACredentials(ctx context.Context, orgID string) 
 	return count, err
 }
 
+const postflightIDEMAJWTBearerClient = `-- name: PostflightIDEMAJWTBearerClient :one
+SELECT count(*) FROM user_session_clients cli
+JOIN user_session_issuers iss ON iss.id = cli.user_session_issuer_id
+WHERE cli.id = $1::uuid
+  AND cli.organization_id = $2::text
+  AND iss.project_id IS NULL AND iss.organization_id = $2::text
+  AND cli.deleted IS FALSE
+  AND cardinality(cli.redirect_uris) = 0
+  AND cli.token_endpoint_auth_method = 'client_secret_basic'
+`
+
+type PostflightIDEMAJWTBearerClientParams struct {
+	ClientID uuid.UUID
+	OrgID    string
+}
+
+func (q *Queries) PostflightIDEMAJWTBearerClient(ctx context.Context, arg PostflightIDEMAJWTBearerClientParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDEMAJWTBearerClient, arg.ClientID, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDExternalOAuthMetadata = `-- name: PostflightIDExternalOAuthMetadata :one
 SELECT count(*) FROM external_oauth_server_metadata
 WHERE project_id = $1::uuid AND deleted IS FALSE

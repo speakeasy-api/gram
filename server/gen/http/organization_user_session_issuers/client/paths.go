@@ -86,3 +86,8 @@ func GetCimdClientOrganizationUserSessionIssuersPath() string {
 func DeleteCimdClientOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.deleteCimdClient"
 }
+
+// CreateJWTBearerClientOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service createJwtBearerClient HTTP endpoint.
+func CreateJWTBearerClientOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.createJwtBearerClient"
+}

@@ -82,6 +82,10 @@ type Client struct {
 	// deleteCimdClient endpoint.
 	DeleteCimdClientDoer goahttp.Doer
 
+	// CreateJWTBearerClient Doer is the HTTP client used to make requests to the
+	// createJwtBearerClient endpoint.
+	CreateJWTBearerClientDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -119,6 +123,7 @@ func NewClient(
 		ListCimdClientsDoer:             doer,
 		GetCimdClientDoer:               doer,
 		DeleteCimdClientDoer:            doer,
+		CreateJWTBearerClientDoer:       doer,
 		RestoreResponseBody:             restoreBody,
 		scheme:                          scheme,
 		host:                            host,
@@ -507,6 +512,30 @@ func (c *Client) DeleteCimdClient() goa.Endpoint {
 		resp, err := c.DeleteCimdClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "deleteCimdClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateJWTBearerClient returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service createJwtBearerClient server.
+func (c *Client) CreateJWTBearerClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateJWTBearerClientRequest(c.encoder)
+		decodeResponse = DecodeCreateJWTBearerClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateJWTBearerClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateJWTBearerClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "createJwtBearerClient", err)
 		}
 		return decodeResponse(resp)
 	}

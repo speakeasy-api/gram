@@ -4,6 +4,7 @@
 
 import { organizationUserSessionIssuersCreate } from "../funcs/organizationUserSessionIssuersCreate.js";
 import { organizationUserSessionIssuersCreateCimdClient } from "../funcs/organizationUserSessionIssuersCreateCimdClient.js";
+import { organizationUserSessionIssuersCreateJwtBearerClient } from "../funcs/organizationUserSessionIssuersCreateJwtBearerClient.js";
 import { organizationUserSessionIssuersDelete } from "../funcs/organizationUserSessionIssuersDelete.js";
 import { organizationUserSessionIssuersDeleteCimdClient } from "../funcs/organizationUserSessionIssuersDeleteCimdClient.js";
 import { organizationUserSessionIssuersGet } from "../funcs/organizationUserSessionIssuersGet.js";
@@ -19,6 +20,7 @@ import { organizationUserSessionIssuersMove } from "../funcs/organizationUserSes
 import { organizationUserSessionIssuersSetAuthenticationHost } from "../funcs/organizationUserSessionIssuersSetAuthenticationHost.js";
 import { organizationUserSessionIssuersUpdate } from "../funcs/organizationUserSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { CreateOrganizationUserSessionIssuerJWTBearerClientResult } from "../models/components/createorganizationusersessionissuerjwtbearerclientresult.js";
 import { CreateUserSessionIssuerCimdClientResult } from "../models/components/createusersessionissuercimdclientresult.js";
 import { MigrateOrganizationUserSessionIssuerResult } from "../models/components/migrateorganizationusersessionissuerresult.js";
 import { OrganizationUserSessionIssuerDeletePreflight } from "../models/components/organizationusersessionissuerdeletepreflight.js";
@@ -34,6 +36,10 @@ import {
   CreateOrganizationUserSessionIssuerCimdClientRequest,
   CreateOrganizationUserSessionIssuerCimdClientSecurity,
 } from "../models/operations/createorganizationusersessionissuercimdclient.js";
+import {
+  CreateOrganizationUserSessionIssuerJwtBearerClientRequest,
+  CreateOrganizationUserSessionIssuerJwtBearerClientSecurity,
+} from "../models/operations/createorganizationusersessionissuerjwtbearerclient.js";
 import {
   DeleteOrganizationUserSessionIssuerRequest,
   DeleteOrganizationUserSessionIssuerSecurity,
@@ -130,6 +136,27 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CreateUserSessionIssuerCimdClientResult> {
     return unwrapAsync(organizationUserSessionIssuersCreateCimdClient(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createJwtBearerClient organizationUserSessionIssuers
+   *
+   * @remarks
+   * Register an MCP client on an organization-owned user_session_issuer for enterprise-managed authorization: the client redeems identity assertion grants (ID-JAG) from the organization's identity provider with the jwt-bearer grant. The client has no redirect URIs and cannot use the authorization code flow. For client_secret_basic and client_secret_post, a client secret is generated and returned once, in this response; Speakeasy stores only its hash. Registering a client does not make the exchange work by itself: the issuer must also trust the identity provider that issues the assertions. Requires org:admin.
+   */
+  async createJwtBearerClient(
+    request: CreateOrganizationUserSessionIssuerJwtBearerClientRequest,
+    security?:
+      | CreateOrganizationUserSessionIssuerJwtBearerClientSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<CreateOrganizationUserSessionIssuerJWTBearerClientResult> {
+    return unwrapAsync(organizationUserSessionIssuersCreateJwtBearerClient(
       this,
       request,
       security,

@@ -3771,6 +3771,242 @@ func DecodeDeleteCimdClientResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildCreateJWTBearerClientRequest instantiates a HTTP request object with
+// method and path set to call the "organizationUserSessionIssuers" service
+// "createJwtBearerClient" endpoint
+func (c *Client) BuildCreateJWTBearerClientRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateJWTBearerClientOrganizationUserSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "createJwtBearerClient", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateJWTBearerClientRequest returns an encoder for requests sent to
+// the organizationUserSessionIssuers createJwtBearerClient server.
+func EncodeCreateJWTBearerClientRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationusersessionissuers.CreateJWTBearerClientPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationUserSessionIssuers", "createJwtBearerClient", "*organizationusersessionissuers.CreateJWTBearerClientPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewCreateJWTBearerClientRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateJWTBearerClientResponse returns a decoder for responses returned
+// by the organizationUserSessionIssuers createJwtBearerClient endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeCreateJWTBearerClientResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateJWTBearerClientResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateJWTBearerClientResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			err = ValidateCreateJWTBearerClientResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			res := NewCreateJWTBearerClientCreateOrganizationUserSessionIssuerJWTBearerClientResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateJWTBearerClientUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			err = ValidateCreateJWTBearerClientUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			return nil, NewCreateJWTBearerClientUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateJWTBearerClientForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			err = ValidateCreateJWTBearerClientForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			return nil, NewCreateJWTBearerClientForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateJWTBearerClientBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			err = ValidateCreateJWTBearerClientBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			return nil, NewCreateJWTBearerClientBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateJWTBearerClientNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			err = ValidateCreateJWTBearerClientNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			return nil, NewCreateJWTBearerClientNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateJWTBearerClientConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			err = ValidateCreateJWTBearerClientConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			return nil, NewCreateJWTBearerClientConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateJWTBearerClientUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			err = ValidateCreateJWTBearerClientUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			return nil, NewCreateJWTBearerClientUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateJWTBearerClientInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			err = ValidateCreateJWTBearerClientInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			return nil, NewCreateJWTBearerClientInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateJWTBearerClientInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+				}
+				err = ValidateCreateJWTBearerClientInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+				}
+				return nil, NewCreateJWTBearerClientInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateJWTBearerClientUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+				}
+				err = ValidateCreateJWTBearerClientUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+				}
+				return nil, NewCreateJWTBearerClientUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "createJwtBearerClient", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateJWTBearerClientGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			err = ValidateCreateJWTBearerClientGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createJwtBearerClient", err)
+			}
+			return nil, NewCreateJWTBearerClientGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "createJwtBearerClient", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer builds a
 // value of type *types.UserSessionIssuer from a value of type
 // *UserSessionIssuerResponseBody.
@@ -3858,6 +4094,35 @@ func unmarshalUserSessionIssuerCimdClientResponseBodyToTypesUserSessionIssuerCim
 		ClientIDMetadataURI: *v.ClientIDMetadataURI,
 		CreatedAt:           *v.CreatedAt,
 		UpdatedAt:           *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalUserSessionClientResponseBodyToTypesUserSessionClient builds a
+// value of type *types.UserSessionClient from a value of type
+// *UserSessionClientResponseBody.
+func unmarshalUserSessionClientResponseBodyToTypesUserSessionClient(v *UserSessionClientResponseBody) *types.UserSessionClient {
+	res := &types.UserSessionClient{
+		ID:                             *v.ID,
+		UserSessionIssuerID:            *v.UserSessionIssuerID,
+		ClientID:                       *v.ClientID,
+		ClientIDMetadataURI:            v.ClientIDMetadataURI,
+		ClientIDMetadataFetchedAt:      v.ClientIDMetadataFetchedAt,
+		ClientIDMetadataCacheExpiresAt: v.ClientIDMetadataCacheExpiresAt,
+		ClientIDMetadataEtag:           v.ClientIDMetadataEtag,
+		ClientName:                     *v.ClientName,
+		CredentialKind:                 *v.CredentialKind,
+		TokenEndpointAuthMethod:        v.TokenEndpointAuthMethod,
+		ClientIDIssuedAt:               *v.ClientIDIssuedAt,
+		ClientSecretExpiresAt:          v.ClientSecretExpiresAt,
+		CreatedAt:                      *v.CreatedAt,
+		UpdatedAt:                      *v.UpdatedAt,
+		ActiveSessionCount:             *v.ActiveSessionCount,
+	}
+	res.RedirectUris = make([]string, len(v.RedirectUris))
+	for i, val := range v.RedirectUris {
+		res.RedirectUris[i] = val
 	}
 
 	return res

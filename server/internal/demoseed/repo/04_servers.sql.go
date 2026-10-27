@@ -437,6 +437,34 @@ func (q *Queries) ServersInsertEMAIdentityProviderClient(ctx context.Context, ar
 	return err
 }
 
+const serversInsertEMAJWTBearerClient = `-- name: ServersInsertEMAJWTBearerClient :exec
+INSERT INTO user_session_clients
+ (id, project_id, organization_id, user_session_issuer_id, client_id, client_secret_hash,
+ client_name, redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+VALUES ($1::uuid, NULL, $2::text, $3::uuid,
+ 'client_' || ($1::uuid)::text, $4::text, 'Codex', ARRAY[]::text[],
+ now() - interval '3 days', 'client_secret_basic')
+`
+
+type ServersInsertEMAJWTBearerClientParams struct {
+	ID               uuid.UUID
+	OrgID            string
+	IssuerID         uuid.UUID
+	ClientSecretHash string
+}
+
+// An assertion-only client an administrator registered for enterprise-managed
+// authorization: no redirect URIs, and an inert placeholder secret hash.
+func (q *Queries) ServersInsertEMAJWTBearerClient(ctx context.Context, arg ServersInsertEMAJWTBearerClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEMAJWTBearerClient,
+		arg.ID,
+		arg.OrgID,
+		arg.IssuerID,
+		arg.ClientSecretHash,
+	)
+	return err
+}
+
 const serversInsertEMAMCPServers = `-- name: ServersInsertEMAMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,

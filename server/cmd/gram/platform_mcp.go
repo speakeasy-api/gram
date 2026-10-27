@@ -76,6 +76,8 @@ type platformMCPConfig struct {
 	DeploymentRedeploy     platformmcp.DeploymentRedeployManagement
 	AssistantIdentity      platformmcp.AssistantIdentityManagement
 	WorkloadAssertionReuse platformmcp.WorkloadAssertionReuseManagement
+	// EMAClients registers jwt-bearer clients through the management API.
+	EMAClients platformmcp.EMAClientRegistrationManagement
 	// Workspaces creates the first organization for a user who connects with
 	// none. Nil refuses such a user, as before self-serve signup existed.
 	Workspaces             platformmcp.WorkspaceProvisioner
@@ -548,6 +550,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	platformReader.WithDeploymentRedeploy(newPlatformMCPDeploymentRedeploy(config, platformReader, limitStore))
 	platformReader.WithWorkloadAssertionReuse(config.WorkloadAssertionReuse)
+	platformReader.WithEMAClientRegistration(config.EMAClients)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
@@ -1263,6 +1266,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	platformReader.WithDeploymentRedeploy(newPlatformMCPDeploymentRedeploy(config, platformReader, limitStore))
 	platformReader.WithWorkloadAssertionReuse(config.WorkloadAssertionReuse)
+	platformReader.WithEMAClientRegistration(config.EMAClients)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	organizationusersessionissuers "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	goa "goa.design/goa/v3/pkg"
@@ -584,6 +585,46 @@ func BuildDeleteCimdClientPayload(organizationUserSessionIssuersDeleteCimdClient
 	}
 	v := &organizationusersessionissuers.DeleteCimdClientPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCreateJWTBearerClientPayload builds the payload for the
+// organizationUserSessionIssuers createJwtBearerClient endpoint from CLI flags.
+func BuildCreateJWTBearerClientPayload(organizationUserSessionIssuersCreateJWTBearerClientBody string, organizationUserSessionIssuersCreateJWTBearerClientSessionToken string) (*organizationusersessionissuers.CreateJWTBearerClientPayload, error) {
+	var err error
+	var body CreateJWTBearerClientRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationUserSessionIssuersCreateJWTBearerClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_name\": \"aa\",\n      \"token_endpoint_auth_method\": \"client_secret_basic\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.ClientName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_name", body.ClientName, utf8.RuneCountInString(body.ClientName), 1, true))
+		}
+		if utf8.RuneCountInString(body.ClientName) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_name", body.ClientName, utf8.RuneCountInString(body.ClientName), 255, false))
+		}
+		if !(body.TokenEndpointAuthMethod == "none" || body.TokenEndpointAuthMethod == "client_secret_basic" || body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", body.TokenEndpointAuthMethod, []any{"none", "client_secret_basic", "client_secret_post"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersCreateJWTBearerClientSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersCreateJWTBearerClientSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.CreateJWTBearerClientPayload{
+		UserSessionIssuerID:     body.UserSessionIssuerID,
+		ClientName:              body.ClientName,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

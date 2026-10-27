@@ -15,13 +15,23 @@
 package usersessions
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 var (
@@ -204,4 +214,66 @@ func keySourceDescription(err error) string {
 	default:
 		return "jwks is not a valid JWK Set"
 	}
+}
+
+// RegisteredClient is a stored client registration. ClientSecret is the
+// plaintext secret, set only for methods that carry one; it is never stored
+// and cannot be recovered after the caller returns it.
+type RegisteredClient struct {
+	Row          repo.UserSessionClient
+	ClientSecret string
+}
+
+// clientSecretBytes is the client secret's entropy: 256 bits, base64url-encoded.
+const clientSecretBytes = 32
+
+// CreateClientRegistration stores a registration that has passed SetDefaults
+// and Validate on issuerID, minting a client_id and, for secret methods, a
+// secret whose bcrypt hash alone is persisted. Returns pgx.ErrNoRows, wrapped,
+// when the issuer is retired, and an *oauthwire.Error for an auth method the
+// registration path does not classify.
+func CreateClientRegistration(ctx context.Context, q *repo.Queries, issuerID uuid.UUID, req RegistrationRequest) (RegisteredClient, error) {
+	// What credential the client gets is decided by an explicit list of the
+	// methods that carry a secret, not by "anything but none": an asymmetric
+	// client must not be handed a secret it never asked for, since a stored
+	// hash would make the token endpoint demand it on every request. The
+	// default arm refuses rather than mints if a method is ever added to an
+	// accepted set without being classified here.
+	var clientSecret string
+	var clientSecretHash pgtype.Text
+	switch req.TokenEndpointAuthMethod {
+	case oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost:
+		b := make([]byte, clientSecretBytes)
+		if _, err := rand.Read(b); err != nil {
+			return RegisteredClient{}, fmt.Errorf("generate client secret: %w", err)
+		}
+		clientSecret = base64.RawURLEncoding.EncodeToString(b)
+		hashed, err := bcrypt.GenerateFromPassword([]byte(clientSecret), bcrypt.DefaultCost)
+		if err != nil {
+			return RegisteredClient{}, fmt.Errorf("hash client secret: %w", err)
+		}
+		clientSecretHash = pgtype.Text{String: string(hashed), Valid: true}
+	case oauthwire.AuthMethodNone, oauthwire.AuthMethodPrivateKeyJWT:
+		// Public clients prove PKCE possession; asymmetric clients prove
+		// possession of a key the server never holds. Neither gets a secret.
+	default:
+		return RegisteredClient{}, &oauthwire.Error{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported token_endpoint_auth_method %q", req.TokenEndpointAuthMethod)}
+	}
+
+	row, err := q.CreateUserSessionClient(ctx, repo.CreateUserSessionClientParams{
+		UserSessionIssuerID: issuerID,
+		ClientID:            "client_" + uuid.NewString(),
+		ClientSecretHash:    clientSecretHash,
+		ClientName:          req.ClientName,
+		RedirectUris:        req.RedirectURIs,
+		// RFC 7591 §3.2.1 expires_at=0 = non-expiring; the column stays NULL.
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
+		ClientJwks:              req.JWKS,
+		ClientJwksUri:           conv.ToPGTextEmpty(req.JWKSURI),
+	})
+	if err != nil {
+		return RegisteredClient{}, fmt.Errorf("create user session client: %w", err)
+	}
+	return RegisteredClient{Row: row, ClientSecret: clientSecret}, nil
 }
