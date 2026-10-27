@@ -35,7 +35,17 @@ const state = vi.hoisted(() => ({
   })),
   settings: vi.fn(() => ({ data: { effectiveName: "example-marketplace" } })),
   mutation: vi.fn(() => ({ isPending: false, mutateAsync: vi.fn() })),
-  mcpServer: { id: "server-a", name: "Server" } as Record<string, string>,
+  mcpServer: { id: "server-a", name: "Server" } as {
+    id: string;
+    name: string;
+    tunneledMcpServerId?: string;
+    remoteMcpServerId?: string;
+  },
+  tunnelConnections: vi.fn(() => ({
+    data: undefined as unknown,
+    isLoading: false,
+    isError: false,
+  })),
   skillsOverMcp: false,
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -121,6 +131,17 @@ vi.mock("@/pages/mcp/x/MCPServerDetails", () => ({
 vi.mock("@/pages/mcp/x/MCPServerDetailsRouting", () => ({
   activeTabFromPath: () => "overview",
   mcpServerTabHref: () => "/mcp",
+  standsInForToolset: () => false,
+  isCanonicalHostedWrapper: () => false,
+}));
+vi.mock("@/hooks/toolTypes", () => ({
+  useToolset: () => ({ data: undefined }),
+}));
+vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
+  useListEnvironments: () => ({ data: undefined }),
+}));
+vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
+  useGetMcpMetadata: () => ({ data: undefined }),
 }));
 vi.mock(
   "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection",
@@ -128,6 +149,13 @@ vi.mock(
 );
 vi.mock("@/pages/mcp/x/tabs/settings/sections/ServerUrlSection", () => ({
   MCP_SERVER_URL_SECTION_ID: "url",
+}));
+vi.mock("@/pages/mcp/x/tabs/settings/sections/AgentSetupSection", () => ({
+  MCP_AGENT_SETUP_SECTION_ID: "agent-setup",
+}));
+vi.mock("@/pages/mcp/x/tabs/tunnelStatus", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/pages/mcp/x/tabs/tunnelStatus")>()),
+  useTunneledMcpConnections: state.tunnelConnections,
 }));
 vi.mock("@/lib/remote-identity", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/remote-identity")>()),
@@ -186,6 +214,11 @@ beforeEach(() => {
   state.grants = [];
   state.mcpServer = { id: "server-a", name: "Server" };
   state.skillsOverMcp = false;
+  state.tunnelConnections.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  });
 });
 afterEach(cleanup);
 const scope = { gramProject: "project-slug", gramSession: "session-a" };
@@ -387,5 +420,40 @@ describe("remote MCP server Skills tab", () => {
     state.grants = grants;
     render(<McpServerXSidebarNav />);
     expect(screen.queryByText("Skills")).toBeNull();
+  });
+});
+
+describe("MCP server readiness", () => {
+  it("leaves servers without a tunnel unchanged", () => {
+    state.grants = [{ scope: "org:read" }];
+    render(<McpServerXSidebarNav />);
+    for (const label of [
+      "Server URL",
+      "Authentication",
+      "Source",
+      "Included in Plugin",
+    ]) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    expect(screen.queryByText("Tunnel agent")).toBeNull();
+    // No tunnel to ask about, so the shared query stays disabled.
+    expect(state.tunnelConnections).toHaveBeenCalledWith("");
+  });
+
+  it("adds the tunnel agent without polling for tunneled servers", () => {
+    state.mcpServer = {
+      id: "server-a",
+      name: "Server",
+      tunneledMcpServerId: "tunnel-a",
+    };
+    state.tunnelConnections.mockReturnValue({
+      data: { activeConnectionCount: 0, connections: [] },
+      isLoading: false,
+      isError: false,
+    });
+    render(<McpServerXSidebarNav />);
+    expect(screen.getByText("Tunnel agent")).toBeTruthy();
+    // The Overview polls; the sidebar reads the same cached snapshot.
+    expect(state.tunnelConnections).toHaveBeenCalledWith("tunnel-a");
   });
 });

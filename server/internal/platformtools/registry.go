@@ -403,6 +403,10 @@ func FindToolEntries(toolURNs []string, extras ...ExternalTool) []*types.ToolEnt
 	return entries
 }
 
+func CountTools(toolURNs []string, extras ...ExternalTool) int {
+	return len(findToolDescriptors(toolURNs, extras...))
+}
+
 func FindTypedTools(projectID uuid.UUID, toolURNs []string, extras ...ExternalTool) []*types.Tool {
 	descriptors := findToolDescriptors(toolURNs, extras...)
 	tools := make([]*types.Tool, 0, len(descriptors))

@@ -291,8 +291,46 @@ func (q *Queries) DetachMCPServerRemoteSessionClient(ctx context.Context, arg De
 	return result.RowsAffected(), nil
 }
 
-const getAuthClientSelection = `-- name: GetAuthClientSelection :one
-SELECT sel.no_auth,
+const getAuthClientSelection = `-- name: GetAuthClientSelection :many
+WITH selected AS (
+  SELECT no_auth, auth_client_id, remote_session_client_id, mcp_server_id, project_id, organization_id,
+         FALSE AS ambiguous
+  FROM upstream_client_selections
+  WHERE NOT $1::boolean
+    AND credential_kind = $2::text
+    AND credential_id = $3::uuid
+    AND mcp_server_id = ANY($4::uuid[])
+    AND organization_id = $5::text
+    AND deleted IS FALSE
+  UNION ALL
+  SELECT $6::uuid IS NULL,
+         candidates.auth_client_id,
+         $6::uuid, m.id, m.project_id, p.organization_id,
+         candidates.ambiguous
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+   AND p.organization_id = $5::text AND p.deleted IS FALSE
+  CROSS JOIN LATERAL (
+    SELECT CASE WHEN count(*) = 1 THEN min(c.id::text)::uuid END AS auth_client_id,
+           count(*) > 1 AS ambiguous
+    FROM mcp_server_auth_clients AS link
+    JOIN mcp_auth_clients AS c ON c.id = link.auth_client_id
+     AND c.organization_id = link.organization_id
+     AND (c.project_id IS NULL OR c.project_id = m.project_id)
+     AND c.deleted IS FALSE
+    WHERE link.mcp_server_id = m.id AND link.organization_id = p.organization_id
+      AND link.deleted IS FALSE
+      AND (($6::uuid IS NOT NULL
+            AND c.remote_session_client_id = $6::uuid
+            AND c.client_type IN ('remote_session', 'service_account'))
+           OR ($6::uuid IS NULL
+               AND c.client_type IN ('static_credential', 'pass_through')))
+  ) AS candidates
+  WHERE $1::boolean AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
+)
+SELECT sel.mcp_server_id,
+       sel.ambiguous,
+       sel.no_auth,
        sel.auth_client_id,
        m.name AS server_name,
        (m.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled,
@@ -300,7 +338,7 @@ SELECT sel.no_auth,
        ac.client_type,
        ac.enabled AS client_enabled,
        ac.deleted AS client_deleted,
-       ac.remote_session_client_id AS registration_id,
+       reg.id AS registration_id,
        reg.remote_session_issuer_id AS registration_issuer_id,
        (
          reg.id IS NOT NULL
@@ -441,7 +479,7 @@ SELECT sel.no_auth,
            AND link.deleted IS FALSE
            AND e.remote_session_client_id = ac.remote_session_client_id
        )::boolean AS registration_has_ema
-FROM upstream_client_selections AS sel
+FROM selected AS sel
 JOIN mcp_servers AS m
   ON m.id = sel.mcp_server_id
  AND m.project_id = sel.project_id
@@ -451,24 +489,23 @@ LEFT JOIN mcp_auth_clients AS ac
  AND ac.organization_id = sel.organization_id
  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
 LEFT JOIN remote_session_clients AS reg
-  ON reg.id = ac.remote_session_client_id
+  ON reg.id = COALESCE(ac.remote_session_client_id, CASE WHEN $1::boolean THEN sel.remote_session_client_id END)
 LEFT JOIN remote_session_issuers AS rsi
   ON rsi.id = reg.remote_session_issuer_id
-WHERE sel.credential_kind = $1::text
-  AND sel.credential_id = $2::uuid
-  AND sel.mcp_server_id = $3::uuid
-  AND sel.organization_id = $4::text
-  AND sel.deleted IS FALSE
 `
 
 type GetAuthClientSelectionParams struct {
-	CredentialKind string
-	CredentialID   uuid.UUID
-	McpServerID    uuid.UUID
-	OrganizationID string
+	Proposed               bool
+	CredentialKind         string
+	CredentialID           uuid.UUID
+	McpServerIds           []uuid.UUID
+	OrganizationID         string
+	ProposedRegistrationID uuid.NullUUID
 }
 
 type GetAuthClientSelectionRow struct {
+	McpServerID                uuid.UUID
+	Ambiguous                  bool
 	NoAuth                     bool
 	AuthClientID               uuid.NullUUID
 	ServerName                 pgtype.Text
@@ -492,7 +529,7 @@ type GetAuthClientSelectionRow struct {
 	RegistrationHasEma         bool
 }
 
-// One credential's choice for one MCP server, read the way the typed auth
+// One credential's choices for MCP servers, read the way the typed auth
 // client resolver reads it: the auth client the choice names, whether that
 // client is still usable for the server, and what the server says about
 // needing upstream authentication. A client outside the server's tenant reads
@@ -501,38 +538,55 @@ type GetAuthClientSelectionRow struct {
 // checked against them: an OAuth client's registration must still be attached
 // to the server, header copies must still match the server's headers, and the
 // server's credential headers must be carried by the chosen client.
-func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientSelectionParams) (GetAuthClientSelectionRow, error) {
-	row := q.db.QueryRow(ctx, getAuthClientSelection,
+func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientSelectionParams) ([]GetAuthClientSelectionRow, error) {
+	rows, err := q.db.Query(ctx, getAuthClientSelection,
+		arg.Proposed,
 		arg.CredentialKind,
 		arg.CredentialID,
-		arg.McpServerID,
+		arg.McpServerIds,
 		arg.OrganizationID,
+		arg.ProposedRegistrationID,
 	)
-	var i GetAuthClientSelectionRow
-	err := row.Scan(
-		&i.NoAuth,
-		&i.AuthClientID,
-		&i.ServerName,
-		&i.Tunneled,
-		&i.ClientID,
-		&i.ClientType,
-		&i.ClientEnabled,
-		&i.ClientDeleted,
-		&i.RegistrationID,
-		&i.RegistrationIssuerID,
-		&i.RegistrationLive,
-		&i.RegistrationAttached,
-		&i.Associated,
-		&i.RequiresUpstreamAuth,
-		&i.ServerHasClients,
-		&i.ServerHasHeaderClients,
-		&i.ServerHasOauthClients,
-		&i.HeadersStale,
-		&i.CredentialHeadersUncovered,
-		&i.RequiresDeniedSource,
-		&i.RegistrationHasEma,
-	)
-	return i, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAuthClientSelectionRow
+	for rows.Next() {
+		var i GetAuthClientSelectionRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.Ambiguous,
+			&i.NoAuth,
+			&i.AuthClientID,
+			&i.ServerName,
+			&i.Tunneled,
+			&i.ClientID,
+			&i.ClientType,
+			&i.ClientEnabled,
+			&i.ClientDeleted,
+			&i.RegistrationID,
+			&i.RegistrationIssuerID,
+			&i.RegistrationLive,
+			&i.RegistrationAttached,
+			&i.Associated,
+			&i.RequiresUpstreamAuth,
+			&i.ServerHasClients,
+			&i.ServerHasHeaderClients,
+			&i.ServerHasOauthClients,
+			&i.HeadersStale,
+			&i.CredentialHeadersUncovered,
+			&i.RequiresDeniedSource,
+			&i.RegistrationHasEma,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const isSoleConsumerBinding = `-- name: IsSoleConsumerBinding :one
@@ -589,24 +643,25 @@ func (q *Queries) IsSoleConsumerBinding(ctx context.Context, arg IsSoleConsumerB
 }
 
 const listAuthClientHeaders = `-- name: ListAuthClientHeaders :many
-SELECT h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
+SELECT h.auth_client_id, h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
 FROM mcp_auth_client_headers AS h
 JOIN mcp_auth_clients AS ac
   ON ac.id = h.auth_client_id
  AND ac.organization_id = h.organization_id
  AND ac.deleted IS FALSE
-WHERE h.auth_client_id = $1::uuid
+WHERE h.auth_client_id = ANY($1::uuid[])
   AND h.organization_id = $2::text
   AND h.deleted IS FALSE
 ORDER BY h.name, h.id
 `
 
 type ListAuthClientHeadersParams struct {
-	AuthClientID   uuid.UUID
+	AuthClientIds  []uuid.UUID
 	OrganizationID string
 }
 
 type ListAuthClientHeadersRow struct {
+	AuthClientID           uuid.UUID
 	Name                   string
 	IsRequired             bool
 	IsSecret               bool
@@ -617,7 +672,7 @@ type ListAuthClientHeadersRow struct {
 // A live auth client's own headers, for the proxy to send after the server's
 // non-credential headers. Values stay as stored; secret ones are encrypted.
 func (q *Queries) ListAuthClientHeaders(ctx context.Context, arg ListAuthClientHeadersParams) ([]ListAuthClientHeadersRow, error) {
-	rows, err := q.db.Query(ctx, listAuthClientHeaders, arg.AuthClientID, arg.OrganizationID)
+	rows, err := q.db.Query(ctx, listAuthClientHeaders, arg.AuthClientIds, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -626,6 +681,7 @@ func (q *Queries) ListAuthClientHeaders(ctx context.Context, arg ListAuthClientH
 	for rows.Next() {
 		var i ListAuthClientHeadersRow
 		if err := rows.Scan(
+			&i.AuthClientID,
 			&i.Name,
 			&i.IsRequired,
 			&i.IsSecret,

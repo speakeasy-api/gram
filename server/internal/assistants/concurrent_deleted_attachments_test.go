@@ -136,8 +136,7 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 					require.NoError(t, err)
 					require.Len(t, listed.Assistants, 1)
 					require.Equal(t, "Original", listed.Assistants[0].Name)
-					require.Zero(t, counts.Toolsets)
-					require.EqualValues(t, 1, counts.McpServers)
+					require.EqualValues(t, 1, counts)
 					if kind == "toolset" {
 						require.Len(t, listed.Assistants[0].Toolsets, 1)
 						require.Equal(t, "live-tools", listed.Assistants[0].Toolsets[0].ToolsetSlug)

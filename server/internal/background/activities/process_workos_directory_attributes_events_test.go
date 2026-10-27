@@ -418,6 +418,46 @@ func directoryUserEventDataWithoutState(workosOrgID, workosDirectoryUserID, emai
 	return []byte(`{"id":"` + workosDirectoryUserID + `","organization_id":"` + workosOrgID + `","email":"` + email + `","first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering"},"created_at":"2026-05-12T10:00:00Z","updated_at":"` + updatedAt + `"}`)
 }
 
+func TestProcessWorkOSOrganizationEvents_DirectoryUserEventsStoreNames(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_directory_user_names")
+	logger := testenv.NewLogger(t)
+
+	const (
+		gramOrgID   = "gram_directory_user_names_org"
+		workosOrgID = "org_directory_user_names"
+		userID      = "directory_user_names"
+	)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, gramOrgID, workosOrgID)
+
+	unnamed := []byte(`{"id":"` + userID + `","organization_id":"` + workosOrgID + `","email":"names@example.com","first_name":"","state":"active","custom_attributes":{},"created_at":"2026-05-12T10:00:00Z","updated_at":"2026-05-12T10:02:00Z"}`)
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_named", Event: "dsync.user.created", CreatedAt: time.Now(), Data: directoryUserEventDataWithState(workosOrgID, userID, "names@example.com", "active", "2026-05-12T10:01:00Z")},
+	}, {
+		{ID: "event_unnamed", Event: "dsync.user.updated", CreatedAt: time.Now(), Data: unnamed},
+	}})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	row, err := directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, userID)
+	require.NoError(t, err)
+	require.Equal(t, "Ada", row.FirstName.String)
+	require.Equal(t, "Lovelace", row.LastName.String)
+
+	// The newest event wins, including when the directory stops reporting a name.
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	row, err = directoryrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, userID)
+	require.NoError(t, err)
+	require.False(t, row.FirstName.Valid)
+	require.False(t, row.LastName.Valid)
+}
+
 func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAccess(t *testing.T) {
 	t.Parallel()
 

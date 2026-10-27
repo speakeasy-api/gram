@@ -7,8 +7,9 @@ export const DATADOG_ORIGIN = "https://app.datadoghq.com";
 
 export type ToolCallTotals = {
   total: number;
-  // Every outcome at status 400 or above, which is what the chart's buckets
-  // count as failed. `unknown` is neither.
+  // Every outcome at status 400 or above, plus isError tool errors below 400
+  // and hook-reported tool errors, which the chart's buckets do not count.
+  // `unknown` is neither.
   failed: number;
   unauthorized: number;
   // 0 to 1. Zero calls is a zero share, never NaN.
@@ -164,7 +165,6 @@ export function humanize(value: string): string {
 
 export const LEGACY_AUTH_LABELS: Record<string, string> = {
   external_oauth: "external OAuth",
-  oauth_proxy: "OAuth proxy",
   gram_private: "private",
 };
 

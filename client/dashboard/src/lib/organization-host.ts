@@ -92,6 +92,7 @@ function allowedProtocol(target: string, current: string): boolean {
 export function organizationHostRedirectTarget(
   dashboardUrl: string | undefined,
   current: CurrentLocation,
+  replaceSession = false,
 ): string | undefined {
   if (!dashboardUrl || isExempt(current)) return undefined;
 
@@ -108,7 +109,59 @@ export function organizationHostRedirectTarget(
     source_host: current.host,
     redirect: current.pathname + current.search,
   });
+  if (replaceSession) params.set("replace_session", "true");
   return `${target.origin}/rpc/auth.transferIn?${params.toString()}`;
+}
+
+/**
+ * Each host keeps its own session, and by default a transfer keeps a session
+ * the browser already holds on the other host, so a stale session here cannot
+ * undo a switch made there. A switch made here must win instead, so it is
+ * recorded and the move that follows asks the other host to replace its
+ * session.
+ */
+const ORGANIZATION_SWITCH_KEY = "organizationSwitch";
+
+/**
+ * How long a recorded switch makes the next move replace the other host's
+ * session. The move follows the switch's reload within seconds; a minute
+ * allows a slow page load without letting a later visit undo the other
+ * host's choice.
+ */
+const ORGANIZATION_SWITCH_WINDOW_MS = 60_000;
+
+/** Records that this tab just switched to organizationId. */
+export function recordOrganizationSwitch(
+  organizationId: string,
+  now = Date.now(),
+): void {
+  try {
+    sessionStorage.setItem(
+      ORGANIZATION_SWITCH_KEY,
+      JSON.stringify({ organizationId, at: now }),
+    );
+  } catch {
+    // Without storage the move keeps the other host's session.
+  }
+}
+
+/** Whether this tab switched to organizationId within the switch window. */
+export function switchedRecently(
+  organizationId: string,
+  now = Date.now(),
+): boolean {
+  try {
+    const parsed = JSON.parse(
+      sessionStorage.getItem(ORGANIZATION_SWITCH_KEY) ?? "null",
+    ) as { organizationId?: unknown; at?: unknown } | null;
+    return (
+      parsed?.organizationId === organizationId &&
+      typeof parsed.at === "number" &&
+      within(parsed.at, now, ORGANIZATION_SWITCH_WINDOW_MS)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function moves(): Record<string, number[]> {

@@ -1,12 +1,18 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 export type RankedRow = {
   /** Stable identity; also the react key. */
   id: string;
   label: string;
+  /**
+   * The label as drawn, for a subject a string cannot say — an agent, which
+   * carries its own face. `label` stays the plain text, so the row's tooltip
+   * and its width still read off one string.
+   */
+  content?: ReactNode;
   value: number;
   /** Shown to the right of the value, e.g. a failure rate. */
   secondary?: string;
@@ -170,7 +176,7 @@ export function RankedList({
                 className="relative z-10 min-w-0 flex-1 truncate"
                 title={row.label}
               >
-                {row.label}
+                {row.content ?? row.label}
               </span>
               <span className="relative z-10 shrink-0 font-mono text-xs tabular-nums">
                 {row.value.toLocaleString()}

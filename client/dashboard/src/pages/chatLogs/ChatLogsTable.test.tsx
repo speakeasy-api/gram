@@ -71,6 +71,9 @@ vi.mock("@/hooks/useRBAC", () => ({
 }));
 
 vi.mock("@/contexts/Auth", () => ({
+  // The assistant cell checks its agent against the readable inventory, which
+  // keys its query on the organization.
+  useOrganization: () => ({ id: "org-1" }),
   useSession: () => ({
     // Distinct from the chat owner so ChatOwnerLabel resolves the member name
     // instead of collapsing to "You".
@@ -155,8 +158,14 @@ describe("ChatLogsTable", () => {
       />,
     );
 
-    expect(screen.getByText(/^Created Jan 1, \d{2}:00$/)).toBeTruthy();
-    expect(screen.getByText(/^Last activity Jan 1, \d{2}:03$/)).toBeTruthy();
+    // The column shows when the session started and how long it ran. Both
+    // timestamps in full wrapped the column mid-date for two values that are
+    // nearly always the same minute, so the exact pair moved to the title.
+    const started = screen.getByText(/^Jan 1, \d{2}:00$/);
+    expect(started).toBeTruthy();
+    expect(started.getAttribute("title")).toMatch(
+      /^Created Jan 1, \d{2}:00 · Last activity Jan 1, \d{2}:03$/,
+    );
   });
 
   it("shows the normalized product surface for a session source", () => {
@@ -282,11 +291,141 @@ describe("ChatLogsTable", () => {
     expect(agentLink.getAttribute("href")).toContain(
       encodeURIComponent("agent:agent-1"),
     );
-    expect(screen.getByText("for")).toBeTruthy();
+    // ActingPrincipal words the relation in full: the agent's name, then
+    // "on behalf of <person>" on its own line.
+    expect(screen.getByText("on behalf of")).toBeTruthy();
     const delegateLink = screen.getByRole("link", { name: "Ada Lovelace" });
     expect(delegateLink.getAttribute("href")).toContain(
       encodeURIComponent("user:gram-user-1"),
     );
+  });
+
+  it("names an assistant's authorizer from the external id when there is no member id", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            externalUserId: "user_01HXXXXXXXXXXXXXXXXXXXXXXX",
+            assistantId: "assistant-1",
+            assistantName: "Helper",
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText("on behalf of")).toBeTruthy();
+    expect(screen.getByText("user_01HXXXXXXXXXXXXXXXXXXXXXXX")).toBeTruthy();
+  });
+
+  it("names every participant and counts the ones past the fifth face", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            participants: ["Ada", "Bruce", "Cleo", "Dara", "Eli", "Fin"].map(
+              (name, index) => ({
+                provider: "slack",
+                providerTeamId: "T1",
+                providerUserId: `U${index}`,
+                displayName: name,
+              }),
+            ),
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    // The faces themselves are decorative, so each one carries its name. All
+    // five, not just the ends: dropping a middle one is the regression.
+    for (const name of ["Ada", "Bruce", "Cleo", "Dara", "Eli"]) {
+      expect(screen.getByText(name)).toBeTruthy();
+    }
+    // The sixth is counted rather than dropped.
+    expect(screen.getByText("+1")).toBeTruthy();
+    expect(screen.getByText("1 more participants")).toBeTruthy();
+  });
+
+  it("keeps participants distinct when two workspaces share a provider id", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            participants: [
+              {
+                provider: "slack",
+                providerTeamId: "T1",
+                providerUserId: "U1",
+                displayName: "Ada",
+              },
+              {
+                provider: "slack",
+                providerTeamId: "T2",
+                providerUserId: "U1",
+                displayName: "Bruce",
+              },
+            ],
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText("Ada")).toBeTruthy();
+    expect(screen.getByText("Bruce")).toBeTruthy();
+  });
+
+  it("marks a session that has risk findings", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            riskFindingsCount: 3,
+          },
+          { ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NF"), title: "Quiet" },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByRole("img", { name: /risk finding/ })
+        .map((marker) => marker.getAttribute("aria-label")),
+    ).toEqual(["3 risk findings on this session"]);
   });
 
   it("links an assistant session without an agent identity to the assistant", () => {
@@ -314,6 +453,6 @@ describe("ChatLogsTable", () => {
     expect(assistantLink.getAttribute("href")).toContain(
       "/assistants/assistant-1",
     );
-    expect(screen.queryByText("for")).toBeNull();
+    expect(screen.queryByText("on behalf of")).toBeNull();
   });
 });

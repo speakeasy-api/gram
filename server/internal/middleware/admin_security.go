@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 )
 
 // AdminCORS allows the configured set of origins to make credentialed
@@ -86,6 +88,27 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 				return
 			}
 
+			// These cookie-authenticated navigation routes retain the same origin
+			// enforcement, but explain the refusal in the browser. Machine routes
+			// and the rest of the admin API retain their own response contracts.
+			proposalID, proposal := strings.CutPrefix(r.URL.Path, "/admin-mcp/proposals/")
+			proposal = proposal && proposalID != "" && !strings.Contains(proposalID, "/")
+			if r.URL.Path == "/admin-mcp/connect" || proposal {
+				_ = oauthui.WriteAuthorizationError(r.Context(), w, oauthui.AuthorizationError{
+					Status:         http.StatusForbidden,
+					Reason:         oauthui.ReasonSessionChanged,
+					Approval:       proposal,
+					ErrorID:        "",
+					Code:           http.StatusText(http.StatusForbidden),
+					Description:    "forbidden: origin not allowed",
+					CallbackURL:    "",
+					ClientName:     "",
+					ClientID:       "",
+					ClientIDOrigin: "",
+					ServerName:     "",
+				})
+				return
+			}
 			http.Error(w, "forbidden: origin not allowed", http.StatusForbidden)
 		})
 	}

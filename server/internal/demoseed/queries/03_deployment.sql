@@ -40,25 +40,25 @@ VALUES
    '{"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/oauth/authorize","token_endpoint":"https://auth.example.com/oauth/token","registration_endpoint":"https://auth.example.com/oauth/register"}'::jsonb,
    NULL);
 
+-- Hosting state (address, visibility, issuer) lives on each hosted
+-- toolset's canonical MCP server, seeded in 04_servers.sql; the toolset
+-- hosting columns stay unset as they do for every new toolset.
 -- name: DeployInsertToolsets :exec
 INSERT INTO toolsets (id, organization_id, project_id, name, slug, description,
-                      mcp_slug, mcp_enabled, mcp_is_public, external_oauth_server_id)
+                      external_oauth_server_id)
 VALUES
   (@toolset_1, @organization_id::text, @project_id::uuid, 'Acme Support Tools', 'acme-support-tools',
-   'Support workflows: logs, refunds, customer lookups.',
-   @support_mcp_slug::text, TRUE, FALSE, NULL),
+   'Support workflows: logs, refunds, customer lookups.', NULL),
   (@toolset_2, @organization_id::text, @project_id::uuid, 'Acme Ops', 'acme-ops',
-   'Operational checks and deploy tooling.', NULL, TRUE, FALSE, NULL),
+   'Operational checks and deploy tooling.', NULL),
   -- The OAuth-protected server, kept separate from the two above: attaching
   -- a session issuer changes what a server's authentication tab and install
   -- instructions say, and the support server is the one a visitor meets
   -- first.
   (@toolset_3, @organization_id::text, @project_id::uuid, 'Acme Partner Gateway', 'acme-partner-gateway',
-   'Tools Acme exposes to partner agents, behind OAuth.',
-   @partner_mcp_slug::text, TRUE, FALSE, NULL),
+   'Tools Acme exposes to partner agents, behind OAuth.', NULL),
   (@toolset_4, @organization_id::text, @project_id::uuid, 'Acme OAuth Discovery', 'acme-oauth-discovery',
    'Demonstrates external OAuth metadata source choices.',
-   @discovery_mcp_slug::text, TRUE, TRUE,
    @external_oauth_server_id::uuid);
 
 -- Version = epoch seconds: the server caches toolset contents in Redis
@@ -75,9 +75,6 @@ INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VAL
 -- name: DeployInsertUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
 VALUES (@id, @project_id::uuid, @organization_id::text, 'acme-partner-gateway', 'interactive', make_interval(secs => 30 * 24 * 60 * 60));
-
--- name: DeployAttachUserSessionIssuer :exec
-UPDATE toolsets SET user_session_issuer_id = @user_session_issuer_id::uuid WHERE id = @toolset_id;
 
 -- name: DeployInsertChainingIssuer :exec
 INSERT INTO remote_session_issuers
@@ -177,10 +174,10 @@ VALUES
 -- name: DeployInsertOrgWorkloadIssuer :exec
 INSERT INTO workload_issuers
   (id, organization_id, project_id, name, description, tags, issuer, jwks_uri,
-   allow_wildcard_admission)
+   allow_wildcard_admission, allow_assertion_reuse)
 VALUES
   (@id, @organization_id::text, NULL, @name, @description::text, @tags::text[], @issuer, @jwks_uri,
-   @allow_wildcard_admission);
+   @allow_wildcard_admission, @allow_assertion_reuse::boolean);
 
 -- name: DeployInsertWorkloadAdmission :exec
 INSERT INTO workload_identity_admissions
@@ -219,7 +216,7 @@ VALUES
 
 -- name: DeployInsertAgent :exec
 INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
-VALUES (@id, @organization_id::text, @project_id::uuid, @owner_user_id, 'Identity-bound assistant agent');
+VALUES (@id, @organization_id::text, @project_id::uuid, @owner_user_id, @name::text);
 
 -- name: DeployInsertPrincipalGrant :exec
 INSERT INTO principal_grants

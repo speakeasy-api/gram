@@ -21,6 +21,10 @@ const (
 	// McpSessionIDHeader is the session header defined by the MCP Streamable
 	// HTTP transport.
 	McpSessionIDHeader = "Mcp-Session-Id"
+
+	// lastEventIDHeader is the SSE header a client sends to resume a stream
+	// after the last event id it received.
+	lastEventIDHeader = "Last-Event-ID"
 )
 
 // HeaderPolicy selects how strictly a proxy treats operator-configured headers

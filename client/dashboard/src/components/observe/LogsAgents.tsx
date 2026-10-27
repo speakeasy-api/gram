@@ -1,7 +1,7 @@
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
-import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
+import { LOG_DATA_RETENTION_MESSAGE } from "@/components/observe/LoggingPageHeader";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
@@ -25,7 +25,8 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { useQueryClient } from "@tanstack/react-query";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pin } from "lucide-react";
 import {
   useState,
@@ -37,19 +38,25 @@ import {
 } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useProject } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
+import type { SortDescriptor } from "@/components/ui/Table";
 import {
   defineFilters,
   type FilterValue,
   type OptionsById,
 } from "@/components/filters";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { type DateRangePreset, getPresetRange } from "@/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
-import { AGENT_SESSION_CHAT_PARAM } from "@/pages/chatLogs/agentSessionLink";
+import {
+  AGENT_SESSION_CHAT_PARAM,
+  AGENT_SESSIONS_AGENT_PARAM,
+} from "@/pages/chatLogs/agentSessionLink";
 
 type SortField = "chronological" | "messageCount";
 type SortOrder = "asc" | "desc";
@@ -172,9 +179,35 @@ const SESSIONS_VIEW_OPTIONS: {
   },
 ];
 
+// The page title and description now belong to the ResourceListPage header, so
+// they are stated here once and handed to the template.
+const AGENT_SESSIONS_TITLE = "Agent Sessions";
+
+// The retention note was part of this page's description before the header
+// moved to the template. LoggingPageHeader keeps its info button private, so
+// the control is rebuilt here around the message it exports rather than being
+// dropped from the description.
+const AGENT_SESSIONS_DESCRIPTION = (
+  <>
+    View and debug individual agent sessions captured for organization members
+    in this project{" "}
+    <span className="inline-flex align-middle">
+      <SimpleTooltip tooltip={LOG_DATA_RETENTION_MESSAGE}>
+        <button
+          type="button"
+          aria-label="About data retention"
+          className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+        >
+          <Icon name="info" className="size-3.5" />
+        </button>
+      </SimpleTooltip>
+    </span>
+  </>
+);
+
 // Shown when the caller lacks chat:read: the list is scoped to their own
-// sessions, so explain why and (for admins) point at the roles page where
-// chat:read is granted.
+// sessions and those of the agents they own, so explain why and (for admins)
+// point at the roles page where chat:read is granted.
 function OwnSessionsNotice(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
   const { hasScope, isLoading } = useRBAC();
@@ -183,7 +216,7 @@ function OwnSessionsNotice(): JSX.Element | null {
 
   return (
     <Alert variant="info" dismissible={false} className="text-sm">
-      Only your own sessions are shown.{" "}
+      Only your own sessions and those of agents you own are shown.{" "}
       <code className="font-mono">chat:read</code> is required to view other
       members&apos; sessions.
       {hasScope("org:admin") && (
@@ -201,8 +234,45 @@ function OwnSessionsNotice(): JSX.Element | null {
   );
 }
 
-export function LogsAgentsContent(): JSX.Element {
+export function LogsAgentsContent({
+  // The route owns the gate; the template owns the frame it is applied to, and
+  // the template is rendered here because every control it takes is derived
+  // from this component's state.
+  scope,
+}: {
+  scope?: Scope | Scope[];
+}): JSX.Element {
+  const { hasAnyScope, isLoading } = useRBAC();
+  const scopes = scope == null ? [] : Array.isArray(scope) ? scope : [scope];
+  // The gate goes above the content, not inside the template the content
+  // renders: the chat, assistant, MCP and Insights reads all fire from the
+  // hooks below, so a refusal applied further down still paid for them. The
+  // template keeps the `scope` prop and draws the refusal itself, inside the
+  // page frame and breadcrumbs — and renders nothing while grants load,
+  // which is why loading takes this branch too.
+  if (scopes.length > 0 && (isLoading || !hasAnyScope(scopes))) {
+    return (
+      <ResourceListPage
+        scope={scope}
+        title={AGENT_SESSIONS_TITLE}
+        description={AGENT_SESSIONS_DESCRIPTION}
+        hideToolbar
+      >
+        {null}
+      </ResourceListPage>
+    );
+  }
+  return <AgentSessionsContent scope={scope} />;
+}
+
+function AgentSessionsContent({
+  scope,
+}: {
+  scope?: Scope | Scope[];
+}): JSX.Element {
   const project = useProject();
+  const organization = useOrganization();
+  const sdk = useSdkClient();
   const { hasScope } = useRBAC();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -258,6 +328,7 @@ export function LogsAgentsContent(): JSX.Element {
   const urlSource = searchParams.get("source");
   const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
+  const urlAgentId = searchParams.get(AGENT_SESSIONS_AGENT_PARAM);
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
 
@@ -317,6 +388,21 @@ export function LogsAgentsContent(): JSX.Element {
     },
   );
   const filteredAssistant = canReadAssistant ? assistantData : undefined;
+
+  const agentId = isUuid(urlAgentId) ? urlAgentId : "";
+  // Read for the chip's label only. A caller who may list the agent's sessions
+  // need not be able to read the agent, so a refusal falls back to the name
+  // the session rows carry.
+  const { data: agentData } = useQuery({
+    queryKey: ["managed-agents", organization.id, "detail", agentId],
+    queryKeyHashFn: hashKey,
+    queryFn: ({ signal }) =>
+      sdk.agents.get({ id: agentId }, undefined, { signal }),
+    enabled: !!agentId,
+    retry: false,
+    throwOnError: false,
+    refetchOnWindowFocus: false,
+  });
 
   const timeRange = useMemo(() => {
     if (customRange) {
@@ -444,6 +530,10 @@ export function LogsAgentsContent(): JSX.Element {
     updateSearchParams({ assistantId: null });
   }, [updateSearchParams]);
 
+  const clearAgentFilter = useCallback(() => {
+    updateSearchParams({ [AGENT_SESSIONS_AGENT_PARAM]: null });
+  }, [updateSearchParams]);
+
   const setSortField = useCallback(
     (value: SortField) => {
       updateSearchParams({ sort: value === "chronological" ? null : value });
@@ -454,6 +544,28 @@ export function LogsAgentsContent(): JSX.Element {
   const setSortOrder = useCallback(
     (value: SortOrder) => {
       updateSearchParams({ order: value === "desc" ? null : value });
+    },
+    [updateSearchParams],
+  );
+
+  // The column headers and the toolbar's own control are two ways of saying
+  // the same thing, so they write the same two parameters and the URL stays
+  // the single answer to "what order is this in" — which is also what makes
+  // an order shareable.
+  const sort = useMemo<SortDescriptor>(
+    () => ({ id: sortField, direction: sortOrder }),
+    [sortField, sortOrder],
+  );
+
+  const handleSortChange = useCallback(
+    (next: SortDescriptor | null) => {
+      // Only the two columns the API can order by are sortable, so anything
+      // else is a column id this page has no query for.
+      if (next?.id !== "chronological" && next?.id !== "messageCount") return;
+      updateSearchParams({
+        sort: next.id === "chronological" ? null : next.id,
+        order: next.direction === "desc" ? null : next.direction,
+      });
     },
     [updateSearchParams],
   );
@@ -472,6 +584,7 @@ export function LogsAgentsContent(): JSX.Element {
           accountType: toApiAccountType(accountType),
           pinned: toApiPinned(sessionsView === "pinned" ? "true" : ""),
           assistantId: assistantId || undefined,
+          agentId: agentId || undefined,
           source: sources.length ? sources.join(",") : undefined,
           from: timeRange.from,
           to: timeRange.to,
@@ -486,6 +599,10 @@ export function LogsAgentsContent(): JSX.Element {
     );
 
   const chats = useMemo(() => data?.chats ?? [], [data?.chats]);
+  const filteredAgentName =
+    agentData?.name ??
+    chats.find((chat) => chat.agentId === agentId)?.agentName ??
+    null;
 
   // Agent-type filter options derived from the sources actually present in the
   // project's chats, so the list stays in sync with the data.
@@ -577,8 +694,14 @@ export function LogsAgentsContent(): JSX.Element {
       filteredAssistant
         ? `. Scoped to assistant "${filteredAssistant.name}".`
         : ""
-    }`;
-  }, [timeRange.from, timeRange.to, searchQuery, filteredAssistant]);
+    }${filteredAgentName ? `. Scoped to agent "${filteredAgentName}".` : ""}`;
+  }, [
+    timeRange.from,
+    timeRange.to,
+    searchQuery,
+    filteredAssistant,
+    filteredAgentName,
+  ]);
 
   return (
     <>
@@ -593,6 +716,7 @@ export function LogsAgentsContent(): JSX.Element {
         suggestions={INSIGHTS_SUGGESTIONS["agent-sessions"]}
       />
       <AgentSessionsPageContent
+        scope={scope}
         dateRange={dateRange}
         setDateRangeParam={setDateRangeParam}
         setCustomRangeParam={setCustomRangeParam}
@@ -615,10 +739,15 @@ export function LogsAgentsContent(): JSX.Element {
         assistantName={filteredAssistant?.name ?? null}
         hasAssistantFilter={!!assistantId}
         clearAssistantFilter={clearAssistantFilter}
+        agentName={filteredAgentName}
+        hasAgentFilter={!!agentId}
+        clearAgentFilter={clearAgentFilter}
         sortField={sortField}
         setSortField={setSortField}
         sortOrder={sortOrder}
         setSortOrder={setSortOrder}
+        sort={sort}
+        onSortChange={handleSortChange}
         chats={chats}
         selectedChat={selectedChat}
         selectedChatId={urlChatId}
@@ -641,7 +770,37 @@ export function LogsAgentsContent(): JSX.Element {
   );
 }
 
+// Names a scope the list arrived narrowed to from another page. It is a chip
+// rather than a filter in the toolbar because nothing on this page sets it.
+function ScopeChip({
+  label,
+  name,
+  onClear,
+}: {
+  label: string;
+  name: string;
+  onClear: () => void;
+}): JSX.Element {
+  return (
+    <Badge variant="neutral" className="w-fit gap-1.5 px-2.5 py-1 text-xs">
+      <Icon name="bot" className="size-3" />
+      <span>
+        {label}: <span className="font-medium">{name}</span>
+      </span>
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Clear ${label.toLowerCase()} filter`}
+        className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
+      >
+        <Icon name="x" className="size-3" />
+      </button>
+    </Badge>
+  );
+}
+
 function AgentSessionsPageContent({
+  scope,
   dateRange,
   setDateRangeParam,
   setCustomRangeParam,
@@ -664,6 +823,9 @@ function AgentSessionsPageContent({
   assistantName,
   hasAssistantFilter,
   clearAssistantFilter,
+  agentName,
+  hasAgentFilter,
+  clearAgentFilter,
   sortField,
   setSortField,
   sortOrder,
@@ -680,12 +842,15 @@ function AgentSessionsPageContent({
   onRefresh,
   isRefreshing,
   hasMore,
+  sort,
+  onSortChange,
   offset,
   setOffset,
   limit,
   total,
   onDeleteChat,
 }: {
+  scope?: Scope | Scope[];
   dateRange: DateRangePreset;
   setDateRangeParam: (preset: DateRangePreset) => void;
   setCustomRangeParam: (from: Date, to: Date) => void;
@@ -708,6 +873,9 @@ function AgentSessionsPageContent({
   assistantName: string | null;
   hasAssistantFilter: boolean;
   clearAssistantFilter: () => void;
+  agentName: string | null;
+  hasAgentFilter: boolean;
+  clearAgentFilter: () => void;
   sortField: SortField;
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
@@ -724,192 +892,194 @@ function AgentSessionsPageContent({
   onRefresh: () => void;
   isRefreshing: boolean;
   hasMore: boolean;
+  sort: SortDescriptor;
+  onSortChange: (sort: SortDescriptor | null) => void;
   offset: number;
   setOffset: (offset: number) => void;
   limit: number;
   total: number;
   onDeleteChat: (chatId: string) => void;
 }) {
-  if (isLogsDisabled) {
-    return (
-      <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-        <LoggingPageHeader
-          title="Agent Sessions"
-          description="View and debug individual agent sessions captured for organization members in this project"
-        />
-        <div className="flex-1">
-          <EnableLoggingOverlay
-            onEnabled={onLogsEnabled}
-            screenshotSrc="/empty-states/agent_sessions_empty.png"
-            screenshotAlt="Agent Sessions dashboard with recorded sessions"
-          />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <>
-      <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="shrink-0 space-y-4 px-8 py-4">
-          <LoggingPageHeader
-            title="Agent Sessions"
-            description="View and debug individual agent sessions captured for organization members in this project"
-          />
-          {hasAssistantFilter && (
-            <Badge
-              variant="neutral"
-              className="w-fit gap-1.5 px-2.5 py-1 text-xs"
-            >
-              <Icon name="bot" className="size-3" />
-              <span>
-                Assistant:{" "}
-                <span className="font-medium">
-                  {assistantName ?? "Loading…"}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={clearAssistantFilter}
-                aria-label="Clear assistant filter"
-                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
-              >
-                <Icon name="x" className="size-3" />
-              </button>
-            </Badge>
-          )}
-          <Page.Toolbar>
-            <Page.Toolbar.Search
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search by chat ID, user ID, user name, or title..."
-              debounceMs={500}
-            />
-            <Page.Toolbar.Filters
-              schema={SESSION_FILTERS}
-              values={{
-                date: {
-                  preset: customRange ? null : dateRange,
-                  customRange,
-                  customLabel: null,
-                },
-                has_risk: hasRisk || null,
-                account_type: accountType || null,
-                source: sources,
-                min_risk_score: minRiskScore ?? null,
-              }}
-              optionsById={filterOptions}
-              onChange={(id: string, value: FilterValue) => {
-                if (id === "date") {
-                  const dateValue = value as {
-                    preset: DateRangePreset | null;
-                    customRange: { from: Date; to: Date } | null;
-                  };
-                  if (dateValue.customRange) {
-                    setCustomRangeParam(
-                      dateValue.customRange.from,
-                      dateValue.customRange.to,
-                    );
-                  } else if (dateValue.preset) {
-                    setDateRangeParam(dateValue.preset);
-                  } else {
-                    clearCustomRange();
-                  }
-                } else if (id === "has_risk") {
-                  setHasRisk((value as string | null) ?? "");
-                } else if (id === "account_type") {
-                  setAccountType((value as string | null) ?? "");
-                } else if (id === "source") {
-                  setSources((value as string[]) ?? []);
-                } else if (id === "min_risk_score") {
-                  setMinRiskScore(value as number | null);
-                }
-              }}
-              onClear={(id: string) => {
-                if (id === "date") {
-                  setDateRangeParam("30d");
-                } else if (id === "has_risk") {
-                  setHasRisk("");
-                } else if (id === "account_type") {
-                  setAccountType("");
-                } else if (id === "source") {
-                  setSources([]);
-                } else if (id === "min_risk_score") {
-                  setMinRiskScore(null);
-                }
-              }}
-              onClearAll={clearAllFilters}
-            />
-            <Page.Toolbar.Actions>
-              <SegmentedControl
-                value={sessionsView}
-                onChange={setSessionsView}
-                options={SESSIONS_VIEW_OPTIONS}
+    <ResourceListPage
+      scope={scope}
+      title={AGENT_SESSIONS_TITLE}
+      description={AGENT_SESSIONS_DESCRIPTION}
+      // Logging off means there is no list and nothing to filter, so the
+      // overlay takes the body and the template drops the toolbar with it.
+      isEmpty={isLogsDisabled}
+      empty={
+        <EnableLoggingOverlay
+          onEnabled={onLogsEnabled}
+          screenshotSrc="/empty-states/agent_sessions_empty.png"
+          screenshotAlt="Agent Sessions dashboard with recorded sessions"
+        />
+      }
+      // Above the toolbar, because the chip says which sessions the controls
+      // below are narrowing. Suppressed with the rest of the list while
+      // logging is off, where it would describe a filter on nothing.
+      belowHeader={
+        (hasAssistantFilter || hasAgentFilter) && !isLogsDisabled ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {hasAssistantFilter && (
+              <ScopeChip
+                label="Assistant"
+                name={assistantName ?? "Loading…"}
+                onClear={clearAssistantFilter}
               />
-            </Page.Toolbar.Actions>
-            <Page.Toolbar.SortBy
-              value={sortField}
-              onChange={(v) => setSortField(v as SortField)}
-              options={[
-                { value: "chronological", label: "Date" },
-                { value: "messageCount", label: "Message Count" },
-              ]}
-              direction={sortOrder}
-              onDirectionChange={setSortOrder}
-            />
-            <Page.Toolbar.Refresh
-              onRefresh={onRefresh}
-              isRefreshing={isRefreshing}
-            />
-          </Page.Toolbar>
-          <OwnSessionsNotice />
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-hidden border-t">
-          <div className="bg-background flex h-full flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
-              <ChatLogsTable
-                chats={chats}
-                selectedChatId={selectedChat?.id}
-                onSelectChat={setSelectedChat}
-                onDeleteChat={onDeleteChat}
-                isLoading={isLoading}
-                error={error}
-                emptyState={
-                  sessionsView === "pinned"
-                    ? {
-                        title: "No pinned sessions",
-                        description:
-                          "Pin a session from All to keep it here for quick access.",
-                      }
-                    : undefined
-                }
+            )}
+            {hasAgentFilter && (
+              <ScopeChip
+                label="Agent"
+                name={agentName ?? "Unknown agent"}
+                onClear={clearAgentFilter}
               />
-            </div>
-            {(hasMore || offset > 0) && (
-              <div className="bg-card flex shrink-0 items-center justify-center gap-4 border-t p-4 pb-20">
-                <Button
-                  onClick={() => setOffset(Math.max(0, offset - limit))}
-                  disabled={offset === 0}
-                >
-                  Previous
-                </Button>
-                <span className="text-muted-foreground font-mono text-xs tabular-nums">
-                  Page {Math.floor(offset / limit) + 1}
-                  {total > 0 && ` of ${Math.ceil(total / limit)}`}
-                </span>
-                <Button
-                  onClick={() => setOffset(offset + limit)}
-                  disabled={!hasMore}
-                >
-                  Next
-                </Button>
-              </div>
             )}
           </div>
+        ) : null
+      }
+      search={{
+        value: searchQuery,
+        onChange: setSearchQuery,
+        placeholder: "Search by chat ID, user ID, user name, or title...",
+        debounceMs: 500,
+      }}
+      filters={{
+        schema: SESSION_FILTERS,
+        values: {
+          date: {
+            preset: customRange ? null : dateRange,
+            customRange,
+            customLabel: null,
+          },
+          has_risk: hasRisk || null,
+          account_type: accountType || null,
+          source: sources,
+          min_risk_score: minRiskScore ?? null,
+        },
+        optionsById: filterOptions,
+        onChange: (id: string, value: FilterValue) => {
+          if (id === "date") {
+            const dateValue = value as {
+              preset: DateRangePreset | null;
+              customRange: { from: Date; to: Date } | null;
+            };
+            if (dateValue.customRange) {
+              setCustomRangeParam(
+                dateValue.customRange.from,
+                dateValue.customRange.to,
+              );
+            } else if (dateValue.preset) {
+              setDateRangeParam(dateValue.preset);
+            } else {
+              clearCustomRange();
+            }
+          } else if (id === "has_risk") {
+            setHasRisk((value as string | null) ?? "");
+          } else if (id === "account_type") {
+            setAccountType((value as string | null) ?? "");
+          } else if (id === "source") {
+            setSources((value as string[]) ?? []);
+          } else if (id === "min_risk_score") {
+            setMinRiskScore(value as number | null);
+          }
+        },
+        onClear: (id: string) => {
+          if (id === "date") {
+            setDateRangeParam("30d");
+          } else if (id === "has_risk") {
+            setHasRisk("");
+          } else if (id === "account_type") {
+            setAccountType("");
+          } else if (id === "source") {
+            setSources([]);
+          } else if (id === "min_risk_score") {
+            setMinRiskScore(null);
+          }
+        },
+        onClearAll: clearAllFilters,
+      }}
+      sort={{
+        value: sortField,
+        onChange: (v) => setSortField(v as SortField),
+        options: [
+          { value: "chronological", label: "Date" },
+          { value: "messageCount", label: "Message Count" },
+        ],
+        direction: sortOrder,
+        onDirectionChange: setSortOrder,
+      }}
+      // The All/Pinned segment is a view, not a filter, so it keeps its place
+      // beside the controls rather than joining the filter chips.
+      toolbarActions={
+        <SegmentedControl
+          value={sessionsView}
+          onChange={setSessionsView}
+          options={SESSIONS_VIEW_OPTIONS}
+        />
+      }
+      onRefresh={onRefresh}
+      isRefreshing={isRefreshing}
+    >
+      <div className="space-y-4">
+        <OwnSessionsNotice />
+        {/* The count the server reports for these filters, not the length of
+              this page: the table shows one page of 50 at a time. It is held
+              back while the first page is in flight, where "0 rows" would be a
+              statement about the project rather than about a pending read. */}
+        {!isLoading && (
+          <span className="text-muted-foreground block font-mono text-xs tabular-nums">
+            {total} {total === 1 ? "row" : "rows"}
+          </span>
+        )}
+        {/* The table draws no rules of its own, so the border lives here —
+              the lines the old full-bleed shell drew above and below it. */}
+        <div className="border-border border">
+          <ChatLogsTable
+            chats={chats}
+            selectedChatId={selectedChat?.id}
+            onSelectChat={setSelectedChat}
+            onDeleteChat={onDeleteChat}
+            isLoading={isLoading}
+            error={error}
+            sort={sort}
+            onSortChange={onSortChange}
+            emptyState={
+              sessionsView === "pinned"
+                ? {
+                    title: "No pinned sessions",
+                    description:
+                      "Pin a session from All to keep it here for quick access.",
+                  }
+                : undefined
+            }
+          />
+          {(hasMore || offset > 0) && (
+            <div className="bg-card flex items-center justify-center gap-4 border-t p-4">
+              <Button
+                onClick={() => setOffset(Math.max(0, offset - limit))}
+                disabled={offset === 0}
+              >
+                Previous
+              </Button>
+              <span className="text-muted-foreground font-mono text-xs tabular-nums">
+                Page {Math.floor(offset / limit) + 1}
+                {total > 0 && ` of ${Math.ceil(total / limit)}`}
+              </span>
+              <Button
+                onClick={() => setOffset(offset + limit)}
+                disabled={!hasMore}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* A sibling of the list rather than of the page: the drawer opens a
+            row from this table, so it belongs to the same branch the table
+            does and goes away with it when logging is off. */}
       <ChatDetailSheet
         chatId={selectedChatId ?? selectedChat?.id ?? null}
         onClose={() => setSelectedChat(null)}
@@ -917,6 +1087,6 @@ function AgentSessionsPageContent({
         onOpenChat={onOpenChat}
         dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}
       />
-    </>
+    </ResourceListPage>
   );
 }

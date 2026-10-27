@@ -8,8 +8,11 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
+	signalquery "github.com/speakeasy-api/gram/server/internal/telemetry/analytics/signals"
 )
 
 // AnalyticsEngine is the query path the analytics tools answer through: the
@@ -18,6 +21,9 @@ type AnalyticsEngine interface {
 	Catalog() *analytics.Catalog
 	Query(ctx context.Context, tenant analytics.Tenant, req analytics.Request) (*analytics.QueryResult, error)
 	Values(ctx context.Context, tenant analytics.Tenant, req analytics.ValuesRequest) ([]analytics.DimensionValue, error)
+	DescribeSignals(ctx context.Context, tenant analytics.Tenant) (*analytics.SignalCatalog, error)
+	ReadSignalDefinition(ctx context.Context, tenant analytics.Tenant, sensorID, hash string) (*analytics.SignalDefinition, error)
+	SignalFindings(ctx context.Context, tenant analytics.Tenant, window analytics.Window, request analytics.SignalFindingsRequest, access analytics.ConversationAccess) (*analytics.SignalFindings, error)
 }
 
 var (
@@ -26,6 +32,10 @@ var (
 	ErrAnalyticsNotEnabled = errors.New("platform mcp analytics not enabled")
 	// ErrAnalyticsInvalid marks a read that does not name one exact project.
 	ErrAnalyticsInvalid = errors.New("invalid platform mcp analytics read")
+	// ErrAnalyticsDatasetRestricted marks a read of a dataset the caller may
+	// not read although they can read its project, such as one only
+	// organization administrators may read.
+	ErrAnalyticsDatasetRestricted = errors.New("platform mcp analytics dataset restricted")
 )
 
 // AnalyticsService serves the analytics catalog, values and queries to the
@@ -36,17 +46,27 @@ type AnalyticsService struct {
 	flags         feature.Provider
 	organizations OrganizationSlugResolver
 	// projects holds the caller to project:read on the exact project named.
-	projects ProjectReadResolver
-	budget   OperationBudget
+	projects           ProjectReadResolver
+	budget             OperationBudget
+	signalFeatures     analytics.SignalFeatures
+	conversationAccess analytics.ConversationAccess
 }
 
 // NewAnalyticsService returns nil without a logger, an engine, an
 // organization resolver or a project reader, so the tools are served as stubs.
-func NewAnalyticsService(logger *slog.Logger, engine AnalyticsEngine, flags feature.Provider, organizations OrganizationSlugResolver, projects ProjectReadResolver, budget OperationBudget) *AnalyticsService {
+func NewAnalyticsService(logger *slog.Logger, engine AnalyticsEngine, flags feature.Provider, organizations OrganizationSlugResolver, projects ProjectReadResolver, budget OperationBudget, signalFeatures analytics.SignalFeatures) *AnalyticsService {
 	if logger == nil || engine == nil || organizations == nil || projects == nil {
 		return nil
 	}
-	return &AnalyticsService{logger: logger, engine: engine, flags: flags, organizations: organizations, projects: projects, budget: budget}
+	return &AnalyticsService{logger: logger, engine: engine, flags: flags, organizations: organizations, projects: projects, budget: budget, signalFeatures: signalFeatures, conversationAccess: nil}
+}
+
+// WithConversationAccess applies the underlying chat gate to requested evidence.
+func (s *AnalyticsService) WithConversationAccess(access analytics.ConversationAccess) *AnalyticsService {
+	if s != nil {
+		s.conversationAccess = access
+	}
+	return s
 }
 
 func (s *AnalyticsService) valid() bool {
@@ -134,23 +154,95 @@ type DescribeAnalyticsCatalogOutput struct {
 	// Grains are the time bucket widths a grouped query may use.
 	Grains []string        `json:"grains"`
 	Limits AnalyticsLimits `json:"limits"`
+	// SignalMetrics is the entitled semantic contract, with current names and scopes.
+	SignalMetrics *analytics.SignalCatalog `json:"signal_metrics,omitempty"`
 }
 
 // Describe serves the catalog to a caller who may read the named project.
 func (s *AnalyticsService) Describe(ctx context.Context, principal Principal, input DescribeAnalyticsCatalogInput) (DescribeAnalyticsCatalogOutput, error) {
-	project, err := s.authorize(ctx, principal, input.ProjectID)
+	project, err := s.authorizeProject(ctx, principal, input.ProjectID)
 	if err != nil {
 		return DescribeAnalyticsCatalogOutput{}, err
 	}
-	return describeAnalyticsCatalog(project, s.engine.Catalog()), nil
+	signals, signalErr := s.signalsEnabled(ctx, principal.OrganizationID)
+	explore, exploreErr := s.exploreAllowed(ctx, principal, project)
+	if !signals && !explore {
+		if signalErr != nil {
+			return DescribeAnalyticsCatalogOutput{}, signalErr
+		}
+		if exploreErr != nil {
+			return DescribeAnalyticsCatalogOutput{}, exploreErr
+		}
+		return DescribeAnalyticsCatalogOutput{}, ErrAnalyticsNotEnabled
+	}
+	catalog := s.engine.Catalog()
+	datasets := make([]*analytics.Dataset, 0, len(catalog.Datasets()))
+	if explore {
+		for _, ds := range catalog.Datasets() {
+			readable, err := datasetReadable(ctx, principal, ds)
+			if err != nil {
+				return DescribeAnalyticsCatalogOutput{}, err
+			}
+			if readable {
+				datasets = append(datasets, ds)
+			}
+		}
+	}
+	out := describeAnalyticsCatalog(project, catalog, datasets)
+	if signals {
+		if err := s.budget.Allow(ctx, principal); err != nil {
+			return DescribeAnalyticsCatalogOutput{}, err
+		}
+		out.SignalMetrics, err = s.engine.DescribeSignals(ctx, analyticsTenant(principal, project))
+		if err != nil {
+			return DescribeAnalyticsCatalogOutput{}, fmt.Errorf("describe signal metrics: %w", err)
+		}
+	}
+	return out, nil
 }
 
-func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalog) DescribeAnalyticsCatalogOutput {
-	datasets := catalog.Datasets()
+// datasetReadable says whether the caller may read a dataset, beyond reading
+// its project, from the grants loaded for this call. Without loaded grants a
+// restricted dataset reads as unreadable, as an undiscoverable tool does.
+func datasetReadable(ctx context.Context, principal Principal, ds *analytics.Dataset) (bool, error) {
+	check, restricted := ds.AccessCheck(principal.OrganizationID)
+	if !restricted {
+		return true, nil
+	}
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return false, nil
+	}
+	allowed, err := authz.GrantsAuthorize(grants, check)
+	if err != nil {
+		return false, fmt.Errorf("authorize dataset %s: %w", ds.Name, err)
+	}
+	return allowed, nil
+}
+
+// requireDataset refuses a read of a dataset the caller may not read. An
+// unknown dataset is left for the compiler to name.
+func (s *AnalyticsService) requireDataset(ctx context.Context, principal Principal, dataset string) error {
+	ds, ok := s.engine.Catalog().Dataset(dataset)
+	if !ok {
+		return nil
+	}
+	readable, err := datasetReadable(ctx, principal, ds)
+	if err != nil {
+		return err
+	}
+	if !readable {
+		return ErrAnalyticsDatasetRestricted
+	}
+	return nil
+}
+
+func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalog, datasets []*analytics.Dataset) DescribeAnalyticsCatalogOutput {
 	out := DescribeAnalyticsCatalogOutput{
-		Project:  analyticsProject(project),
-		Datasets: make([]AnalyticsDataset, 0, len(datasets)),
-		Grains:   analyticsNames(analytics.TimeGrains()),
+		SignalMetrics: nil,
+		Project:       analyticsProject(project),
+		Datasets:      make([]AnalyticsDataset, 0, len(datasets)),
+		Grains:        analyticsNames(analytics.TimeGrains()),
 		Limits: AnalyticsLimits{
 			MaxDimensions:      analytics.MaxDimensions,
 			MaxFilterValues:    analytics.MaxFilterValues,
@@ -213,12 +305,18 @@ type ListAnalyticsDimensionValuesInput struct {
 	From      string `json:"from"`
 	To        string `json:"to"`
 	Limit     int    `json:"limit,omitempty"`
+	// SignalScope is required for dataset signals.
+	SignalScope *signalquery.Scope `json:"signal_scope,omitempty"`
+	// Attribute selects an exact label key with dimension=attribute.
+	Attribute string `json:"attribute,omitempty"`
 }
 
 // AnalyticsDimensionValue is one value and how many rows carry it.
 type AnalyticsDimensionValue struct {
 	Value string `json:"value"`
 	Count int64  `json:"count"`
+	// Present distinguishes absent signal labels from present empty values.
+	Present *bool `json:"present,omitempty"`
 }
 
 // ListAnalyticsDimensionValuesOutput lists a dimension's values, most
@@ -233,8 +331,11 @@ type ListAnalyticsDimensionValuesOutput struct {
 // Values lists what a dimension holds, read the way a filter will match it.
 func (s *AnalyticsService) Values(ctx context.Context, principal Principal, input ListAnalyticsDimensionValuesInput) (ListAnalyticsDimensionValuesOutput, error) {
 	var zero ListAnalyticsDimensionValuesOutput
-	project, err := s.authorize(ctx, principal, input.ProjectID)
+	project, err := s.authorizeDataset(ctx, principal, input.ProjectID, input.Dataset)
 	if err != nil {
+		return zero, err
+	}
+	if err := s.requireDataset(ctx, principal, input.Dataset); err != nil {
 		return zero, err
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
@@ -250,6 +351,8 @@ func (s *AnalyticsService) Values(ctx context.Context, principal Principal, inpu
 		FromUnixNano: from,
 		ToUnixNano:   to,
 		Limit:        input.Limit,
+		SignalScope:  input.SignalScope,
+		Attribute:    input.Attribute,
 	})
 	if err != nil {
 		return zero, fmt.Errorf("list dimension values: %w", err)
@@ -261,7 +364,7 @@ func (s *AnalyticsService) Values(ctx context.Context, principal Principal, inpu
 		Values:    make([]AnalyticsDimensionValue, 0, len(values)),
 	}
 	for _, value := range values {
-		out.Values = append(out.Values, AnalyticsDimensionValue{Value: value.Value, Count: value.Count})
+		out.Values = append(out.Values, AnalyticsDimensionValue{Value: value.Value, Count: value.Count, Present: value.Present})
 	}
 	return out, nil
 }
@@ -300,6 +403,8 @@ type RunAnalyticsQueryInput struct {
 	OrderBy    []AnalyticsOrderBy `json:"order_by,omitempty"`
 	Limit      int                `json:"limit,omitempty"`
 	Ungrouped  bool               `json:"ungrouped,omitempty"`
+	// SignalQuery is the named signal measurement, with explicit sensor and rule.
+	SignalQuery *signalquery.Request `json:"signal_query,omitempty"`
 }
 
 // AnalyticsColumn is one result column.
@@ -318,13 +423,18 @@ type RunAnalyticsQueryOutput struct {
 	Plan    string            `json:"plan"`
 	Columns []AnalyticsColumn `json:"columns"`
 	Rows    []map[string]any  `json:"rows"`
+	// SignalResult preserves measurement and completeness metadata beside Rows.
+	SignalResult *analytics.SignalResult `json:"signal_result,omitempty"`
 }
 
 // Query runs one query for a caller who may read the named project.
 func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input RunAnalyticsQueryInput) (RunAnalyticsQueryOutput, error) {
 	var zero RunAnalyticsQueryOutput
-	project, err := s.authorize(ctx, principal, input.ProjectID)
+	project, err := s.authorizeDataset(ctx, principal, input.ProjectID, input.Dataset)
 	if err != nil {
+		return zero, err
+	}
+	if err := s.requireDataset(ctx, principal, input.Dataset); err != nil {
 		return zero, err
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
@@ -345,6 +455,7 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 		OrderBy:      make([]analytics.OrderBy, 0, len(input.OrderBy)),
 		Limit:        input.Limit,
 		Ungrouped:    input.Ungrouped,
+		SignalQuery:  input.SignalQuery,
 	}
 	for _, measure := range input.Measures {
 		req.Measures = append(req.Measures, analytics.Measure{Op: measure.Op, Field: measure.Field, Alias: measure.Alias})
@@ -360,11 +471,12 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 		return zero, fmt.Errorf("run analytics query: %w", err)
 	}
 	out := RunAnalyticsQueryOutput{
-		Project: analyticsProject(project),
-		Dataset: result.Dataset,
-		Plan:    result.Plan,
-		Columns: make([]AnalyticsColumn, 0, len(result.Columns)),
-		Rows:    make([]map[string]any, 0, len(result.Rows)),
+		SignalResult: result.SignalResult,
+		Project:      analyticsProject(project),
+		Dataset:      result.Dataset,
+		Plan:         result.Plan,
+		Columns:      make([]AnalyticsColumn, 0, len(result.Columns)),
+		Rows:         make([]map[string]any, 0, len(result.Rows)),
 	}
 	for _, column := range result.Columns {
 		out.Columns = append(out.Columns, AnalyticsColumn{Name: column.Name, Kind: string(column.Kind)})
@@ -377,9 +489,23 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 
 // authorize holds the caller to project:read on the exact project, then to
 // the Explore flag. A project the caller cannot read reads as one that does
-// not exist. Values and Query then charge the budget; Describe, which returns
-// only the static catalog, is not charged.
+// not exist. Reads charge the budget when they query data or live configuration.
 func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, projectID string) (ResolvedProject, error) {
+	project, err := s.authorizeProject(ctx, principal, projectID)
+	if err != nil {
+		return ResolvedProject{}, err
+	}
+	enabled, err := s.exploreAllowed(ctx, principal, project)
+	if err != nil {
+		return ResolvedProject{}, err
+	}
+	if !enabled {
+		return ResolvedProject{}, ErrAnalyticsNotEnabled
+	}
+	return project, nil
+}
+
+func (s *AnalyticsService) authorizeProject(ctx context.Context, principal Principal, projectID string) (ResolvedProject, error) {
 	var zero ResolvedProject
 	if !s.valid() {
 		return zero, ErrUnavailable
@@ -394,16 +520,46 @@ func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, p
 	if err != nil {
 		return zero, fmt.Errorf("authorize analytics read: %w", err)
 	}
+	return project, nil
+}
+
+func (s *AnalyticsService) exploreAllowed(ctx context.Context, principal Principal, project ResolvedProject) (bool, error) {
 	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
 	if err != nil {
-		return zero, fmt.Errorf("%w: resolve organization slug for analytics: %w", ErrUnavailable, err)
+		return false, fmt.Errorf("%w: resolve organization slug for analytics: %w", ErrUnavailable, err)
 	}
 	enabled, err := exploreEnabled(ctx, s.flags, principal.OrganizationID, organizationSlug, project.Slug)
 	if err != nil {
-		return zero, err
+		return false, err
+	}
+	return enabled, nil
+}
+
+func (s *AnalyticsService) signalsEnabled(ctx context.Context, organization string) (bool, error) {
+	if s.signalFeatures == nil {
+		return false, nil
+	}
+	enabled, err := s.signalFeatures.IsFeatureEnabled(ctx, organization, productfeatures.FeatureSignalsIntelligence)
+	if err != nil {
+		return false, fmt.Errorf("%w: check signals entitlement: %w", ErrUnavailable, err)
+	}
+	return enabled, nil
+}
+
+func (s *AnalyticsService) authorizeDataset(ctx context.Context, principal Principal, projectID, dataset string) (ResolvedProject, error) {
+	if dataset != signalquery.Dataset {
+		return s.authorize(ctx, principal, projectID)
+	}
+	project, err := s.authorizeProject(ctx, principal, projectID)
+	if err != nil {
+		return ResolvedProject{}, err
+	}
+	enabled, err := s.signalsEnabled(ctx, principal.OrganizationID)
+	if err != nil {
+		return ResolvedProject{}, err
 	}
 	if !enabled {
-		return zero, ErrAnalyticsNotEnabled
+		return ResolvedProject{}, ErrAnalyticsNotEnabled
 	}
 	return project, nil
 }
