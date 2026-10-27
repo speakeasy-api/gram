@@ -21,37 +21,13 @@ type AddToolsetPromptTemplatesParams struct {
 	PromptName       string
 }
 
-const checkMCPSlugAvailability = `-- name: CheckMCPSlugAvailability :one
-SELECT EXISTS (
-  SELECT 1
-  FROM toolsets
-  WHERE mcp_slug = $1
-  AND deleted IS FALSE
-) OR EXISTS (
-  SELECT 1
-  FROM mcp_endpoints
-  WHERE slug = $1
-  AND deleted IS FALSE
-)
-`
-
-// Deprecated inline-editor probe: taken when any live toolset or endpoint
-// holds the slug in any scope. Removed with the mcp_slug fallback (AIS-646).
-func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.Text) (pgtype.Bool, error) {
-	row := q.db.QueryRow(ctx, checkMCPSlugAvailability, mcpSlug)
-	var column_1 pgtype.Bool
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const clearToolsetOAuthServers = `-- name: ClearToolsetOAuthServers :one
 UPDATE toolsets
 SET
     external_oauth_server_id = NULL
-  , oauth_proxy_server_id = NULL
   , updated_at = clock_timestamp()
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
 
 type ClearToolsetOAuthServersParams struct {
@@ -76,7 +52,6 @@ func (q *Queries) ClearToolsetOAuthServers(ctx context.Context, arg ClearToolset
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -123,7 +98,7 @@ INSERT INTO toolsets (
   , $7
   , $8
 )
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateToolsetParams struct {
@@ -163,7 +138,6 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -266,21 +240,6 @@ func (q *Queries) CreateToolsetVersion(ctx context.Context, arg CreateToolsetVer
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const deleteAssistantToolsetsByToolset = `-- name: DeleteAssistantToolsetsByToolset :exec
-DELETE FROM assistant_toolsets
-WHERE toolset_id = $1 AND project_id = $2
-`
-
-type DeleteAssistantToolsetsByToolsetParams struct {
-	ToolsetID uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) DeleteAssistantToolsetsByToolset(ctx context.Context, arg DeleteAssistantToolsetsByToolsetParams) error {
-	_, err := q.db.Exec(ctx, deleteAssistantToolsetsByToolset, arg.ToolsetID, arg.ProjectID)
-	return err
 }
 
 const deleteToolset = `-- name: DeleteToolset :one
@@ -644,7 +603,7 @@ func (q *Queries) GetPromptTemplatesForToolsets(ctx context.Context, arg GetProm
 }
 
 const getToolset = `-- name: GetToolset :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -671,7 +630,6 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -683,7 +641,7 @@ func (q *Queries) GetToolset(ctx context.Context, arg GetToolsetParams) (Toolset
 }
 
 const getToolsetByIDAndOrganization = `-- name: GetToolsetByIDAndOrganization :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE
 `
@@ -710,7 +668,6 @@ func (q *Queries) GetToolsetByIDAndOrganization(ctx context.Context, arg GetTool
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -722,7 +679,7 @@ func (q *Queries) GetToolsetByIDAndOrganization(ctx context.Context, arg GetTool
 }
 
 const getToolsetByIDAndProject = `-- name: GetToolsetByIDAndProject :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -749,7 +706,6 @@ func (q *Queries) GetToolsetByIDAndProject(ctx context.Context, arg GetToolsetBy
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -761,7 +717,7 @@ func (q *Queries) GetToolsetByIDAndProject(ctx context.Context, arg GetToolsetBy
 }
 
 const getToolsetByIDIncludingDeletedFixture = `-- name: GetToolsetByIDIncludingDeletedFixture :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE id = $1 AND project_id = $2
 `
@@ -788,7 +744,6 @@ func (q *Queries) GetToolsetByIDIncludingDeletedFixture(ctx context.Context, arg
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -800,7 +755,7 @@ func (q *Queries) GetToolsetByIDIncludingDeletedFixture(ctx context.Context, arg
 }
 
 const getToolsetByMCPSlug = `-- name: GetToolsetByMCPSlug :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE mcp_slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -828,7 +783,6 @@ func (q *Queries) GetToolsetByMCPSlug(ctx context.Context, arg GetToolsetByMCPSl
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -840,7 +794,7 @@ func (q *Queries) GetToolsetByMCPSlug(ctx context.Context, arg GetToolsetByMCPSl
 }
 
 const getToolsetByMcpSlug = `-- name: GetToolsetByMcpSlug :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE mcp_slug = $1
   AND deleted IS FALSE
@@ -865,7 +819,6 @@ func (q *Queries) GetToolsetByMcpSlug(ctx context.Context, mcpSlug pgtype.Text) 
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -877,7 +830,7 @@ func (q *Queries) GetToolsetByMcpSlug(ctx context.Context, mcpSlug pgtype.Text) 
 }
 
 const getToolsetByMcpSlugAndCustomDomain = `-- name: GetToolsetByMcpSlugAndCustomDomain :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id = $2
@@ -906,7 +859,6 @@ func (q *Queries) GetToolsetByMcpSlugAndCustomDomain(ctx context.Context, arg Ge
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -918,7 +870,7 @@ func (q *Queries) GetToolsetByMcpSlugAndCustomDomain(ctx context.Context, arg Ge
 }
 
 const getToolsetByMcpSlugAndProject = `-- name: GetToolsetByMcpSlugAndProject :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE mcp_slug = $1
   AND project_id = $2
@@ -947,7 +899,52 @@ func (q *Queries) GetToolsetByMcpSlugAndProject(ctx context.Context, arg GetTool
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getToolsetByMcpSlugAndProjectAndCustomDomain = `-- name: GetToolsetByMcpSlugAndProjectAndCustomDomain :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted FROM toolsets
+WHERE mcp_slug = $1 AND project_id = $2
+  AND organization_id = $3
+  AND custom_domain_id IS NOT DISTINCT FROM $4 AND deleted IS FALSE
+`
+
+type GetToolsetByMcpSlugAndProjectAndCustomDomainParams struct {
+	McpSlug        pgtype.Text
+	ProjectID      uuid.UUID
+	OrganizationID string
+	CustomDomainID uuid.NullUUID
+}
+
+func (q *Queries) GetToolsetByMcpSlugAndProjectAndCustomDomain(ctx context.Context, arg GetToolsetByMcpSlugAndProjectAndCustomDomainParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, getToolsetByMcpSlugAndProjectAndCustomDomain,
+		arg.McpSlug,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.CustomDomainID,
+	)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -959,7 +956,7 @@ func (q *Queries) GetToolsetByMcpSlugAndProject(ctx context.Context, arg GetTool
 }
 
 const getToolsetByPlatformMcpSlug = `-- name: GetToolsetByPlatformMcpSlug :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id IS NULL
@@ -983,7 +980,6 @@ func (q *Queries) GetToolsetByPlatformMcpSlug(ctx context.Context, mcpSlug pgtyp
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -995,7 +991,7 @@ func (q *Queries) GetToolsetByPlatformMcpSlug(ctx context.Context, mcpSlug pgtyp
 }
 
 const getToolsetForUpdate = `-- name: GetToolsetForUpdate :one
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 FOR UPDATE
@@ -1023,7 +1019,6 @@ func (q *Queries) GetToolsetForUpdate(ctx context.Context, arg GetToolsetForUpda
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -1160,7 +1155,7 @@ func (q *Queries) GetToolsetPromptTemplateNames(ctx context.Context, arg GetTool
 
 const getToolsetsByToolURN = `-- name: GetToolsetsByToolURN :many
 SELECT
-    t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted,
+    t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted,
     tv.version as latest_version
 FROM toolsets t
 JOIN toolset_versions tv ON t.id = tv.toolset_id
@@ -1195,7 +1190,6 @@ type GetToolsetsByToolURNRow struct {
 	ToolSelectionMode      string
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
-	OauthProxyServerID     uuid.NullUUID
 	UserSessionIssuerID    uuid.NullUUID
 	ToolVariationsGroupID  uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
@@ -1228,7 +1222,6 @@ func (q *Queries) GetToolsetsByToolURN(ctx context.Context, arg GetToolsetsByToo
 			&i.ToolSelectionMode,
 			&i.CustomDomainID,
 			&i.ExternalOauthServerID,
-			&i.OauthProxyServerID,
 			&i.UserSessionIssuerID,
 			&i.ToolVariationsGroupID,
 			&i.CreatedAt,
@@ -1247,8 +1240,100 @@ func (q *Queries) GetToolsetsByToolURN(ctx context.Context, arg GetToolsetsByToo
 	return items, nil
 }
 
+const listCanonicalHostingByToolsetIDs = `-- name: ListCanonicalHostingByToolsetIDs :many
+SELECT
+    s.id AS toolset_id
+  , (s.toolset_id IS NOT DISTINCT FROM s.id)::boolean AS canonical
+  , s.visibility
+  , s.user_session_issuer_id
+  , (address.slug IS NOT NULL)::boolean AS has_endpoint
+  , COALESCE(address.slug, '')::text AS endpoint_slug
+  , address.custom_domain_id AS endpoint_custom_domain_id
+  , COALESCE((
+      SELECT array_agg(e.slug ORDER BY e.slug)
+      FROM mcp_endpoints e
+      WHERE e.mcp_server_id = s.id
+        AND e.project_id = s.project_id
+        AND e.deleted IS FALSE
+        AND s.toolset_id IS NOT DISTINCT FROM s.id
+    ), ARRAY[]::text[])::text[] AS endpoint_slugs
+FROM mcp_servers s
+JOIN toolsets t
+  ON t.id = s.id
+ AND t.project_id = s.project_id
+ AND t.organization_id = $1
+ AND t.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug, e.custom_domain_id
+  FROM mcp_endpoints e
+  LEFT JOIN custom_domains cd
+    ON cd.id = e.custom_domain_id
+   AND cd.organization_id = $1
+   AND cd.deleted IS FALSE
+   AND cd.verified
+   AND cd.activated
+  WHERE e.mcp_server_id = s.id
+    AND e.project_id = s.project_id
+    AND e.deleted IS FALSE
+    AND s.toolset_id IS NOT DISTINCT FROM s.id
+    AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (e.custom_domain_id IS NULL) DESC, e.created_at, e.id
+  LIMIT 1
+) address ON TRUE
+WHERE s.id = ANY($2::uuid[])
+  AND s.deleted IS FALSE
+`
+
+type ListCanonicalHostingByToolsetIDsParams struct {
+	OrganizationID string
+	ToolsetIds     []uuid.UUID
+}
+
+type ListCanonicalHostingByToolsetIDsRow struct {
+	ToolsetID              uuid.UUID
+	Canonical              bool
+	Visibility             string
+	UserSessionIssuerID    uuid.NullUUID
+	HasEndpoint            bool
+	EndpointSlug           string
+	EndpointCustomDomainID uuid.NullUUID
+	EndpointSlugs          []string
+}
+
+// The server row holding each toolset's id: its hosting state when it is the canonical wrapper, its preferred
+// address (the oldest platform endpoint, else the oldest endpoint on a verified, activated custom domain), and
+// the slugs of all its live endpoints. A non-canonical row means the toolset's id was kept by a server that left it.
+func (q *Queries) ListCanonicalHostingByToolsetIDs(ctx context.Context, arg ListCanonicalHostingByToolsetIDsParams) ([]ListCanonicalHostingByToolsetIDsRow, error) {
+	rows, err := q.db.Query(ctx, listCanonicalHostingByToolsetIDs, arg.OrganizationID, arg.ToolsetIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCanonicalHostingByToolsetIDsRow
+	for rows.Next() {
+		var i ListCanonicalHostingByToolsetIDsRow
+		if err := rows.Scan(
+			&i.ToolsetID,
+			&i.Canonical,
+			&i.Visibility,
+			&i.UserSessionIssuerID,
+			&i.HasEndpoint,
+			&i.EndpointSlug,
+			&i.EndpointCustomDomainID,
+			&i.EndpointSlugs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listToolsetsByOrganization = `-- name: ListToolsetsByOrganization :many
-SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
 FROM toolsets t
 JOIN projects p ON t.project_id = p.id
 WHERE p.organization_id = $1
@@ -1280,7 +1365,6 @@ func (q *Queries) ListToolsetsByOrganization(ctx context.Context, organizationID
 			&i.ToolSelectionMode,
 			&i.CustomDomainID,
 			&i.ExternalOauthServerID,
-			&i.OauthProxyServerID,
 			&i.UserSessionIssuerID,
 			&i.ToolVariationsGroupID,
 			&i.CreatedAt,
@@ -1299,7 +1383,7 @@ func (q *Queries) ListToolsetsByOrganization(ctx context.Context, organizationID
 }
 
 const listToolsetsByProject = `-- name: ListToolsetsByProject :many
-SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -1329,7 +1413,6 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 			&i.ToolSelectionMode,
 			&i.CustomDomainID,
 			&i.ExternalOauthServerID,
-			&i.OauthProxyServerID,
 			&i.UserSessionIssuerID,
 			&i.ToolVariationsGroupID,
 			&i.CreatedAt,
@@ -1360,6 +1443,7 @@ SELECT
   t.mcp_is_public,
   t.mcp_enabled,
   t.tool_selection_mode,
+  t.external_oauth_server_id,
   t.created_at,
   t.updated_at,
   COALESCE(tv.tool_urns, ARRAY[]::TEXT[]) AS latest_tool_urns,
@@ -1391,6 +1475,7 @@ type ListToolsetsWithVersionsByOrganizationRow struct {
 	McpIsPublic            bool
 	McpEnabled             bool
 	ToolSelectionMode      string
+	ExternalOauthServerID  uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	LatestToolUrns         []urn.Tool
@@ -1418,6 +1503,7 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 			&i.McpIsPublic,
 			&i.McpEnabled,
 			&i.ToolSelectionMode,
+			&i.ExternalOauthServerID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LatestToolUrns,
@@ -1433,141 +1519,109 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 	return items, nil
 }
 
-const lockHostedToolsetsByUserSessionIssuer = `-- name: LockHostedToolsetsByUserSessionIssuer :many
-SELECT toolsets.id, toolsets.organization_id, toolsets.project_id, toolsets.name, toolsets.slug, toolsets.description, toolsets.default_environment_slug, toolsets.mcp_slug, toolsets.mcp_is_public, toolsets.mcp_enabled, toolsets.tool_selection_mode, toolsets.custom_domain_id, toolsets.external_oauth_server_id, toolsets.oauth_proxy_server_id, toolsets.user_session_issuer_id, toolsets.tool_variations_group_id, toolsets.created_at, toolsets.updated_at, toolsets.deleted_at, toolsets.deleted
+const lockToolsetByIDAndProject = `-- name: LockToolsetByIDAndProject :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
-JOIN projects
-  ON projects.id = toolsets.project_id
- AND projects.organization_id = $1::text
- AND projects.deleted IS FALSE
-JOIN mcp_servers
-  ON mcp_servers.id = toolsets.id
- AND mcp_servers.toolset_id = toolsets.id
- AND mcp_servers.project_id = toolsets.project_id
- AND mcp_servers.deleted IS FALSE
-WHERE toolsets.user_session_issuer_id = $2::uuid
-  AND toolsets.organization_id = $1::text
-  AND toolsets.deleted IS FALSE
-ORDER BY toolsets.id
-FOR UPDATE OF toolsets
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR NO KEY UPDATE
 `
 
-type LockHostedToolsetsByUserSessionIssuerParams struct {
-	OrganizationID      string
-	UserSessionIssuerID uuid.UUID
+type LockToolsetByIDAndProjectParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
 }
 
-// Live toolsets on the issuer that own a live canonical wrapper, locked in id order.
-func (q *Queries) LockHostedToolsetsByUserSessionIssuer(ctx context.Context, arg LockHostedToolsetsByUserSessionIssuerParams) ([]Toolset, error) {
-	rows, err := q.db.Query(ctx, lockHostedToolsetsByUserSessionIssuer, arg.OrganizationID, arg.UserSessionIssuerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Toolset
-	for rows.Next() {
-		var i Toolset
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.Name,
-			&i.Slug,
-			&i.Description,
-			&i.DefaultEnvironmentSlug,
-			&i.McpSlug,
-			&i.McpIsPublic,
-			&i.McpEnabled,
-			&i.ToolSelectionMode,
-			&i.CustomDomainID,
-			&i.ExternalOauthServerID,
-			&i.OauthProxyServerID,
-			&i.UserSessionIssuerID,
-			&i.ToolVariationsGroupID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+// Hosting writes lock the toolset before domains, endpoints and the server.
+func (q *Queries) LockToolsetByIDAndProject(ctx context.Context, arg LockToolsetByIDAndProjectParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, lockToolsetByIDAndProject, arg.ID, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
-const setToolsetCustomDomain = `-- name: SetToolsetCustomDomain :exec
+const mirrorToolsetHosting = `-- name: MirrorToolsetHosting :one
 UPDATE toolsets
 SET
-    custom_domain_id = $1
+    name = $1
+  , mcp_slug = $2
+  , mcp_enabled = $3
+  , mcp_is_public = $4
+  , custom_domain_id = $5
+  , user_session_issuer_id = $6
+  , tool_variations_group_id = $7
   , updated_at = clock_timestamp()
-WHERE slug = $2 AND project_id = $3
+WHERE id = $8 AND project_id = $9 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
 
-type SetToolsetCustomDomainParams struct {
-	CustomDomainID uuid.NullUUID
-	Slug           string
-	ProjectID      uuid.UUID
+type MirrorToolsetHostingParams struct {
+	Name                  string
+	McpSlug               pgtype.Text
+	McpEnabled            bool
+	McpIsPublic           bool
+	CustomDomainID        uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
 }
 
-// Narrow setter used by test fixtures: UpdateToolset's COALESCE pattern can't
-// set custom_domain_id without also supplying every non-nullable column.
-func (q *Queries) SetToolsetCustomDomain(ctx context.Context, arg SetToolsetCustomDomainParams) error {
-	_, err := q.db.Exec(ctx, setToolsetCustomDomain, arg.CustomDomainID, arg.Slug, arg.ProjectID)
-	return err
-}
-
-const setToolsetMCPEnabledByID = `-- name: SetToolsetMCPEnabledByID :exec
-UPDATE toolsets
-SET mcp_enabled = $1
-WHERE id = $2 AND project_id = $3
-`
-
-type SetToolsetMCPEnabledByIDParams struct {
-	McpEnabled bool
-	ID         uuid.UUID
-	ProjectID  uuid.UUID
-}
-
-func (q *Queries) SetToolsetMCPEnabledByID(ctx context.Context, arg SetToolsetMCPEnabledByIDParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPEnabledByID, arg.McpEnabled, arg.ID, arg.ProjectID)
-	return err
-}
-
-const setToolsetMCPPublicByID = `-- name: SetToolsetMCPPublicByID :exec
-UPDATE toolsets
-SET mcp_is_public = $1
-WHERE id = $2 AND project_id = $3
-`
-
-type SetToolsetMCPPublicByIDParams struct {
-	McpIsPublic bool
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-func (q *Queries) SetToolsetMCPPublicByID(ctx context.Context, arg SetToolsetMCPPublicByIDParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPPublicByID, arg.McpIsPublic, arg.ID, arg.ProjectID)
-	return err
-}
-
-const setToolsetMCPPublicBySlug = `-- name: SetToolsetMCPPublicBySlug :exec
-UPDATE toolsets
-SET mcp_is_public = $1
-WHERE mcp_slug = $2
-`
-
-type SetToolsetMCPPublicBySlugParams struct {
-	McpIsPublic bool
-	McpSlug     pgtype.Text
-}
-
-func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetMCPPublicBySlugParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPPublicBySlug, arg.McpIsPublic, arg.McpSlug)
-	return err
+// Writes a hosted toolset's hosting columns from its canonical server so pods that still read them stay consistent.
+func (q *Queries) MirrorToolsetHosting(ctx context.Context, arg MirrorToolsetHostingParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, mirrorToolsetHosting,
+		arg.Name,
+		arg.McpSlug,
+		arg.McpEnabled,
+		arg.McpIsPublic,
+		arg.CustomDomainID,
+		arg.UserSessionIssuerID,
+		arg.ToolVariationsGroupID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const toolsetHasExternalMCPProxy = `-- name: ToolsetHasExternalMCPProxy :one
@@ -1629,7 +1683,7 @@ SET
   , tool_selection_mode = COALESCE($8, tool_selection_mode)
   , updated_at = clock_timestamp()
 WHERE slug = $9 AND project_id = $10 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetParams struct {
@@ -1645,6 +1699,7 @@ type UpdateToolsetParams struct {
 	ProjectID              uuid.UUID
 }
 
+// Test fixture: also writes the MCP hosting columns, which production code writes only through MirrorToolsetHosting.
 func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolset,
 		arg.Name,
@@ -1673,7 +1728,62 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateToolsetDetails = `-- name: UpdateToolsetDetails :one
+UPDATE toolsets
+SET
+    name = COALESCE($1, name)
+  , description = COALESCE($2, description)
+  , default_environment_slug = COALESCE($3, default_environment_slug)
+  , tool_selection_mode = COALESCE($4, tool_selection_mode)
+  , updated_at = clock_timestamp()
+WHERE slug = $5 AND project_id = $6 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateToolsetDetailsParams struct {
+	Name                   string
+	Description            pgtype.Text
+	DefaultEnvironmentSlug pgtype.Text
+	ToolSelectionMode      string
+	Slug                   string
+	ProjectID              uuid.UUID
+}
+
+// Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state and MirrorToolsetHosting writes them.
+func (q *Queries) UpdateToolsetDetails(ctx context.Context, arg UpdateToolsetDetailsParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, updateToolsetDetails,
+		arg.Name,
+		arg.Description,
+		arg.DefaultEnvironmentSlug,
+		arg.ToolSelectionMode,
+		arg.Slug,
+		arg.ProjectID,
+	)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -1693,7 +1803,7 @@ WHERE slug = $2
   AND project_id = $3
   AND deleted IS FALSE
   AND external_oauth_server_id IS NULL
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetExternalOAuthServerParams struct {
@@ -1719,7 +1829,6 @@ func (q *Queries) UpdateToolsetExternalOAuthServer(ctx context.Context, arg Upda
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -1736,7 +1845,7 @@ SET
     tool_variations_group_id = $1
   , updated_at = clock_timestamp()
 WHERE slug = $2 AND project_id = $3 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetToolVariationsGroupParams struct {
@@ -1762,7 +1871,6 @@ func (q *Queries) UpdateToolsetToolVariationsGroup(ctx context.Context, arg Upda
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,
@@ -1779,7 +1887,7 @@ SET
     user_session_issuer_id = $1
   , updated_at = clock_timestamp()
 WHERE slug = $2 AND project_id = $3 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateToolsetUserSessionIssuerParams struct {
@@ -1788,6 +1896,7 @@ type UpdateToolsetUserSessionIssuerParams struct {
 	ProjectID           uuid.UUID
 }
 
+// Test fixture: production code writes the issuer column only through MirrorToolsetHosting and the issuer migration.
 func (q *Queries) UpdateToolsetUserSessionIssuer(ctx context.Context, arg UpdateToolsetUserSessionIssuerParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolsetUserSessionIssuer, arg.UserSessionIssuerID, arg.Slug, arg.ProjectID)
 	var i Toolset
@@ -1805,7 +1914,6 @@ func (q *Queries) UpdateToolsetUserSessionIssuer(ctx context.Context, arg Update
 		&i.ToolSelectionMode,
 		&i.CustomDomainID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UserSessionIssuerID,
 		&i.ToolVariationsGroupID,
 		&i.CreatedAt,

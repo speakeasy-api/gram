@@ -254,7 +254,7 @@ describe("McpServerHealth", () => {
     expect(
       screen.getByRole("heading", { name: "Tool calls per day" }),
     ).toBeTruthy();
-    expect(screen.getByText(/Failed means status 400 or above/)).toBeTruthy();
+    expect(screen.getByText(/failed means status 400 or above/)).toBeTruthy();
     // The chart and the card count different calls, and the page says so.
     expect(
       screen.getByText(/The chart counts calls that reach the server directly/),
@@ -573,7 +573,7 @@ describe("McpServerHealth", () => {
     respond = () => ({
       server: SERVER,
       correlation: { url_slug: "crm-9c1e" },
-      legacy_auth: "oauth_proxy",
+      legacy_auth: "gram_private",
       tool_calls: { type: "logging:disabled" },
     });
     await open();

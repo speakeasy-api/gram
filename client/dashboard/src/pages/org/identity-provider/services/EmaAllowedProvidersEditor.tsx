@@ -300,7 +300,7 @@ export function EmaAllowedProvidersEditor({
           ) : (
             <>
               {changedUnderneath && (
-                <Alert variant="warning" alignTop>
+                <Alert variant="warning">
                   <div className="flex flex-col items-start gap-2">
                     <Text small className="block">
                       {editing
@@ -437,7 +437,7 @@ export function EmaAllowedProvidersEditor({
             </Text>
           )}
           {canEdit && candidatesError ? (
-            <Alert variant="error" alignTop>
+            <Alert variant="error">
               <div className="flex flex-col items-start gap-2">
                 <Text small className="block">
                   Couldn’t load the identity providers you can choose from. You

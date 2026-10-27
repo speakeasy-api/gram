@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -166,23 +167,10 @@ func handleToolsList(
 	// Both the privacy read and the resource id follow the wrapper when one
 	// fronts the request.
 	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
-		allowed := make([]*toolListEntry, 0, len(tools))
-		for _, t := range tools {
-			disposition := dispositionFromAnnotations(t.Annotations)
-			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
-				Tool:        t.Name,
-				Disposition: disposition,
-				ProjectID:   payload.projectID.String(),
-			})); err != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					continue
-				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
-			}
-			allowed = append(allowed, t)
+		tools, err = filterToolsByMCPConnect(ctx, logger, authzEngine, payload.mcpConnectResourceID(toolset.ID), payload.projectID.String(), tools)
+		if err != nil {
+			return nil, err
 		}
-		tools = allowed
 	}
 
 	toolsetProjectID, err := uuid.Parse(toolset.ProjectID)
@@ -353,4 +341,28 @@ func dispositionFromAnnotations(a *externalmcp.ToolAnnotations) string {
 	default:
 		return ""
 	}
+}
+
+// filterToolsByMCPConnect keeps the tools the caller may connect to and stops
+// once the request is canceled.
+func filterToolsByMCPConnect(ctx context.Context, logger *slog.Logger, authzEngine *authz.Engine, resourceID string, projectID string, tools []*toolListEntry) ([]*toolListEntry, error) {
+	allowed := make([]*toolListEntry, 0, len(tools))
+	for _, t := range tools {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("filter tools by authz: %w", err)
+		}
+		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(resourceID, authz.MCPToolCallDimensions{
+			Tool:        t.Name,
+			Disposition: dispositionFromAnnotations(t.Annotations),
+			ProjectID:   projectID,
+		})); err != nil {
+			var oopsErr *oops.ShareableError
+			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+				continue
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
+		}
+		allowed = append(allowed, t)
+	}
+	return allowed, nil
 }

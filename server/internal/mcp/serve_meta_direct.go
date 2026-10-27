@@ -68,10 +68,76 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 	return results
 }
 
+// unavailableMember is a member collectGatewayTools could not list; err is
+// nil when its catalog was malformed.
+type unavailableMember struct {
+	member metaMember
+	err    error
+}
+
+// gatewayTool is one member tool under its gateway-qualified name.
+type gatewayTool struct {
+	entry  *toolListEntry
+	member metaMember
+}
+
+// collectGatewayTools describes members' permission-filtered catalogs under
+// gateway-qualified names. Members the caller cannot see are skipped, as are
+// members it cannot reach or has not connected, as Progressive does. Any
+// other member failure fails the whole inventory, unless unavailable is
+// non-nil: then a member that cannot be listed right now is skipped and
+// appended there with its failure.
+func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, unavailable *[]unavailableMember, captured map[string]*memberCatalog) ([]gatewayTool, error) {
+	tools := make([]gatewayTool, 0)
+	names := map[string]bool{}
+	described := s.describeMetaMembers(ctx, logger, gate, members)
+	for i, member := range members {
+		catalog, err := described[i].catalog, described[i].err
+		if err != nil {
+			var denied *oops.ShareableError
+			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
+				if unavailable != nil {
+					*unavailable = append(*unavailable, unavailableMember{member: member, err: err})
+				}
+				continue
+			}
+			if _, memberErr := errors.AsType[*metaMemberError](err); memberErr || unavailable != nil {
+				logger.WarnContext(ctx, "gateway member tools unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+				if unavailable != nil {
+					*unavailable = append(*unavailable, unavailableMember{member: member, err: err})
+				}
+				continue
+			}
+			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
+		}
+		if catalog.incomplete {
+			if unavailable != nil {
+				*unavailable = append(*unavailable, unavailableMember{member: member, err: nil})
+				continue
+			}
+			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again").LogWarn(ctx, logger)
+		}
+		if captured != nil {
+			captured[member.slug] = catalog
+		}
+		for _, entry := range catalog.entries {
+			qualified := *entry
+			qualified.Name = metamcp.QualifyName(member.slug, entry.Name)
+			if names[qualified.Name] {
+				return nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
+			}
+			names[qualified.Name] = true
+			tools = append(tools, gatewayTool{entry: &qualified, member: member})
+			if len(tools) > 10000 {
+				return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
+			}
+		}
+	}
+	return tools, nil
+}
+
 // listDirectGatewayTools exposes qualified member tools through the same
-// permission-filtered catalogs used by Progressive discovery. A member that
-// cannot be reached or is not connected for the caller is left out, as
-// Progressive does; a malformed member catalog fails the whole listing.
+// permission-filtered catalogs used by Progressive discovery.
 func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logger, endpoint *mcpendpointsrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, req *rawRequest) (json.RawMessage, error) {
 	var params struct {
 		Cursor string `json:"cursor"`
@@ -88,37 +154,13 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	if err != nil {
 		return nil, err
 	}
-	tools := make([]*toolListEntry, 0)
-	names := map[string]bool{}
-	described := s.describeMetaMembers(ctx, logger, gate, members)
-	for i, member := range members {
-		catalog, err := described[i].catalog, described[i].err
-		if err != nil {
-			var denied *oops.ShareableError
-			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
-				continue
-			}
-			if _, ok := errors.AsType[*metaMemberError](err); ok {
-				logger.WarnContext(ctx, "gateway member tools unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-				continue
-			}
-			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
-		}
-		if catalog.incomplete {
-			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again").LogWarn(ctx, logger)
-		}
-		for _, entry := range catalog.entries {
-			qualified := *entry
-			qualified.Name = metamcp.QualifyName(member.slug, entry.Name)
-			if names[qualified.Name] {
-				return nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
-			}
-			names[qualified.Name] = true
-			tools = append(tools, &qualified)
-			if len(tools) > 10000 {
-				return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
-			}
-		}
+	inventory, err := s.collectGatewayTools(ctx, logger, gate, members, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	tools := make([]*toolListEntry, 0, len(inventory))
+	for _, tool := range inventory {
+		tools = append(tools, tool.entry)
 	}
 	slices.SortFunc(tools, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
 	catalogBytes, err := json.Marshal(tools)
@@ -129,6 +171,9 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 		return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 16 MiB")
 	}
 	fingerprint := fmt.Sprintf("%x", sha256.Sum256(catalogBytes))
+	if gate.catalog != nil {
+		fingerprint = gate.catalog.ID.String() + ":" + fingerprint
+	}
 	type cursor struct {
 		Offset      int    `json:"offset"`
 		Fingerprint string `json:"fingerprint"`

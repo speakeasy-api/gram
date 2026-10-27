@@ -188,14 +188,12 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: GetPluginServerByBackend :one
--- Look up a live plugin server by its backend (toolset or mcp_server).
+-- Look up a live plugin server by its mcp_server backend.
 -- Used by AttachToDefaultPlugin to no-op on already-attached servers before
 -- inserting: a duplicate insert can trip the (plugin_id, display_name)
 -- unique index rather than a backend one, and either way the failed
--- statement aborts the caller's surrounding transaction. A toolset and its
--- canonical wrapper share one id, so either key finds the other's row; a
--- non-canonical server holding a toolset's id does not.
-SELECT * FROM plugin_servers
+-- statement aborts the caller's surrounding transaction.
+SELECT id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted FROM plugin_servers
 WHERE plugin_id = @plugin_id
   AND EXISTS (
     SELECT 1 FROM plugins
@@ -203,14 +201,7 @@ WHERE plugin_id = @plugin_id
       AND plugins.project_id = @project_id
       AND plugins.organization_id = @organization_id
   )
-  AND (toolset_id = sqlc.narg('toolset_id')::uuid
-    OR mcp_server_id = sqlc.narg('mcp_server_id')::uuid
-    OR ((toolset_id = sqlc.narg('mcp_server_id')::uuid OR mcp_server_id = sqlc.narg('toolset_id')::uuid)
-      AND EXISTS (
-        SELECT 1 FROM mcp_servers c
-        WHERE c.id = COALESCE(plugin_servers.toolset_id, plugin_servers.mcp_server_id)
-          AND c.toolset_id = c.id AND c.project_id = @project_id
-      )))
+  AND mcp_server_id = @mcp_server_id
   AND deleted IS FALSE
 ORDER BY created_at, id
 LIMIT 1;
@@ -245,21 +236,7 @@ WHERE plugins.id = plugin_servers.plugin_id
   AND plugins.project_id = @project_id
   AND plugin_servers.mcp_server_id = @mcp_server_id
   AND plugin_servers.deleted IS FALSE
-RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
-
--- name: SoftDeletePluginServersByToolsetID :many
--- Detaches toolset-keyed rows when their toolset is deleted; wrapper-keyed rows
--- detach with the wrapper.
-UPDATE plugin_servers
-SET deleted_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-FROM plugins
-WHERE plugins.id = plugin_servers.plugin_id
-  AND plugins.project_id = @project_id
-  AND plugins.organization_id = @organization_id
-  AND plugin_servers.toolset_id = @toolset_id
-  AND plugin_servers.deleted IS FALSE
-RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
+RETURNING plugin_servers.id, plugin_servers.plugin_id, plugin_servers.project_id, plugin_servers.mcp_server_id, plugin_servers.meta_mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
 
 -- name: SoftDeletePluginServersByGatewayID :many
 UPDATE plugin_servers
@@ -270,7 +247,7 @@ WHERE plugins.id = plugin_servers.plugin_id
   AND plugins.organization_id = @organization_id
   AND plugin_servers.meta_mcp_server_id = @gateway_id
   AND plugin_servers.deleted IS FALSE
-RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
+RETURNING plugin_servers.id, plugin_servers.plugin_id, plugin_servers.project_id, plugin_servers.mcp_server_id, plugin_servers.meta_mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
 
 -- name: HasPluginMembershipForGateway :one
 SELECT EXISTS (
@@ -292,7 +269,7 @@ VALUES (
   @policy,
   @sort_order
 )
-RETURNING *;
+RETURNING id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted;
 
 -- name: HasCanonicalWrapper :one
 -- A hosted entry is stored under its toolset's live canonical wrapper, which shares the toolset id.
@@ -315,7 +292,7 @@ FROM plugins p
 JOIN meta_mcp_servers g ON g.id = @meta_mcp_server_id
   AND g.project_id = p.project_id AND g.deleted IS FALSE
 WHERE p.id = @plugin_id AND p.project_id = @project_id AND p.deleted IS FALSE
-RETURNING *;
+RETURNING id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted;
 
 -- name: GetGatewayForPluginServer :one
 SELECT g.id, g.name, g.visibility, (g.user_session_issuer_id IS NOT NULL)::bool AS has_oauth,
@@ -353,7 +330,7 @@ WHERE
   AND s.deleted IS FALSE;
 
 -- name: ListPluginServers :many
-SELECT *
+SELECT id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 FROM plugin_servers
 WHERE plugin_id = @plugin_id
   AND deleted IS FALSE
@@ -364,7 +341,7 @@ ORDER BY sort_order ASC, created_at ASC;
 -- a set of plugins (e.g. ListPlugins) without one round-trip per plugin.
 -- Joins plugins and scopes by project_id as defense-in-depth, so this stays
 -- safe even if a future caller passes plugin IDs it hasn't already scoped.
-SELECT plugin_servers.*
+SELECT plugin_servers.id, plugin_servers.plugin_id, plugin_servers.project_id, plugin_servers.mcp_server_id, plugin_servers.meta_mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted
 FROM plugin_servers
 JOIN plugins ON plugins.id = plugin_servers.plugin_id
 WHERE plugin_servers.plugin_id = ANY(@plugin_ids::uuid[])
@@ -381,12 +358,11 @@ SET display_name = @display_name,
 WHERE id = @id
   AND plugin_id = @plugin_id
   AND deleted IS FALSE
-RETURNING *;
+RETURNING id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted;
 
 -- name: SyncMcpServerDisplayName :execrows
 -- Keep auto-derived plugin server names in sync with their MCP server while
--- preserving names customized through UpdatePluginServer. Toolset-keyed rows
--- match their canonical wrapper, which shares the toolset id.
+-- preserving names customized through UpdatePluginServer.
 UPDATE plugin_servers ps
 SET display_name = @new_display_name,
     updated_at = clock_timestamp()
@@ -394,9 +370,7 @@ FROM plugins p
 WHERE ps.plugin_id = p.id
   AND p.project_id = @project_id
   AND p.deleted IS FALSE
-  AND (ps.mcp_server_id = @mcp_server_id OR (ps.toolset_id = @mcp_server_id AND EXISTS (
-    SELECT 1 FROM mcp_servers c WHERE c.id = @mcp_server_id AND c.toolset_id = c.id AND c.project_id = p.project_id
-  )))
+  AND ps.mcp_server_id = @mcp_server_id
   AND ps.display_name = @old_display_name
   AND ps.deleted IS FALSE
   AND NOT EXISTS (
@@ -417,7 +391,7 @@ SET deleted_at = clock_timestamp(),
 WHERE id = @id
   AND plugin_id = @plugin_id
   AND deleted IS FALSE
-RETURNING *;
+RETURNING id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted;
 
 -- name: HasPluginGithubConnectionForProject :one
 SELECT EXISTS (
@@ -425,44 +399,27 @@ SELECT EXISTS (
 )::bool;
 
 -- name: HasPluginMembershipForMCPServer :one
--- Include legacy toolset-backed plugins only when this server is the toolset's
--- hosting wrapper: its canonical row (id = toolset id), or else its sole active wrapper.
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers ps
   JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = @project_id AND p.deleted IS FALSE
   JOIN mcp_servers s ON s.id = @mcp_server_id AND s.project_id = p.project_id AND s.deleted IS FALSE
   WHERE ps.deleted IS FALSE
-    AND (
-      ps.mcp_server_id = s.id
-      OR (
-        ps.toolset_id = s.toolset_id
-        AND s.visibility <> 'disabled'
-        AND (
-          s.id = s.toolset_id
-          OR (
-            NOT EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = s.toolset_id AND c.project_id = p.project_id AND c.deleted IS FALSE)
-            AND (SELECT count(*) FROM mcp_servers wrapper
-                 WHERE wrapper.toolset_id = s.toolset_id AND wrapper.project_id = p.project_id
-                   AND wrapper.deleted IS FALSE AND wrapper.visibility <> 'disabled') = 1
-          )
-        )
-      )
-    )
+    AND ps.mcp_server_id = s.id
 )::bool;
 
 -- name: HasPluginMembershipForToolset :one
--- A toolset reaches a package directly while it is MCP-enabled, or through an
--- enabled MCP server it backs, mirroring the package-generation queries. The toolset must belong to
+-- A toolset reaches a package through an enabled MCP server it backs,
+-- mirroring the package-generation queries. The toolset must belong to
 -- the project, but its own deleted flag is ignored so a deletion can still be
 -- traced to the plugins that carried it.
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers ps
   JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = @project_id AND p.deleted IS FALSE
   JOIN toolsets t ON t.id = @toolset_id::uuid AND t.project_id = p.project_id
-  LEFT JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.project_id = p.project_id
+  JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.project_id = p.project_id
     AND s.deleted IS FALSE AND s.visibility <> 'disabled'
   WHERE ps.deleted IS FALSE
-    AND ((ps.toolset_id = t.id AND t.mcp_enabled IS TRUE) OR s.toolset_id = t.id)
+    AND s.toolset_id = t.id
 )::bool;
 
 
@@ -543,23 +500,17 @@ ORDER BY pa.principal_urn;
 
 -- name: ListPluginEnvironmentConfigsForProject :many
 -- Batch companion to ListPluginsWithMcpServersForProject. A hosted entry's
--- environment comes from its toolset, keyed by toolset id or by the canonical
--- wrapper id (the same uuid), with metadata keyed either way. A server-keyed
--- row counts only when that server is the toolset's canonical wrapper.
+-- environment comes from its toolset, keyed by the canonical wrapper id (the
+-- toolset's own id).
 SELECT DISTINCT
   t.id AS toolset_id,
   ec.variable_name,
   ec.header_display_name
 FROM plugin_servers ps
 JOIN plugins p ON p.id = ps.plugin_id AND p.deleted IS FALSE
-JOIN toolsets t ON t.id = COALESCE(ps.toolset_id, ps.mcp_server_id) AND t.project_id = p.project_id AND t.deleted IS FALSE
-  AND (ps.toolset_id IS NOT NULL OR EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = ps.mcp_server_id AND c.toolset_id = c.id AND c.project_id = p.project_id))
-JOIN LATERAL (
-  SELECT m.id FROM mcp_metadata m
-  WHERE (m.toolset_id = t.id OR (m.mcp_server_id = t.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = t.id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND m.project_id = p.project_id
-  ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
-  LIMIT 1
-) md ON TRUE
+JOIN toolsets t ON t.id = ps.mcp_server_id AND t.project_id = p.project_id AND t.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = t.id AND c.toolset_id = c.id AND c.project_id = p.project_id)
+JOIN mcp_metadata md ON md.mcp_server_id = t.id AND md.project_id = p.project_id
 JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
 WHERE p.project_id = @project_id
   AND ps.deleted IS FALSE
@@ -568,23 +519,22 @@ WHERE p.project_id = @project_id
 ORDER BY t.id, ec.variable_name ASC, ec.header_display_name ASC;
 
 -- name: ListPluginsWithMcpServersForProject :many
--- Plugin generation for toolset- and mcp_server-keyed entries. A toolset-keyed
--- entry resolves to its hosting wrapper (canonical row, else its sole enabled
--- wrapper) for its network mode and keeps the toolset's own address,
--- visibility and auth; a canonical wrapper with no usable endpoint uses that address too,
--- so re-keying onto the wrapper renders the same. Each other server resolves to
+-- Plugin generation for mcp_server-keyed entries. A canonical wrapper with no
+-- usable endpoint uses its toolset's address. Each other server resolves to
 -- a single usable endpoint: custom-domain endpoints win over platform
 -- endpoints, then oldest created_at.
 -- Resolving the host inside the selection keeps endpoint choice and URL-host
 -- construction in lockstep, so a dangling custom-domain endpoint is never
 -- picked and emitted as a (wrong) platform URL. A server backed by an
 -- unproxied MCP server never has an mcp_endpoints row, so it's resolved via
--- unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
--- usable endpoint nor an unproxied backing are dropped unless their stored
--- network mode needs fail-closed validation. Private-only endpoints are picked
--- only from the ingress-pinned namespace; absence blocks publication in Go.
--- env_toolset_id is set only for a toolset's own server, whose environment
--- comes from the toolset.
+-- unproxied_mcp_servers, exposing the vendor's own URL. A built-in server
+-- (builtin_backend) is served by Speakeasy itself at its endpoint. Servers
+-- with neither a usable endpoint nor an unproxied backing are dropped unless
+-- their stored network mode needs fail-closed validation. Private-only
+-- endpoints are picked only from the ingress-pinned namespace; absence blocks
+-- publication in Go.
+-- env_toolset_id is set only for a toolset's canonical wrapper, whose
+-- environment comes from the toolset.
 SELECT
   p.id AS plugin_id,
   p.name AS plugin_name,
@@ -595,9 +545,9 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
-  COALESCE(lt.mcp_slug, s.slug) AS mcp_server_slug,
-  COALESCE(lt.mcp_is_public, s.visibility = 'public')::bool AS mcp_server_is_public,
-  (CASE WHEN lt.id IS NOT NULL THEN lt.user_session_issuer_id ELSE s.user_session_issuer_id END IS NOT NULL)::bool AS mcp_server_is_oauth,
+  s.slug AS mcp_server_slug,
+  (s.visibility = 'public')::bool AS mcp_server_is_public,
+  (s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
   ep.custom_domain AS endpoint_custom_domain,
   addr.mcp_slug AS address_slug,
@@ -606,20 +556,10 @@ SELECT
   s.network_access_mode,
   COALESCE(private_ep.slug, '') AS private_endpoint_slug,
   ingress.dns_name AS private_dns_name,
-  envt.id AS env_toolset_id,
-  (SELECT count(*) FROM mcp_servers ms WHERE ms.toolset_id = lt.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE AND ms.visibility <> 'disabled'
-    AND (ms.id = lt.id OR NOT EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = lt.id AND c.project_id = p.project_id AND c.deleted IS FALSE)))::bigint AS wrapper_count
+  envt.id AS env_toolset_id
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE AND ps.meta_mcp_server_id IS NULL
-LEFT JOIN toolsets lt ON lt.id = ps.toolset_id AND lt.project_id = p.project_id AND lt.deleted IS FALSE AND lt.mcp_enabled IS TRUE AND lt.mcp_slug IS NOT NULL
-LEFT JOIN LATERAL (
-  SELECT ms.id FROM mcp_servers ms
-  WHERE ms.toolset_id = lt.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE AND ms.visibility <> 'disabled'
-    AND (ms.id = lt.id OR NOT EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = lt.id AND c.project_id = p.project_id AND c.deleted IS FALSE))
-  ORDER BY ms.id
-  LIMIT 1
-) hw ON TRUE
-LEFT JOIN mcp_servers s ON s.id = COALESCE(ps.mcp_server_id, hw.id) AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
+JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
 LEFT JOIN network_ingresses ingress ON ingress.organization_id = p.organization_id AND ingress.enabled IS TRUE AND ingress.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT e.slug
@@ -649,24 +589,21 @@ LEFT JOIN LATERAL (
 LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE
 LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id AND rms.project_id = p.project_id AND rms.deleted IS FALSE AND rms.transport_type IN ('streamable-http', 'sse')
 LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id AND tms.project_id = p.project_id AND tms.deleted IS FALSE AND tms.status <> 'revoked' AND (s.visibility <> 'public' OR tms.allow_public IS TRUE)
-LEFT JOIN toolsets mts ON mts.id = s.toolset_id AND mts.project_id = p.project_id AND mts.deleted IS FALSE AND mts.mcp_enabled IS TRUE
-LEFT JOIN toolsets addr ON addr.id = (CASE WHEN ps.toolset_id IS NOT NULL THEN lt.id WHEN s.id = s.toolset_id AND ep.slug IS NULL THEN mts.id END) AND addr.project_id = p.project_id AND addr.mcp_slug IS NOT NULL
+LEFT JOIN mcp_servers mcw ON mcw.id = s.toolset_id AND mcw.toolset_id = s.toolset_id AND mcw.project_id = p.project_id AND mcw.deleted IS FALSE
+LEFT JOIN toolsets mts ON mts.id = s.toolset_id AND mts.project_id = p.project_id AND mts.deleted IS FALSE AND (CASE WHEN mcw.id IS NOT NULL THEN mcw.visibility <> 'disabled' ELSE mts.mcp_enabled END)
+LEFT JOIN toolsets addr ON addr.id = (CASE WHEN s.id = s.toolset_id AND ep.slug IS NULL THEN mts.id END) AND addr.project_id = p.project_id AND addr.mcp_slug IS NOT NULL
 LEFT JOIN custom_domains addr_cd ON addr_cd.id = addr.custom_domain_id AND addr_cd.organization_id = p.organization_id AND addr_cd.activated IS TRUE AND addr_cd.verified IS TRUE AND addr_cd.deleted IS FALSE
-LEFT JOIN toolsets envt ON envt.id = (CASE WHEN ps.toolset_id IS NOT NULL THEN lt.id WHEN s.id = s.toolset_id THEN mts.id END) AND envt.project_id = p.project_id
+LEFT JOIN toolsets envt ON envt.id = (CASE WHEN s.id = s.toolset_id THEN mts.id END) AND envt.project_id = p.project_id
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
   AND (COALESCE(cardinality(@plugin_ids::uuid[]), 0) = 0 OR p.id = ANY(@plugin_ids::uuid[]))
+  AND (ep.slug IS NOT NULL OR addr.id IS NOT NULL OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
   AND (
-    (lt.id IS NOT NULL AND hw.id IS NULL)
-    OR (
-      (ep.slug IS NOT NULL OR addr.id IS NOT NULL OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
-      AND (
-        (s.remote_mcp_server_id IS NOT NULL AND rms.id IS NOT NULL)
-        OR (s.tunneled_mcp_server_id IS NOT NULL AND tms.id IS NOT NULL)
-        OR (s.toolset_id IS NOT NULL AND mts.id IS NOT NULL)
-        OR (s.unproxied_mcp_server_id IS NOT NULL AND ump.id IS NOT NULL)
-      )
-    )
+    (s.remote_mcp_server_id IS NOT NULL AND rms.id IS NOT NULL)
+    OR (s.tunneled_mcp_server_id IS NOT NULL AND tms.id IS NOT NULL)
+    OR (s.toolset_id IS NOT NULL AND mts.id IS NOT NULL)
+    OR (s.unproxied_mcp_server_id IS NOT NULL AND ump.id IS NOT NULL)
+    OR s.builtin_backend IS NOT NULL
   )
 ORDER BY p.slug, ps.sort_order ASC;
 
@@ -717,7 +654,7 @@ WITH intended AS (
     p.id AS plugin_id,
     ps.id AS server_id,
     CASE
-      WHEN ps.toolset_id IS NULL AND ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL THEN 'missing_backend'
+      WHEN ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL THEN 'missing_backend'
       WHEN ps.meta_mcp_server_id IS NOT NULL AND g.id IS NULL THEN 'gateway_missing'
       WHEN ps.meta_mcp_server_id IS NOT NULL AND g.visibility = 'disabled' THEN 'gateway_disabled'
       WHEN ps.meta_mcp_server_id IS NOT NULL AND g.network_access_mode IS NOT NULL AND g.network_access_mode NOT IN ('', 'public_only', 'dual', 'private_only') THEN 'gateway_network_mode_invalid'
@@ -735,45 +672,31 @@ WITH intended AS (
         WHERE e.meta_mcp_server_id = g.id AND e.project_id = p.project_id AND e.deleted IS FALSE
           AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
       ) THEN 'gateway_endpoint_unresolved'
-      WHEN ps.toolset_id IS NOT NULL AND lt.id IS NULL THEN 'mcp_server_missing'
-      WHEN ps.toolset_id IS NOT NULL AND (SELECT count(*) FROM mcp_servers ms WHERE ms.toolset_id = lt.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE AND ms.visibility <> 'disabled' AND (ms.id = lt.id OR NOT EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = lt.id AND c.project_id = p.project_id AND c.deleted IS FALSE))) > 1 THEN 'mcp_server_ambiguous'
-      WHEN ps.toolset_id IS NOT NULL AND hw.id IS NULL AND EXISTS (
-        SELECT 1 FROM mcp_environment_configs ec
-        WHERE ec.project_id = p.project_id AND ec.provided_by = 'user' AND ec.mcp_metadata_id = (
-          SELECT m.id FROM mcp_metadata m
-          WHERE (m.toolset_id = lt.id OR (m.mcp_server_id = lt.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = lt.id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND m.project_id = p.project_id
-          ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
-          LIMIT 1
-        )
-      ) THEN 'mcp_server_requires_user_header'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.id IS NULL THEN 'mcp_server_missing'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.project_id <> p.project_id THEN 'mcp_server_wrong_project'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.deleted IS TRUE THEN 'mcp_server_deleted'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.visibility = 'disabled' THEN 'mcp_server_disabled'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.network_access_mode IS NOT NULL AND s.network_access_mode NOT IN ('', 'public_only', 'dual', 'private_only') THEN 'mcp_server_network_mode_invalid'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND (rms.id IS NULL OR rms.project_id <> p.project_id OR rms.deleted IS TRUE) THEN 'remote_backing_unresolved'
-	  WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND rms.transport_type NOT IN ('streamable-http', 'sse') THEN 'remote_transport_unsupported'
-	  WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND EXISTS (
+      WHEN ps.mcp_server_id IS NOT NULL AND s.id IS NULL THEN 'mcp_server_missing'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.project_id <> p.project_id THEN 'mcp_server_wrong_project'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.deleted IS TRUE THEN 'mcp_server_deleted'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.visibility = 'disabled' THEN 'mcp_server_disabled'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.network_access_mode IS NOT NULL AND s.network_access_mode NOT IN ('', 'public_only', 'dual', 'private_only') THEN 'mcp_server_network_mode_invalid'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND (rms.id IS NULL OR rms.project_id <> p.project_id OR rms.deleted IS TRUE) THEN 'remote_backing_unresolved'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND rms.transport_type NOT IN ('streamable-http', 'sse') THEN 'remote_transport_unsupported'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND EXISTS (
 		SELECT 1 FROM remote_mcp_server_headers rmh
 		WHERE rmh.remote_mcp_server_id = rms.id AND rmh.deleted IS FALSE AND rmh.value_from_request_header IS NOT NULL
 	  ) THEN 'remote_backing_requires_user_header'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.tunneled_mcp_server_id IS NOT NULL AND (tms.id IS NULL OR tms.project_id <> p.project_id OR tms.deleted IS TRUE OR tms.status = 'revoked') THEN 'tunneled_backing_unresolved'
-	  WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.tunneled_mcp_server_id IS NOT NULL AND s.visibility = 'public' AND tms.allow_public IS FALSE THEN 'tunneled_public_consent_missing'
-	  WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.tunneled_mcp_server_id IS NOT NULL AND EXISTS (
+      WHEN ps.mcp_server_id IS NOT NULL AND s.tunneled_mcp_server_id IS NOT NULL AND (tms.id IS NULL OR tms.project_id <> p.project_id OR tms.deleted IS TRUE OR tms.status = 'revoked') THEN 'tunneled_backing_unresolved'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.tunneled_mcp_server_id IS NOT NULL AND s.visibility = 'public' AND tms.allow_public IS FALSE THEN 'tunneled_public_consent_missing'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.tunneled_mcp_server_id IS NOT NULL AND EXISTS (
 		SELECT 1 FROM tunneled_mcp_server_headers tmh
 		WHERE tmh.tunneled_mcp_server_id = tms.id AND tmh.deleted IS FALSE AND tmh.value_from_request_header IS NOT NULL
 	  ) THEN 'tunneled_backing_requires_user_header'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.toolset_id IS NOT NULL AND (mts.id IS NULL OR mts.project_id <> p.project_id OR mts.deleted IS TRUE OR mts.mcp_enabled IS FALSE) THEN 'toolset_backing_unresolved'
-	  WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND s.visibility = 'public' AND mts.mcp_is_public IS FALSE THEN 'toolset_backing_auth_mismatch'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND (mts.id IS NULL OR mts.project_id <> p.project_id OR mts.deleted IS TRUE OR (CASE WHEN mcw.id IS NOT NULL THEN mcw.visibility = 'disabled' ELSE mts.mcp_enabled IS FALSE END)) THEN 'toolset_backing_unresolved'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND s.visibility = 'public' AND (CASE WHEN mcw.id IS NOT NULL THEN mcw.visibility <> 'public' ELSE mts.mcp_is_public IS FALSE END) THEN 'toolset_backing_auth_mismatch'
       -- Hosted entries read headers from the one metadata row published output uses.
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND (ps.mcp_server_id IS NULL OR s.id = s.toolset_id) AND EXISTS (
-        SELECT 1 FROM mcp_environment_configs ec
-        WHERE ec.project_id = p.project_id AND ec.provided_by = 'user' AND ec.mcp_metadata_id = (
-          SELECT m.id FROM mcp_metadata m
-          WHERE (m.toolset_id = s.toolset_id OR (m.mcp_server_id = s.toolset_id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = s.toolset_id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND m.project_id = p.project_id
-          ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
-          LIMIT 1
-        )
+      WHEN ps.mcp_server_id IS NOT NULL AND s.id = s.toolset_id AND EXISTS (
+        SELECT 1
+        FROM mcp_metadata md
+        JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
+        WHERE md.mcp_server_id = s.toolset_id AND md.project_id = p.project_id AND ec.provided_by = 'user'
       ) THEN 'mcp_server_requires_user_header'
 	  WHEN ps.mcp_server_id IS NOT NULL AND s.id IS DISTINCT FROM s.toolset_id AND EXISTS (
 		SELECT 1
@@ -785,17 +708,17 @@ WITH intended AS (
 		SELECT 1
 		FROM mcp_metadata md
 		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
-		WHERE (md.toolset_id = mts.id OR (md.mcp_server_id = mts.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = mts.id AND c.toolset_id = c.id AND c.project_id = p.project_id))) AND md.project_id = p.project_id AND ec.provided_by = 'user'
+		WHERE md.mcp_server_id = mts.id AND EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = mts.id AND c.toolset_id = c.id AND c.project_id = p.project_id) AND md.project_id = p.project_id AND ec.provided_by = 'user'
 	  ) THEN 'toolset_backing_requires_user_header'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND s.network_access_mode IN ('dual', 'private_only') THEN 'unproxied_private_network_unsupported'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND NOT EXISTS (
+      WHEN ps.mcp_server_id IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND s.network_access_mode IN ('dual', 'private_only') THEN 'unproxied_private_network_unsupported'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND NOT EXISTS (
         SELECT 1
         FROM unproxied_mcp_servers ump
         WHERE ump.id = s.unproxied_mcp_server_id
           AND ump.project_id = p.project_id
           AND ump.deleted IS FALSE
       ) THEN 'unproxied_backing_unresolved'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.network_access_mode = 'private_only' AND NOT EXISTS (
+      WHEN ps.mcp_server_id IS NOT NULL AND s.network_access_mode = 'private_only' AND NOT EXISTS (
         SELECT 1 FROM network_ingresses ni
         JOIN mcp_endpoints e ON e.project_id = p.project_id AND e.mcp_server_id = s.id AND e.deleted IS FALSE
           AND ((ni.endpoint_namespace_kind = 'platform' AND ni.custom_domain_id IS NULL AND e.custom_domain_id IS NULL)
@@ -803,8 +726,8 @@ WITH intended AS (
         WHERE ni.organization_id = p.organization_id AND ni.enabled IS TRUE AND ni.deleted IS FALSE
           AND ni.dns_name IS NOT NULL AND ni.dns_name <> ''
       ) THEN 'mcp_server_private_endpoint_unresolved'
-      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.unproxied_mcp_server_id IS NULL AND s.network_access_mode IS DISTINCT FROM 'private_only'
-        AND ps.toolset_id IS NULL AND s.id IS DISTINCT FROM s.toolset_id AND NOT EXISTS (
+      WHEN ps.mcp_server_id IS NOT NULL AND s.unproxied_mcp_server_id IS NULL AND s.network_access_mode IS DISTINCT FROM 'private_only'
+        AND s.id IS DISTINCT FROM s.toolset_id AND NOT EXISTS (
         SELECT 1
         FROM mcp_endpoints e
         LEFT JOIN custom_domains cd
@@ -822,18 +745,11 @@ WITH intended AS (
   FROM plugins p
   JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
   LEFT JOIN meta_mcp_servers g ON g.id = ps.meta_mcp_server_id AND g.project_id = p.project_id AND g.deleted IS FALSE
-  LEFT JOIN toolsets lt ON lt.id = ps.toolset_id AND lt.project_id = p.project_id AND lt.deleted IS FALSE AND lt.mcp_enabled IS TRUE AND lt.mcp_slug IS NOT NULL
-  LEFT JOIN LATERAL (
-    SELECT ms.id FROM mcp_servers ms
-    WHERE ms.toolset_id = lt.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE AND ms.visibility <> 'disabled'
-      AND (ms.id = lt.id OR NOT EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = lt.id AND c.project_id = p.project_id AND c.deleted IS FALSE))
-    ORDER BY ms.id
-    LIMIT 1
-  ) hw ON TRUE
-  LEFT JOIN mcp_servers s ON s.id = COALESCE(ps.mcp_server_id, hw.id)
+  LEFT JOIN mcp_servers s ON s.id = ps.mcp_server_id
   LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id
   LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id
   LEFT JOIN toolsets mts ON mts.id = s.toolset_id
+  LEFT JOIN mcp_servers mcw ON mcw.id = s.toolset_id AND mcw.toolset_id = s.toolset_id AND mcw.project_id = p.project_id AND mcw.deleted IS FALSE
   WHERE p.project_id = @project_id
     AND p.deleted IS FALSE
 	AND (COALESCE(cardinality(@plugin_ids::uuid[]), 0) = 0 OR p.id = ANY(@plugin_ids::uuid[]))
@@ -1245,6 +1161,10 @@ UPDATE projects SET created_at = '1990-01-01', deleted_at = clock_timestamp() WH
 -- name: AgeRoleSetupProjectFixture :exec
 UPDATE projects SET created_at = '2000-01-01' WHERE id = $1;
 
+-- name: CountLivePluginServersByMCPServerIDFixture :one
+SELECT count(*) FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
+WHERE p.project_id = @project_id AND ps.mcp_server_id = @mcp_server_id AND ps.deleted IS FALSE;
+
 -- name: CreateRoleSetupGlobalRoleFixture :exec
 INSERT INTO global_roles (id, workos_slug, workos_name, workos_created_at, workos_updated_at) VALUES ($1,'setup-global','Global Engineering',clock_timestamp(),clock_timestamp());
 
@@ -1291,9 +1211,10 @@ SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = cur
 -- Load latest live contents with the inventory for typed platform classification.
 -- Prefer the canonical wrapper, but allow fallback when it is enabled and endpointless.
 -- A disabled canonical wrapper still blocks automatic delivery through alternatives.
+-- A wrapper whose backing toolset is deleted is never delivered.
 SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
-  'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
-  (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
+  COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
+  (m.visibility <> 'disabled' AND (m.toolset_id IS NULL OR backing.id IS NOT NULL) AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
   )) AND NOT (m.toolset_id IS NOT NULL AND m.id <> m.toolset_id AND EXISTS (
     SELECT 1 FROM mcp_servers canonical WHERE canonical.id = m.toolset_id AND canonical.project_id = p.id AND canonical.deleted IS FALSE
@@ -1310,39 +1231,15 @@ LEFT JOIN LATERAL (
 ) latest ON true
 WHERE p.organization_id = @organization_id AND p.id = @project_id
   AND p.deleted IS FALSE AND m.deleted IS FALSE
-UNION ALL
--- A toolset with no MCP server is a removal candidate only; it is never delivered.
-SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id, FALSE::boolean, latest.tool_urns
-FROM toolsets t JOIN projects p ON p.id = t.project_id
-LEFT JOIN LATERAL (
-  SELECT v.tool_urns FROM toolset_versions v
-  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
-  ORDER BY v.version DESC LIMIT 1
-) latest ON true
-WHERE p.organization_id = @organization_id AND p.id = @project_id
-  AND p.deleted IS FALSE AND t.deleted IS FALSE
-ORDER BY id;
+ORDER BY m.id;
 
 -- name: HasRoleDeliveryMembership :one
--- A legacy toolset membership and its typed MCP wrapper are the same delivery,
--- and automatic delivery treats all wrappers on the same toolset as one delivery.
+-- Automatic delivery treats all wrappers on the same toolset as one delivery.
 -- Setup/eligibility preserve deleted history; explicit new grants/audiences do not.
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
   WHERE p.id = @plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id
-    AND ((ps.toolset_id = sqlc.narg('toolset_id')::uuid)
-      OR (ps.mcp_server_id = sqlc.narg('mcp_server_id')::uuid)
-      OR (ps.toolset_id = sqlc.narg('legacy_toolset_id')::uuid)
-      OR (ps.mcp_server_id IN (
-        SELECT m.id FROM mcp_servers m
-        WHERE m.toolset_id = sqlc.narg('toolset_id')::uuid
-          AND m.project_id = @project_id AND m.deleted IS FALSE
-      ))
-      OR (ps.toolset_id IN (
-        SELECT m.toolset_id FROM mcp_servers m
-        WHERE m.id = sqlc.narg('mcp_server_id')::uuid
-          AND m.project_id = @project_id AND m.deleted IS FALSE
-      ))
+    AND ((ps.mcp_server_id = sqlc.narg('mcp_server_id')::uuid)
       OR (ps.mcp_server_id IN (
         SELECT m.id FROM mcp_servers m
         WHERE m.toolset_id = sqlc.narg('legacy_toolset_id')::uuid
@@ -1386,7 +1283,7 @@ WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FAL
 FOR SHARE;
 
 -- name: ListRolePluginsForResource :many
--- Live contents only; a legacy toolset is equivalent only to its sole active wrapper.
+-- Live contents only.
 SELECT DISTINCT a.principal_urn, p.id AS plugin_id, p.name, p.slug
 FROM plugins p
 JOIN plugin_assignments a ON a.plugin_id = p.id AND a.organization_id = p.organization_id
@@ -1396,11 +1293,9 @@ WHERE p.organization_id = @organization_id AND p.project_id = @project_id
   AND a.principal_urn = ANY(@principal_urns::text[])
   AND (
     EXISTS (SELECT 1 FROM mcp_servers m WHERE m.id = @resource_id AND m.project_id = p.project_id AND m.deleted IS FALSE
-      AND (ps.mcp_server_id = m.id OR (ps.toolset_id = m.toolset_id AND m.visibility <> 'disabled'
-        AND EXISTS (SELECT 1 FROM toolsets t WHERE t.id = m.toolset_id AND t.project_id = p.project_id AND t.organization_id = p.organization_id AND t.deleted_at IS NULL)
-        AND NOT EXISTS (SELECT 1 FROM mcp_servers other WHERE other.toolset_id = m.toolset_id AND other.id <> m.id AND other.deleted IS FALSE AND other.visibility <> 'disabled' AND other.project_id = p.project_id))))
+      AND ps.mcp_server_id = m.id)
     OR EXISTS (SELECT 1 FROM toolsets t WHERE t.id = @resource_id AND t.project_id = p.project_id AND t.organization_id = p.organization_id AND t.deleted_at IS NULL
-      AND (ps.toolset_id = t.id OR EXISTS (SELECT 1 FROM mcp_servers m WHERE m.id = ps.mcp_server_id AND m.toolset_id = t.id AND m.project_id = p.project_id AND m.deleted IS FALSE AND m.visibility <> 'disabled')))
+      AND EXISTS (SELECT 1 FROM mcp_servers m WHERE m.id = ps.mcp_server_id AND m.toolset_id = t.id AND m.project_id = p.project_id AND m.deleted IS FALSE AND m.visibility <> 'disabled'))
     OR EXISTS (SELECT 1 FROM meta_mcp_servers m WHERE m.id = @resource_id AND m.id = ps.meta_mcp_server_id AND m.project_id = p.project_id AND m.deleted IS FALSE)
   )
 ORDER BY a.principal_urn, p.name, p.id;
@@ -1425,7 +1320,7 @@ WHERE p.organization_id = @organization_id AND p.id = @project_id
 -- name: ListPlatformCleanupMemberships :many
 -- Exact membership audit provenance only. Initiating-user Default attachments
 -- and manually updated entries remain ambiguous and must never be auto-cleaned.
-SELECT sqlc.embed(ps),
+SELECT ps.id, ps.plugin_id, ps.project_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted,
   (EXISTS (
     SELECT 1 FROM audit_logs a
     WHERE a.organization_id = @organization_id AND a.project_id = @project_id
@@ -1447,8 +1342,8 @@ LEFT JOIN mcp_servers m ON m.id = ps.mcp_server_id AND m.project_id = @project_i
 WHERE p.organization_id = @organization_id AND p.project_id = @project_id
   AND project.organization_id = @organization_id AND project.deleted IS FALSE
   AND p.deleted IS FALSE AND ps.deleted IS FALSE
-  AND (ps.toolset_id IS NOT NULL OR m.toolset_id IS NOT NULL)
-  AND (sqlc.narg('toolset_id')::uuid IS NULL OR ps.toolset_id = sqlc.narg('toolset_id')::uuid OR m.toolset_id = sqlc.narg('toolset_id')::uuid)
+  AND m.toolset_id IS NOT NULL
+  AND (sqlc.narg('toolset_id')::uuid IS NULL OR m.toolset_id = sqlc.narg('toolset_id')::uuid)
   AND (cardinality(@membership_ids::uuid[]) = 0 OR ps.id = ANY(@membership_ids::uuid[]))
   AND ps.id > @after_id::uuid
 ORDER BY ps.id
@@ -1478,4 +1373,4 @@ WHERE ps.id = @id AND ps.plugin_id = @plugin_id AND ps.deleted IS FALSE
   AND p.organization_id = @organization_id AND p.project_id = @project_id
   AND project.id = p.project_id AND project.organization_id = @organization_id
   AND project.deleted IS FALSE
-RETURNING ps.*;
+RETURNING ps.id, ps.plugin_id, ps.project_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted;

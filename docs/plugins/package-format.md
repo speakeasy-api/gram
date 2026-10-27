@@ -78,8 +78,7 @@ When plugins are published, all platform configs land in a single repo. The root
 │
 └── agent-plugins/<plugin-slug>/       # Portable Agent Plugins 1.0 package
     ├── .cursor-plugin/plugin.json     # Native Cursor overlay
-    ├── .codex-plugin/plugin.json      # Native Codex overlay
-    ├── .mcp.json                      # Native Codex MCP config
+    ├── .mcp.json                      # Native Cursor MCP config
     ├── plugin.json
     ├── mcp.json
     └── skills/
@@ -90,7 +89,12 @@ Cursor plugins are grouped under the `cursor-plugins/` subdirectory, declared vi
 then resolved relative to that root (bare names, no `./` prefix).
 
 Compatible plugins are also published under `agent-plugins/` without changing the
-native Cursor or Codex marketplace entries.
+native Cursor or Codex marketplace entries. Codex must install the native
+`<plugin-slug>-codex/` package (or `speakeasy-codex/` for Platform MCP), not
+the portable package: its AP1.0 manifest selects Codex's restricted Agent Plugins
+tool budget. The portable package retains its Cursor overlay and MCP config,
+but does not include a Codex overlay. Native Codex ZIP downloads likewise have
+no root AP1.0 manifest; the explicit `agent-plugin` ZIP remains AP1.0.
 
 ## Marketplace manifests
 

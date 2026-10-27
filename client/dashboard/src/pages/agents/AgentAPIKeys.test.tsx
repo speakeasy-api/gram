@@ -459,7 +459,8 @@ describe("Agent API keys", () => {
     // The env-var recipes name a variable, so they must also set it. Without
     // the export line a copied recipe points at nothing.
     expect(
-      screen.getAllByText(/export GRAM_AGENT_KEY='secret_example_once'/).length,
+      screen.getAllByText(/export SPEAKEASY_AGENT_KEY='secret_example_once'/)
+        .length,
     ).toBeGreaterThan(0);
   });
 

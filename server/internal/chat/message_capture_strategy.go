@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"log/slog"
 	"strings"
 
@@ -65,7 +66,7 @@ func NewChatMessageCaptureStrategy(
 
 func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request openrouter.CompletionRequest) (openrouter.CaptureSession, error) {
 	chatID := request.ChatID
-	if chatID == uuid.Nil {
+	if chatID == uuid.Nil || assistanttokens.InferenceTranscriptOwned(ctx) {
 		return nil, nil // No chat ID, so no need to start or resume a chat
 	}
 
@@ -129,6 +130,16 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 	}
 
 	rows := buildPendingRows(request, projectID, userID, externalUserID, newMessages, generation)
+	if matchResult.diverged {
+		slots := make([]messageSlot, len(newMessages))
+		for i, message := range newMessages {
+			slots[i] = slotFromIncoming(message)
+		}
+		lineages := transcriptLineage(matchResult.previous, slots, false)
+		for i := range rows {
+			rows[i].lineage = lineages[i]
+		}
+	}
 
 	if err := s.writer.WriteWithAssets(ctx, projectID, rows); err != nil {
 		s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
@@ -151,6 +162,7 @@ type matchResult struct {
 	generation    int32
 	matchedPrefix int
 	diverged      bool
+	previous      []repo.ListChatMessagesForMatchRow
 }
 
 // matchIncomingAgainstStored finds the longest matching prefix between
@@ -223,6 +235,7 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		generation:    currentGen,
 		matchedPrefix: ii,
 		diverged:      diverged,
+		previous:      stored,
 	}, nil
 }
 
@@ -283,6 +296,7 @@ func buildPendingRows(
 			completionTokens: 0,
 			totalTokens:      0,
 			generation:       generation,
+			lineage:          nil,
 		}
 	}
 	return rows
@@ -296,7 +310,7 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	response openrouter.CompletionResponse,
 ) error {
 	// Skip if no chat ID
-	if request.ChatID == uuid.Nil {
+	if request.ChatID == uuid.Nil || assistanttokens.InferenceTranscriptOwned(ctx) {
 		return nil
 	}
 
@@ -428,15 +442,17 @@ func buildAssistantRows(
 
 	assistantID, workloadSource := messageReadingAttribution(ctx, request.UsageSource)
 	return []MessageWrite{{
-		Params:         only,
-		BillingUserID:  request.UserID,
-		AssistantID:    assistantID,
-		WorkloadSource: workloadSource,
-		UserEmail:      request.UserEmail,
-		Provider:       response.Provider,
-		HookHostname:   "",
-		AccountType:    "",
-		BillingMode:    "",
+		Params:            only,
+		BillingUserID:     request.UserID,
+		AssistantID:       assistantID,
+		WorkloadSource:    workloadSource,
+		UserEmail:         request.UserEmail,
+		Provider:          response.Provider,
+		InferenceProvider: response.Provider,
+		Lineage:           nil,
+		HookHostname:      "",
+		AccountType:       "",
+		BillingMode:       "",
 	}}
 }
 

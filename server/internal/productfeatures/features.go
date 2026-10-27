@@ -52,9 +52,21 @@ const (
 	// FeatureSignalsIntelligence gates signals intelligence configuration access.
 	FeatureSignalsIntelligence Feature = "signals_intelligence"
 	// FeatureOrganizationGatewayDisabled turns the organization gateway off:
-	// while set, every gateway route answers 404. Stored inverted so the
-	// gateway stays on for every organization that never touched it.
+	// while set, every gateway route answers 404. Unconfigured organizations
+	// also default off; a soft-deleted flag records explicit opt-in.
 	FeatureOrganizationGatewayDisabled Feature = "organization_gateway_disabled"
+	// FeatureCodeMode is the staff-managed entitlement for gateway Code Mode.
+	// Code Mode runs customer Python on Speakeasy-operated runners, so it is
+	// enabled per organization rather than for every organization on a
+	// deployment with the runtime configured. Without it, Code Mode gateways
+	// serve Progressive discovery.
+	FeatureCodeMode Feature = "code_mode"
+	// FeatureUpstreamAuthEnforced serves the organization's direct proxied
+	// servers through the typed auth client resolver and requires mcp:auth on
+	// the chosen auth client. Staff turn it on through the admin enforcement
+	// endpoint once the organization's readiness checks pass, so it is left out
+	// of the productFeatures.set enum and cannot be toggled there.
+	FeatureUpstreamAuthEnforced Feature = "upstream_auth_enforced"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set
@@ -94,6 +106,9 @@ func (f FeatureCache) CacheKey() string {
 }
 
 func FeatureCacheKey(organizationID string, feature Feature) string {
+	if feature == FeatureOrganizationGatewayDisabled {
+		return fmt.Sprintf("feature:v2:%s:%s", organizationID, string(feature))
+	}
 	return fmt.Sprintf("feature:%s:%s", organizationID, string(feature))
 }
 

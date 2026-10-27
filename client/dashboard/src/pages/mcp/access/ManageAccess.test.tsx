@@ -5,11 +5,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
 // whole point, so the tests assert the payload rather than the rendering alone.
-const { mutate, mutationOptions, invalidate, permission } = vi.hoisted(() => ({
-  mutate: vi.fn(),
-  mutationOptions: vi.fn(),
-  invalidate: vi.fn(),
-  permission: { admin: true },
+const { mutate, mutationOptions, invalidate, permission, directory } =
+  vi.hoisted(() => ({
+    mutate: vi.fn(),
+    mutationOptions: vi.fn(),
+    invalidate: vi.fn(),
+    permission: { admin: true },
+    // The directory role mappings the list reads, when it reads them.
+    directory: {
+      data: undefined as unknown,
+      enabled: vi.fn(),
+    },
+  }));
+
+vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
+  useDirectoryRoleMappings: (
+    _request: unknown,
+    _security: unknown,
+    options: { enabled?: boolean },
+  ) => {
+    directory.enabled(options.enabled);
+    // Like react-query, a disabled query still returns what it cached.
+    return { data: directory.data };
+  },
 }));
 
 vi.mock("@gram/client/react-query/setResourceAudience.js", () => ({
@@ -76,7 +94,7 @@ vi.mock("@gram/client/react-query/audienceOptions.js", () => ({
 }));
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({}),
+  useQueryClient: () => ({ invalidateQueries: invalidate }),
 }));
 
 vi.mock("react-router", () => ({
@@ -93,6 +111,7 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     plugins: { detail: { href: (id: string) => `/org/plugins/${id}` } },
     access: { roles: { href: () => "/org/access/roles" } },
+    identity: { href: () => "/org/identity" },
   }),
 }));
 
@@ -119,6 +138,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   permission.admin = true;
+  directory.data = undefined;
 });
 
 function entry(
@@ -369,7 +389,8 @@ describe("the access list", () => {
       ],
     });
     await mutationOptions.mock.calls.at(-1)![0].onSuccess();
-    expect(invalidate).toHaveBeenCalledTimes(4);
+    expect(invalidate).toHaveBeenCalledTimes(5);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["mcpAssignments"] });
   });
 
   it("says when nobody reaches the server", () => {
@@ -437,6 +458,55 @@ describe("what a row change writes", () => {
         .entries.map((e: { level: string }) => e.level)
         .sort(),
     ).toEqual(["blocked", "blocked_manage", "blocked_view"]);
+  });
+});
+
+describe("a blocking role", () => {
+  const engineering = {
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineering",
+  } as const;
+
+  it("reads as blocked rather than as no access", () => {
+    renderList([
+      entry({ ...engineering, level: "blocked" }),
+      entry({ ...engineering, level: "blocked_view" }),
+      entry({ ...engineering, level: "blocked_manage" }),
+    ]);
+
+    // The collapsed row says it, not only the lines inside it.
+    expect(screen.getAllByText("Blocked").length).toBeGreaterThan(0);
+    expandFirstRow();
+    expect(screen.getAllByRole("button", { name: /^Blocked/ })).toHaveLength(3);
+    expect(screen.queryByText("No access")).toBeNull();
+  });
+
+  it("names the choice that writes a block as blocked", () => {
+    renderList([entry({ ...engineering, appliesTo: "all_resources" })]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /All tools/ }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+
+    expect(screen.getByRole("menuitem", { name: "Blocked" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "No access" })).toBeNull();
+  });
+
+  it("keeps no access for a choice that only removes the role's own rule", () => {
+    renderList([entry({ ...engineering })]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /All tools/ }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+
+    expect(screen.getByRole("menuitem", { name: "No access" })).toBeTruthy();
   });
 });
 
@@ -583,6 +653,107 @@ describe("role plugin distribution", () => {
     expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
     expect(screen.queryByText("Distributed via")).toBeNull();
     expect(screen.getByRole("link", { name: "Engineering" })).toBeDefined();
+  });
+});
+
+describe("directory sources on role rows", () => {
+  const role = entry({
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineer",
+  });
+  const mapping = (
+    id: string,
+    overrides: Record<string, unknown>,
+  ): Record<string, unknown> => ({
+    id,
+    roleUrn: role.principalUrn,
+    sourceStatus: "active",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    directory.data = {
+      groups: [{ id: "group-1", name: "Platform", memberCount: 3 }],
+      attributes: [{ key: "department", value: "Sales", memberCount: 2 }],
+      mappings: [
+        mapping("m1", {
+          sourceKind: "group",
+          directoryGroupId: "group-1",
+          directoryGroupName: "Platform",
+        }),
+        mapping("m2", {
+          sourceKind: "attribute",
+          attributeKey: "department",
+          attributeValue: "Sales",
+        }),
+        mapping("m3", {
+          sourceKind: "group",
+          directoryGroupId: "group-gone",
+          directoryGroupName: "Contractors",
+          sourceStatus: "missing",
+        }),
+        mapping("m4", {
+          sourceKind: "group",
+          directoryGroupId: "group-1",
+          roleUrn: "role:global:other",
+        }),
+      ],
+    };
+  });
+
+  it("names the sources giving out the role and links a removed one to review", () => {
+    renderList([role]);
+    expect(
+      screen.getByText(
+        "Via directory: Platform, department = Sales · 1 removed source",
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("link", { name: "Review" }).getAttribute("href"),
+    ).toBe("/org/identity");
+  });
+
+  it("offers no review link while every source is live", () => {
+    directory.data = {
+      ...(directory.data as object),
+      mappings: (directory.data as { mappings: unknown[] }).mappings.slice(
+        0,
+        2,
+      ),
+    };
+    renderList([role]);
+    expect(
+      screen.getByText("Via directory: Platform, department = Sales"),
+    ).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
+  });
+
+  it("does not read or show the mappings for someone who is not an administrator", () => {
+    permission.admin = false;
+    renderList([role]);
+    expect(directory.enabled).toHaveBeenCalledWith(false);
+    expect(screen.queryByText(/Via directory/)).toBeNull();
+  });
+
+  it("hides cached mappings immediately after permission downgrade", () => {
+    const { rerender } = renderList([role]);
+    expect(screen.getByText(/Via directory/)).toBeDefined();
+    permission.admin = false;
+    rerender(
+      <TooltipProvider>
+        <ManageAccess
+          resourceId="server-1"
+          resourceName="Acme Ops"
+          entries={[role]}
+          version="v1"
+          isLoading={false}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByText(/Via directory/)).toBeNull();
   });
 });
 

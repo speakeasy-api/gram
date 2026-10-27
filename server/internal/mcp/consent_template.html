@@ -246,8 +246,7 @@
             </summary>
             <div class="flex flex-col gap-3 px-6 pt-4 pb-6 sm:px-8">
               <p class="text-xs text-muted-foreground">
-                A server that needs you to sign in works as soon as you connect
-                it, now or the first time you use it.
+                {{if .ShowToolsIsland}}Only servers verified at consent are included. If access or a connection changes, reload this page to review it.{{else}}Connect a server that needs you to sign in before using it.{{end}}
               </p>
               <ul class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0">
                 {{range .Gateway.Servers}}
@@ -650,17 +649,25 @@
         </div>
         {{end}}
 
+        {{with .ApprovalError}}
+        <div role="alert" class="border-b px-6 py-6 text-sm sm:px-8">
+          <p>{{.Message}}</p>
+          {{if .ActionURL}}<a class="underline" href="{{.ActionURL}}">{{.ActionLabel}}</a>{{end}}
+        </div>
+        {{end}}
         {{if .ShowToolsIsland}}
         <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <h2 class="text-eyebrow">Tool access</h2>
           <div
             id="consent-tools-root"
+            data-gateway-inventory="{{.GatewayInventory}}"
             data-tools-url="{{.ConsentToolsURL}}"
             data-state="{{.State}}"
             data-csrf-token="{{.CSRFToken}}"
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
+            data-gateway="{{if .ShowDiscoveryMode}}true{{else}}false{{end}}"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
             data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
@@ -670,8 +677,9 @@
             aria-live="polite"
           >
             <p class="text-sm text-muted-foreground">
-              Loading available tools…
+              Loading tool choices. Approval is unavailable until they appear.
             </p>
+            <noscript>To choose tools, enable JavaScript and reload this page.</noscript>
           </div>
         </div>
         {{end}}
@@ -742,7 +750,8 @@
                 </select>
               </dd>
             </div>
-            {{end}} {{if .ShowDiscoveryMode}}
+            {{end}}
+            {{if .ShowDiscoveryMode}}
             <div data-agent-self-only>
               <dt class="text-eyebrow">Tool discovery</dt>
               <dd class="mt-1 ml-0">
@@ -753,21 +762,35 @@
                   aria-describedby="discovery-mode-help"
                   class="bg-card border px-2 py-1.5 font-mono text-sm"
                 >
-                  <option value="">Use gateway default</option>
+                  <option value="">{{if .GatewayDefaultMode}}Gateway default ({{.GatewayDefaultMode}}){{else}}Use gateway default{{end}}</option>
                   <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
                   <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
+                  {{if .ShowCodeMode}}<option value="code_mode"{{if eq .PrefillDiscoveryMode "code_mode"}} selected{{end}}>Code Mode</option>{{end}}
                 </select>
                 <p
                   id="discovery-mode-help"
                   class="text-muted-foreground mt-2 text-sm"
                 >
-                  Progressive discovers tools as needed. Direct lists every
-                  available tool. Use Direct if your client cannot discover
-                  tools progressively.
+                  Progressive discovers tools as needed, starting from
+                  <code>list_servers</code>. Direct lists every available tool
+                  as a qualified <code>server--tool</code> name. Use Direct if
+                  your client cannot discover tools progressively. {{if .ShowCodeMode}}Code Mode exposes one execute tool to discover and call tools using Python, with <code>tools.search</code>, <code>tools.describe</code> and <code>tools.call</code>.{{end}}
                 </p>
               </dd>
             </div>
-            {{end}} {{if .RemoteSessionCards}}
+            {{else if .GatewayDefaultMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">{{.GatewayDefaultMode}} (gateway default). Connections without an override follow this setting.</dd>
+            </div>
+            {{end}}
+            {{if .CodeModeUnavailable}}
+            <div data-agent-self-only>
+              <dt class="sr-only">Code Mode unavailable</dt>
+              <dd class="ml-0 text-muted-foreground text-sm">The code runtime is unavailable. Progressive discovery is available for this connection.</dd>
+            </div>
+            {{end}}
+            {{if .RemoteSessionCards}}
             <div>
               <dt class="text-eyebrow">Auto refresh</dt>
               <dd class="mt-1 ml-0">
@@ -870,7 +893,7 @@
             >
               Give access
             </button>
-            {{if and (not .ConsentEnabled) (not .ShowToolsIsland)}}
+            {{if and (not .ConsentEnabled) (not .ShowToolsIsland) (not .ApprovalError)}}
             <p data-agent-self-only class="text-muted-foreground mt-2 text-xs">
               Connect a service above to enable access.
             </p>

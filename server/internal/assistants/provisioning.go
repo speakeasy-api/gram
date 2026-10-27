@@ -372,6 +372,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,

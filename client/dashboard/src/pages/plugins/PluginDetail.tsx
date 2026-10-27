@@ -253,19 +253,22 @@ function PluginDetailContent({
     [toolsetsData?.toolsets],
   );
 
-  // Remote MCP-backed mcp_servers for this project. All of them back the
-  // cards of already-attached plugin servers (an attached server that's been
-  // disabled or lost its endpoints must still resolve for display), while
-  // only non-disabled servers with at least one endpoint are publishable —
-  // mirroring the backend's AddPluginServer check, so the picker never
-  // offers a server the API would reject.
+  // Remote MCP-backed and built-in mcp_servers for this project. All of
+  // them back the cards of already-attached plugin servers (an attached
+  // server that's been disabled or lost its endpoints must still resolve for
+  // display), while only non-disabled servers with at least one endpoint are
+  // publishable, mirroring the backend's AddPluginServer check, so the picker
+  // never offers a server the API would reject.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } = serversQuery;
   const { data: mcpEndpointsData, isLoading: isLoadingMcpEndpoints } =
     endpointsQuery;
   const mcpServers = useMemo(
     () =>
       (mcpServersData?.mcpServers ?? []).filter(
-        (s) => !!s.remoteMcpServerId || !!s.unproxiedMcpServerId,
+        (s) =>
+          !!s.remoteMcpServerId ||
+          !!s.unproxiedMcpServerId ||
+          !!s.builtinBackend,
       ),
     [mcpServersData],
   );
@@ -592,9 +595,11 @@ function PluginDetailContent({
         o.kind === "mcpServer" ? mcpServerById.get(o.id) : undefined;
       const kindLabel = toolset
         ? "Hosted"
-        : mcpServer?.unproxiedMcpServerId
-          ? "Unproxied"
-          : "Remote";
+        : mcpServer?.builtinBackend
+          ? "Built-in"
+          : mcpServer?.unproxiedMcpServerId
+            ? "Unproxied"
+            : "Remote";
       const slug = toolset?.slug ?? mcpServer?.slug;
       // Mirrors AddPluginServer: a hosted server needs MCP on and an MCP slug.
       const mcpOff = !!toolset && !toolset.mcpEnabled;
@@ -1405,7 +1410,7 @@ function PluginServerCard({
 }) {
   const routes = useRoutes();
 
-  // Hosted rows resolve to their toolset under either key; anything else is remote.
+  // Hosted rows resolve to their toolset; other MCP server rows are remote.
   const isRemote =
     !!server.mcpServerId &&
     !toolset &&
@@ -1423,9 +1428,10 @@ function PluginServerCard({
     // Remote MCP servers live on the mcp_servers-backed details page (x/);
     // toolset-backed servers use the toolset details page.
     if (isRemote) {
-      if (mcpServer) routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+      if (mcpServer)
+        routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
     } else if (toolset) {
-      routes.mcp.details.goTo(toolset.slug);
+      routes.toolset.goTo(toolset.slug);
     }
   };
 
@@ -1471,9 +1477,15 @@ function PluginServerCard({
             // Remote/unproxied MCP servers have no Speakeasy-side tool
             // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
-              {mcpServer?.unproxiedMcpServerId
-                ? "Unproxied MCP · Not proxied"
-                : "Remote MCP"}
+              {mcpServer?.builtinBackend
+                ? "Built-in"
+                : mcpServer?.unproxiedMcpServerId
+                  ? "Unproxied MCP · Not proxied"
+                  : "Remote MCP"}
+            </Badge>
+          ) : server.metaMcpServerId ? (
+            <Badge variant="neutral" className="text-xs">
+              Gateway
             </Badge>
           ) : metadataUnavailable ? (
             <Badge variant="neutral" className="text-xs">
@@ -1483,11 +1495,7 @@ function PluginServerCard({
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
           ) : isLoading ? (
             <Skeleton className="h-5 w-16" />
-          ) : (
-            <Badge variant="destructive" className="text-xs">
-              Toolset missing
-            </Badge>
-          )}
+          ) : null}
         </div>
       </div>
 

@@ -65,6 +65,13 @@ func testServerHealth() *gen.AdminMcpServerHealth {
 				testHealthClient(testHealthOtherID, "cimd"),
 			},
 		},
+		UpstreamAuth: &gen.AdminMcpServerHealthUpstreamAuth{
+			Status: "configured", RequiresUpstreamAuth: new(true),
+			AuthClients: []*gen.AdminMcpServerHealthAuthClient{{
+				ID: testHealthOtherID, ClientType: "service_account", Source: "backfill", Enabled: true,
+				RemoteSessionClientID: new(testHealthClientID), ServerCount: 2, HeaderCount: 1,
+			}},
+		},
 	}
 }
 
@@ -159,6 +166,11 @@ func TestDescribeMCPServerHealthExactTargetAndProjection(t *testing.T) {
 	require.Equal(t, "https://idp.example.test", client.Issuer.Issuer)
 	require.Equal(t, "2026-08-01T00:00:00Z", *client.Issuer.MetadataLastErrorAt)
 	require.Equal(t, MCPServerHealthOutcomes{Success: 90, Unauthorized: 5, ClientError: 2, ServerError: 1, Blocked: 1, Failed: 1}, *output.ToolCalls.Outcomes)
+	require.NotNil(t, output.UpstreamAuth)
+	require.Equal(t, MCPServerHealthUpstream{Status: "configured", RequiresUpstreamAuth: new(true), AuthClients: []MCPServerHealthAuthClient{{
+		ID: testHealthOtherID, ClientType: "service_account", Source: "backfill", Enabled: true,
+		RemoteSessionClientID: new(testHealthClientID), ServerCount: 2, HeaderCount: 1,
+	}}}, *output.UpstreamAuth)
 
 	// The daily series and bucket width are service-only.
 	require.NotContains(t, string(data), "daily")
@@ -193,13 +205,13 @@ func TestDescribeMCPServerHealthLegacyAndLoggingDisabled(t *testing.T) {
 	t.Parallel()
 	reads := testServerHealthReads()
 	reads.health.UserSessionIssuer = nil
-	reads.health.LegacyAuth = new("oauth_proxy")
+	reads.health.LegacyAuth = new("external_oauth")
 	reads.calls = &gen.AdminMcpServerToolCalls{Type: "logging:disabled"}
 	body, data, isError := callServerHealthTool(t, reads, nil, healthArgs(""))
 	require.False(t, isError, body)
 	var output MCPServerHealth
 	require.NoError(t, json.Unmarshal(data, &output))
-	require.Equal(t, "oauth_proxy", *output.LegacyAuth)
+	require.Equal(t, "external_oauth", *output.LegacyAuth)
 	require.Nil(t, output.UserSessionIssuer)
 	require.Equal(t, MCPServerHealthToolCalls{Type: "logging:disabled"}, output.ToolCalls)
 }
@@ -290,20 +302,23 @@ func TestDescribeMCPServerHealthFailsClosedOnMalformedResults(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("x", maxHealthValueLength+1)
 	cases := map[string]func(*gen.AdminMcpServerHealth){
-		"nil result":            nil,
-		"nil server":            func(h *gen.AdminMcpServerHealth) { h.Server = nil },
-		"other server":          func(h *gen.AdminMcpServerHealth) { h.Server.ID = testHealthOtherID },
-		"unknown source":        func(h *gen.AdminMcpServerHealth) { h.Server.Source = "other" },
-		"long name":             func(h *gen.AdminMcpServerHealth) { h.Server.Name = long },
-		"bad created_at":        func(h *gen.AdminMcpServerHealth) { h.Server.CreatedAt = "yesterday" },
-		"empty url slug":        func(h *gen.AdminMcpServerHealth) { h.Correlation.URLSlug = new("") },
-		"long url slug":         func(h *gen.AdminMcpServerHealth) { h.Correlation.URLSlug = new(long) },
-		"missing mcp server id": func(h *gen.AdminMcpServerHealth) { h.Correlation.McpServerID = nil },
-		"other mcp server id":   func(h *gen.AdminMcpServerHealth) { h.Correlation.McpServerID = new(testHealthOtherID) },
-		"toolset_only with id":  func(h *gen.AdminMcpServerHealth) { h.Server.Source = "toolset_only" },
-		"empty toolset slug":    func(h *gen.AdminMcpServerHealth) { h.Correlation.ToolsetSlug = new("") },
-		"nil scope":             func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.RemoteSessionClients[0].Scope = nil },
-		"nil grant types":       func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.RemoteSessionClients[0].GrantTypes = nil },
+		"nil result":               nil,
+		"nil server":               func(h *gen.AdminMcpServerHealth) { h.Server = nil },
+		"unknown upstream status":  func(h *gen.AdminMcpServerHealth) { h.UpstreamAuth.Status = "maybe" },
+		"unknown auth client type": func(h *gen.AdminMcpServerHealth) { h.UpstreamAuth.AuthClients[0].ClientType = "magic" },
+		"auth client on no server": func(h *gen.AdminMcpServerHealth) { h.UpstreamAuth.AuthClients[0].ServerCount = 0 },
+		"other server":             func(h *gen.AdminMcpServerHealth) { h.Server.ID = testHealthOtherID },
+		"unknown source":           func(h *gen.AdminMcpServerHealth) { h.Server.Source = "other" },
+		"long name":                func(h *gen.AdminMcpServerHealth) { h.Server.Name = long },
+		"bad created_at":           func(h *gen.AdminMcpServerHealth) { h.Server.CreatedAt = "yesterday" },
+		"empty url slug":           func(h *gen.AdminMcpServerHealth) { h.Correlation.URLSlug = new("") },
+		"long url slug":            func(h *gen.AdminMcpServerHealth) { h.Correlation.URLSlug = new(long) },
+		"missing mcp server id":    func(h *gen.AdminMcpServerHealth) { h.Correlation.McpServerID = nil },
+		"other mcp server id":      func(h *gen.AdminMcpServerHealth) { h.Correlation.McpServerID = new(testHealthOtherID) },
+		"toolset_only with id":     func(h *gen.AdminMcpServerHealth) { h.Server.Source = "toolset_only" },
+		"empty toolset slug":       func(h *gen.AdminMcpServerHealth) { h.Correlation.ToolsetSlug = new("") },
+		"nil scope":                func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.RemoteSessionClients[0].Scope = nil },
+		"nil grant types":          func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.RemoteSessionClients[0].GrantTypes = nil },
 		"nil validation counts": func(h *gen.AdminMcpServerHealth) {
 			h.UserSessionIssuer.RemoteSessionClients[0].Sessions.ValidationStatusCounts = nil
 		},
@@ -325,6 +340,13 @@ func TestDescribeMCPServerHealthFailsClosedOnMalformedResults(t *testing.T) {
 		},
 		"too many clients": func(h *gen.AdminMcpServerHealth) {
 			h.UserSessionIssuer.RemoteSessionClients = make([]*gen.AdminMcpServerHealthRemoteSessionClient, maxHealthClients+1)
+		},
+		"too many auth clients": func(h *gen.AdminMcpServerHealth) {
+			clients := make([]*gen.AdminMcpServerHealthAuthClient, maxHealthClients+1)
+			for i := range clients {
+				clients[i] = &gen.AdminMcpServerHealthAuthClient{ID: testHealthOtherID, ClientType: "service_account", Source: "backfill", Enabled: true, ServerCount: 1}
+			}
+			h.UpstreamAuth.AuthClients = clients
 		},
 		"nil client":           func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.RemoteSessionClients[0] = nil },
 		"unknown registration": func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.RemoteSessionClients[0].Registration = "manual" },

@@ -17,6 +17,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
@@ -74,6 +75,11 @@ func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) worklo
 // is serverURL, or the harness default when empty.
 func newWorkloadGrantFixtureOn(t *testing.T, logger *slog.Logger, serverURL string) workloadGrantFixture {
 	t.Helper()
+	return newWorkloadGrantFixtureWithPool(t, logger, serverURL, nil)
+}
+
+func newWorkloadGrantFixtureWithPool(t *testing.T, logger *slog.Logger, serverURL string, configurePool func(*pgxpool.Config)) workloadGrantFixture {
+	t.Helper()
 
 	issuer := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil, TLS: true})
 	jwksURI := oauthtest.DiscoverWorkloadJWKSURI(t, issuer)
@@ -84,7 +90,7 @@ func newWorkloadGrantFixtureOn(t *testing.T, logger *slog.Logger, serverURL stri
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		MaxRequestLifetime: 0,
-	}, nil, nil, true, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0}, testenv.NewTracerProvider(t), nil, nil, serverURL, guardian.WithTLSRootCAs(issuer.RootCAs()))
+	}, nil, configurePool, true, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0}, testenv.NewTracerProvider(t), nil, nil, serverURL, guardian.WithTLSRootCAs(issuer.RootCAs()))
 	fx := newWorkloadConsentFixture(t, ctx, ti)
 
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")

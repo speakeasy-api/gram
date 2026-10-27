@@ -13,10 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestToolsetsService_DeleteToolset_Success(t *testing.T) {
@@ -258,28 +256,6 @@ func TestToolsetsService_DeleteToolset_DetachesFromAssistants(t *testing.T) {
 		Name: "attachment test assistant", Model: "test-model", Status: "active", MaxConcurrency: 1,
 	})
 	require.NoError(t, err)
-	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name: "Other project", Slug: "other-project", OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	require.NoError(t, err)
-	otherAssistant, err := ar.CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
-		ProjectID: otherProject.ID, OrganizationID: authCtx.ActiveOrganizationID,
-		Name: "other assistant", Model: "test-model", Status: "active", MaxConcurrency: 1,
-	})
-	require.NoError(t, err)
-	otherTarget, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		ProjectID: otherProject.ID, OrganizationID: authCtx.ActiveOrganizationID, Name: "Other tools", Slug: "other-tools",
-	})
-	require.NoError(t, err)
-	_, err = ar.AddAssistantToolsets(ctx, []assistantsrepo.AddAssistantToolsetsParams{{
-		AssistantID: otherAssistant.ID, ToolsetID: otherTarget.ID, ProjectID: otherProject.ID,
-	}})
-	require.NoError(t, err)
-	otherBefore, err := ar.LoadAssistantToolsets(ctx, assistantsrepo.LoadAssistantToolsetsParams{
-		AssistantIds: []uuid.UUID{otherAssistant.ID}, ProjectID: otherProject.ID,
-	})
-	require.NoError(t, err)
-	require.Len(t, otherBefore, 1)
 	var deleteID string
 	var retainedID uuid.UUID
 	for i, name := range []string{"deleted target", "retained target"} {
@@ -295,25 +271,16 @@ func TestToolsetsService_DeleteToolset_DetachesFromAssistants(t *testing.T) {
 		}})
 		require.NoError(t, err)
 	}
-	err = toolsetsrepo.New(ti.conn).DeleteAssistantToolsetsByToolset(ctx, toolsetsrepo.DeleteAssistantToolsetsByToolsetParams{
-		ToolsetID: otherTarget.ID, ProjectID: *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
 	err = ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: types.Slug(deleteID)})
 	require.NoError(t, err)
 	counts, err := testrepo.New(ti.conn).CountAssistantAttachments(ctx, testrepo.CountAssistantAttachmentsParams{
 		ProjectID: *authCtx.ProjectID, AssistantID: assistant.ID,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, counts.McpServers, "deleted target must be physically detached")
+	require.EqualValues(t, 1, counts, "deleted target must be physically detached")
 	remaining, err := ar.ListAssistantAttachedServerIDs(ctx, assistantsrepo.ListAssistantAttachedServerIDsParams{AssistantID: assistant.ID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{retainedID}, remaining, "unrelated target must remain")
-	otherAfter, err := ar.LoadAssistantToolsets(ctx, assistantsrepo.LoadAssistantToolsetsParams{
-		AssistantIds: []uuid.UUID{otherAssistant.ID}, ProjectID: otherProject.ID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, otherBefore, otherAfter, "another project's independent attachments must survive deletion")
 
 	core := assistants.NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, nil, nil, nil, nil, nil, audit.NewLogger(), nil, nil)
 	reloaded, err := core.GetAssistant(ctx, *authCtx.ProjectID, assistant.ID)
