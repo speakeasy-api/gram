@@ -136,6 +136,7 @@
       body.set("action", toggle.value);
       toggle.disabled = true;
       visibilityError.hidden = true;
+      var moved = false;
       try {
         var response = await fetch(visibilityForm.getAttribute("action"), {
           method: "POST",
@@ -145,6 +146,7 @@
         });
         if (!response.ok) throw new Error(String(response.status));
         moveGatewayRow(visibilityForm.closest("[data-gateway-server]"), hide);
+        moved = true;
         refreshGatewayCounts();
       } catch (_) {
         visibilityError.textContent =
@@ -152,6 +154,7 @@
         visibilityError.hidden = false;
       } finally {
         toggle.disabled = false;
+        if (moved) toggle.focus();
       }
     });
   }

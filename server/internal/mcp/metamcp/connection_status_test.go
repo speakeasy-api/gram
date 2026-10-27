@@ -58,3 +58,20 @@ func TestConnectionStatusText_WithoutHiddenOmitsShowLine(t *testing.T) {
 	require.Contains(t, text, "1 of 1 server ready.")
 	require.NotContains(t, text, "hidden")
 }
+
+func TestIsConnectionStatusResourceURI(t *testing.T) {
+	t.Parallel()
+	require.True(t, IsConnectionStatusResourceURI(ConnectionStatusResourceURI))
+	require.True(t, IsConnectionStatusResourceURI(ConnectionStatusResourcePrefix+"0123456789ab"))
+	for _, uri := range []string{
+		ConnectionStatusResourcePrefix,
+		ConnectionStatusResourcePrefix + "0123456789a",
+		ConnectionStatusResourcePrefix + "0123456789abc",
+		ConnectionStatusResourcePrefix + "0123456789AB",
+		ConnectionStatusResourcePrefix + "0123456789az",
+		ConnectionStatusResourcePrefix + "0123456789ab/x",
+		"ui://gateway/other/0123456789ab",
+	} {
+		require.False(t, IsConnectionStatusResourceURI(uri), uri)
+	}
+}

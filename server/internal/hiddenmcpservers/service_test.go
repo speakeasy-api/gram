@@ -29,6 +29,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -147,6 +148,38 @@ func createServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, project
 	})
 	require.NoError(t, err)
 	return server.ID
+}
+
+func createToolsetServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, project projectsrepo.Project, slug, visibility string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         project.OrganizationID,
+		ProjectID:              project.ID,
+		Name:                   slug,
+		Slug:                   slug + "-" + uuid.NewString()[:8],
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    uuid.Must(uuid.NewV7()),
+		ProjectID:             project.ID,
+		Name:                  conv.ToPGText("Server " + slug),
+		Slug:                  conv.ToPGText(slug),
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            visibility,
+		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	return server.ID, toolset.ID
 }
 
 func hide(t *testing.T, ctx context.Context, si *instance, serverID uuid.UUID) {
@@ -317,4 +350,20 @@ func TestListOmitsServerCallerCannotConnect(t *testing.T) {
 
 	require.Equal(t, []string{public.String()}, listedIDs(t, authztest.WithExactGrants(t, ctx), si))
 	require.ElementsMatch(t, []string{private.String(), public.String()}, listedIDs(t, authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPConnect, private.String())), si))
+}
+
+func TestHidePrivateToolsetServerFollowsToolsetConnectAccess(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	project := createProject(t, ctx, si.conn, si.authCtx.ActiveOrganizationID)
+	serverID, toolsetID := createToolsetServer(t, ctx, si.conn, project, "private-toolset", mcpservers.VisibilityPrivate)
+
+	serverGrant := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPConnect, serverID.String()))
+	err := si.svc.Hide(serverGrant, &srv.HidePayload{SessionToken: nil, McpServerID: serverID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	toolsetGrant := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPConnect, toolsetID.String()))
+	hide(t, toolsetGrant, si, serverID)
+	require.Equal(t, []string{serverID.String()}, listedIDs(t, toolsetGrant, si))
+	require.Empty(t, listedIDs(t, serverGrant, si))
 }

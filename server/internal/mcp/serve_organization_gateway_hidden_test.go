@@ -92,7 +92,7 @@ func TestServeOrganizationGateway_HiddenMemberLeavesListServers(t *testing.T) {
 	require.Empty(t, result.Note)
 }
 
-func TestServeOrganizationGateway_HiddenMemberReadsUnknown(t *testing.T) {
+func TestServeOrganizationGateway_HiddenMemberReadsAsHidden(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	fx := seedHiddenGateway(t, ctx, ti)

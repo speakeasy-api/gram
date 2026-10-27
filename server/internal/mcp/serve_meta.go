@@ -647,7 +647,7 @@ func (s *Service) handleMetaListServersCall(
 	}
 
 	result := metamcp.ListServersResult{Servers: servers, Hidden: nil, ConnectURL: "", Note: ""}
-	for _, member := range gate.hiddenMembers {
+	for _, member := range catalogSelectedMembers(gate, gate.hiddenMembers) {
 		result.Hidden = append(result.Hidden, metamcp.HiddenServer{Slug: member.slug, Name: member.name})
 	}
 	if len(result.Hidden) > 0 && gate.connectURL != "" {

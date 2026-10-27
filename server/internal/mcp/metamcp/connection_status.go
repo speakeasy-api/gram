@@ -25,6 +25,17 @@ var ConnectionStatusResourceURI = ConnectionStatusResourcePrefix + contentHash(C
 // an earlier hash get the current page so cached tool lists keep rendering.
 const ConnectionStatusResourcePrefix = "ui://gateway/connection-status/"
 
+// IsConnectionStatusResourceURI accepts the current view URI or any earlier
+// hashed version of it.
+func IsConnectionStatusResourceURI(uri string) bool {
+	hash, ok := strings.CutPrefix(uri, ConnectionStatusResourcePrefix)
+	if !ok || len(hash) != len(contentHash("")) {
+		return false
+	}
+	_, err := hex.DecodeString(hash)
+	return err == nil && strings.ToLower(hash) == hash
+}
+
 func contentHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:6])
