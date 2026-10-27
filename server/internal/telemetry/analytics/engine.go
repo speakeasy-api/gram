@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 )
 
@@ -27,6 +28,8 @@ func NewEngine(db *pgxpool.Pool, ch Querier) (*Engine, error) {
 	catalog, err := Default.WithLoaders(map[string]LookupLoader{
 		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
 		AgentNamesLookup:            agentNames(agentsRepo.New(db)),
+		ProductFamiliesLookup:       productAttribute(aivendors.Product.FamilyID),
+		ProductVendorsLookup:        productAttribute(func(p aivendors.Product) string { return p.VendorKey }),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind catalog lookups: %w", err)
@@ -117,6 +120,18 @@ func agentNames(agents *agentsRepo.Queries) LookupLoader {
 			pairs[row.ID.String()] = row.Name
 		}
 		return uniqueAgentNames(pairs), nil
+	}
+}
+
+// productAttribute maps every catalog product id to one of its attributes; the catalog is compiled in, so the tenant is unused.
+func productAttribute(attribute func(aivendors.Product) string) LookupLoader {
+	products := aivendors.Products()
+	values := make(map[string]string, len(products))
+	for _, product := range products {
+		values[product.ID] = attribute(product)
+	}
+	return func(context.Context, Tenant) (map[string]string, error) {
+		return values, nil
 	}
 }
 

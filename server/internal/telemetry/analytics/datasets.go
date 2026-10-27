@@ -87,6 +87,26 @@ var ToolCalls = &Dataset{
 			Description: productDescription,
 		},
 		{
+			Name:        "family",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: familyDescription,
+			Lookup:      ProductFamiliesLookup,
+		},
+		{
+			Name:        "vendor",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: vendorDescription,
+			Lookup:      ProductVendorsLookup,
+		},
+		{
 			Name:        "client",
 			Type:        TypeString,
 			Role:        RoleDimension,
@@ -198,6 +218,26 @@ var Skills = &Dataset{
 			Description: productDescription,
 		},
 		{
+			Name:        "family",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: familyDescription,
+			Lookup:      ProductFamiliesLookup,
+		},
+		{
+			Name:        "vendor",
+			Type:        TypeString,
+			Role:        RoleDimension,
+			Operators:   equalsIn,
+			Expr:        "product",
+			Typeahead:   "product",
+			Description: vendorDescription,
+			Lookup:      ProductVendorsLookup,
+		},
+		{
 			Name:        "client",
 			Type:        TypeString,
 			Role:        RoleDimension,
@@ -246,12 +286,20 @@ const mcpServerDescription = "MCP server the call went to, under the display nam
 const (
 	surfaceDescription = "Agent surface as the producer named it, mixing the product with where it ran. Deprecated: use product and client."
 	productDescription = "Agent product that made the call, as the AI products catalog names it: claude-code, claude (Claude chat), cowork, codex, chatgpt, cursor and others. Empty when the producer named none the catalog knows."
+	familyDescription  = "Product family, e.g. claude for Claude Code, Claude and Cowork; a product with no family is its own."
+	vendorDescription  = "Vendor that ships the product, e.g. anthropic or openai."
 	clientDescription  = "Kind of client the product ran in: cli, ide, desktop, web, mobile, cloud or slack. Empty when the producer gives no signal for it."
 	agentDescription   = "Speakeasy agent the call ran as, under its name. Empty for a call a person made."
 )
 
 // AgentNamesLookup reads agent ids as the organization's agent names.
 const AgentNamesLookup = "agent_names"
+
+// ProductFamiliesLookup reads product ids as their families in the AI products catalog.
+const ProductFamiliesLookup = "product_families"
+
+// ProductVendorsLookup reads product ids as their vendors in the AI products catalog.
+const ProductVendorsLookup = "product_vendors"
 
 // MCPServerDisplayNamesLookup names the lookup mcp_server reads through: the
 // project's hook server-name overrides, raw name to display name.
@@ -267,6 +315,14 @@ var Lookups = []*Lookup{
 	{
 		Name:        AgentNamesLookup,
 		Description: "The organization's agents: an agent id shows as the agent's name, an id with no agent as reported.",
+	},
+	{
+		Name:        ProductFamiliesLookup,
+		Description: "The AI products catalog: a product id shows as its family, an id the catalog does not know as reported.",
+	},
+	{
+		Name:        ProductVendorsLookup,
+		Description: "The AI products catalog: a product id shows as its vendor, an id the catalog does not know as reported.",
 	},
 }
 

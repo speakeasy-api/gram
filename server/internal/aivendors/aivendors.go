@@ -76,6 +76,10 @@ type Product struct {
 	// VendorKey groups products by vendor. Not unique; stable.
 	VendorKey string
 
+	// Family groups a vendor's related products, such as Claude Code, Claude and
+	// Cowork. Empty means the product is a family of its own.
+	Family string
+
 	DisplayName string
 
 	// Category is required when Signatures are set.
@@ -109,6 +113,14 @@ type Product struct {
 // vendor be classified as enforceable.
 func (p Product) SpeaksCIMD() bool {
 	return hasEnabledDocument(p)
+}
+
+// FamilyID is the product's family, or its own ID when it declares none.
+func (p Product) FamilyID() string {
+	if p.Family == "" {
+		return p.ID
+	}
+	return p.Family
 }
 
 // IsScanned reports whether device agents probe for this product.

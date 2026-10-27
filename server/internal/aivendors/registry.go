@@ -25,6 +25,7 @@ var registry = []Product{
 	{
 		ID:          "claude-code",
 		VendorKey:   "anthropic",
+		Family:      "claude",
 		DisplayName: "Claude Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -51,6 +52,7 @@ var registry = []Product{
 	{
 		ID:              "claude",
 		VendorKey:       "anthropic",
+		Family:          "claude",
 		DisplayName:     "Claude",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -74,6 +76,7 @@ var registry = []Product{
 	{
 		ID:              "cowork",
 		VendorKey:       "anthropic",
+		Family:          "claude",
 		DisplayName:     "Cowork",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -93,6 +96,7 @@ var registry = []Product{
 	{
 		ID:              "vscode",
 		VendorKey:       "microsoft",
+		Family:          "",
 		DisplayName:     "Visual Studio Code",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -121,6 +125,7 @@ var registry = []Product{
 	{
 		ID:          "zed",
 		VendorKey:   "zed",
+		Family:      "",
 		DisplayName: "Zed",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -151,6 +156,7 @@ var registry = []Product{
 	{
 		ID:          "goose",
 		VendorKey:   "block",
+		Family:      "",
 		DisplayName: "Goose",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -192,6 +198,7 @@ var registry = []Product{
 	{
 		ID:          "chatgpt",
 		VendorKey:   "openai",
+		Family:      "",
 		DisplayName: "ChatGPT",
 		Category:    CategoryAssistant,
 		// Verified 2026-09 against the shipping app (ChatGPT 26.903.71938):
@@ -258,6 +265,7 @@ var registry = []Product{
 	{
 		ID:          "chatgpt-classic",
 		VendorKey:   "openai",
+		Family:      "",
 		DisplayName: "ChatGPT Classic",
 		Category:    CategoryAssistant,
 		// Verified 2026-09 against the Homebrew cask (chatgpt-classic
@@ -295,6 +303,7 @@ var registry = []Product{
 	{
 		ID:          "codex",
 		VendorKey:   "openai",
+		Family:      "",
 		DisplayName: "Codex",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -351,6 +360,7 @@ var registry = []Product{
 	{
 		ID:              "notion",
 		VendorKey:       "notion",
+		Family:          "",
 		DisplayName:     "Notion",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -375,6 +385,7 @@ var registry = []Product{
 	{
 		ID:              "mcpjam",
 		VendorKey:       "mcpjam",
+		Family:          "",
 		DisplayName:     "MCPJam Inspector",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -392,6 +403,7 @@ var registry = []Product{
 	{
 		ID:              "factory-droid",
 		VendorKey:       "factory",
+		Family:          "",
 		DisplayName:     "Factory Droid",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -409,6 +421,7 @@ var registry = []Product{
 	{
 		ID:              "toolhive",
 		VendorKey:       "stacklok",
+		Family:          "",
 		DisplayName:     "ToolHive",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -434,6 +447,7 @@ var registry = []Product{
 	{
 		ID:          "hermes-agent",
 		VendorKey:   "nousresearch",
+		Family:      "",
 		DisplayName: "Hermes Agent",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -458,6 +472,7 @@ var registry = []Product{
 	{
 		ID:              "skydive",
 		VendorKey:       "skydive",
+		Family:          "",
 		DisplayName:     "Skydive",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -478,6 +493,7 @@ var registry = []Product{
 	{
 		ID:          "opencode",
 		VendorKey:   "opencode",
+		Family:      "",
 		DisplayName: "opencode",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -504,6 +520,7 @@ var registry = []Product{
 	{
 		ID:              "github-copilot-cli",
 		VendorKey:       "github",
+		Family:          "",
 		DisplayName:     "GitHub Copilot CLI",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -531,6 +548,7 @@ var registry = []Product{
 	{
 		ID:          "conductor",
 		VendorKey:   "conductor",
+		Family:      "",
 		DisplayName: "Conductor",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -562,6 +580,7 @@ var registry = []Product{
 	{
 		ID:              "vercel-connect",
 		VendorKey:       "vercel",
+		Family:          "",
 		DisplayName:     "Vercel Connect",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -583,6 +602,7 @@ var registry = []Product{
 	{
 		ID:              "linear",
 		VendorKey:       "linear",
+		Family:          "",
 		DisplayName:     "Linear",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -605,6 +625,7 @@ var registry = []Product{
 	{
 		ID:              "lovable",
 		VendorKey:       "lovable",
+		Family:          "",
 		DisplayName:     "Lovable",
 		Category:        "",
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
@@ -639,6 +660,7 @@ var registry = []Product{
 	{
 		ID:          "antigravity",
 		VendorKey:   "google",
+		Family:      "",
 		DisplayName: "Google Antigravity",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -665,6 +687,7 @@ var registry = []Product{
 	{
 		ID:          "cursor",
 		VendorKey:   "cursor",
+		Family:      "",
 		DisplayName: "Cursor",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -690,6 +713,7 @@ var registry = []Product{
 		// which neither Antigravity 2.23.0 nor its CLI 1.3.5 references.
 		ID:          "gemini-cli",
 		VendorKey:   "google",
+		Family:      "",
 		DisplayName: "Gemini CLI",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -714,6 +738,7 @@ var registry = []Product{
 		// extension are a separate product below.
 		ID:          "windsurf",
 		VendorKey:   "codeium",
+		Family:      "",
 		DisplayName: "Windsurf",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -732,6 +757,7 @@ var registry = []Product{
 	{
 		ID:          "aider",
 		VendorKey:   "aider",
+		Family:      "",
 		DisplayName: "Aider",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -748,6 +774,7 @@ var registry = []Product{
 	{
 		ID:          "openclaw",
 		VendorKey:   "openclaw",
+		Family:      "",
 		DisplayName: "OpenClaw",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -775,6 +802,7 @@ var registry = []Product{
 	{
 		ID:          "pi",
 		VendorKey:   "pi",
+		Family:      "",
 		DisplayName: "Pi",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -799,6 +827,7 @@ var registry = []Product{
 	{
 		ID:          "crush",
 		VendorKey:   "charm",
+		Family:      "",
 		DisplayName: "Crush",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -821,6 +850,7 @@ var registry = []Product{
 	{
 		ID:          "qwen-code",
 		VendorKey:   "alibaba",
+		Family:      "",
 		DisplayName: "Qwen Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -848,6 +878,7 @@ var registry = []Product{
 	{
 		ID:          "cline",
 		VendorKey:   "cline",
+		Family:      "",
 		DisplayName: "Cline",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -874,6 +905,7 @@ var registry = []Product{
 	{
 		ID:          "roo-code",
 		VendorKey:   "roocode",
+		Family:      "",
 		DisplayName: "Roo Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -892,6 +924,7 @@ var registry = []Product{
 	{
 		ID:          "continue",
 		VendorKey:   "continue",
+		Family:      "",
 		DisplayName: "Continue",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -912,6 +945,7 @@ var registry = []Product{
 	{
 		ID:          "kilo-code",
 		VendorKey:   "kilocode",
+		Family:      "",
 		DisplayName: "Kilo Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -930,6 +964,7 @@ var registry = []Product{
 	{
 		ID:          "augment",
 		VendorKey:   "augment",
+		Family:      "",
 		DisplayName: "Augment Code",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -951,6 +986,7 @@ var registry = []Product{
 	{
 		ID:          "devin",
 		VendorKey:   "cognition",
+		Family:      "",
 		DisplayName: "Devin",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -973,6 +1009,7 @@ var registry = []Product{
 	{
 		ID:          "amp",
 		VendorKey:   "sourcegraph",
+		Family:      "",
 		DisplayName: "Amp",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -991,6 +1028,7 @@ var registry = []Product{
 	{
 		ID:          "openhands",
 		VendorKey:   "allhands",
+		Family:      "",
 		DisplayName: "OpenHands",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -1009,6 +1047,7 @@ var registry = []Product{
 	{
 		ID:          "trae",
 		VendorKey:   "bytedance",
+		Family:      "",
 		DisplayName: "Trae",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -1029,6 +1068,7 @@ var registry = []Product{
 	{
 		ID:          "warp",
 		VendorKey:   "warp",
+		Family:      "",
 		DisplayName: "Warp",
 		Category:    CategoryHarness,
 		Signatures: Signatures{
@@ -1052,6 +1092,7 @@ var registry = []Product{
 	{
 		ID:          "cherry-studio",
 		VendorKey:   "cherrystudio",
+		Family:      "",
 		DisplayName: "Cherry Studio",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -1068,6 +1109,7 @@ var registry = []Product{
 	{
 		ID:          "msty",
 		VendorKey:   "msty",
+		Family:      "",
 		DisplayName: "Msty",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -1084,6 +1126,7 @@ var registry = []Product{
 	{
 		ID:          "anythingllm",
 		VendorKey:   "mintplexlabs",
+		Family:      "",
 		DisplayName: "AnythingLLM",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -1105,6 +1148,7 @@ var registry = []Product{
 	{
 		ID:          "open-webui",
 		VendorKey:   "openwebui",
+		Family:      "",
 		DisplayName: "Open WebUI",
 		Category:    CategoryAssistant,
 		Signatures: Signatures{
@@ -1127,6 +1171,7 @@ var registry = []Product{
 	{
 		ID:          "jan",
 		VendorKey:   "menlo",
+		Family:      "",
 		DisplayName: "Jan",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1145,6 +1190,7 @@ var registry = []Product{
 	{
 		ID:          "gpt4all",
 		VendorKey:   "nomic",
+		Family:      "",
 		DisplayName: "GPT4All",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1164,6 +1210,7 @@ var registry = []Product{
 	{
 		ID:          "llamacpp",
 		VendorKey:   "ggml",
+		Family:      "",
 		DisplayName: "llama.cpp",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1184,6 +1231,7 @@ var registry = []Product{
 	{
 		ID:          "vllm",
 		VendorKey:   "vllm",
+		Family:      "",
 		DisplayName: "vLLM",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1201,6 +1249,7 @@ var registry = []Product{
 	{
 		ID:          "localai",
 		VendorKey:   "localai",
+		Family:      "",
 		DisplayName: "LocalAI",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1218,6 +1267,7 @@ var registry = []Product{
 	{
 		ID:          "koboldcpp",
 		VendorKey:   "koboldcpp",
+		Family:      "",
 		DisplayName: "KoboldCpp",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1235,6 +1285,7 @@ var registry = []Product{
 	{
 		ID:          "ollama",
 		VendorKey:   "ollama",
+		Family:      "",
 		DisplayName: "Ollama",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
@@ -1251,6 +1302,7 @@ var registry = []Product{
 	{
 		ID:          "lmstudio",
 		VendorKey:   "lmstudio",
+		Family:      "",
 		DisplayName: "LM Studio",
 		Category:    CategoryLocalModel,
 		Signatures: Signatures{
