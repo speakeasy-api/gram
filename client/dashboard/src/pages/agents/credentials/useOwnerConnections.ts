@@ -12,6 +12,8 @@ import type { InventoryServer } from "./useServerInventory";
 export interface OwnerConnections {
   /** Per server id, for the servers that authorize each person separately. */
   byServer: Map<string, ServerConnection>;
+  /** Actual assignments only; candidates must not appear connected in edit summaries. */
+  assignedByServer?: Map<string, ServerConnection>;
   /** Re-read assignments and the caller's connections, after they sign in elsewhere. */
   refetch: () => void;
 }
@@ -142,8 +144,49 @@ export function useOwnerConnections(
       ]),
     );
   }
+  const assignedByServer = agentId ? new Map(byServer) : undefined;
+  if (assignedByServer) {
+    for (const server of personal) {
+      const index = issuers.findIndex(
+        (issuer) =>
+          issuer.gramProject === server.projectSlug &&
+          issuer.userSessionIssuerId === server.issuerId,
+      );
+      const clientsRead = clients[index];
+      const bindingRead = bindings[index];
+      if (
+        !clientsRead?.data ||
+        !bindingRead?.data ||
+        clientsRead.isError ||
+        bindingRead.isError
+      )
+        continue;
+      if (bindingRead.data.items.some((binding) => !binding.remoteSession)) {
+        assignedByServer.set(server.id, { status: "missing" });
+        continue;
+      }
+      assignedByServer.set(
+        server.id,
+        serverConnection(
+          server.issuerId!,
+          clientsRead.data,
+          bindingRead.data.items.flatMap((binding) =>
+            binding.remoteSession
+              ? [
+                  {
+                    ...binding.remoteSession,
+                    userSessionIssuerId: server.issuerId!,
+                  },
+                ]
+              : [],
+          ),
+        ),
+      );
+    }
+  }
   return {
     byServer,
+    assignedByServer,
     refetch: () => {
       for (const read of [
         ...sessions,

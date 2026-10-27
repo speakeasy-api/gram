@@ -442,13 +442,30 @@ open their effective assignments; the dropdown always offers compact member sear
     - With the feature enabled, inspect the two active release agents owned
       by the first demo member. **Release assistant** has that member's
       unexpired connection; **Release notes assistant** has the second demo
-      member's expired delegated connection. The latter must show a refresh
-      warning in both the agent list and detail view. No token material is
+      member's expired delegated connection. The latter must show one **Needs
+      refresh** status in both the agent list and detail view, replacing Active
+      rather than adding a second badge. No token material is
       exposed. Shared demo impersonation is not an authorized caller.
     - An ordinary human with agent write permission may remove either
-      assignment and attach only their own session. Refresh is available only
-      to the person whose connection expired. Use a separate local-only
-      account/session fixture for mutation checks.
+      assignment and attach only their own session. In the wizard, **MCP
+      selection** chooses servers without connection controls; **MCP
+      authentication** then lists only those selected. Shared credentials,
+      the assigned person, expired connections, and missing connections must
+      be distinguishable in the collapsed rows. Expand a row to manage its
+      connection. Remove a selected server here without returning to selection.
+    - **Reauthenticate** and **Remove** belong on the connection subrow;
+      expired connections use a warning treatment. Reauthenticate is available
+      only to the person whose connection expired. With a separate live
+      local-only OAuth fixture, verify it opens a small popup and refreshes the
+      row automatically when the popup closes. The icon-only status refresh is
+      a fallback, not a required second step. A successful explicit
+      reauthentication must restore gateway calls; the inert seed cannot prove
+      that exchange.
+    - On creation, missing or expired individual selections must be connected
+      or removed before continuing. **All servers** keeps valid assignments
+      and names missing connections without blocking progression. On edit,
+      Save remains unavailable until the stored server grants have loaded;
+      clearing all selections may then intentionally remove those grants.
     - Detach one agent: the other binding and both personal accounts must
       survive. Reattach the same exact session twice: only one active binding
       per agent/issuer/client slot. Reauthorization changes the generation and

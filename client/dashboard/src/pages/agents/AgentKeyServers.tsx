@@ -1,3 +1,4 @@
+import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { sessionAccountLabel } from "@/components/sessions/session-account-identity";
@@ -6,7 +7,7 @@ import {
   connectionLifetimeLabel,
 } from "@/components/sessions/connection-lifetime";
 import { useEffect, useRef, useState, type JSX } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Button } from "@/components/ui/Button";
@@ -14,7 +15,13 @@ import { Text } from "@/components/ui/Text";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { Server, CheckCircle2, ExternalLink, LockKeyhole } from "lucide-react";
+import {
+  Server,
+  CheckCircle2,
+  LockKeyhole,
+  AlertTriangle,
+  RefreshCw,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   internalMcpUrl,
@@ -371,6 +378,7 @@ export function ServerAccounts({
   const organization = useOrganization();
   const { user } = useSession();
   const sdk = useSdkClient();
+  const queryClient = useQueryClient();
   const { data: members } = useMembers(undefined, undefined, {
     retry: false,
     throwOnError: false,
@@ -388,6 +396,8 @@ export function ServerAccounts({
     bindingId: string;
     clientId: string;
     server: KeyServer;
+    priorSessions: Map<string, string>;
+    returned: boolean;
   }>();
   const [error, setError] = useState(false);
   const attachBinding = useRemoteSessionsAttachBindingMutation();
@@ -456,6 +466,13 @@ export function ServerAccounts({
   };
   const refetchAccounts = useRef(query.refetch);
   refetchAccounts.current = query.refetch;
+  const connectionPopup = useOAuthPopup(async () => {
+    await refetchAccounts.current();
+    setRefreshing((current) =>
+      current ? { ...current, returned: true } : current,
+    );
+    await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
+  });
   // A row earns a card when it asks for an account, or when it still holds a
   // binding whose authorization is gone: that binding blocks `ready`, and
   // disconnecting it is the only way past, so the row has to stay on screen.
@@ -489,6 +506,7 @@ export function ServerAccounts({
   useEffect(() => {
     if (
       !refreshing ||
+      !refreshing.returned ||
       !canManage ||
       refreshInFlight.current ||
       pending ||
@@ -503,9 +521,21 @@ export function ServerAccounts({
     const renewed = row?.candidates.find(
       (candidate) =>
         candidate.remoteSessionClientId === refreshing.clientId &&
-        connectionLifetime(candidate).kind !== "ended",
+        connectionLifetime(candidate).kind !== "ended" &&
+        refreshing.priorSessions.get(candidate.id) !==
+          JSON.stringify([
+            candidate.updatedAt,
+            candidate.accessExpiresAt,
+            candidate.refreshExpiresAt,
+            candidate.authorizationExpiresAt,
+          ]),
     );
-    if (!renewed) return;
+    if (!renewed) {
+      // Returning without a changed grant is a cancellation, not consent to
+      // attach a connection acquired later by an unrelated sign-in.
+      setRefreshing(undefined);
+      return;
+    }
     refreshInFlight.current = true;
     setPending(true);
     const request = {
@@ -533,6 +563,9 @@ export function ServerAccounts({
         });
         setRefreshing(undefined);
         await refetchAccounts.current();
+        await queryClient.invalidateQueries({
+          queryKey: ["owner-connections"],
+        });
       } catch {
         setError(true);
       } finally {
@@ -550,6 +583,7 @@ export function ServerAccounts({
     query.data,
     sdk,
     agent.id,
+    queryClient,
   ]);
   async function attach(server: KeyServer, sessionId: string) {
     setPending(true);
@@ -566,6 +600,7 @@ export function ServerAccounts({
         },
       });
       await query.refetch();
+      await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
     } catch {
       setError(true);
     } finally {
@@ -587,6 +622,7 @@ export function ServerAccounts({
         },
       });
       await query.refetch();
+      await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
     } catch {
       setError(true);
     } finally {
@@ -605,7 +641,7 @@ export function ServerAccounts({
               one, so the sentence follows what the rows actually show. */}
             {query.data.every((row) => row.clients.length === 0)
               ? "None of the servers you chose need one. Continue."
-              : "Choose a connected account, or connect a new one in a separate tab and refresh this list. Accounts belong to the agent, so they stay connected for its other keys."}
+              : "Choose a connected account or sign in to connect one. Each connection is shared by this agent’s keys."}
           </Text>
         </div>
       )}
@@ -638,51 +674,23 @@ export function ServerAccounts({
               You need permission to edit this agent to change its connections.
             </Text>
           )}
-          {canManage &&
-            row.server.connectUrl &&
-            (!compact ||
-              row.bindings.length === 0 ||
-              row.bindings.some(
-                (b) =>
-                  b.remoteSession &&
-                  connectionLifetime(b.remoteSession).kind === "ended",
-              )) && (
-              <a
-                href={row.server.connectUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => {
-                  const expired = row.bindings.find(
-                    (binding) =>
-                      binding.remoteSession?.subjectUrn === `user:${user.id}` &&
-                      connectionLifetime(binding.remoteSession).kind ===
-                        "ended",
-                  );
-                  if (expired)
-                    setRefreshing({
-                      bindingId: expired.id,
-                      clientId: expired.remoteSessionClientId,
-                      server: row.server,
-                    });
-                }}
-                className="text-primary inline-flex items-center gap-1.5 text-sm underline underline-offset-4"
-              >
-                {row.bindings.some(
-                  (binding) =>
-                    binding.remoteSession?.subjectUrn === `user:${user.id}` &&
-                    connectionLifetime(binding.remoteSession).kind === "ended",
-                )
-                  ? "Refresh connection"
-                  : "Connect an account"}
-                <ExternalLink aria-hidden="true" className="size-3.5" />
-              </a>
-            )}
+          {canManage && row.server.connectUrl && row.bindings.length === 0 && (
+            <Button
+              size="sm"
+              onClick={() => {
+                connectionPopup.open(row.server.connectUrl!);
+              }}
+            >
+              Connect an account
+            </Button>
+          )}
           {row.bindings
             .filter((binding) => binding.remoteSession)
             .map((binding) => {
               const session = binding.remoteSession!;
               const mine = session.subjectUrn === `user:${user.id}`;
               const locked = !mine;
+              const expired = connectionLifetime(session).kind === "ended";
               const label =
                 session.subjectDisplayName ||
                 session.subjectEmail ||
@@ -693,6 +701,7 @@ export function ServerAccounts({
                   className={cn(
                     "flex items-center gap-3 border p-3",
                     locked && "bg-muted/40 text-muted-foreground",
+                    expired && "border-warning-softest bg-warning-softest/30",
                   )}
                 >
                   <Avatar title={label}>
@@ -715,10 +724,53 @@ export function ServerAccounts({
                     <Text small>
                       {mine ? "Your connection" : `${label}'s connection`}
                     </Text>
-                    <Text small muted>
+                    <Text
+                      small
+                      muted={!expired}
+                      className={
+                        expired
+                          ? "text-default-warning flex items-center gap-1.5"
+                          : undefined
+                      }
+                    >
+                      {expired && (
+                        <AlertTriangle
+                          aria-hidden="true"
+                          className="size-3.5"
+                        />
+                      )}
+                      {expired ? "Expired · " : ""}
                       {connectionLifetimeLabel(connectionLifetime(session))}
                     </Text>
                   </div>
+                  {canManage && mine && expired && row.server.connectUrl && (
+                    <Button
+                      size="sm"
+                      disabled={pending || query.isFetching}
+                      onClick={() => {
+                        if (connectionPopup.open(row.server.connectUrl!))
+                          setRefreshing({
+                            bindingId: binding.id,
+                            clientId: binding.remoteSessionClientId,
+                            server: row.server,
+                            returned: false,
+                            priorSessions: new Map(
+                              row.candidates.map((candidate) => [
+                                candidate.id,
+                                JSON.stringify([
+                                  candidate.updatedAt,
+                                  candidate.accessExpiresAt,
+                                  candidate.refreshExpiresAt,
+                                  candidate.authorizationExpiresAt,
+                                ]),
+                              ]),
+                            ),
+                          });
+                      }}
+                    >
+                      Reauthenticate
+                    </Button>
+                  )}
                   {!canManage ? (
                     <LockKeyhole
                       className="size-4"
@@ -731,7 +783,7 @@ export function ServerAccounts({
                       disabled={pending || query.isFetching}
                       onClick={() => void detach(row.server, binding.id)}
                     >
-                      Remove assignment
+                      Remove
                     </Button>
                   )}
                 </div>
@@ -833,14 +885,19 @@ export function ServerAccounts({
                 (c) => c.remoteSessionClientId === client.id,
               ) && (
                 <Text small muted>
-                  No connected accounts yet. Connect an account, then refresh
-                  this list.
+                  No connected accounts yet. Choose Connect an account to sign
+                  in.
                 </Text>
               )}
             </div>
           ))}
         </section>
       ))}
+      {connectionPopup.blocked && (
+        <Text role="alert">
+          Allow popups for this page, then try connecting again.
+        </Text>
+      )}
       {error && (
         <Text role="alert">
           Could not confirm the account connection. Refresh to check its status
@@ -853,14 +910,17 @@ export function ServerAccounts({
       {(query.isError || (query.data.some(shows) && (!compact || !ready))) && (
         <>
           <Button
-            variant="secondary"
+            variant="tertiary"
+            size="sm"
+            aria-label="Refresh connection status"
+            title="Refresh connection status"
             disabled={pending}
             onClick={() => {
               setError(false);
               void query.refetch();
             }}
           >
-            Refresh accounts
+            <RefreshCw aria-hidden="true" className="size-4" />
           </Button>
           {ready && (
             <div role="status" className="flex items-center gap-2 text-sm">

@@ -132,11 +132,12 @@ export function AgentIdentityFacts({
       {agent.connectionNeedsRefresh && agent.lifecycle === "active" && (
         <Text role="alert" small>
           An assigned connection has expired or is no longer available. The
-          owner needs to refresh it before the agent can use that server.{" "}
+          connection owner needs to reauthenticate before the agent can use that
+          server.{" "}
           {agent.permissions.write && (
             <Link
               className="underline underline-offset-4"
-              to={`${routes.identities.agents.edit.href(agent.id)}?step=1`}
+              to={`${routes.identities.agents.edit.href(agent.id)}?step=2`}
             >
               Review connections
             </Link>

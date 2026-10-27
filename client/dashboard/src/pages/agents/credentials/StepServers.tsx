@@ -1,15 +1,11 @@
-import { connectionSelectable } from "./ownerConnections";
-import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { PersonServers } from "./PersonServers";
 import { useEffect, useId, useState, type JSX } from "react";
 import { WizardStepHeader } from "./WizardChrome";
-import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
 
 /**
@@ -44,8 +40,6 @@ export function StepServers({
   scopeLabel,
   selected,
   onChange,
-  connections,
-  agent,
 }: {
   servers: InventoryServer[];
   isLoading: boolean;
@@ -84,13 +78,6 @@ export function StepServers({
   scopeLabel: string;
   selected: ServerSelection[];
   onChange: (next: ServerSelection[]) => void;
-  /**
-   * The creator's own connections to the servers that authorize each person
-   * separately. When given, those servers can be chosen and the agent uses
-   * the creator's connection to them; without it they are only listed.
-   */
-  connections?: OwnerConnections;
-  agent?: ManagedAgent;
 }): JSX.Element {
   const refusalId = useId();
   const allServersLocked = !allServers && allServersRefusal !== undefined;
@@ -99,8 +86,8 @@ export function StepServers({
     const refresh = () => {
       if (document.visibilityState === "visible") onRetry();
     };
-    window.addEventListener("visibilitychange", refresh);
-    return () => window.removeEventListener("visibilitychange", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
   }, [onRetry]);
   const [search, setSearch] = useState("");
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
@@ -112,7 +99,6 @@ export function StepServers({
   // A server that authorizes each person separately needs an account attached
   // to the agent before a key can call it. It is chosen
   // only when the creator's own connection to it can be attached.
-  const needsAccount = (server: InventoryServer) => Boolean(server.issuerId);
   const matches = servers.filter((server) => {
     if (showSelectedOnly && !isSelected(server.id)) return false;
     if (!query) return true;
@@ -120,15 +106,7 @@ export function StepServers({
       .toLowerCase()
       .includes(query);
   });
-  const shown = matches.filter(
-    (server) =>
-      !needsAccount(server) ||
-      agent ||
-      connectionSelectable(connections?.byServer.get(server.id)),
-  );
-  // Counted across the whole scope rather than the filtered rows: it is told
-  // beside "All servers", which is about the scope and not about the search.
-  const perUserCount = servers.filter(needsAccount).length;
+  const shown = matches;
 
   const toggle = (server: InventoryServer) => {
     onChange(
@@ -141,7 +119,7 @@ export function StepServers({
   return (
     <div className="space-y-5">
       <WizardStepHeader
-        title="Server selection"
+        title="MCP selection"
         description="The MCP servers this agent may call. It can reach nothing else, and never more than you can reach yourself."
       />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -261,8 +239,6 @@ export function StepServers({
                   separately is not one it can name. */}
               <span className="text-muted-foreground block text-xs">
                 Every server in {scopeLabel}, including ones added later.
-                {perUserCount > 0 &&
-                  ` Valid assigned connections are kept. Your connections fill any remaining gaps when you save.`}
               </span>
               {allServersRefusal && (
                 <span
@@ -275,27 +251,6 @@ export function StepServers({
               )}
             </span>
           </label>
-          {allServers &&
-            connections &&
-            (() => {
-              const missing = servers.filter(
-                (server) =>
-                  server.issuerId &&
-                  ["missing", "ended", "error"].includes(
-                    connections.byServer.get(server.id)?.status ?? "checking",
-                  ),
-              );
-              return missing.length > 0 ? (
-                <div role="alert" className="border-b px-4 py-3 text-sm">
-                  No usable connection available for:{" "}
-                  <strong>
-                    {missing.map((server) => server.name).join(", ")}
-                  </strong>
-                  . These servers will need a connection before the agent can
-                  use them. Existing valid assignments will be kept.
-                </div>
-              ) : null;
-            })()}
           {matches.length === 0 ? (
             <Text muted small className="block px-4 py-10 text-center">
               {servers.length === 0
@@ -305,19 +260,6 @@ export function StepServers({
           ) : (
             <ul className="divide-border divide-y">
               {matches.map((server) => {
-                if (needsAccount(server))
-                  return (
-                    <PersonServers
-                      key={server.id}
-                      agent={agent}
-                      servers={[server]}
-                      connections={connections}
-                      refusedServers={refusedServers}
-                      allServers={allServers}
-                      selected={selected}
-                      onChange={onChange}
-                    />
-                  );
                 const checked = isSelected(server.id);
                 const refusal = refusedServers?.get(server.id);
                 const locked = allServers || (!checked && !!refusal);
@@ -347,9 +289,6 @@ export function StepServers({
                           <span className="truncate">{server.name}</span>
                           <Badge variant="neutral" size="sm">
                             {server.projectName || server.projectSlug}
-                          </Badge>
-                          <Badge variant="neutral" size="sm">
-                            Shared access
                           </Badge>
                         </span>
                         <span className="text-muted-foreground block truncate font-mono text-xs">

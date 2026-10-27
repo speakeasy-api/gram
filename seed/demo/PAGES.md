@@ -160,7 +160,22 @@ and the `mcp_servers.remote_session_issuer_id` stamp stays derivable. It is
 display-only, not a live OAuth integration. All IDs reuse `Spec.NameSeed` and
 retarget with the tenant.
 Reseeding deletes bindings before sessions, issuers, agents and projects.
-Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
+The wizard separates **MCP selection** from **MCP authentication**. The latter
+shows selected servers with compact shared/personal/expired/missing summaries
+and expandable connection controls, with server removal available on the same
+step. Expired connections show **Reauthenticate** and **Remove** on the
+connection row; popup completion refreshes its state automatically. The list
+and detail page use one **Needs refresh** status instead of a second Active
+badge. Live popup recovery needs a separate local OAuth fixture; seeded
+ciphertext is deliberately unusable.
+
+This UI reorganization adds no routes, named resource types, permissions, or
+management capability. Existing Command K agent page and named-agent
+candidates remain applicable. Platform MCP authorization and the documented
+human-session-only assignment boundary are unchanged; no additional tool is
+introduced for wizard layout or popup presentation.
+
+Browser verification: `[~]` (not yet verified); see check 23 in `verify.md`.
 
 That upstream client sits under the **Example Workspace Identity** provider,
 which carries a scope override (`read`), shown on its Overview and editable on its

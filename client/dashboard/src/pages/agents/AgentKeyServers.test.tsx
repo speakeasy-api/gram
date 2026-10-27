@@ -141,19 +141,24 @@ function setup(
       />
     );
   }
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+    <QueryClientProvider client={queryClient}>
       <Harness />
     </QueryClientProvider>,
   );
-  return { ready, changed, inventory };
+  return { ready, changed, inventory, queryClient };
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.spyOn(window, "open").mockReturnValue({
+    location: { href: "about:blank" },
+    focus: vi.fn(),
+    closed: false,
+    opener: window,
+  } as unknown as Window);
   mocks.domains.mockResolvedValue({
     domains: [{ id: "domain_example", domain: "mcp.example.test" }],
   });
@@ -225,7 +230,10 @@ beforeEach(() => {
   mocks.attach.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue(undefined);
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 describe("Agent key MCP servers", () => {
   it("explains unavailable inventory when only disabled or unproxied servers exist", async () => {
     mocks.toolsets.mockResolvedValue({
@@ -293,7 +301,7 @@ describe("Agent key MCP servers", () => {
     await screen.findByRole("button", { name: "Use account" });
     expect(screen.getByText("Identity unavailable")).toBeTruthy();
     expect(
-      screen.getByText(/they stay connected for its other keys/),
+      screen.getByText(/Each connection is shared by this agent’s keys/),
     ).toBeTruthy();
     expect(screen.queryByText(/account_example|client_example/)).toBeNull();
     expect(screen.getByText("Access: read")).toBeTruthy();
@@ -413,13 +421,20 @@ describe("Agent key MCP servers", () => {
     expect(mocks.endpoints).not.toHaveBeenCalled();
   });
   it("reuses an account through attachment APIs and waits for confirmed active bindings", async () => {
-    const { ready } = setup(1, [server]);
+    const { ready, queryClient } = setup(1, [server]);
+    queryClient.setQueryData(["owner-connections", "bindings", agent.id], []);
     fireEvent.click(await screen.findByRole("button", { name: "Use account" }));
     await waitFor(() =>
       expect(mocks.attach).toHaveBeenCalledWith(
         "agent_example",
         "account_example",
       ),
+    );
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryState(["owner-connections", "bindings", agent.id])
+          ?.isInvalidated,
+      ).toBe(true),
     );
     expect(ready).not.toHaveBeenCalledWith(true);
     mocks.bindings.mockResolvedValue([
@@ -436,19 +451,16 @@ describe("Agent key MCP servers", () => {
       expect(
         (
           screen.getByRole("button", {
-            name: "Refresh accounts",
+            name: "Refresh connection status",
           }) as HTMLButtonElement
         ).disabled,
       ).toBe(false),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Refresh accounts" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh connection status" }),
+    );
     await screen.findByText("Accounts ready.");
     expect(ready).toHaveBeenLastCalledWith(true);
-    expect(
-      screen
-        .getByRole("link", { name: "Connect an account" })
-        .getAttribute("target"),
-    ).toBe("_blank");
   });
   it.each(["account_example", "revoked_account"])(
     "keeps tombstone %s detach-only even if a new grant has the same session ID",
@@ -518,10 +530,10 @@ describe("Agent key MCP servers", () => {
       expect(
         await screen.findByText("Jordan Example's connection"),
       ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Remove" })).toBeTruthy();
       expect(
-        screen.queryByRole("button", { name: "Remove assignment" }),
-      ).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Unlock" })).toBeNull();
+        screen.queryByRole("button", { name: "Reauthenticate" }),
+      ).toBeNull();
       await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
       expect(mocks.detach).not.toHaveBeenCalled();
     },
@@ -555,13 +567,19 @@ describe("Agent key MCP servers", () => {
       mocks.candidates.mockResolvedValue([expired]);
       const { ready } = setup(1, [server]);
       expect(
-        await screen.findByRole("link", { name: "Refresh connection" }),
+        await screen.findByRole("button", { name: "Reauthenticate" }),
       ).toBeTruthy();
       expect(ready).not.toHaveBeenCalledWith(true);
-      const refreshLink = screen.getByRole("link", {
-        name: "Refresh connection",
+      const refreshLink = screen.getByRole("button", {
+        name: "Reauthenticate",
       });
       fireEvent.click(refreshLink);
+      expect(window.open).toHaveBeenCalledWith(
+        "about:blank",
+        "speakeasy-connection",
+        "popup=yes,width=560,height=720",
+      );
+      expect(screen.getByText(/^Expired ·/)).toBeTruthy();
       expect(mocks.detach).not.toHaveBeenCalled();
       const renewed = {
         ...expired,
@@ -580,7 +598,7 @@ describe("Agent key MCP servers", () => {
           },
         ]);
       });
-      fireEvent.click(screen.getByRole("button", { name: "Refresh accounts" }));
+      fireEvent(window, new Event("focus"));
       await waitFor(() =>
         expect(mocks.attach).toHaveBeenCalledWith(agent.id, renewed.id),
       );
@@ -590,6 +608,92 @@ describe("Agent key MCP servers", () => {
       await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
     },
   );
+  it("does not replace an expired binding with a pre-existing grant before OAuth completes", async () => {
+    const old = {
+      id: "old",
+      subjectUrn: "user:user_example",
+      remoteSessionClientId: "client_example",
+      scopes: [],
+      hasRefreshToken: false,
+      accessExpiresAt: new Date(Date.now() - 1000),
+    };
+    const live = {
+      ...old,
+      id: "already_live",
+      accessExpiresAt: new Date(Date.now() + 3600000),
+    };
+    mocks.bindings.mockResolvedValue([
+      {
+        id: "binding",
+        remoteSessionId: old.id,
+        remoteSessionClientId: "client_example",
+        remoteSession: old,
+      },
+    ]);
+    mocks.candidates.mockResolvedValue([live]);
+    setup(1, [server]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Reauthenticate" }),
+    );
+    expect(mocks.attach).not.toHaveBeenCalled();
+    const calls = mocks.candidates.mock.calls.length;
+    fireEvent(window, new Event("focus"));
+    await waitFor(() =>
+      expect(mocks.candidates.mock.calls.length).toBeGreaterThan(calls),
+    );
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Reauthenticate",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
+    expect(mocks.detach).not.toHaveBeenCalled();
+    mocks.candidates.mockResolvedValue([
+      { ...live, id: "unrelated_later_login" },
+    ]);
+    fireEvent(window, new Event("focus"));
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Reauthenticate",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
+    expect(mocks.attach).not.toHaveBeenCalled();
+  });
+  it("reports blocked popups without detaching an account", async () => {
+    vi.mocked(window.open).mockReturnValue(null);
+    setup(1, [server]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect an account" }),
+    );
+    expect(await screen.findByText(/Allow popups/)).toBeTruthy();
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+  it("reloads connections automatically when the sign-in popup closes", async () => {
+    const popup = {
+      location: { href: "" },
+      focus: vi.fn(),
+      closed: false,
+      opener: window as Window | null,
+    };
+    vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
+    setup(1, [server]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect an account" }),
+    );
+    expect(popup.opener).toBeNull();
+    const calls = mocks.candidates.mock.calls.length;
+    popup.closed = true;
+    await waitFor(() =>
+      expect(mocks.candidates.mock.calls.length).toBeGreaterThan(calls),
+    );
+  });
   it("does not accept missing or stale bindings as ready", async () => {
     mocks.bindings.mockResolvedValue([
       {

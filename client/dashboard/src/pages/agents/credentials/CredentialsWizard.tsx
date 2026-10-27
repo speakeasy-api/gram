@@ -65,6 +65,8 @@ import {
 import { useRBAC } from "@/hooks/useRBAC";
 import { useServerInventory } from "./useServerInventory";
 import { useOwnerConnections } from "./useOwnerConnections";
+import { StepAuthentication } from "./StepAuthentication";
+import { connectionSelectable } from "./ownerConnections";
 import { attachOwnerConnections } from "./ownerConnections";
 import {
   WizardFooter,
@@ -87,7 +89,8 @@ import {
 /** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
   { label: "Name", short: "Name" },
-  { label: "Server selection", short: "Servers" },
+  { label: "MCP selection", short: "MCPs" },
+  { label: "MCP authentication", short: "Authentication" },
   { label: "Credential", short: "Credential" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
@@ -578,7 +581,14 @@ export function CredentialsWizard({
   );
   // New agents attach the creator's connections as part of provisioning.
   const offersConnections = !editing && !existing;
-  const connections = useOwnerConnections(listedServers, true, agent?.id);
+  const connectionServers = [
+    ...new Map(
+      [...listedServers, ...selected.map((entry) => entry.server)].map(
+        (server) => [server.id, server],
+      ),
+    ).values(),
+  ];
+  const connections = useOwnerConnections(connectionServers, true, agent?.id);
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
@@ -586,7 +596,7 @@ export function CredentialsWizard({
   // The verify step reads the key itself: a key with an access time is a
   // runtime that reached the gateway and was admitted.
   useEffect(() => {
-    if (step !== 4 || !agentID || verify === "connected") return;
+    if (step !== 5 || !agentID || verify === "connected") return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -919,7 +929,7 @@ export function CredentialsWizard({
   const stepNames =
     credential === "workload" && workload.steps.length > 0
       ? [
-          ...STEPS.slice(0, 3),
+          ...STEPS.slice(0, 4),
           ...workload.steps.map((entry) => ({
             label: entry.title,
             short: entry.short,
@@ -928,7 +938,7 @@ export function CredentialsWizard({
       : STEPS;
   /** The platform setup step on screen, when one is. */
   const workloadStep =
-    credential === "workload" ? workload.steps[step - 3] : undefined;
+    credential === "workload" ? workload.steps[step - 4] : undefined;
   // How many steps there are is only known here, once the platform's own have
   // been counted, so an out-of-range link is corrected rather than refused:
   // the URL is rewritten to the last real step instead of leaving the wizard
@@ -1068,7 +1078,7 @@ export function CredentialsWizard({
       });
       keyID.current = issued.id;
       setSecret(issued.key ?? null);
-      setStep(3);
+      setStep(4);
       if (issued.key) regenerate(issued.key, agentGatewayURL(target.id));
     } catch (failure) {
       const conflict =
@@ -1258,7 +1268,6 @@ export function CredentialsWizard({
         return (
           <div className="space-y-5">
             <StepServers
-              agent={agent}
               servers={listedServers}
               isLoading={inventory.isLoading}
               isError={inventory.isError}
@@ -1278,7 +1287,6 @@ export function CredentialsWizard({
                 setHighlight(next ? "server:all" : null);
               }}
               selected={selected}
-              connections={connections}
               onChange={(next) => {
                 setSelected(next);
                 // The one just added, or the last one left when removing.
@@ -1294,6 +1302,28 @@ export function CredentialsWizard({
           </div>
         );
       case 2:
+        return (
+          <StepAuthentication
+            servers={
+              allServers ? listedServers : selected.map((entry) => entry.server)
+            }
+            connections={connections}
+            agent={agent}
+            allServers={allServers}
+            onRemove={(id) => {
+              if (allServers) {
+                setAllServers(false);
+                setSelected(
+                  listedServers
+                    .filter((server) => server.id !== id)
+                    .map((server) => ({ server })),
+                );
+              } else
+                setSelected(selected.filter((entry) => entry.server.id !== id));
+            }}
+          />
+        );
+      case 3:
         return (
           <div className="space-y-6">
             <WizardStepHeader
@@ -1326,7 +1356,7 @@ export function CredentialsWizard({
             />
           </div>
         );
-      case 3:
+      case 4:
         return (
           <StepInstall
             command={command}
@@ -1359,26 +1389,30 @@ export function CredentialsWizard({
         ? "Name this agent."
         : null
       : step === 1
-        ? !allServers && selected.length === 0
+        ? !editing && !allServers && selected.length === 0
           ? "Select at least one MCP server."
           : refusedChoice
             ? refusedChoice
-            : // A key names servers one by one, and a server that authorizes
-              // each person separately is not one a key can name. So "all
-              // servers" with none of them left is a key that would reach
-              // nothing, said here rather than after the agent is created.
-              allServers &&
-                !inventory.isLoading &&
-                !inventory.isError &&
-                listedServers.every((server) => server.issuerId)
-              ? "No server here can be reached with a key yet."
-              : null
-        : null;
+            : null
+        : step === 2 &&
+            offersConnections &&
+            !allServers &&
+            selected.some(
+              (entry) =>
+                entry.server.issuerId &&
+                !connectionSelectable(
+                  connections.byServer.get(entry.server.id),
+                ),
+            )
+          ? "Connect or remove the servers that need authentication."
+          : step === 2 && !editing && !allServers && selected.length === 0
+            ? "Select at least one MCP server."
+            : null;
 
   const footer = () => {
-    // Editing writes on the second step. Past it the flow is the ordinary
+    // Editing writes after authentication. Past it the flow is the ordinary
     // one for an agent that exists: adding a credential it does not have.
-    if (editing && step < 2) {
+    if (editing && step < 3) {
       return (
         <WizardFooter
           note={
@@ -1394,11 +1428,8 @@ export function CredentialsWizard({
           }
           onBack={step === 0 ? undefined : () => setStep(step - 1)}
           primary={
-            step === 0 ? (
-              <Button
-                disabled={name.trim().length === 0}
-                onClick={() => setStep(1)}
-              >
+            step < 2 ? (
+              <Button disabled={!!blocked} onClick={() => setStep(step + 1)}>
                 Continue
               </Button>
             ) : (
@@ -1416,7 +1447,7 @@ export function CredentialsWizard({
       );
     }
     if (workloadStep !== undefined) {
-      const last = step - 3 === workload.steps.length - 1;
+      const last = step - 4 === workload.steps.length - 1;
       const ready = workload.complete(workloadStep);
       return (
         <WizardFooter
@@ -1462,7 +1493,7 @@ export function CredentialsWizard({
       );
     }
     switch (step) {
-      case 2:
+      case 3:
         if (credential === "workload") {
           let note =
             "Choose the platform whose tokens this agent will present.";
@@ -1482,11 +1513,11 @@ export function CredentialsWizard({
           return (
             <WizardFooter
               note={note}
-              onBack={() => setStep(1)}
+              onBack={() => setStep(2)}
               primary={
                 <Button
                   disabled={refused || workload.steps.length === 0}
-                  onClick={() => setStep(3)}
+                  onClick={() => setStep(4)}
                 >
                   Continue
                 </Button>
@@ -1503,7 +1534,7 @@ export function CredentialsWizard({
                   ? "Reading the project this agent will belong to…"
                   : "Creating the agent is recorded in the organization audit log."
             }
-            onBack={() => setStep(1)}
+            onBack={() => setStep(2)}
             primary={
               <Button
                 // An agent belongs to the project it is made in, so there is
@@ -1522,18 +1553,18 @@ export function CredentialsWizard({
             }
           />
         );
-      case 3:
+      case 4:
         return (
           <WizardFooter
             note="The API key can be rotated or revoked from the agent page."
             primary={
-              <Button onClick={() => setStep(4)}>
+              <Button onClick={() => setStep(5)}>
                 Continue to verification
               </Button>
             }
           />
         );
-      case 4:
+      case 5:
         return (
           <WizardFooter
             note={
@@ -1541,7 +1572,7 @@ export function CredentialsWizard({
                 ? "The agent has called the gateway."
                 : "Run the setup from the previous step, then wait for the first call."
             }
-            onBack={() => setStep(3)}
+            onBack={() => setStep(4)}
             primary={
               <Button onClick={() => onDone(agentID ?? undefined)}>
                 {verify === "connected" ? "Done" : "Skip for now"}
@@ -1585,14 +1616,14 @@ export function CredentialsWizard({
         // existing agent has no such order, so every step is reachable until
         // the key is issued.
         // Editing has settled everything a credential step would ask.
-        settledFrom={editing ? 2 : undefined}
+        settledFrom={editing ? 3 : undefined}
         forward={existing && !secret}
         // Verify watches a key being used, so it has nothing to watch until
         // one is issued. Without this an existing agent could jump straight
         // to it and finish the flow having provisioned nothing.
         onJump={(next) =>
           setStep(
-            secret || credential === "workload" ? next : Math.min(next, 3),
+            secret || credential === "workload" ? next : Math.min(next, 4),
           )
         }
       />
