@@ -315,7 +315,8 @@ export type IdentityRisk = {
 
 /**
  * Findings by category and rule across every agent id. The endpoint takes one
- * id; a finding belongs to one id, so summing counts each once.
+ * id and matches it case-insensitively, so ids differing only in case are
+ * asked once; a finding then belongs to one id and summing counts it once.
  */
 export function useIdentityRisk(
   identity: IdentityModel,
@@ -325,8 +326,13 @@ export function useIdentityRisk(
   const client = useGramContext();
   const { slug: gramProject } = useIdentityProject();
   const canReadRisk = useCanReadRisk();
+  const externalUserIds = [
+    ...new Map(
+      identity.externalUserIds.map((id) => [id.toLowerCase(), id]),
+    ).values(),
+  ];
   return useQueries({
-    queries: identity.externalUserIds.map((externalUserId) => ({
+    queries: externalUserIds.map((externalUserId) => ({
       ...buildRiskUserBreakdownQuery(client, {
         externalUserId,
         from,

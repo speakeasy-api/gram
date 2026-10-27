@@ -1,6 +1,7 @@
 package risk_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -370,7 +371,8 @@ func TestGetRiskUserBreakdownCountsOnlyLiveUserFindings(t *testing.T) {
 	}
 
 	secret := finding(active.ID, "gitleaks", "secret.github_pat", targetUserID)
-	financial := finding(active.ID, "presidio", "pii.credit_card", targetUserID)
+	// Agents report ids in whatever case they were configured with.
+	financial := finding(active.ID, "presidio", "pii.credit_card", strings.ToUpper(targetUserID))
 	dismissed := finding(active.ID, "gitleaks", "secret.dismissed", targetUserID)
 	dismissed.FalsePositiveAt = &at
 	excluded := finding(active.ID, "gitleaks", "secret.excluded", targetUserID)

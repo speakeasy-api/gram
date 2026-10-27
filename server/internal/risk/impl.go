@@ -1955,33 +1955,22 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 		To:             to,
 		MCPServerID:    "",
 	}
-	categoryRows, err := s.findingsCH.ListRiskUserCategoryBreakdown(ctx, chWindow, payload.ExternalUserID, policyIDs)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list user category breakdown").LogError(ctx, s.logger)
-	}
-
 	ruleRows, err := s.findingsCH.ListRiskUserRuleBreakdown(ctx, chWindow, payload.ExternalUserID, policyIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user rule breakdown").LogError(ctx, s.logger)
 	}
 
-	categories := make([]*gen.RiskOverviewCategory, 0, len(categoryRows))
-	var total int64
-	for _, row := range categoryRows {
-		findings := safeCount(row.Findings)
-		categories = append(categories, &gen.RiskOverviewCategory{
-			Category: row.Category,
-			Findings: findings,
-		})
-		total += findings
-	}
-
+	categoryCounts := make(map[string]int64)
 	rules := make([]*gen.RiskRuleBreakdownEntry, 0, len(ruleRows))
+	var total int64
 	for _, row := range ruleRows {
+		findings := safeCount(row.Findings)
+		categoryCounts[string(categories.Classify(row.Source, row.RuleID))] += findings
+		total += findings
 		rules = append(rules, &gen.RiskRuleBreakdownEntry{
 			RuleID:   row.RuleID,
 			Source:   row.Source,
-			Findings: safeCount(row.Findings),
+			Findings: findings,
 		})
 	}
 
@@ -1990,7 +1979,7 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 		To:             to.UTC().Format(time.RFC3339),
 		ExternalUserID: payload.ExternalUserID,
 		Findings:       total,
-		Categories:     categories,
+		Categories:     topCategoriesFromCounts(categoryCounts, len(categoryCounts)),
 		Rules:          rules,
 	}, nil
 }
