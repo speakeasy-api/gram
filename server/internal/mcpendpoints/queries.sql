@@ -191,10 +191,13 @@ SELECT (
 -- name: LockSlugScope :exec
 -- Serializes competing claims on one (namespace, slug) address for the rest of
 -- the caller's transaction; the per-table unique indexes cannot see
--- cross-table collisions.
-SELECT pg_advisory_xact_lock(hashtextextended(
-  'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
-));
+-- cross-table collisions. The platform lock comes first, also for a
+-- custom-domain claim, since the platform host serves custom-domain aliases.
+SELECT
+  pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0)),
+  pg_advisory_xact_lock(hashtextextended(
+    'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
+  ));
 
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
 -- Soft-delete all endpoints that point at a given mcp server. Used when the

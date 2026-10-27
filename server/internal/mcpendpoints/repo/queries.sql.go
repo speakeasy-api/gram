@@ -1032,21 +1032,24 @@ func (q *Queries) LockRootMCPEndpointsByMCPServerID(ctx context.Context, arg Loc
 }
 
 const lockSlugScope = `-- name: LockSlugScope :exec
-SELECT pg_advisory_xact_lock(hashtextextended(
-  'mcp_slug:' || coalesce($1::uuid::text, 'platform') || '/' || $2::text, 0
-))
+SELECT
+  pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || $1::text, 0)),
+  pg_advisory_xact_lock(hashtextextended(
+    'mcp_slug:' || coalesce($2::uuid::text, 'platform') || '/' || $1::text, 0
+  ))
 `
 
 type LockSlugScopeParams struct {
-	CustomDomainID uuid.NullUUID
 	Slug           string
+	CustomDomainID uuid.NullUUID
 }
 
 // Serializes competing claims on one (namespace, slug) address for the rest of
 // the caller's transaction; the per-table unique indexes cannot see
-// cross-table collisions.
+// cross-table collisions. The platform lock comes first, also for a
+// custom-domain claim, since the platform host serves custom-domain aliases.
 func (q *Queries) LockSlugScope(ctx context.Context, arg LockSlugScopeParams) error {
-	_, err := q.db.Exec(ctx, lockSlugScope, arg.CustomDomainID, arg.Slug)
+	_, err := q.db.Exec(ctx, lockSlugScope, arg.Slug, arg.CustomDomainID)
 	return err
 }
 

@@ -152,6 +152,25 @@ func TakenAddresses(ctx context.Context, db repo.DBTX, addresses []Alias) (map[A
 	return taken, nil
 }
 
+// PlatformServed returns, keyed by canonical server id, the custom-domain alias slug the platform host still serves
+// for each of the given servers: the only alias with its slug, with no live platform endpoint holding it.
+func PlatformServed(ctx context.Context, db repo.DBTX, organizationID string, projectIDs, serverIDs []uuid.UUID) (map[uuid.UUID]string, error) {
+	served := make(map[uuid.UUID]string)
+	if len(serverIDs) == 0 {
+		return served, nil
+	}
+	rows, err := repo.New(db).ListPlatformServedAliases(ctx, repo.ListPlatformServedAliasesParams{
+		OrganizationID: organizationID, ProjectIds: projectIDs, McpServerIds: serverIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list platform-served legacy toolset aliases: %w", err)
+	}
+	for _, row := range rows {
+		served[row.McpServerID] = row.Slug
+	}
+	return served, nil
+}
+
 func addressKey(address Alias) string {
 	domain := ""
 	if address.CustomDomainID.Valid {
