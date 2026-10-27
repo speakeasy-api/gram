@@ -35,7 +35,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"claude-code", "Claude Code", "claude-ai"},
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "claude-code", Client: ClientUnknown},
 			{Name: "claude-code-cli", Client: ClientCLI},
 			{Name: "claude-code-web", Client: ClientCloud},
@@ -56,7 +56,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "claude-chat", Client: ClientUnknown},
 			{Name: "claude-chat-web", Client: ClientWeb},
 			{Name: "claude-web", Client: ClientWeb},
@@ -79,7 +79,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "cowork", Client: ClientUnknown},
 			{Name: "claude-cowork", Client: ClientUnknown},
 			{Name: "cowork-desktop", Client: ClientDesktop},
@@ -98,7 +98,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{
 			{
 				URL:         "https://vscode.dev/oauth/client-metadata.json",
@@ -131,7 +131,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://zed.dev/oauth/client-metadata.json",
 			DisplayName: "Zed",
@@ -161,7 +161,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://goose-docs.ai/oauth/client-metadata.json",
 			DisplayName: "Goose",
@@ -216,7 +216,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"ChatGPT", "chatgpt"},
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "chatgpt", Client: ClientUnknown},
 			{Name: "chatgpt-work", Client: ClientUnknown},
 		},
@@ -289,7 +289,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
@@ -305,7 +305,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"codex", "codex-cli", "Codex CLI"},
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "codex", Client: ClientUnknown},
 			{Name: "codex-cli", Client: ClientCLI},
 			{Name: "codex-web", Client: ClientCloud},
@@ -356,7 +356,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{
 			{
 				URL:         "https://www.notion.so/oauth/mcp-client-metadata.json",
@@ -380,7 +380,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
 			DisplayName: "MCPJam Inspector",
@@ -397,7 +397,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://api.factory.ai/mcp/oauth-client",
 			DisplayName: "Factory Droid",
@@ -414,7 +414,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://toolhive.dev/oauth/client-metadata.json",
 			DisplayName: "ToolHive",
@@ -444,7 +444,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
 			DisplayName: "Hermes Agent",
@@ -463,7 +463,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://www.skydive.com/api/v1/external-oauth/client-metadata",
 			DisplayName: "Skydive",
@@ -488,7 +488,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"opencode"},
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "opencode", Client: ClientCLI},
 		},
 		Documents: []Document{{
@@ -509,7 +509,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://github.com/copilot/cli/client-metadata.json",
 			DisplayName: "GitHub Copilot CLI",
@@ -541,7 +541,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://api.conductor.build/oauth/client-metadata.json",
 			DisplayName: "Conductor",
@@ -567,7 +567,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://connect.vercel.com/connectors/*",
 			DisplayName: "Vercel Connect (connectors)",
@@ -588,7 +588,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
 			DisplayName: "Linear",
@@ -610,7 +610,7 @@ var registry = []Product{
 		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://api.lovable.dev/.well-known/oauth-client",
 			DisplayName: "Lovable",
@@ -649,7 +649,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents: []Document{{
 			URL:         "https://antigravity.google/oauth/client-metadata.json",
 			DisplayName: "Google Antigravity",
@@ -675,7 +675,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"Cursor", "cursor", "cursor-vscode"},
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "cursor", Client: ClientIDE},
 			{Name: "cursor-vscode", Client: ClientIDE},
 			{Name: "cursor-cli", Client: ClientCLI},
@@ -700,7 +700,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"gemini-cli", "Gemini CLI"},
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "gemini", Client: ClientUnknown},
 			{Name: "gemini-cli", Client: ClientCLI},
 		},
@@ -724,7 +724,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"Windsurf", "windsurf"},
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "windsurf", Client: ClientIDE},
 		},
 		Documents: nil,
@@ -742,7 +742,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"aider"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
@@ -758,7 +758,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"openclaw", "OpenClaw"},
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "openclaw", Client: ClientUnknown},
 		},
 		Documents: nil,
@@ -785,7 +785,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"pi"},
-		Surfaces: []Surface{
+		Aliases: []Alias{
 			{Name: "pi", Client: ClientCLI},
 		},
 		Documents: nil,
@@ -809,7 +809,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"crush", "Crush"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -831,7 +831,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"qwen-code", "Qwen Code"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -858,7 +858,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"cline", "Cline"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -884,7 +884,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"roo-code", "Roo Code"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -902,7 +902,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"continue", "Continue"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -922,7 +922,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"kilo-code", "Kilo Code"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -940,7 +940,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"augment", "Augment Code"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -961,7 +961,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"devin", "Devin"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -983,7 +983,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"amp", "Amp"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1001,7 +1001,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"openhands", "OpenHands"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1019,7 +1019,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"trae", "Trae"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1039,7 +1039,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"warp", "Warp"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1062,7 +1062,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"cherry-studio", "Cherry Studio"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
@@ -1078,7 +1078,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"msty", "Msty"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
@@ -1094,7 +1094,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"anythingllm", "AnythingLLM"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1115,7 +1115,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"open-webui", "Open WebUI"},
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1137,7 +1137,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1155,7 +1155,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1174,7 +1174,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1194,7 +1194,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1211,7 +1211,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1228,7 +1228,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 
@@ -1245,7 +1245,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 	{
@@ -1261,7 +1261,7 @@ var registry = []Product{
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: nil,
-		Surfaces:        nil,
+		Aliases:         nil,
 		Documents:       nil,
 	},
 }

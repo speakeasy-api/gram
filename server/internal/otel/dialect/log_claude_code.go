@@ -104,6 +104,7 @@ const (
 	claudeCodeAccountUUIDKey   = "user.account_uuid"
 	claudeCodeLegacyBodyPrefix = "claude_code."
 	claudeCodeToolParamsKey    = "tool_parameters"
+	claudeCodeTerminalTypeKey  = "terminal.type"
 )
 
 // Producer knowledge: the scope name identified Claude Code, so it is the key.
@@ -116,13 +117,16 @@ func (ClaudeCodeLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return scopeNameKey, claudeCodeSurface, nil
 }
 
-// Client reads terminal.type, which Claude Code puts on every event.
-func (ClaudeCodeLog) Client(record *otelv1.InboundLogRecord) (string, string, error) {
-	key, value := getOneLogAttr(record, "terminal.type")
-	if client := aivendors.ClientForTerminal(value); client != aivendors.ClientUnknown {
-		return key, string(client), nil
+// Identity is Claude Code, in the IDE or at a command line by terminal.type,
+// which Claude Code puts on every event.
+func (ClaudeCodeLog) Identity(record *otelv1.InboundLogRecord) (string, aivendors.Identity, error) {
+	identity, _ := aivendors.Identify(claudeCodeSurface)
+	key, terminal := getOneLogAttr(record, claudeCodeTerminalTypeKey)
+	if client := aivendors.ClientFromTerminal(terminal); client != aivendors.ClientUnknown {
+		identity.Client = client
+		return key, identity, nil
 	}
-	return "", "", nil
+	return scopeNameKey, identity, nil
 }
 
 // claudeCodeEventName is the producer's own name for the event: the OTLP

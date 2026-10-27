@@ -24,6 +24,6 @@ func (*logClassification) Enrich(_ context.Context, record *otelv1.InboundLogRec
 		inboundLogAttributeString(record, string(attr.ProviderKey)),
 		stated(d.Provider(record)),
 		stated(d.Surface(record)),
-		stated(d.Client(record)),
+		stated(d.Identity(record)),
 	), nil
 }

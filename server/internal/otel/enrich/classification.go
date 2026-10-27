@@ -10,8 +10,8 @@ import (
 // provider and surface. An unclassified record keeps its raw name and source
 // and gets no type. A provider the pipeline already
 // attributed (gram.provider) wins over the dialect's. Product and client are
-// the aivendors placement of the surface; a client the dialect states wins.
-func classify(source, rawEventName, eventType, attributedProvider, dialectProvider, surface, statedClient string) []attribute.KeyValue {
+// the identity the dialect states.
+func classify(source, rawEventName, eventType, attributedProvider, dialectProvider, surface string, identity aivendors.Identity) []attribute.KeyValue {
 	out := []attribute.KeyValue{AgentSourceKey.String(source)}
 	if rawEventName != "" {
 		out = append(out, AgentRawEventNameKey.String(rawEventName))
@@ -29,16 +29,11 @@ func classify(source, rawEventName, eventType, attributedProvider, dialectProvid
 	if surface != "" {
 		out = append(out, AgentSurfaceKey.String(surface))
 	}
-	product, placedClient, _ := aivendors.Place(surface)
-	if product != "" {
-		out = append(out, AgentProductKey.String(product))
+	if identity.ProductID != "" {
+		out = append(out, AgentProductKey.String(identity.ProductID))
 	}
-	client := statedClient
-	if client == "" {
-		client = string(placedClient)
-	}
-	if client != "" {
-		out = append(out, AgentClientKey.String(client))
+	if identity.Client != aivendors.ClientUnknown {
+		out = append(out, AgentClientKey.String(string(identity.Client)))
 	}
 	return out
 }

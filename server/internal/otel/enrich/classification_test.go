@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/stretchr/testify/require"
 )
@@ -187,15 +188,16 @@ func TestLogClassificationPlacesTheProductAndClient(t *testing.T) {
 	}
 }
 
-func TestClassifyLetsAStatedClientWinOverTheSurfaceName(t *testing.T) {
+func TestClassifyWritesTheIdentityTheDialectStates(t *testing.T) {
 	t.Parallel()
 
-	attrs := indexed(classify("claude-code", "", "", "", "", "claude-code-desktop", "ide"))
+	attrs := indexed(classify("claude-code", "", "", "", "", "claude-code-desktop", aivendors.Identity{ProductID: "claude-code", Client: aivendors.ClientIDE}))
 	require.Equal(t, "claude-code", attrs[AgentProductKey].AsString())
-	require.Equal(t, "ide", attrs[AgentClientKey].AsString())
+	require.Equal(t, "ide", attrs[AgentClientKey].AsString(), "the dialect's client, not one read off the surface")
 
-	attrs = indexed(classify("claude-code", "", "", "", "", "claude-code-desktop", ""))
-	require.Equal(t, "desktop", attrs[AgentClientKey].AsString())
+	attrs = indexed(classify("claude-code", "", "", "", "", "claude-code-desktop", aivendors.Identity{ProductID: "", Client: aivendors.ClientUnknown}))
+	require.NotContains(t, attrs, AgentProductKey, "classify does not identify the surface itself")
+	require.NotContains(t, attrs, AgentClientKey)
 }
 
 // A session lifecycle hook row has no type in the vocabulary, whichever

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -138,8 +139,8 @@ func (SemconvLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return "", "", nil
 }
 
-func (SemconvLog) Client(*otelv1.InboundLogRecord) (string, string, error) {
-	return "", "", nil
+func (SemconvLog) Identity(*otelv1.InboundLogRecord) (string, aivendors.Identity, error) {
+	return "", aivendors.Identity{ProductID: "", Client: aivendors.ClientUnknown}, nil
 }
 
 func (SemconvLog) EventName(record *otelv1.InboundLogRecord) (string, string, error) {

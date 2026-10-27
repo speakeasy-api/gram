@@ -83,7 +83,7 @@ func TestClaudeCodeLogAppliesToEveryClaudeCodeScope(t *testing.T) {
 	}
 }
 
-func TestClaudeCodeLogClientReadsTheTerminal(t *testing.T) {
+func TestClaudeCodeLogIdentityReadsTheTerminal(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -94,7 +94,7 @@ func TestClaudeCodeLogClientReadsTheTerminal(t *testing.T) {
 	}{
 		{name: "it reads an editor terminal as the IDE", terminal: "vscode", wantKey: "terminal.type", want: "ide"},
 		{name: "it reads tmux as the CLI", terminal: "tmux", wantKey: "terminal.type", want: "cli"},
-		{name: "it says nothing without a terminal type", terminal: "", wantKey: "", want: ""},
+		{name: "it is still claude code without a terminal type", terminal: "", wantKey: "scope.name", want: ""},
 	}
 
 	for _, tt := range tests {
@@ -112,10 +112,11 @@ func TestClaudeCodeLogClientReadsTheTerminal(t *testing.T) {
 				Attributes: attributes,
 			}).Build()
 
-			key, value, err := ClaudeCodeLog{}.Client(record)
+			key, identity, err := ClaudeCodeLog{}.Identity(record)
 			require.NoError(t, err)
 			require.Equal(t, tt.wantKey, key)
-			require.Equal(t, tt.want, value)
+			require.Equal(t, "claude-code", identity.ProductID)
+			require.Equal(t, tt.want, string(identity.Client))
 		})
 	}
 }

@@ -2,6 +2,7 @@ package dialect
 
 import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // GatewayLogScope is the scope the MCP gateway emits its tool call records under.
@@ -33,6 +34,16 @@ func (g GatewayLog) EventType(record *otelv1.InboundLogRecord) (string, string, 
 		eventType = EventTypeToolCallResult
 	}
 	return key, eventType, err
+}
+
+// Identity is the product the MCP client named itself as at initialize.
+func (GatewayLog) Identity(record *otelv1.InboundLogRecord) (string, aivendors.Identity, error) {
+	key, name := getOneLogAttr(record, gatewayMCPClientNameKey)
+	identity, ok := aivendors.Identify(name)
+	if !ok {
+		return "", identity, nil
+	}
+	return key, identity, nil
 }
 
 // Surface is whatever MCP client made the call.

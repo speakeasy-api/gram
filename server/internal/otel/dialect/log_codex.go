@@ -2,6 +2,7 @@ package dialect
 
 import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -83,8 +84,9 @@ func (CodexLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 	return scopeNameKey, codexSurface, nil
 }
 
-func (CodexLog) Client(*otelv1.InboundLogRecord) (string, string, error) {
-	return "", "", nil
+func (CodexLog) Identity(*otelv1.InboundLogRecord) (string, aivendors.Identity, error) {
+	identity, _ := aivendors.Identify(codexSurface)
+	return scopeNameKey, identity, nil
 }
 
 func (CodexLog) EventName(record *otelv1.InboundLogRecord) (string, string, error) {

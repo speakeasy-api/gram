@@ -4,8 +4,8 @@
 // hook_source is not a controlled vocabulary: adapters report it verbatim and
 // spell the same product several ways.
 //
-// Deprecated: use aivendors.Place, which names the aivendors product and the
-// client a reported name implies.
+// Deprecated: use aivendors.Identify, which names the aivendors product and
+// the client a reported name implies.
 package agentsurface
 
 import "strings"

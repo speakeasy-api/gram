@@ -19,14 +19,14 @@ var unplacedSources = map[string]bool{
 	"glean":          true,
 }
 
-func TestEveryHookSourcePlacesOnAnAIVendorsProduct(t *testing.T) {
+func TestEveryHookSourceIdentifiesAnAIVendorsProduct(t *testing.T) {
 	t.Parallel()
 
 	for source := range bySource {
 		if unplacedSources[source] {
 			continue
 		}
-		_, _, ok := aivendors.Place(source)
-		require.True(t, ok, "hook source %q places on no aivendors product", source)
+		_, ok := aivendors.Identify(source)
+		require.True(t, ok, "hook source %q identifies no aivendors product", source)
 	}
 }

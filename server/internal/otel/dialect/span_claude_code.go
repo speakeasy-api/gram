@@ -2,6 +2,7 @@ package dialect
 
 import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -65,6 +66,17 @@ func (ClaudeCodeSpan) Provider(*otelv1.InboundSpan) (string, string, error) {
 
 func (ClaudeCodeSpan) Surface(*otelv1.InboundSpan) (string, string, error) {
 	return scopeNameKey, claudeCodeSurface, nil
+}
+
+// Identity is Claude Code, in the IDE or at a command line by terminal.type.
+func (ClaudeCodeSpan) Identity(span *otelv1.InboundSpan) (string, aivendors.Identity, error) {
+	identity, _ := aivendors.Identify(claudeCodeSurface)
+	key, terminal := getOneAttr(span, claudeCodeTerminalTypeKey)
+	if client := aivendors.ClientFromTerminal(terminal); client != aivendors.ClientUnknown {
+		identity.Client = client
+		return key, identity, nil
+	}
+	return scopeNameKey, identity, nil
 }
 
 func (ClaudeCodeSpan) EventName(span *otelv1.InboundSpan) (string, string, error) {
