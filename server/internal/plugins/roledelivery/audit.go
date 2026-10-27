@@ -6,31 +6,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// memberRow is a plugin_servers row as the role delivery queries return it.
-type memberRow struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
 // Content automation records the same content events as manual additions and
 // removals. The originating grant/audience mutation separately records its actor.
-func auditChange(ctx context.Context, tx pgx.Tx, org string, projectID, pluginID uuid.UUID, membership memberRow, added bool) error {
+func auditChange(ctx context.Context, tx pgx.Tx, org string, projectID, pluginID uuid.UUID, membership pluginsrepo.PluginServer, added bool) error {
 	plugin, err := pluginsrepo.New(tx).GetPlugin(ctx, pluginsrepo.GetPluginParams{ID: pluginID, OrganizationID: org, ProjectID: projectID})
 	if err != nil {
 		return fmt.Errorf("load role delivery audit plugin: %w", err)

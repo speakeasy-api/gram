@@ -114,6 +114,8 @@ type ProductFeatures struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled bool
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -269,6 +271,9 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	if vres.OrganizationGatewayDisabled != nil {
 		res.OrganizationGatewayDisabled = *vres.OrganizationGatewayDisabled
 	}
+	if vres.CodeModeEnabled != nil {
+		res.CodeModeEnabled = *vres.CodeModeEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -299,6 +304,7 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

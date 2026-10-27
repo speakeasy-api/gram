@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -20,7 +21,7 @@ import (
 // connecting it through the gateway, by memberNeedsSignIn. It checks
 // capability, not whether a person has connected yet: an OAuth member stays
 // supported so they can connect it.
-func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (supported bool, needsOAuth bool, err error) {
+func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, member metaMember) (supported bool, needsOAuth bool, err error) {
 	oauth := memberNeedsSignIn(member)
 	if member.backend != metaMemberBackendHosted {
 		if !member.remoteServerID.Valid {
@@ -53,12 +54,16 @@ func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (sup
 	case err != nil:
 		return false, false, fmt.Errorf("load member auth toolset: %w", err)
 	}
+	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
+	if err != nil {
+		return false, false, fmt.Errorf("load member auth hosting state: %w", err)
+	}
 	// Same rules as loadMemberToolset. Derived gateways always have a
 	// signed-in caller.
 	if member.serverID == toolset.ID && !toolset.McpEnabled {
 		return false, false, nil
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, true, &toolset)
+	allowed, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset)
 	if err != nil || !allowed {
 		return false, false, err
 	}

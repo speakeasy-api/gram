@@ -2147,6 +2147,24 @@ VALUES (
 -- server, so a table-driven test can set each case's associations afresh.
 DELETE FROM mcp_server_remote_session_clients WHERE mcp_server_id = @mcp_server_id;
 
+-- name: CopyConsentEMACredentialToProjectFixture :exec
+-- TEST FIXTURE ONLY. A pending organization-issued consent in another member project.
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id,
+  remote_session_client_id, resource, subject_urn, client_selection,
+  remote_session_ema_binding_id, ema_binding_generation, ema_provider,
+  internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id, sign_in_id,
+  access_token_encrypted, access_expires_at
+)
+SELECT c.organization_id, p.id, c.user_session_issuer_id, c.remote_session_issuer_id,
+       c.remote_session_client_id, c.resource, c.subject_urn, c.client_selection,
+       c.remote_session_ema_binding_id, c.ema_binding_generation, c.ema_provider,
+       c.internal_session_issuer_id, c.internal_session_issuer_updated_at, c.internal_session_issuer_key_id, c.sign_in_id,
+       c.access_token_encrypted, c.access_expires_at
+FROM remote_session_ema_credentials AS c
+JOIN projects AS p ON p.id = @project_id AND p.organization_id = c.organization_id
+WHERE c.id = @id AND c.organization_id = @organization_id AND c.user_session_id IS NULL;
+
 -- name: ListUserSessionCredentialsForSubjectFixture :many
 -- Test-only fixture: every session row of one subject, oldest first, with the
 -- credential it belongs to, so a test can follow refresh rotation.
@@ -2185,9 +2203,107 @@ WHERE project_id = @project_id
   AND deployment_id = @deployment_id
   AND tool_urn = @tool_urn;
 
+-- name: ExpireUserSessionFixture :execrows
+-- Test-only fixture: expires a session without waiting for its access token TTL.
+UPDATE user_sessions
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+  AND organization_id = @organization_id::text
+  AND project_id = @project_id::uuid
+  AND user_session_issuer_id = @user_session_issuer_id;
+
 -- name: ExpireAPIKeyFixture :exec
 -- Test-only fixture: puts a key's expiry in the past.
 UPDATE api_keys
 SET expires_at = clock_timestamp() - interval '1 minute'
 WHERE id = @id
   AND organization_id = @organization_id;
+-- name: CreateRemoteMCPBackendFixture :exec
+INSERT INTO remote_mcp_servers (id, project_id, transport_type, url)
+VALUES (@id, @project_id, 'streamable-http', @url);
+
+-- name: CreateRemoteBackedMCPServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, slug, name, remote_mcp_server_id, visibility)
+VALUES (@id, @project_id, @slug, @slug, @remote_mcp_server_id, @visibility);
+
+-- name: CreateAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
+VALUES (@organization_id, @project_id, @client_type, 'backfill', @name)
+RETURNING id;
+
+-- name: CreateAuthClientHeaderFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_secret, value)
+VALUES (@auth_client_id, @organization_id, @name, @is_secret, @value);
+
+-- name: AssociateAuthClientFixture :exec
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+VALUES (
+    @project_id, @organization_id, @mcp_server_id, @auth_client_id,
+    (SELECT ac.attachment_scope FROM mcp_auth_clients ac WHERE ac.id = @auth_client_id),
+    'backfill'
+);
+
+-- name: SetToolsetCustomDomain :exec
+-- Points a toolset's legacy alias at a custom domain; the canonical wrapper's endpoints are left as they are.
+UPDATE toolsets
+SET
+    custom_domain_id = @custom_domain_id
+  , updated_at = clock_timestamp()
+WHERE slug = @slug AND project_id = @project_id;
+
+-- name: SetToolsetMCPPublicByID :exec
+-- Sets publicness as an MCP server update would: on the canonical wrapper, and on the columns for wrapper-less toolsets.
+WITH toolset AS (
+    UPDATE toolsets
+    SET mcp_is_public = @mcp_is_public
+    WHERE toolsets.id = @id AND toolsets.project_id = @project_id
+    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
+)
+UPDATE mcp_servers
+SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
+FROM toolset
+WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
+
+-- name: SetToolsetMCPPublicBySlug :exec
+WITH toolset AS (
+    UPDATE toolsets
+    SET mcp_is_public = @mcp_is_public
+    WHERE toolsets.mcp_slug = @mcp_slug AND toolsets.project_id = @project_id
+    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
+)
+UPDATE mcp_servers
+SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
+FROM toolset
+WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
+
+-- name: SetToolsetMCPEnabledByID :exec
+-- Enables or disables as an MCP server update would: on the canonical wrapper, and on the column for wrapper-less toolsets.
+WITH toolset AS (
+    UPDATE toolsets
+    SET mcp_enabled = @mcp_enabled
+    WHERE toolsets.id = @id AND toolsets.project_id = @project_id
+    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
+)
+UPDATE mcp_servers
+SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
+FROM toolset
+WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
+
+-- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
+-- Test-only fixture for an issuer policy change while admission waits on its lock.
+UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
+WHERE organization_id = @organization_id
+  AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND id = @id AND deleted IS FALSE;
+
+-- name: SetWorkloadIssuerAssertionReuseFixture :exec
+UPDATE workload_issuers SET allow_assertion_reuse = @allow_assertion_reuse::boolean
+WHERE id = @id AND organization_id = @organization_id;
+
+-- name: WorkloadIssuerWriteIsBlockedFixture :one
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database()
+      AND wait_event_type = 'Lock'
+      AND query LIKE '%LockWorkloadIssuerForWrite%'
+)::boolean;

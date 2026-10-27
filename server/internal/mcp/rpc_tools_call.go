@@ -513,13 +513,33 @@ func handleToolsCall(
 		ToolAnnotations: nil,
 	}, mcpriskscan.BorrowPayload(params.Arguments))
 	decision := scan.Scan(ctx, requestSubject)
+	if decision.HeldForApproval() {
+		// A held call is an instruction, not a refusal: the agent reads the
+		// tool result, requests approval and retries.
+		rw.resultIsError = true
+		identity := serverInfoHostedToolset
+		if payload.metaMcpServerID != "" {
+			identity = serverInfoMetaServer
+		}
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
+	}
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure
 	}
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		invocation.dispatched = true
+	}
 	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
+		// The proxy refused a body it could not decode before contacting the
+		// tool's server, so a Code Mode program can fix it and call again.
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && errors.Is(err, gateway.ErrToolInputRejected) {
+			invocation.dispatched = false
+			invocation.rejected = true
+			invocation.message = "invalid request body"
+		}
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
 			recordToolCallErrorStatus(ctx, rw, rejected)
 			return nil, rejected
@@ -536,6 +556,16 @@ func handleToolsCall(
 	}
 
 	outputBytes = int64(rw.body.Len())
+
+	// The proxy refused the input before contacting the tool's server, so a
+	// Code Mode program can fix its arguments and call again.
+	if rw.headers.Get(gateway.ToolInputRejectedHeader) != "" {
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+			invocation.dispatched = false
+			invocation.rejected = true
+			invocation.message = toolInputRejection(rw.body.Bytes())
+		}
+	}
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
@@ -934,7 +964,7 @@ func filterOmittedEnvVars(
 		return fmt.Errorf("get metadata for toolset: %w", err)
 	}
 
-	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, mcpmetadata.MetadataRecord(rawMetadata))
+	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, rawMetadata)
 	if err != nil {
 		return fmt.Errorf("convert to mcp metadata: %w", err)
 	}
@@ -970,4 +1000,15 @@ func filterOmittedEnvVars(
 	}
 
 	return nil
+}
+
+// toolInputRejection extracts the proxy's input refusal from its error body.
+func toolInputRejection(body []byte) string {
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &refusal); err == nil && refusal.Error != "" {
+		return refusal.Error
+	}
+	return strings.TrimSpace(string(body))
 }

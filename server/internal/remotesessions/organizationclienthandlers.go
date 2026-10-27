@@ -707,11 +707,18 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
+	newClientID, err := correctedClientID(existing.RemoteSessionClient, payload.ClientID)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
 		return nil, err
 	}
 
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
+		ClientID:                        newClientID,
+		DisplayName:                     updatedDisplayName(payload.DisplayName),
 		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
@@ -726,6 +733,16 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// Sessions obtained through the old client_id hold tokens the issuer bound
+	// to it, so they cannot be refreshed under the corrected one.
+	var revokedSessions []repo.SoftDeleteRemoteSessionsByClientIDRow
+	if newClientID.Valid {
+		revokedSessions, err = txRepo.SoftDeleteRemoteSessionsByClientID(ctx, updated.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "revoke remote sessions of the corrected client").LogError(ctx, logger)
+		}
 	}
 
 	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, updated.ID)
@@ -768,6 +785,9 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Best effort and post-commit, as on delete.
+	s.revoker.RevokeAllIssuedToDetached(ctx, revokedCredentials(revokedSessions), issuingClientAuth(existing.RemoteSessionClient))
 
 	// Set after the audit snapshot so it matches the snapshot before.
 	afterView.CallbackURL = s.clientCallbackURL(updated)
@@ -824,6 +844,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		ActorDisplayName:         authCtx.Email,
 		ConfirmUpstreamRejection: false,
 		OrganizationID:           authCtx.ActiveOrganizationID,
+		RegistrationScope:        nil,
 	})
 	if err != nil {
 		if conflict, ok := errors.AsType[*oops.ShareableError](err); ok && conflict.Code == oops.CodeConflict {

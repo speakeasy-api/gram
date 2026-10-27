@@ -909,6 +909,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
+    m.builtin_backend,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -1005,6 +1006,7 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
+        m.builtin_backend,
         COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
@@ -1152,6 +1154,18 @@ INSERT INTO platform_mcp_catalog_registrations (
     @acting_surface
 )
 RETURNING *;
+
+-- name: RetirePlatformMCPCatalogRegistration :exec
+-- Retires a registration whose MCP server was deleted outside Platform MCP, so
+-- adding the same catalogue server again creates a fresh registration instead
+-- of reusing one that points at a deleted server.
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
 
 -- name: UpdatePlatformMCPCatalogRegistrationComponents :one
 UPDATE platform_mcp_catalog_registrations
@@ -2875,34 +2889,6 @@ WHERE cm.chat_id = @chat_id
 ORDER BY cm.created_at DESC, cm.seq DESC
 LIMIT @row_limit;
 
--- name: ListRiskFindingSpansForRecall :many
--- Findings that drive inline masking of the recall digest. Message-anchored
--- rows only (the digest does not render content parts): found, not excluded,
--- not swept as false positive, policy still enabled and not deleted.
--- Latest generation only, matching the transcript read: findings on
--- superseded generations mask nothing the digest renders, so loading them
--- would only let long, repeatedly compacted sessions inflate the scan.
-SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN chats c ON c.id = cm.chat_id
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE cm.chat_id = @chat_id
-  AND rr.project_id = @project_id
-  AND c.organization_id = @organization_id
-  AND c.user_id = @user_id::text
-  AND c.deleted IS FALSE
-  AND (ua.id IS NULL OR ua.account_type <> 'personal')
-  AND cm.generation = (
-    SELECT COALESCE(MAX(generation), 0)
-    FROM chat_messages
-    WHERE chat_id = @chat_id
-      AND project_id = @project_id
-  )
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC;
-
 -- name: InsertChatSessionRecallLink :exec
 -- Sibling of agent's InsertChatSessionLink with kind='recall'. A v1 recall
 -- edge always has a NULL child: the OAuth principal carries no harness
@@ -3128,6 +3114,7 @@ WHERE m.id = @mcp_server_id
 -- Deliberately returns no upstream URL, credentials, or provider resource data.
 SELECT
     CASE WHEN @target_kind::text = 'gateway' THEN COALESCE(gateway.discovery_mode, 'progressive') ELSE '' END::text AS discovery_mode,
+    (@target_kind::text = 'gateway' AND gateway.user_session_issuer_id IS NOT NULL)::boolean AS gateway_requires_sign_in,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
     CASE WHEN @target_kind::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
     COALESCE(
@@ -3307,7 +3294,6 @@ SELECT
     ps.policy,
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    (ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL)::boolean AS unresolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
@@ -3380,12 +3366,7 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    CASE
-      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
-      WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
-      -- A live toolset-only row lands here until AIM-581 drops plugin_servers.toolset_id.
-      ELSE 'unresolved'
-    END::text AS target_kind,
+    CASE WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server' ELSE 'gateway' END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
@@ -3465,6 +3446,25 @@ LIMIT @result_limit;
 -- required for the optimistic-concurrency version; no principal leaves this
 -- internal query boundary.
 SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id
+ORDER BY pa.principal_urn;
+
+-- name: ListPlatformMCPPluginAssignmentsWithModes :many
+-- The same exact-plugin assignment set as ListPlatformMCPPluginAssignments,
+-- with each assignment's install mode, which the optimistic-concurrency version
+-- also covers.
+SELECT pa.principal_urn, pa.install_mode
 FROM plugin_assignments pa
 JOIN plugins p
   ON p.id = pa.plugin_id

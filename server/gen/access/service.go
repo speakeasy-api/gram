@@ -1394,14 +1394,18 @@ type Selector struct {
 	// remote_session clients only). A user ID, '*', or '$represented_user' for the
 	// user the request acts for. Never lets a caller use another user's connection.
 	ConnectionOwner *string
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
+	UpstreamClient *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth
-	// scopes). When set with resource_id='*', grants access to every resource of
-	// the kind in the project. For mcp:auth and mcp:blocked_auth it is the project
-	// of the server using the client.
+	// Project filter (MCP, environment, assistant, inference, mcp:auth, and
+	// mcp:blocked_auth scopes). When set with resource_id='*', grants access to
+	// every resource of the kind in the project. For mcp:auth and mcp:blocked_auth
+	// it is the project of the server using the client.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.

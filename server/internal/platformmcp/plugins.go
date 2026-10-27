@@ -24,8 +24,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -101,6 +103,11 @@ type PluginAssignmentOption struct {
 	DisplayName string        `json:"display_name"`
 	MemberCount *SubjectCount `json:"member_count,omitempty"`
 	Reference   string        `json:"reference"`
+
+	// InstallMode is how the device agent installs the plugin for this
+	// audience: required, default or available. Set only on a plugin's current
+	// assignments in get_plugin.
+	InstallMode string `json:"install_mode,omitempty"`
 }
 
 // Plugin publication states.
@@ -164,7 +171,7 @@ type PluginServer struct {
 	// DisplayName is the name the generated package gives this server.
 	DisplayName string `json:"display_name"`
 
-	// Backend is what the entry is backed by: "mcp_server", "gateway", or "unresolved" when it has no current backend.
+	// Backend is what the entry is backed by: "mcp_server" or "gateway".
 	Backend string `json:"backend"`
 
 	// TargetID is the exact typed backend ID. It is present only in
@@ -452,6 +459,12 @@ type PluginsService struct {
 	metadataLogger *slog.Logger
 	metadataCore   *plugindelivery.PluginMetadataCore
 	metadataBudget OperationBudget
+
+	// orgHosts resolves the platform host stored as an organization's default
+	// host. Nil links follow the request's platform origin. orgHostsLogger
+	// records failed reads of that host.
+	orgHosts       *orghost.Resolver
+	orgHostsLogger *slog.Logger
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -571,6 +584,21 @@ func (s *PluginsService) WithInstallLinks(dashboardURL, serverURL *url.URL) *Plu
 	return s
 }
 
+// WithOrganizationHosts makes member links use the platform host stored as the
+// organization's default host, the host the dashboard serves it on. logger
+// records failed reads of that host, after which links fall back to the
+// request's platform origin. A nil logger discards those records.
+func (s *PluginsService) WithOrganizationHosts(resolver *orghost.Resolver, logger *slog.Logger) *PluginsService {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	if s != nil {
+		s.orgHosts = resolver
+		s.orgHostsLogger = logger
+	}
+	return s
+}
+
 func (s *PluginsService) WithDistributionAdmissionReads(read distributionAdmissionReader) *PluginsService {
 	if s != nil {
 		s.distributionAdmissionRead = read
@@ -584,7 +612,8 @@ func (s *PluginsService) ResolveAssignmentReferences(ctx context.Context, tx pgx
 	if !s.valid() {
 		return nil, nil, ErrUnavailable
 	}
-	return s.resolveMutationAssignments(ctx, tx, principal, project, references)
+	principalURNs, summaries, _, err := s.resolveMutationAssignments(ctx, tx, principal, project, references)
+	return principalURNs, summaries, err
 }
 
 func (s *PluginsService) valid() bool {
@@ -782,11 +811,8 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 	}
 	for _, server := range servers {
 		backend := "mcp_server"
-		switch {
-		case server.GatewayBacked:
+		if server.GatewayBacked {
 			backend = "gateway"
-		case server.Unresolved:
-			backend = "unresolved"
 		}
 		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: server.McpSlug, Policy: server.Policy, Enabled: server.Enabled})
 	}
@@ -918,13 +944,19 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin skills: %w", err)
 	}
 	skills, skillsTruncated := boundedRows(skills, maxPluginMembers)
-	assignments, err := q.ListPlatformMCPPluginAssignments(ctx, platformrepo.ListPlatformMCPPluginAssignmentsParams{
+	assignmentRows, err := q.ListPlatformMCPPluginAssignmentsWithModes(ctx, platformrepo.ListPlatformMCPPluginAssignmentsWithModesParams{
 		PluginID:       target.ID,
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID,
 	})
 	if err != nil {
 		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin assignments: %w", err)
+	}
+	assignments := make([]string, 0, len(assignmentRows))
+	assignmentModes := make(map[string]installmode.Mode, len(assignmentRows))
+	for _, row := range assignmentRows {
+		assignments = append(assignments, row.PrincipalUrn)
+		assignmentModes[canonicalPluginAssignmentURN(row.PrincipalUrn)] = installmode.FromStored(row.InstallMode)
 	}
 	availableAssignments := []resolvedPluginAssignment{}
 	expiresAt := time.Time{}
@@ -936,7 +968,10 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		}
 	}
 	currentAssignments, detailsComplete := currentPluginAssignments(availableAssignments, assignments)
-	assignmentVersion := pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, assignments)
+	for index := range currentAssignments {
+		currentAssignments[index].option.InstallMode = string(assignmentModes[currentAssignments[index].principalURN])
+	}
+	assignmentVersion := pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, assignments, assignmentModes)
 	publicAssignments := publicAssignmentOptions(currentAssignments)
 
 	output := GetPluginOutput{
@@ -1152,20 +1187,33 @@ func currentPluginAssignments(available []resolvedPluginAssignment, assignments 
 	return current, len(assigned) == 0
 }
 
-func pluginAssignmentVersion(key []byte, projectID, pluginID uuid.UUID, assignments []string) string {
+// pluginAssignmentVersion covers the canonical assignment set and each
+// assignment's install mode, so a mode-only edit also invalidates the version.
+// A principal missing from modes counts as installmode.Default.
+func pluginAssignmentVersion(key []byte, projectID, pluginID uuid.UUID, assignments []string, modes map[string]installmode.Mode) string {
 	canonical := slices.Clone(assignments)
 	for index := range canonical {
 		canonical[index] = canonicalPluginAssignmentURN(canonical[index])
 	}
 	slices.Sort(canonical)
 	canonical = slices.Compact(canonical)
+	canonicalModes := make(map[string]installmode.Mode, len(modes))
+	for principalURN, mode := range modes {
+		canonicalModes[canonicalPluginAssignmentURN(principalURN)] = mode
+	}
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write([]byte(projectID.String()))
 	_, _ = mac.Write([]byte{0})
 	_, _ = mac.Write([]byte(pluginID.String()))
 	for _, principalURN := range canonical {
+		mode, ok := canonicalModes[principalURN]
+		if !ok {
+			mode = installmode.Default
+		}
 		_, _ = mac.Write([]byte{0})
 		_, _ = mac.Write([]byte(principalURN))
+		_, _ = mac.Write([]byte{1})
+		_, _ = mac.Write([]byte(mode))
 	}
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

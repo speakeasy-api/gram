@@ -22,7 +22,6 @@ func TestHandleToken_ClientBoundGrantsWithoutClientAreInvalidClient(t *testing.T
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	forms := map[string]url.Values{
-		"client_credentials": {"grant_type": {"client_credentials"}},
 		oauthwire.GrantTypeAuthorizationCode: {
 			"grant_type":    {oauthwire.GrantTypeAuthorizationCode},
 			"code":          {"irrelevant"},
@@ -36,7 +35,7 @@ func TestHandleToken_ClientBoundGrantsWithoutClientAreInvalidClient(t *testing.T
 	}
 	for grantType, form := range forms {
 		w := postForm(t, ti, toolset.McpSlug.String, "token", form)
-		require.Equal(t, http.StatusUnauthorized, w.Code, grantType)
+		require.Equal(t, http.StatusBadRequest, w.Code, grantType)
 		require.JSONEq(t, missingClientIDResponse, w.Body.String(), grantType)
 	}
 }
@@ -68,7 +67,7 @@ func TestHandleToken_JWTBearerWithClientAuthenticatesClient(t *testing.T) {
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	w := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, "client_"+uuid.NewString(), "header.payload.signature")
-	requireInvalidClient(t, w)
+	requireInvalidClient(t, w, http.StatusBadRequest)
 }
 
 // grant_type is dispatched before client authentication, so an unsupported
@@ -80,8 +79,9 @@ func TestHandleToken_UnsupportedGrantPrecedesClientAuthentication(t *testing.T) 
 	toolset, _, publicClient := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	forms := map[string]url.Values{
+		"uncomposed client credentials without client": {"grant_type": {"client_credentials"}},
+		"uncomposed client credentials with client":    {"grant_type": {"client_credentials"}, "client_id": {publicClient.ClientID}},
 		"no client":           {"grant_type": {"urn:example:grant-type:unknown"}},
-		"no grant_type":       {},
 		"unregistered client": {"grant_type": {"urn:example:grant-type:unknown"}, "client_id": {"client_" + uuid.NewString()}},
 		"wrong secret":        {"grant_type": {"password"}, "client_id": {publicClient.ClientID}, "client_secret": {"wrong"}},
 	}

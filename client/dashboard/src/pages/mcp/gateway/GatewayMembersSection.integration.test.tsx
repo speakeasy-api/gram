@@ -93,7 +93,7 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
       catalog: { href: () => "/catalog" },
-      x: { overview: { href: () => "/server" } },
+      details: { overview: { href: () => "/server" } },
       add: Object.fromEntries(
         ["remote", "tunneled", "openapi", "fromSource", "function"].map(
           (key) => [key, { href: () => "/" + key }],

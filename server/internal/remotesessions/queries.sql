@@ -814,7 +814,8 @@ WHERE id = @id
 -- endpoint to probe and the registration endpoint to re-register at, both as
 -- discovery last refreshed them on the issuer, and the issuer's transport
 -- binding, since both of those endpoints are only reachable over the tunnel
--- when one is set. Not locked: the rotation talks to the issuer between this
+-- when one is set, and the issuer's scope inputs for a client that stores no
+-- scope. Not locked: the rotation talks to the issuer between this
 -- read and its write, and the write compares the client_id it read here so a
 -- concurrent rotation is detected rather than blocked. The ID comes from an
 -- authorized client selection, not a caller-supplied issuer ID. Restrict the
@@ -829,7 +830,10 @@ SELECT
     i.updated_at             AS issuer_updated_at,
     i.project_id             AS issuer_project_id,
     i.organization_id        AS issuer_organization_id,
-    i.tunneled_mcp_server_id AS issuer_tunneled_mcp_server_id
+    i.tunneled_mcp_server_id AS issuer_tunneled_mcp_server_id,
+    i.scopes_supported       AS issuer_scopes_supported,
+    i.scope_override         AS issuer_scope_override,
+    i.omit_scope_fallback    AS issuer_omit_scope_fallback
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
@@ -1214,15 +1218,31 @@ ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: UpdateRemoteSessionClient :one
--- A rotated secret also clears the upstream rejection marker: the rejection
--- may have been the old secret, and a client whose refreshes succeed again
--- should not stay flagged for re-registration.
+-- A rotated secret or corrected client_id also clears the upstream rejection
+-- marker: the rejection may have been the old value, and a client whose
+-- refreshes succeed again should not stay flagged for re-registration. A
+-- corrected client_id is a new registration as far as the issuer is
+-- concerned, so it drops the old one's grant evidence and issue time.
 UPDATE remote_session_clients
 SET
+    client_id = COALESCE(sqlc.narg('client_id'), client_id),
+    client_id_issued_at = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN clock_timestamp()
+        ELSE client_id_issued_at
+    END,
+    grant_types = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE grant_types
+    END,
+    display_name = CASE
+        WHEN sqlc.narg('display_name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('display_name'), display_name)
+    END,
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN upstream_rejected_at
-        ELSE NULL
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NOT NULL THEN NULL
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE upstream_rejected_at
     END,
     -- A replaced secret takes the expiry supplied with it, or none: keeping
     -- the old secret's deadline would flag the new secret as expired.
@@ -1380,6 +1400,26 @@ VALUES (
     @audience,
     sqlc.narg('callback_base_url')
 )
+RETURNING *;
+
+-- name: SetDuplicatedCIMDRemoteSessionClientAuthentication :one
+-- Gives a duplicated client metadata document client the authentication
+-- settings of the client it copies. CreateRemoteSessionClientCIMD always
+-- creates a public client, while a document client may sign private_key_jwt
+-- assertions with a key set, which its document then publishes. Scoped to the
+-- caller's organization like the other organization-surface client writes, and
+-- matches only a document client.
+UPDATE remote_session_clients
+SET
+    token_endpoint_auth_method = @token_endpoint_auth_method,
+    token_endpoint_auth_audience_format = @token_endpoint_auth_audience_format,
+    json_web_key_set_id = sqlc.narg('json_web_key_set_id')::uuid,
+    grant_types = sqlc.narg('grant_types')::text[],
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: DeleteRemoteSessionClient :one
@@ -3223,13 +3263,28 @@ RETURNING *;
 -- passing it as client_secret_encrypted; an omitted narg keeps the existing
 -- secret. See the ORG REACHABILITY note on
 -- ListOrganizationRemoteSessionClientsByIssuerID. Note this mutates the CLIENT,
--- which the tenant owns, never the platform issuer it points at.
+-- which the tenant owns, never the platform issuer it points at. A corrected
+-- client_id resets the registration state as UpdateRemoteSessionClient does.
 UPDATE remote_session_clients AS c
 SET
+    client_id = COALESCE(sqlc.narg('client_id'), c.client_id),
+    client_id_issued_at = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN clock_timestamp()
+        ELSE c.client_id_issued_at
+    END,
+    grant_types = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE c.grant_types
+    END,
+    display_name = CASE
+        WHEN sqlc.narg('display_name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('display_name'), c.display_name)
+    END,
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), c.client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN c.upstream_rejected_at
-        ELSE NULL
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NOT NULL THEN NULL
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE c.upstream_rejected_at
     END,
     -- A pasted-in replacement secret carries no issuer-reported expiry, and
     -- keeping the old secret's deadline would flag the new one as expired.
@@ -6132,7 +6187,7 @@ WHERE organization_id = @organization_id::text AND project_id = @project_id::uui
 -- session issuer that no grant adopted, when the user denies consent.
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
+WHERE organization_id = @organization_id::text
   AND user_session_issuer_id = @user_session_issuer_id::uuid
   AND subject_urn = @subject_urn::text AND sign_in_id = @sign_in_id::uuid
   AND ema_provider = 'speakeasy' AND user_session_id IS NULL

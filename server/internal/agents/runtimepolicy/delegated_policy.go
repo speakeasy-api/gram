@@ -23,15 +23,25 @@ const (
 	DelegatedPolicyVersion4 DelegatedPolicyVersion = 4
 	DelegatedPolicyVersion5 DelegatedPolicyVersion = 5
 
-	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion5
+	DelegatedPolicyVersion6 DelegatedPolicyVersion = 6
 
-	// IssuedDelegatedPolicyVersion is the newest version any credential is
-	// issued at. It trails CurrentDelegatedPolicyVersion until every replica
-	// decodes the newer version, so a mixed deploy or rollback strands nothing.
+	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion6
+
+	// IssuedDelegatedPolicyVersion preserves the general delegated/MCP issuance
+	// contract. Reader support (Current) does not advance existing issuers.
 	IssuedDelegatedPolicyVersion = DelegatedPolicyVersion4
+
+	// AssistantIssuedPolicyVersion preserves the pre-inference version used by
+	// assistant MCP credentials and internal assistant inference ceilings.
+	AssistantIssuedPolicyVersion = DelegatedPolicyVersion5
+
+	// InferenceIssuedPolicyVersion is an explicit opt-in for the new external
+	// inference audience only. Older replicas reject it; mixed deployments and
+	// rollback do not promise availability for these new credentials.
+	InferenceIssuedPolicyVersion = DelegatedPolicyVersion6
 )
 
-// IsIssuableScope reports whether a credential issued today can carry scope.
+// IsIssuableScope reports whether the general delegated issuance contract can carry scope.
 func IsIssuableScope(scope authz.Scope) bool {
 	return IsRuntimeScopeSafe(RuntimeScopeRegistryVersion(IssuedDelegatedPolicyVersion), scope)
 }
@@ -125,6 +135,15 @@ func EncodeDelegatedPolicy(version DelegatedPolicyVersion, policy DelegatedPolic
 // from RuntimeGrants, so each such entry fails closed without disabling valid
 // entries. All other malformed or noncanonical profiles are rejected.
 func DecodeDelegatedPolicy(version DelegatedPolicyVersion, raw []byte) (DelegatedPolicy, error) {
+	return decodeDelegatedPolicyThroughVersion(version, raw, CurrentDelegatedPolicyVersion)
+}
+
+// The reader's version ceiling is checked before interpreting any policy bytes.
+// Keeping this boundary explicit lets compatibility tests exercise older readers.
+func decodeDelegatedPolicyThroughVersion(version DelegatedPolicyVersion, raw []byte, supportedVersion DelegatedPolicyVersion) (DelegatedPolicy, error) {
+	if version > supportedVersion {
+		return DelegatedPolicy{}, invalidDelegatedPolicy("unsupported version %d", version)
+	}
 	if err := validateDelegatedPolicyVersion(version); err != nil {
 		return DelegatedPolicy{}, err
 	}
@@ -163,7 +182,7 @@ func DecodeDelegatedPolicy(version DelegatedPolicyVersion, raw []byte) (Delegate
 func (p DelegatedPolicy) RuntimeGrants() []authz.Grant {
 	grants := make([]authz.Grant, len(p.runtimeGrants))
 	for i, grant := range p.runtimeGrants {
-		grants[i] = authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector)}
+		grants[i] = authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector), Inferred: false}
 	}
 	return grants
 }
@@ -271,7 +290,7 @@ func runtimeGrants(version DelegatedPolicyVersion, effective []DelegatedPolicyGr
 		if !known || definition.lifecycle != RuntimeScopeLifecycleActive || definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
 			continue
 		}
-		grants = append(grants, authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector)})
+		grants = append(grants, authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector), Inferred: false})
 	}
 	return grants
 }

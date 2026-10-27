@@ -29,6 +29,10 @@ const (
 	MCPConnectionStateSetupRequired           = "setup_required"
 	MCPConnectionStateNotApplicable           = "not_applicable"
 
+	// MCPConnectionReasonPermissionRequired marks a member who lacks
+	// mcp:connect on the server, so no sign-in can make it usable.
+	MCPConnectionReasonPermissionRequired = "permission_required"
+
 	// MCPConnectionReasonIdentityChaining marks an active connection served by
 	// a usable identity chaining credential rather than an interactive one.
 	MCPConnectionReasonIdentityChaining = "identity_chaining"
@@ -120,13 +124,32 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
 	}
+	return s.memberConnectionStatus(ctx, principal, target)
+}
+
+// MemberConnectionStatus reports the member's sign-in state for one MCP server
+// from grants the caller already loaded, outside the Platform MCP operation
+// budget. The device agent's menu bar reads it for each server in the
+// member's plugins.
+func (s *PluginsService) MemberConnectionStatus(ctx context.Context, principal Principal, grants []authz.Grant, projectID, mcpID uuid.UUID) (GetMyMCPConnectionStatusOutput, error) {
+	if s == nil || s.db == nil || s.now == nil || s.authorization == nil {
+		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
+	}
+	target, err := s.resolveMemberMCPStatusTarget(ctx, principal, grants, projectID, mcpID)
+	if err != nil {
+		return GetMyMCPConnectionStatusOutput{}, err
+	}
+	return s.memberConnectionStatus(ctx, principal, target)
+}
+
+func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal Principal, target memberMCPStatusTarget) (GetMyMCPConnectionStatusOutput, error) {
 	output := GetMyMCPConnectionStatusOutput{
 		ProjectID: target.projectID.String(), MCPID: target.mcpID.String(), MCPName: target.name,
 		State: MCPConnectionStateNotConnected, Reason: "", RequiredScope: "", RequestAccessURL: "", ConnectionURL: "", NextAction: "connect",
 	}
 	if !target.canConnect {
 		output.State = MCPConnectionStateNotApplicable
-		output.Reason = "permission_required"
+		output.Reason = MCPConnectionReasonPermissionRequired
 		output.RequiredScope = string(authz.ScopeMCPConnect)
 		output.RequestAccessURL = s.requestMCPAccessURL(ctx, principal.OrganizationID, target.mcpID.String(), target.name)
 		output.NextAction = memberMCPAccessNextAction(output.RequestAccessURL)
@@ -138,7 +161,8 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		output.NextAction = "ask_administrator"
 		return output, nil
 	}
-	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
+	serverURL, _ := s.memberLinkBases(ctx, principal.OrganizationID)
+	output.ConnectionURL = serverURL.JoinPath("mcp", target.endpointSlug).String()
 	if target.associatedClients != nil && len(target.associatedClients) == 0 && target.remoteSessionIssuerID != uuid.Nil {
 		// A proxied server with no associated client that still derives an
 		// authorization server signs in through a client nobody configured for
@@ -264,6 +288,14 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return memberMCPStatusTarget{}, err
 	}
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return memberMCPStatusTarget{}, ErrUnavailable
+	}
+	return s.resolveMemberMCPStatusTarget(ctx, principal, grants, projectID, mcpID)
+}
+
+func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, principal Principal, grants []authz.Grant, projectID, mcpID uuid.UUID) (memberMCPStatusTarget, error) {
 	row, err := platformrepo.New(s.db).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{
 		OrganizationID: principal.OrganizationID, McpServerID: mcpID, ProjectID: projectID,
 	})
@@ -272,10 +304,6 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	}
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("get member MCP status target: %w", err)
-	}
-	grants, ok := authz.GrantsFromContext(ctx)
-	if !ok {
-		return memberMCPStatusTarget{}, ErrUnavailable
 	}
 	canRead, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String()))
 	if err != nil {

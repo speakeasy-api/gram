@@ -29,9 +29,16 @@ type LogSigintSensorCreateEvent struct {
 
 	SensorURN  urn.SigintSensor
 	SensorName string
+
+	// SensorSnapshotAfter preserves initial activation state and configuration.
+	SensorSnapshotAfter *types.SigintSensor
 }
 
 func (l *Logger) LogSigintSensorCreate(ctx context.Context, dbtx repo.DBTX, event LogSigintSensorCreateEvent) error {
+	after, err := marshalAuditPayload(event.SensorSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal sensor creation snapshot: %w", err)
+	}
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
@@ -49,7 +56,7 @@ func (l *Logger) LogSigintSensorCreate(ctx context.Context, dbtx repo.DBTX, even
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  after,
 		Metadata:       nil,
 	}
 
@@ -115,9 +122,16 @@ type LogSigintSensorDeleteEvent struct {
 
 	SensorURN  urn.SigintSensor
 	SensorName string
+
+	// SensorSnapshotBefore preserves the final activation state before deletion.
+	SensorSnapshotBefore *types.SigintSensor
 }
 
 func (l *Logger) LogSigintSensorDelete(ctx context.Context, dbtx repo.DBTX, event LogSigintSensorDeleteEvent) error {
+	before, err := marshalAuditPayload(event.SensorSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal sensor deletion snapshot: %w", err)
+	}
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
@@ -134,7 +148,7 @@ func (l *Logger) LogSigintSensorDelete(ctx context.Context, dbtx repo.DBTX, even
 		SubjectDisplayName: conv.ToPGTextEmpty(event.SensorName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
-		BeforeSnapshot: nil,
+		BeforeSnapshot: before,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
 	}

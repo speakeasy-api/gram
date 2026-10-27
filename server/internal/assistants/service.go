@@ -263,6 +263,7 @@ type assistantMCPServerRow struct {
 	ToolsetSlug            pgtype.Text
 	Visibility             string
 	EndpointSlug           string
+	EndpointDomain         string // custom-domain host; "" for platform endpoints
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -1285,6 +1286,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 			ToolsetSlug:            row.ToolsetSlug,
 			Visibility:             row.Visibility,
 			EndpointSlug:           row.EndpointSlug,
+			EndpointDomain:         row.EndpointDomain,
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
 			EnvironmentSlug:        row.EnvironmentSlug,
@@ -1343,13 +1345,16 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 // the caller cannot write.
 var errMCPEnableForbidden = errors.New("attaching a toolset with MCP disabled requires mcp:write on it")
 
+// errMCPEnableUnavailable rejects attaching a toolset whose hosted server cannot be re-enabled as it is configured.
+var errMCPEnableUnavailable = errors.New("the toolset's hosted MCP server cannot be enabled as configured: it needs an address, and private network access needs an online network ingress")
+
 // errToolsetNoMCPServer rejects attaching a toolset that has no canonical MCP server.
 var errToolsetNoMCPServer = errors.New(hostedmcp.NoServerMessage)
 
-// enableAssistantToolsets turns MCP on for newly attached toolsets that have it
-// off, so every attached hosted server is reachable at runtime, and syncs their
-// canonical wrappers. Toolsets in alreadyAttached keep their MCP state. Toolset
-// rows are already locked FOR NO KEY UPDATE, so EnablesMCP is current.
+// enableAssistantToolsets turns newly attached toolsets' disabled canonical
+// wrappers private, so every attached hosted server is reachable at runtime.
+// Toolsets in alreadyAttached keep their MCP state. Toolset rows are already
+// locked FOR NO KEY UPDATE, which serializes this with other hosted writes.
 func enableAssistantToolsets(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -1373,21 +1378,18 @@ func enableAssistantToolsets(
 	if len(toolsetIDs) == 0 {
 		return nil
 	}
-	enabled, err := assistantrepo.New(tx).EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
-		ToolsetIds: toolsetIDs,
-		ProjectID:  projectID,
-	})
-	if err != nil {
-		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
-	}
-	slices.SortFunc(enabled, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
-	for _, id := range enabled {
+	slices.SortFunc(toolsetIDs, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	for _, id := range toolsetIDs {
 		toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: id, ProjectID: projectID})
 		if err != nil {
-			return fmt.Errorf("load enabled assistant toolset: %w", err)
+			return fmt.Errorf("load assistant toolset: %w", err)
 		}
-		if _, err := hostedmcp.Sync(ctx, tx, auditLogger, actor, toolset, nil); err != nil {
-			return fmt.Errorf("sync hosted mcp for assistant toolset: %w", err)
+		if _, err := hostedmcp.Enable(ctx, tx, auditLogger, actor, toolset); err != nil {
+			var shareable *oops.ShareableError
+			if errors.As(err, &shareable) && shareable.Code == oops.CodeInvalid {
+				return fmt.Errorf("toolset %q: %w: %w", toolset.Slug, errMCPEnableUnavailable, err)
+			}
+			return fmt.Errorf("enable hosted mcp for assistant toolset: %w", err)
 		}
 	}
 	return nil
@@ -1505,7 +1507,7 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 			EnvironmentSlug: envSlug,
 			EndpointSlug:    nil,
 		}
-		if row.EndpointSlug != "" {
+		if row.EndpointSlug != "" && row.EndpointDomain == "" {
 			endpointSlug := row.EndpointSlug
 			ref.EndpointSlug = &endpointSlug
 		}
@@ -3373,7 +3375,12 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		return nil, err
 	}
 	var canonicalUserMessageID uuid.UUID
+	var sourceInstructions string
 	if runtime.RuntimeVersion == 3 {
+		sourceInstructions, err = composeInstructions("", thread, nil)
+		if err != nil {
+			return nil, err
+		}
 		ids, err := assistantrepo.New(s.db).ResolveKitCurrentUserMessage(ctx, assistantrepo.ResolveKitCurrentUserMessageParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: event.ID})
 		if err != nil {
 			return nil, fmt.Errorf("resolve canonical Kit input: %w", err)
@@ -3389,6 +3396,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		EventID:                event.ID,
 		EventAttempt:           event.Attempts,
 		CanonicalUserMessageID: canonicalUserMessageID,
+		SourceInstructions:     sourceInstructions,
 		Model:                  assistant.Model,
 		ThreadID:               thread.ID,
 		IdempotencyKey:         event.ID.String(),
@@ -3696,6 +3704,8 @@ const assistantRuntimeTokenTTL = 60 * time.Minute
 // live in each adapter's OutputChannelGuidance.
 const mcpAuthAddendum = `## MCP authentication
 
+Use the supplied sign-in links for authentication. Never ask users to paste passwords or tokens, and never disclose workload credentials.
+
 OAuth + MCP auth are owner-only: only owner can sign in and complete flow. Owner = the person who set this assistant up — NOT simply whoever triggered the current turn. When your instructions record the owner's identity (an "Owner" entry, e.g. a Slack handle + user ID), treat the requester as owner only if they match it. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
 Two MCP auth events may appear in thread, each as <message-context> block with EventType and field lines.
@@ -3759,6 +3769,26 @@ func unreachableReason(m assistantMCPServerRow) string {
 	return "disabled"
 }
 
+// endpointURL is the server's own MCP address; platform endpoints live under base.
+// Platform-first selection (not endpointaddr.PrimaryEndpoint) keeps existing URLs stable.
+func (m assistantMCPServerRow) endpointURL(base *url.URL) *url.URL {
+	if m.EndpointDomain != "" {
+		return (&url.URL{Scheme: "https", Host: m.EndpointDomain}).JoinPath("mcp", m.EndpointSlug)
+	}
+	return base.JoinPath("mcp", m.EndpointSlug)
+}
+
+func assistantMCPEnvironment(m assistantMCPServerRow) string {
+	switch {
+	case m.EnvironmentSlug.Valid:
+		return m.EnvironmentSlug.String
+	case m.ToolsetSlug.Valid && m.DefaultEnvironmentSlug.Valid:
+		return m.DefaultEnvironmentSlug.String
+	default:
+		return ""
+	}
+}
+
 func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, mcpServers []assistantMCPServerRow, platformToolsets []string) []runtimeMCPServer {
 	servers := make([]runtimeMCPServer, 0, len(mcpServers)+len(platformToolsets))
 	// Runtime server IDs must be unique — agentkit namespaces tool names by
@@ -3779,13 +3809,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		}
 
 		headers := map[string]string{}
-		envSlug := ""
-		switch {
-		case m.EnvironmentSlug.Valid:
-			envSlug = m.EnvironmentSlug.String
-		case hosted && m.DefaultEnvironmentSlug.Valid:
-			envSlug = m.DefaultEnvironmentSlug.String
-		}
+		envSlug := assistantMCPEnvironment(m)
 		if envSlug != "" {
 			headers["Gram-Environment"] = envSlug
 		}
@@ -3809,7 +3833,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		seenIDs[id] = struct{}{}
 		servers = append(servers, runtimeMCPServer{
 			ID:      id,
-			URL:     serverURL.JoinPath("mcp", m.EndpointSlug).String(),
+			URL:     m.endpointURL(serverURL).String(),
 			Headers: headers,
 		})
 	}
@@ -4103,11 +4127,16 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		UserEmail:         "",
 		Provider:          "",
 		InferenceProvider: "",
+		Lineage:           &chat.MessageLineage{Kind: chat.CaptureSynthetic, OriginalMessageID: uuid.Nil},
 		HookHostname:      "",
 		AccountType:       chatRow.AccountType,
 		BillingMode:       "",
 	})
 	for _, m := range userMessages {
+		originalID := m.ID
+		if m.OriginalMessageID.Valid {
+			originalID = m.OriginalMessageID.UUID
+		}
 		row := base
 		row.Content = conv.TruncateString(m.Content, selfHealUserMessageMaxLen)
 		row.UserID = m.UserID
@@ -4120,6 +4149,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 			UserEmail:         "",
 			Provider:          "",
 			InferenceProvider: "",
+			Lineage:           &chat.MessageLineage{Kind: chat.CaptureSynthetic, OriginalMessageID: originalID},
 			HookHostname:      "",
 			AccountType:       chatRow.AccountType,
 			BillingMode:       "",

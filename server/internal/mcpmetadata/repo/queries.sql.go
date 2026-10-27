@@ -80,7 +80,7 @@ FROM mcp_metadata
 WHERE mcp_server_id = $1
 `
 
-func (q *Queries) GetHeaderDisplayNamesByMcpServerID(ctx context.Context, mcpServerID uuid.NullUUID) ([]byte, error) {
+func (q *Queries) GetHeaderDisplayNamesByMcpServerID(ctx context.Context, mcpServerID uuid.UUID) ([]byte, error) {
 	row := q.db.QueryRow(ctx, getHeaderDisplayNamesByMcpServerID, mcpServerID)
 	var header_display_names []byte
 	err := row.Scan(&header_display_names)
@@ -287,7 +287,7 @@ RETURNING id,
 `
 
 type SetDefaultLogoIfUnsetParams struct {
-	McpServerID uuid.NullUUID
+	McpServerID uuid.UUID
 	ProjectID   uuid.UUID
 	LogoID      uuid.NullUUID
 }
@@ -448,7 +448,7 @@ RETURNING id,
 `
 
 type UpsertMetadataByMcpServerIDParams struct {
-	McpServerID               uuid.NullUUID
+	McpServerID               uuid.UUID
 	ProjectID                 uuid.UUID
 	ExternalDocumentationUrl  pgtype.Text
 	ExternalDocumentationText pgtype.Text

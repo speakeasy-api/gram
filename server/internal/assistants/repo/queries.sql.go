@@ -1062,46 +1062,6 @@ func (q *Queries) DisableAttachedMCPServerForTest(ctx context.Context, arg Disab
 	return err
 }
 
-const enableMCPForToolsets = `-- name: EnableMCPForToolsets :many
-UPDATE toolsets
-SET mcp_enabled = TRUE,
-    updated_at = clock_timestamp()
-WHERE id = ANY($1::UUID[])
-  AND project_id = $2
-  AND mcp_enabled IS FALSE
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-RETURNING id
-`
-
-type EnableMCPForToolsetsParams struct {
-	ToolsetIds []uuid.UUID
-	ProjectID  uuid.UUID
-}
-
-// Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
-// attached toolsets are enabled so users don't have to do it separately; the
-// caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
-func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const endAssistantRuntimeForTest = `-- name: EndAssistantRuntimeForTest :exec
 UPDATE assistant_runtimes SET ended_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2
@@ -3193,25 +3153,14 @@ SELECT
   ams.mcp_server_id,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
-  CASE WHEN t.id IS NOT NULL THEN CASE
-    WHEN t.mcp_enabled IS NOT TRUE THEN 'disabled'
-    WHEN t.mcp_is_public THEN 'public'
-    ELSE 'private'
-  END ELSE ms.visibility END::text AS visibility,
-  CASE WHEN t.id IS NOT NULL THEN COALESCE(t.mcp_slug, '') ELSE COALESCE((
-    SELECT me.slug
-    FROM mcp_endpoints me
-    WHERE me.mcp_server_id = ms.id
-      AND me.project_id = ms.project_id
-      AND me.custom_domain_id IS NULL
-      AND me.deleted IS FALSE
-    ORDER BY me.created_at
-    LIMIT 1
-  ), '') END::text AS endpoint_slug,
+  ms.visibility::text AS visibility,
+  COALESCE(ep.slug, t.mcp_slug, '')::text AS endpoint_slug,
+  COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
   ams.environment_id,
   e.slug AS environment_slug
 FROM assistant_mcp_servers ams
+JOIN projects p ON p.id = ams.project_id
 JOIN mcp_servers ms
   ON ms.id = ams.mcp_server_id
   AND ms.project_id = $1
@@ -3221,6 +3170,22 @@ LEFT JOIN toolsets t
   AND ms.toolset_id = ms.id
   AND t.project_id = $1
   AND t.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT me.slug, cd.domain
+  FROM mcp_endpoints me
+  LEFT JOIN custom_domains cd
+    ON cd.id = me.custom_domain_id
+    AND cd.organization_id = p.organization_id
+    AND cd.deleted IS FALSE
+    AND cd.verified IS TRUE
+    AND cd.activated IS TRUE
+  WHERE me.mcp_server_id = ms.id
+    AND me.project_id = ms.project_id
+    AND me.deleted IS FALSE
+    AND (me.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (me.custom_domain_id IS NOT NULL), me.created_at, me.id
+  LIMIT 1
+) ep ON TRUE
 LEFT JOIN environments e ON e.id = ams.environment_id AND e.project_id = $1
 WHERE ams.assistant_id = ANY($2::UUID[])
   AND ams.project_id = $1
@@ -3239,14 +3204,18 @@ type LoadAssistantMcpServersRow struct {
 	ToolsetSlug            pgtype.Text
 	Visibility             string
 	EndpointSlug           string
+	EndpointDomain         string
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
 }
 
-// Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug,
-// mcp_enabled, /mcp/{mcp_slug} address and default environment, and sort first
-// so they win runtime id collisions.
+// Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug and
+// default environment, and sort first so they win runtime id
+// collisions. The address is the server's own endpoint: platform first, else
+// one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
+// A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias until the
+// toolset slug fallback is removed.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.ProjectID, arg.AssistantIds)
 	if err != nil {
@@ -3263,6 +3232,7 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 			&i.ToolsetSlug,
 			&i.Visibility,
 			&i.EndpointSlug,
+			&i.EndpointDomain,
 			&i.DefaultEnvironmentSlug,
 			&i.EnvironmentID,
 			&i.EnvironmentSlug,
@@ -4404,19 +4374,19 @@ SELECT
   (EXISTS (
     SELECT 1
     FROM mcp_endpoints me
+    LEFT JOIN custom_domains cd
+      ON cd.id = me.custom_domain_id
+      AND cd.organization_id = p.organization_id
+      AND cd.deleted IS FALSE
+      AND cd.verified IS TRUE
+      AND cd.activated IS TRUE
     WHERE me.mcp_server_id = ms.id
       AND me.project_id = ms.project_id
-      AND me.custom_domain_id IS NULL
       AND me.deleted IS FALSE
-  ) OR (ms.toolset_id = ms.id AND EXISTS (
-    SELECT 1
-    FROM toolsets t
-    WHERE t.id = ms.toolset_id
-      AND t.project_id = ms.project_id
-      AND t.mcp_slug IS NOT NULL
-      AND t.deleted IS FALSE
-  )))::bool AS has_gram_endpoint
+      AND (me.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ))::bool AS has_gram_endpoint
 FROM mcp_servers ms
+JOIN projects p ON p.id = ms.project_id
 WHERE ms.project_id = $1
   AND ms.slug = ANY($2::TEXT[])
   AND ms.deleted IS FALSE
@@ -4441,8 +4411,8 @@ type ResolveMcpServersForWriteRow struct {
 // Besides resolving slugs to ids, this returns everything attach-time
 // validation needs to reject servers the assistant runtime cannot reach:
 // the backend kind (tunnelled servers have no serving path), visibility,
-// and whether a Speakeasy-hosted endpoint exists to build the /mcp/{slug} URL.
-// A canonical hosted wrapper may use its toolset's legacy mcp_slug address.
+// and whether a Speakeasy-hosted endpoint exists to build the /mcp/{slug} URL,
+// on the platform or a verified, activated custom domain.
 func (q *Queries) ResolveMcpServersForWrite(ctx context.Context, arg ResolveMcpServersForWriteParams) ([]ResolveMcpServersForWriteRow, error) {
 	rows, err := q.db.Query(ctx, resolveMcpServersForWrite, arg.ProjectID, arg.Slugs)
 	if err != nil {
@@ -4550,7 +4520,19 @@ func (q *Queries) ResolveThreadProjectID(ctx context.Context, threadID uuid.UUID
 }
 
 const resolveToolsetsForWrite = `-- name: ResolveToolsetsForWrite :many
-SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
+SELECT t.id, t.slug, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+    AND (
+      t.mcp_slug IS NOT NULL
+      OR EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
+    )
+)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = $1
   AND t.deleted IS FALSE

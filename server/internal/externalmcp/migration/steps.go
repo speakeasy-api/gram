@@ -105,6 +105,10 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		return outcome, fmt.Errorf("lock server endpoints: %w", err)
 	}
 	outcome.McpServerID = serverID
+	server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
+	if err != nil {
+		return outcome, fmt.Errorf("read toolset server: %w", err)
+	}
 
 	url := candidate.ReplacementURL
 	if _, err := proxy.ValidateRemoteMCPURL(ctx, m.policy, url); err != nil {
@@ -174,7 +178,7 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		OrganizationID: organizationID, ProjectID: projectID,
 		Actor: principal, ActorDisplayName: actor.Email, ActorSlug: nil,
 		ToolsetURN: urn.NewToolset(toolset.ID), ToolsetName: toolset.Name, ToolsetSlug: toolset.Slug,
-		McpSlug: toolset.McpSlug.String, McpServerURN: urn.NewMcpServer(serverID), RemoteMcpServerURN: urn.NewRemoteMcpServer(remote.ID),
+		McpSlug: server.Slug.String, McpServerURN: urn.NewMcpServer(serverID), RemoteMcpServerURN: urn.NewRemoteMcpServer(remote.ID),
 		PreviousRemoteURL: candidate.RemoteURL, RemoteURL: remote.Url,
 	}); err != nil {
 		return outcome, fmt.Errorf("audit migration: %w", err)

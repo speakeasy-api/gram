@@ -2,6 +2,8 @@
 package adminmcp
 
 import (
+	"github.com/google/uuid"
+
 	"context"
 	"errors"
 	"slices"
@@ -28,7 +30,7 @@ var errServerHealthUnavailable = errors.New("MCP server health is unavailable")
 var (
 	healthSources             = []string{"toolset", "remote", "tunneled", "unproxied", "toolset_only"}
 	healthVisibilities        = []string{"disabled", "private", "public"}
-	healthLegacyAuth          = []string{"external_oauth", "oauth_proxy", "gram_private"}
+	healthLegacyAuth          = []string{"external_oauth", "gram_private"}
 	healthClassifications     = []string{"custom", "project_default_idp"}
 	healthAuthnChallengeModes = []string{"chain", "interactive"}
 	healthAttachmentScopes    = []string{"project", "organization", "global"}
@@ -60,7 +62,27 @@ type MCPServerHealth struct {
 	Correlation       MCPServerHealthCorrelation `json:"correlation"`
 	LegacyAuth        *string                    `json:"legacy_auth,omitempty"`
 	UserSessionIssuer *MCPServerHealthUserIssuer `json:"user_session_issuer,omitempty"`
+	UpstreamAuth      *MCPServerHealthUpstream   `json:"upstream_auth,omitempty"`
 	ToolCalls         MCPServerHealthToolCalls   `json:"tool_calls"`
+}
+
+// MCPServerHealthUpstream is how the server reaches its upstream: whether it
+// needs authentication and the auth clients it offers. Names and header
+// values are never included.
+type MCPServerHealthUpstream struct {
+	Status               string                      `json:"status"`
+	RequiresUpstreamAuth *bool                       `json:"requires_upstream_auth,omitempty"`
+	AuthClients          []MCPServerHealthAuthClient `json:"auth_clients"`
+}
+
+type MCPServerHealthAuthClient struct {
+	ID                    string  `json:"id"`
+	ClientType            string  `json:"client_type"`
+	Source                string  `json:"source"`
+	Enabled               bool    `json:"enabled"`
+	RemoteSessionClientID *string `json:"remote_session_client_id,omitempty"`
+	ServerCount           int     `json:"server_count"`
+	HeaderCount           int     `json:"header_count"`
 }
 
 type MCPServerHealthServer struct {
@@ -279,7 +301,38 @@ func projectServerHealth(result *gen.AdminMcpServerHealth, calls *gen.AdminMcpSe
 		}
 		output.UserSessionIssuer = &issuer
 	}
+	if result.UpstreamAuth != nil {
+		upstream, ok := projectHealthUpstream(result.UpstreamAuth)
+		if !ok {
+			return MCPServerHealth{}, false
+		}
+		output.UpstreamAuth = &upstream
+	}
 	return output, true
+}
+
+var (
+	healthUpstreamStatuses = []string{"configured", "setup_incomplete", "no_auth_required", "undecided"}
+	healthAuthClientTypes  = []string{"remote_session", "service_account", "static_credential", "pass_through", "ema"}
+	healthAuthClientSource = []string{"backfill", "admin"}
+)
+
+func projectHealthUpstream(u *gen.AdminMcpServerHealthUpstreamAuth) (MCPServerHealthUpstream, bool) {
+	if !slices.Contains(healthUpstreamStatuses, u.Status) || len(u.AuthClients) > maxHealthClients {
+		return MCPServerHealthUpstream{}, false
+	}
+	clients := make([]MCPServerHealthAuthClient, 0, len(u.AuthClients))
+	for _, c := range u.AuthClients {
+		if c == nil || !validHealthUUID(c.ID) || !slices.Contains(healthAuthClientTypes, c.ClientType) || !slices.Contains(healthAuthClientSource, c.Source) ||
+			(c.RemoteSessionClientID != nil && !validHealthUUID(*c.RemoteSessionClientID)) || c.ServerCount < 1 || c.HeaderCount < 0 {
+			return MCPServerHealthUpstream{}, false
+		}
+		clients = append(clients, MCPServerHealthAuthClient{
+			ID: c.ID, ClientType: c.ClientType, Source: c.Source, Enabled: c.Enabled,
+			RemoteSessionClientID: c.RemoteSessionClientID, ServerCount: c.ServerCount, HeaderCount: c.HeaderCount,
+		})
+	}
+	return MCPServerHealthUpstream{Status: u.Status, RequiresUpstreamAuth: u.RequiresUpstreamAuth, AuthClients: clients}, true
 }
 
 // projectHealthToolCalls drops the daily series and bucket width.
@@ -432,4 +485,9 @@ func validHealthTime(value string) bool {
 
 func validHealthOptionalTime(value *string) bool {
 	return value == nil || validHealthTime(*value)
+}
+
+func validHealthUUID(value string) bool {
+	_, err := uuid.Parse(value)
+	return err == nil
 }
