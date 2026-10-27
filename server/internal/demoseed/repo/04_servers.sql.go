@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
@@ -128,7 +129,7 @@ INSERT INTO remote_sessions
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes')
 `
@@ -138,6 +139,7 @@ type ServersInsertAttachmentSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	ExpiresIn             pgtype.Interval
 }
 
 func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg ServersInsertAttachmentSessionParams) error {
@@ -146,6 +148,7 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.ExpiresIn,
 	)
 	return err
 }
