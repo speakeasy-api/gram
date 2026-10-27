@@ -1426,6 +1426,15 @@ type AdminRegistryPage struct {
 	NextCursor *string
 }
 
+// Publicly advertised authentication capabilities, not a verified OAuth
+// connection.
+type AdminRegistryPromotionAuthDiscovery struct {
+	SupportsDcr  bool
+	SupportsCimd bool
+	AuthSetup    string
+	Status       string
+}
+
 // AdminRegistryPromotionCandidate is the result type of the admin service
 // getRegistryPromotionCandidate method.
 type AdminRegistryPromotionCandidate struct {
@@ -1438,6 +1447,7 @@ type AdminRegistryPromotionCandidate struct {
 	CreatedAt         string
 	CurationRevision  string
 	SuggestedMetadata *AdminRegistryPromotionSuggestions
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscovery
 	SourceRevision    string
 	Eligible          bool
 	// Whether staff may explicitly accept this candidate's health evidence.
