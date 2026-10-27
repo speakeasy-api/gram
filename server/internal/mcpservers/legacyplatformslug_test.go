@@ -73,13 +73,12 @@ func TestGetMcpServer_LegacyPlatformSlug(t *testing.T) {
 	require.NoError(t, err)
 	twin, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: slug + "-twin", Slug: slug + "-twin", McpSlug: conv.ToPGText(slug), McpEnabled: true,
+		Name: slug + "-twin", Slug: slug + "-twin",
 	})
 	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, *authCtx.ProjectID, twin.ID, slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	require.Nil(t, get(), "a platform alias of another toolset wins the slug")
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
-		CustomDomainID: uuid.NullUUID{UUID: otherDomain.ID, Valid: true}, Slug: twin.Slug, ProjectID: *authCtx.ProjectID,
-	}))
+	testenv.SetLegacyAlias(t, ctx, ti.conn, *authCtx.ProjectID, twin.ID, slug, uuid.NullUUID{UUID: otherDomain.ID, Valid: true})
 	require.Nil(t, get(), "two custom-domain aliases share the slug, so neither is reported")
 	_, err = toolsetsrepo.New(ti.conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: twin.Slug, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
