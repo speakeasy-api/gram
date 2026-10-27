@@ -85,7 +85,7 @@ func TestKitGKEColdAdmissionPodWaitRetryRejectsReplacement(t *testing.T) {
 				gvr, name := gkeSandboxClaimGVR, kitGKEName(r)
 				switch failure {
 				case "template":
-					gvr = kitTemplateGVR
+					gvr, name = kitTemplateGVR, kitGKETemplateName(kitGKEName(r))
 				case "secret":
 					gvr, name = kitSecretGVR, metadata.SecretName
 				}
