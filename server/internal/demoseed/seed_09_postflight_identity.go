@@ -83,14 +83,14 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 2, "demo seed postflight: expected exact project/server-scoped agent grants"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDSessionAttachments(ctx, repo.PostflightIDSessionAttachmentsParams{
-				UserSessionID:   s.det("user-session-6"),
-				OrgID:           org,
-				ProjectID:       proj,
-				RemoteSessionID: s.det("attachment-session"),
+				UserSessionID:    s.det("user-session-6"),
+				OrgID:            org,
+				ProjectID:        proj,
+				RemoteSessionIds: []uuid.UUID{s.det("attachment-session"), s.det("attachment-session-expired")},
 			})
 		}, 2, "demo seed postflight: expected 2 inert reachable exact-session attachments, found %d"},
 		{byOrg(s.q.PostflightIDSessionBindings), 2, "demo seed postflight: expected 2 principal session bindings, found %d"},
-		{byProj(s.q.PostflightIDUserOwnedUpstreamSessions), 7, "demo seed postflight: expected 7 user-owned upstream sessions, found %d"},
+		{byProj(s.q.PostflightIDUserOwnedUpstreamSessions), 8, "demo seed postflight: expected 8 user-owned upstream sessions, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDInertUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
 		}, 6, "demo seed postflight: expected 6 inert validated-spread upstream sessions, found %d"},

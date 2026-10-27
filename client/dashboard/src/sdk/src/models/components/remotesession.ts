@@ -17,7 +17,7 @@ export type RemoteSession = {
    */
   accessExpiresAt: Date;
   /**
-   * Absolute upstream authorization deadline; refreshing does not extend it.
+   * Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.
    */
   authorizationExpiresAt?: Date | undefined;
   createdAt: Date;

@@ -3,13 +3,18 @@ package mcp
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
+
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/stretchr/testify/require"
 )
 
 func TestOAuthBrowserRoutePolicy(t *testing.T) {
@@ -123,5 +128,85 @@ func TestConsentActionMalformedFormRetainsParseFailure(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestCallbackRoutesRenderExpiredPages(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{
+		"/mcp/idp_callback", "/mcp/idp_callback/test-client", "/mcp/example/idp_callback",
+		"/mcp/remote_login_callback", "/mcp/example/remote_login_callback", "/mcp/remote_login_bind",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			service := browserTestService(t)
+			mux := goahttp.NewMuxer()
+			Attach(mux, service, nil)
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, path+"?state=expired&code=unused", nil)
+			request.Header.Set("Accept", "application/json")
+			mux.ServeHTTP(response, request)
+			status := http.StatusBadRequest
+			if strings.Contains(path, "remote_login") {
+				status = http.StatusUnauthorized
+			}
+			require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, response, status).Code)
+			require.Contains(t, response.Body.String(), "expired or was already used")
+			require.Empty(t, response.Header().Get("Location"))
+			require.NotContains(t, response.Body.String(), "unused")
+		})
+	}
+}
+
+func TestRemoteCallbackBrowserMismatchPagePreservesState(t *testing.T) {
+	t.Parallel()
+	service := browserTestService(t)
+	parent := browserTestState()
+	require.NoError(t, service.authnChallengeCache.Store(t.Context(), parent))
+	remote := remotesessions.RemoteLoginState{ID: uuid.NewString(), ParentChallengeID: parent.ID, Subject: parent.Subject, UserSessionIssuerID: parent.UserSessionIssuerID}
+	require.NoError(t, service.remoteLoginCache.Store(t.Context(), remote))
+	mux := goahttp.NewMuxer()
+	Attach(mux, service, nil)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+remote.ID+"&code=unused", nil))
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusUnauthorized).Code)
+	require.Contains(t, response.Body.String(), "doesn't match your current browser")
+	_, err := service.remoteLoginCache.Get(t.Context(), "remoteLogin:"+remote.ID)
+	require.NoError(t, err)
+}
+
+func TestFirstPartyBrowserRecovery(t *testing.T) {
+	t.Parallel()
+	for _, route := range []string{"start", "idp", "consent", "action"} {
+		t.Run(route, func(t *testing.T) {
+			t.Parallel()
+			service := browserTestService(t)
+			var err error
+			service.siteURL, err = url.Parse("https://app.example.test")
+			require.NoError(t, err)
+			state := browserTestState()
+			state.FirstParty = true
+			require.NoError(t, service.authnChallengeCache.Store(t.Context(), state))
+			request := httptest.NewRequest(http.MethodGet, "/connect?state="+state.ID+"&redirect_uri=https://untrusted.example/", nil)
+			handler := service.HandleFirstPartyConnect
+			switch route {
+			case "idp":
+				handler = service.HandleIDPCallback
+			case "consent":
+				handler = func(w http.ResponseWriter, r *http.Request) error {
+					return service.ServeConsent(w, r, &ResolvedMcpEndpoint{})
+				}
+			case "action":
+				handler = func(w http.ResponseWriter, r *http.Request) error {
+					return service.ServeConsentAction(w, r, &ResolvedMcpEndpoint{})
+				}
+				request = httptest.NewRequest(http.MethodPost, "/connect", strings.NewReader("state="+state.ID+"&action=connect"))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			response := httptest.NewRecorder()
+			oops.BrowserErrHandle(service.logger, handler).ServeHTTP(response, request)
+			require.NotEmpty(t, oauthtest.RequireAuthorizationErrorRecovery(t, response, http.StatusBadRequest, "https://app.example.test/@self").Code)
+			require.Contains(t, response.Body.String(), "Return to dashboard")
+		})
 	}
 }

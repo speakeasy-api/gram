@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -59,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
@@ -81,6 +83,8 @@ import (
 // RouteBase is the surface the parent challenge was minted under. Drives
 // the post-callback bounce to /<RouteBase>/{slug}/connect.
 type ParentChallenge struct {
+	// ConnectionPopup opts this leg into the dashboard’s explicit reconnect completion.
+	ConnectionPopup     bool
 	ID                  string
 	ProjectID           uuid.UUID
 	OrganizationID      string
@@ -125,6 +129,8 @@ type ParentChallenge struct {
 // `state` parameter sent to the upstream provider. ~10 minute TTL — same
 // budget as the parent AuthnChallengeState.
 type RemoteLoginState struct {
+	// ConnectionPopup preserves the server-owned opt-in through upstream redirects and retries.
+	ConnectionPopup   bool      `json:"connection_popup,omitempty"`
 	ID                string    `json:"id"`
 	ParentChallengeID string    `json:"parent_challenge_id"`
 	ProjectID         uuid.UUID `json:"project_id"`
@@ -192,6 +198,7 @@ type RemoteLoginState struct {
 // callback can mint a sibling leg for the same login.
 func (s RemoteLoginState) parent() ParentChallenge {
 	return ParentChallenge{
+		ConnectionPopup:     s.ConnectionPopup,
 		ID:                  s.ParentChallengeID,
 		ProjectID:           s.ProjectID,
 		OrganizationID:      s.OrganizationID,
@@ -293,6 +300,8 @@ type ChallengeManager struct {
 // RemoteGrant is a grant the remote login callback committed, keyed to the
 // consent challenge it belongs to.
 type RemoteGrant struct {
+	// ConnectionPopup opts the callback into exact dashboard reconnect handling.
+	ConnectionPopup bool
 	// ParentChallengeID is the consent challenge the login was started from.
 	ParentChallengeID string
 	// UserSessionIssuerID is the issuer that challenge was minted for.
@@ -304,12 +313,14 @@ type RemoteGrant struct {
 	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact stored credential committed by the callback.
 	RemoteSessionID        uuid.UUID
 	RemoteSessionUpdatedAt time.Time
+	// GrantGeneration pins the authorization decision even if the same row is reauthorized later.
+	GrantGeneration int64
 }
 
 // RemoteLoginResult is where the callback sends the browser next.
 type RemoteLoginResult struct {
 	RedirectURL string
-	// Grant is the committed grant, nil while the login is being retried upstream.
+	// Grant is the committed grant, nil on cancellation or an upstream retry.
 	Grant *RemoteGrant
 }
 
@@ -1379,6 +1390,7 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 
 	state := RemoteLoginState{
+		ConnectionPopup:       parent.ConnectionPopup,
 		ID:                    stateID,
 		ParentChallengeID:     parent.ID,
 		ProjectID:             parent.ProjectID,
@@ -1522,10 +1534,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// is consumed, so the issuer that answered it is known.
 	state, err := m.cache.GetAndDelete(ctx, "remoteLogin:"+stateID)
 	if err != nil {
-		if errCode != "" {
-			return none, denied(ctx, logger, q)
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return none, fmt.Errorf("complete remote login: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 		}
-		return none, oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
+		return none, fmt.Errorf("complete remote login: %w", oops.WithBrowserReason(oops.E(oops.CodeUnavailable, err, "remote login state is temporarily unavailable").LogError(ctx, logger), oauthui.ReasonUnavailable))
 	}
 	mcpSlug := state.McpSlug
 	if mcpSlug == "" {
@@ -1558,6 +1570,18 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	if errCode != "" {
+		if errCode == oautherr.CodeAccessDenied {
+			// Final destinations acknowledge a completed connection, so a canceled
+			// flow must stay on the callback page instead of claiming success.
+			if state.FinalRedirectURI != "" {
+				return none, fmt.Errorf("complete remote login: %w", oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "sign-in was canceled"), oauthui.ReasonCanceled))
+			}
+			redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
+			if err != nil {
+				return none, err
+			}
+			return RemoteLoginResult{RedirectURL: redirect, Grant: nil}, nil
+		}
 		if errCode == oautherr.CodeInvalidTarget {
 			cause := oautherr.RFC6749Error{
 				Code:        errCode,
@@ -1572,13 +1596,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	// Only the default consent bounce is built from the route base; one no
 	// longer served fails before the code is exchanged.
-	routeBase := mcproute.MCP
 	if state.ConsentURL == "" && state.FinalRedirectURI == "" {
-		resolved, ok := state.RouteBase.Resolve()
+		_, ok := state.RouteBase.Resolve()
 		if !ok {
 			return none, oops.E(oops.CodeUnauthorized, nil, "remote login state not found or expired").LogWarn(ctx, logger)
 		}
-		routeBase = resolved
 	}
 
 	// Hoisted above the DB lookup + upstream code exchange so a state with a
@@ -1839,6 +1861,42 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 	stranded = false
 
+	redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
+	if err != nil {
+		return none, err
+	}
+	return RemoteLoginResult{
+		RedirectURL: redirect,
+		Grant: &RemoteGrant{
+			ConnectionPopup:        state.ConnectionPopup,
+			GrantGeneration:        storedSession.GrantGeneration,
+			ParentChallengeID:      state.ParentChallengeID,
+			UserSessionIssuerID:    state.UserSessionIssuerID,
+			RemoteSessionClientID:  client.ID,
+			Subject:                *state.Subject,
+			RemoteSessionID:        storedSession.ID,
+			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
+		},
+	}, nil
+}
+
+// remoteLoginDestination uses only the server-owned destination stored when the
+// flow started. Consent revalidates the parent challenge when the browser returns.
+func (m *ChallengeManager) remoteLoginDestination(ctx context.Context, state RemoteLoginState, mcpSlug string) (string, error) {
+	if state.FinalRedirectURI != "" {
+		return state.FinalRedirectURI, nil
+	}
+	if state.ConsentURL != "" {
+		redirect := state.ConsentURL
+		if state.ConsentServer != "" {
+			redirect += "&server=" + url.QueryEscape(state.ConsentServer)
+		}
+		return redirect, nil
+	}
+	routeBase, ok := state.RouteBase.Resolve()
+	if !ok {
+		return "", fmt.Errorf("complete remote login: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login state not found or expired"), oauthui.ReasonExpired))
+	}
 	redirectBaseURL := m.serverURL.String()
 	if state.Authority.IsPrivate() {
 		redirectBaseURL = state.Authority.BaseURL
@@ -1857,26 +1915,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(redirectBaseURL, "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
-	if state.ConsentURL != "" {
-		redirect = state.ConsentURL
-	}
 	if state.ConsentServer != "" {
 		redirect += "&server=" + url.QueryEscape(state.ConsentServer)
 	}
-	if state.FinalRedirectURI != "" {
-		redirect = state.FinalRedirectURI
-	}
-	return RemoteLoginResult{
-		RedirectURL: redirect,
-		Grant: &RemoteGrant{
-			ParentChallengeID:      state.ParentChallengeID,
-			UserSessionIssuerID:    state.UserSessionIssuerID,
-			RemoteSessionClientID:  client.ID,
-			Subject:                *state.Subject,
-			RemoteSessionID:        storedSession.ID,
-			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
-		},
-	}, nil
+	return redirect, nil
 }
 
 func (m *ChallengeManager) recordCIMDAuthorizationFailure(ctx context.Context, state RemoteLoginState, code, description string) {

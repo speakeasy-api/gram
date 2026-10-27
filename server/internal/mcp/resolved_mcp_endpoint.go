@@ -835,6 +835,13 @@ func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref End
 	if ref.Authority.IsPrivate() && metaServer.OrganizationID != ref.Authority.OrganizationID {
 		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 	}
+	// A project deleted mid-flow closes in-flight challenges.
+	switch _, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID); {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "project not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
+	}
 
 	// The denormalized org id is authoritative — the composite FK on
 	// meta_mcp_servers pins (organization_id, project_id) to the projects
