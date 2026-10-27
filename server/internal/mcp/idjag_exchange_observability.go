@@ -27,7 +27,7 @@ func (s *Service) startIDJAGExchange(endpoint *ResolvedMcpEndpoint) *idJAGExchan
 // rejection log line carries. err is logged, never returned to the client.
 func (e *idJAGExchange) reject(reason mcpmetrics.IDJAGRejectionReason, err error) []slog.Attr {
 	e.outcome, e.reason = mcpmetrics.IDJAGExchangeRejected, reason
-	attrs := []slog.Attr{attr.SlogOAuthIDJAGRejectionReason(reason), attr.SlogUserSessionIssuerID(e.issuerID)}
+	attrs := []slog.Attr{attr.SlogOAuthIDJAGOutcome(string(mcpmetrics.IDJAGExchangeRejected)), attr.SlogOAuthIDJAGRejectionReason(reason), attr.SlogUserSessionIssuerID(e.issuerID)}
 	if err != nil {
 		attrs = append(attrs, attr.SlogError(err))
 	}
@@ -37,6 +37,11 @@ func (e *idJAGExchange) reject(reason mcpmetrics.IDJAGRejectionReason, err error
 // rejectAssertion is reject for a validator refusal.
 func (e *idJAGExchange) rejectAssertion(err error) []slog.Attr {
 	return e.reject(mcpmetrics.IDJAGRejectionFromValidator(idjag.ReasonOf(err)), err)
+}
+
+// acceptedAttrs are the attributes the accepted exchange's log line carries.
+func (e *idJAGExchange) acceptedAttrs() []slog.Attr {
+	return []slog.Attr{attr.SlogOAuthIDJAGOutcome(string(mcpmetrics.IDJAGExchangeAccepted)), attr.SlogUserSessionIssuerID(e.issuerID)}
 }
 
 func (e *idJAGExchange) accept() {

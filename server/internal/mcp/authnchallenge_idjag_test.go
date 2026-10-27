@@ -77,6 +77,23 @@ func (a idJAGTestAssertion) sign(t *testing.T, issuer, audience, resource, clien
 	return raw
 }
 
+// signWithoutResource signs an ID-JAG shaped like Okta's, with no resource claim.
+func (a idJAGTestAssertion) signWithoutResource(t *testing.T, issuer, audience, clientID, email, assertionID string) string {
+	t.Helper()
+	now := time.Now()
+	claims := jwt.Claims{
+		Issuer: issuer, Subject: "external-user", Audience: jwt.Audience{audience},
+		Expiry: jwt.NewNumericDate(now.Add(2 * time.Minute)), IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)), ID: assertionID,
+	}
+	extra := struct {
+		ClientID string `json:"client_id"`
+		Email    string `json:"email"`
+	}{ClientID: clientID, Email: email}
+	raw, err := jwt.Signed(a.signer).Claims(claims).Claims(extra).Serialize()
+	require.NoError(t, err)
+	return raw
+}
+
 func postIDJAGToken(t *testing.T, ctx context.Context, ti *testInstance, slug, clientID, assertion string, resources ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	form := url.Values{
@@ -390,4 +407,34 @@ func TestTokenIDJAGExchangeRejectsTrustedIssuerFromAnotherOrganization(t *testin
 	require.NoError(t, ti.service.ServeToken(w, req, endpoint))
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"assertion is invalid"}`, w.Body.String())
+}
+
+// An Okta-style assertion on a per-endpoint authorization server binds to the requested server.
+func TestTokenIDJAGExchangeWithoutResourceClaimBindsRequestedResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	const upstreamIssuer = "https://identity.example.test"
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksURL)
+	toolset, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
+
+	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
+	assertion := assertionSigner.signWithoutResource(t, upstreamIssuer, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
+	missing := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
+	require.Equal(t, http.StatusBadRequest, missing.Code, missing.Body.String())
+	require.Equal(t, "invalid_request", decodeSharedTokenResponse(t, missing).Error)
+
+	accepted := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion, resource)
+	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
+	require.Equal(t, []any{resource}, unverifiedClaims(t, decodeSharedTokenResponse(t, accepted).AccessToken)["aud"])
 }

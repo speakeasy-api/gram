@@ -583,8 +583,13 @@ func (s *Service) handleTokenJWTBearerGrant(
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Audience:            assertionAudience,
 		Resource:            canonicalResource,
+		ResourceIndicated:   len(req.Resources) > 0,
 		ClientID:            clientRow.ClientID,
 	})
+	if idjag.ReasonOf(err) == idjag.ReasonResourceNotIndicated {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidRequest, exchange.rejectAssertion(err)...)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, sharedResourceDescription(sharedResourceMissing))
+	}
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant", exchange.rejectAssertion(err)...)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
@@ -610,6 +615,11 @@ func (s *Service) handleTokenJWTBearerGrant(
 	}
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
+			// The assertion is already spent; without a resource claim the request alone chose this server.
+			if result.Claims.Resource == "" {
+				logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget, exchange.reject(mcpmetrics.IDJAGRejectionResourceNotAvailable, nil)...)
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "resource is not available to this user")
+			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "subject_not_authorized", exchange.reject(mcpmetrics.IDJAGRejectionSubjectNotAuthorized, nil)...)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
 		}
@@ -650,7 +660,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
 		return err
 	}
-	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "")
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "", exchange.acceptedAttrs()...)
 	return nil
 }
 

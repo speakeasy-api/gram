@@ -35,6 +35,9 @@ const (
 	IDJAGRejectionResourceMismatch IDJAGRejectionReason = "resource_mismatch"
 	// IDJAGRejectionSubjectNotAuthorized: the resolved user lacks access.
 	IDJAGRejectionSubjectNotAuthorized IDJAGRejectionReason = "subject_not_authorized"
+	// IDJAGRejectionResourceNotAvailable: the assertion named no resource and
+	// the resolved user lacks access to the server the request chose.
+	IDJAGRejectionResourceNotAvailable IDJAGRejectionReason = "resource_not_available"
 	// IDJAGRejectionAssertionOther: the validator refused the assertion for
 	// a reason this set does not name yet.
 	IDJAGRejectionAssertionOther IDJAGRejectionReason = "assertion_other"
@@ -52,6 +55,7 @@ var idJAGValidatorReasons = map[idjag.Reason]struct{}{
 	idjag.ReasonClaimsMalformed:        {},
 	idjag.ReasonAudienceMismatch:       {},
 	idjag.ReasonResourceMismatch:       {},
+	idjag.ReasonResourceNotIndicated:   {},
 	idjag.ReasonClientMismatch:         {},
 	idjag.ReasonSubjectMissing:         {},
 	idjag.ReasonEmailMissing:           {},

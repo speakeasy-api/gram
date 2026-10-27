@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -181,6 +182,20 @@ func (s *Service) sharedAuthorizationServerHosts() authserver.Hosts {
 // an organization issuer with an explicit trust link to an upstream issuer.
 func issuerIDJAGConfigured(issuer usersessions_repo.UserSessionIssuer) bool {
 	return !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
+}
+
+// idJAGAdvertised reports whether the validator's trust lookup would accept ID-JAGs for an issuer.
+func (s *Service) idJAGAdvertised(ctx context.Context, logger *slog.Logger, organizationID string, issuerID uuid.UUID) bool {
+	_, err := s.idJAGTrust.TrustedIssuer(ctx, organizationID, issuerID)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, idjag.ErrNoTrustedIssuer), errors.Is(err, idjag.ErrTrustedIssuerHasNoJWKS):
+		logger.InfoContext(ctx, "ID-JAG grant not advertised", attr.SlogError(err))
+	default:
+		logger.ErrorContext(ctx, "load ID-JAG trust link for metadata", attr.SlogError(err))
+	}
+	return false
 }
 
 // sharedAuthorizationServerFor builds the shared authorization server of an

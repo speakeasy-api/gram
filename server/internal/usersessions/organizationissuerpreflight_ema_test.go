@@ -39,7 +39,6 @@ func TestOrganizationIssuerPreflightActiveEMABindings(t *testing.T) {
 		{ID: user.String(), AuthnChallengeMode: conv.PtrEmpty("none")},
 		{ID: user.String(), SessionDurationHours: conv.PtrEmpty(12)},
 		{ID: user.String(), ClientIDMetadataAdmissionMode: conv.PtrEmpty("open")},
-		{ID: user.String(), TrustedRemoteSessionIssuerID: conv.PtrEmpty(remote.String())},
 		{ID: user.String(), TrustedRemoteSessionClientID: conv.PtrEmpty(uuid.NewString())},
 	} {
 		_, err := ti.service.UpdateIssuer(ctx, patch)
@@ -47,6 +46,13 @@ func TestOrganizationIssuerPreflightActiveEMABindings(t *testing.T) {
 		require.ErrorAs(t, err, &shared)
 		require.Equal(t, oops.CodeConflict, shared.Code)
 	}
+	// Outbound chaining reads the trust link only with a client, so an issuer-only link stays editable.
+	linked, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{ID: user.String(), TrustedRemoteSessionIssuerID: conv.PtrEmpty(remote.String())})
+	require.NoError(t, err)
+	require.Equal(t, remote.String(), *linked.TrustedRemoteSessionIssuerID)
+	unlinked, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{ID: user.String(), TrustedRemoteSessionIssuerID: new("")})
+	require.NoError(t, err)
+	require.Nil(t, unlinked.TrustedRemoteSessionIssuerID)
 	preflight, err := ti.service.GetIssuerDeletePreflight(ctx, &orggen.GetIssuerDeletePreflightPayload{ID: user.String()})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), preflight.EmaBindingCount)
