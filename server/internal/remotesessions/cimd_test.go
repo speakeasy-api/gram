@@ -470,8 +470,16 @@ func TestCIMD_CallbackAccessDeniedDoesNotRecordRegistrationFailure(t *testing.T)
 	mgr, reader, state := newCIMDCallbackFailureFixture(t)
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(state), nil)
 
-	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
-	require.Error(t, err)
+	response := httptest.NewRecorder()
+	err := mgr.HandleRemoteLoginCallback(response, callback)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, response.Code)
+	location, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, mustURL(t, cimdServerURL).Scheme, location.Scheme)
+	require.Equal(t, mustURL(t, cimdServerURL).Host, location.Host)
+	require.Equal(t, "/mcp/cimd-callback-failure/connect", location.Path)
+	require.NotEmpty(t, location.Query().Get("state"))
 	require.Empty(t, registrationFailurePoints(t, reader))
 }
 
