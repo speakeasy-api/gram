@@ -1590,6 +1590,7 @@ SELECT (
     WHERE pa.mcp_slug = $1
       AND pa.custom_domain_id IS NULL
       AND pa.deleted IS FALSE
+      AND pa.id <> $2
   )
   AND EXISTS (
     SELECT 1

@@ -299,7 +299,7 @@ func TestCheckSlugAvailable_OwnerExclusionMcpServer(t *testing.T) {
 	require.True(t, available)
 }
 
-func TestCheckSlugAvailable_CustomDomainDoesNotCollideWithPlatform(t *testing.T) {
+func TestCheckSlugAvailable_CustomDomainToolsetHoldsPlatformSlugEndpointDoesNot(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)

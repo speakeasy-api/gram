@@ -209,9 +209,32 @@ func TestCheckSlugAvailabilityLetsServerClaimItsOwnAlias(t *testing.T) {
 	require.False(t, check(conv.PtrEmpty(nonCanonical.String())))
 
 	_, other, otherSlug := seedCustomDomainAliasInOtherProject(t, ctx, ti)
-	available, err := ti.service.CheckMcpEndpointSlugAvailability(ctx, &gen.CheckMcpEndpointSlugAvailabilityPayload{
+	_, err := ti.service.CheckMcpEndpointSlugAvailability(ctx, &gen.CheckMcpEndpointSlugAvailabilityPayload{
 		Slug: types.McpEndpointSlug(otherSlug), McpServerID: conv.PtrEmpty(other.ID.String()),
 	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr, "a server outside the project cannot discount its alias")
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+func TestMovingPlatformAliasDoesNotHideOtherCustomDomainAlias(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, other, slug := seedCustomDomainAliasInOtherProject(t, ctx, ti)
+	mover := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
+
+	served, err := toolsetsrepo.New(ti.conn).OtherCustomDomainAliasServedOnPlatform(ctx, toolsetsrepo.OtherCustomDomainAliasServedOnPlatformParams{
+		Slug: conv.ToPGText(slug), ToolsetID: mover.ID,
+	})
 	require.NoError(t, err)
-	require.False(t, available, "a server outside the project cannot discount its alias")
+	require.True(t, served, "the mover's own platform alias leaves with it, so the other alias would contend")
+
+	served, err = toolsetsrepo.New(ti.conn).OtherCustomDomainAliasServedOnPlatform(ctx, toolsetsrepo.OtherCustomDomainAliasServedOnPlatformParams{
+		Slug: conv.ToPGText(slug), ToolsetID: other.ID,
+	})
+	require.NoError(t, err)
+	require.False(t, served)
 }

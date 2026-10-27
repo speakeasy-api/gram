@@ -293,6 +293,7 @@ SELECT (
     WHERE pa.mcp_slug = @slug
       AND pa.custom_domain_id IS NULL
       AND pa.deleted IS FALSE
+      AND pa.id <> @toolset_id
   )
   AND EXISTS (
     SELECT 1
