@@ -576,9 +576,10 @@ func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
 }
 
 // SetSiteURL wires the dashboard base URL used to smart-link CIMD client
-// metadata back to the assistant UI. Set after construction to match the
+// metadata and callback recovery links back to the assistant UI. Set after
+// construction to match the
 // existing post-construction injection pattern. A nil URL omits client_uri
-// from served documents.
+// from served documents and recovery links from callback error pages.
 func (s *ServiceCore) SetSiteURL(u *url.URL) {
 	s.siteURL = u
 }

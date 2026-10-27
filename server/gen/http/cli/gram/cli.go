@@ -914,7 +914,8 @@ func ParseEndpoint(
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
 		authCallbackFlags     = flag.NewFlagSet("callback", flag.ExitOnError)
-		authCallbackCodeFlag  = authCallbackFlags.String("code", "REQUIRED", "")
+		authCallbackCodeFlag  = authCallbackFlags.String("code", "", "")
+		authCallbackErrorFlag = authCallbackFlags.String("error", "", "")
 		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
 		authLoginFlags              = flag.NewFlagSet("login", flag.ExitOnError)
@@ -10338,7 +10339,7 @@ func ParseEndpoint(
 			switch epn {
 			case "callback":
 				endpoint = c.Callback()
-				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackStateFlag)
+				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackErrorFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
 				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginPartnerCodeFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag)
@@ -16200,6 +16201,7 @@ func authCallbackUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth callback", os.Args[0])
 	fmt.Fprint(os.Stderr, " -code STRING")
+	fmt.Fprint(os.Stderr, " -error STRING")
 	fmt.Fprint(os.Stderr, " -state STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -16209,11 +16211,12 @@ func authCallbackUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -code STRING: `)
+	fmt.Fprintln(os.Stderr, `    -error STRING: `)
 	fmt.Fprintln(os.Stderr, `    -state STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"abc123\" --state \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"abc123\" --error \"abc123\" --state \"abc123\"")
 }
 
 func authLoginUsage() {

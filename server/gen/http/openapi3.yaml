@@ -22852,9 +22852,15 @@ paths:
                   description: The auth code for authentication from the speakeasy system
                   in: query
                   name: code
-                  required: true
                   schema:
                     description: The auth code for authentication from the speakeasy system
+                    type: string
+                - allowEmptyValue: true
+                  description: The identity provider error, when sign-in was not completed.
+                  in: query
+                  name: error
+                  schema:
+                    description: The identity provider error, when sign-in was not completed.
                     type: string
                 - allowEmptyValue: true
                   description: The opaque state string optionally provided during initialization.

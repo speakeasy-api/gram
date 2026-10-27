@@ -9,17 +9,20 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -42,7 +45,7 @@ import (
 // WorkOS alone may upsert users. Federation offers ephemeral credentials only
 // to an explicitly installed, post-authorization consumer. No chat session
 // persists.
-func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (retErr error) {
 	ctx := r.Context()
 	routeMcpSlug := chi.URLParam(r, "mcpSlug")
 	routeClientID := chi.URLParam(r, "clientID")
@@ -51,7 +54,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	q := r.URL.Query()
 	stateID := q.Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
+		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
 	// Peek first so a transient live-authority lookup can return 503 without
@@ -59,19 +62,26 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// atomically elects one callback winner before any identity side effects.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if !errors.Is(err, redisCache.ErrCacheMiss) {
+			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeUnavailable, err, "login state is temporarily unavailable").LogError(ctx, logger), oauthui.ReasonUnavailable))
+		}
 		// No challenge in hand (expired / replayed / never existed): nothing to
 		// attribute to an issuer, and an expired state is closer to abandonment
 		// than a flow failure, so it is left to the started-without-terminal gap.
-		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
+	}
+
+	if challengeState.FirstParty {
+		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 
 	if challengeState.Subject != nil || challengeState.AuthorizerUserID != "" {
 		// Resolved identities cannot be replaced, even in malformed legacy state.
 		// Consume the invalid callback key before rejecting it.
 		if _, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID); err != nil {
-			return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 		}
-		return oops.E(oops.CodeBadRequest, nil, "authn challenge identity is already resolved").LogWarn(ctx, logger)
+		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "authn challenge identity is already resolved").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 
 	// Challenge in hand: correlate every subsequent log line by flow_id, and
@@ -90,18 +100,18 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
 		// State-confusion guard (state minted for a different route). Attacker-
 		// controllable, so deliberately NOT counted as a flow failure.
-		return oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this MCP server").LogWarn(ctx, logger)
+		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this MCP server").LogWarn(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 	if routeClientID != "" && (challengeState.Federation == nil || routeClientID != challengeState.Federation.ClientID.String()) {
 		// Per-client callbacks serve only their own federated client, never WorkOS. Attacker-controllable.
 		logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason("client_mismatch"))
-		return oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this callback")
+		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this callback"), oauthui.ReasonInvalidLink))
 	}
 	if federation := challengeState.Federation; federation != nil {
 		// Validate before GETDEL so a misrouted callback cannot burn the single-use state.
 		if reason := federatedCallbackMisrouted(r, federation, routeClientID, requestorigin.BaseURL(ctx, s.serverURL.String())); reason != "" {
 			logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason(reason))
-			return oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this callback")
+			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this callback"), oauthui.ReasonInvalidLink))
 		}
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
@@ -110,7 +120,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// (e.g. toolset removed mid-flow) — a config-class terminal failure.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		if errors.Is(err, errToolsetEndpointMismatch) {
-			return oops.E(oops.CodeBadRequest, err, "authn challenge endpoint does not match the endpoint that started the flow").LogWarn(ctx, logger)
+			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge endpoint does not match the endpoint that started the flow").LogWarn(ctx, logger), oauthui.ReasonInvalidLink))
 		}
 		return err
 	}
@@ -122,7 +132,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable").LogError(ctx, logger)
 		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
-		return oops.E(oops.CodeBadRequest, err, "authn challenge endpoint authority changed while the flow was in progress").LogWarn(ctx, logger)
+		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge endpoint authority changed while the flow was in progress").LogWarn(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 	s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, nil)
 
@@ -137,16 +147,16 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 
 	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 	// Reject identity replacement against the consumed value so invalid callbacks
 	// stay single-use without consuming state on transient authority failures.
 	if challengeState.Subject != nil || challengeState.AuthorizerUserID != "" {
-		return oops.E(oops.CodeBadRequest, nil, "authn challenge identity is already resolved").LogWarn(ctx, logger)
+		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "authn challenge identity is already resolved").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 	// Recheck the consumed snapshot without another live lookup.
 	if err := endpoint.validateChallengeRef(challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "authn challenge endpoint authority changed while the flow was in progress").LogWarn(ctx, logger)
+		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge endpoint authority changed while the flow was in progress").LogWarn(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
 	logger = endpoint.LogWith(logger)
@@ -240,7 +250,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			if idpErr == "access_denied" {
 				s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 				logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
-				return oops.E(oops.CodeForbidden, nil, "login was declined").LogError(ctx, logger)
+				return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "login was declined").LogWarn(ctx, logger), oauthui.ReasonCanceled))
 			}
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
@@ -371,11 +381,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnexpected, err, "failed to check organization membership").LogError(ctx, logger)
 	}
 	if !member {
-		if challengeState.Federation != nil {
-			return finishFederation(oops.CodeForbidden, errors.New("federated organization membership denied"), "Your account is not provisioned for this organization. Contact your administrator", false)
-		}
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
-		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").LogError(ctx, logger)
+		return finishFederation(oops.CodeForbidden, errors.New("organization membership denied"), "Your account is not provisioned for this organization. Contact your administrator", false)
 	}
 	// Recorded only for members, and only in the endpoint's organization.
 	signInID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}

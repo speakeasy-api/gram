@@ -189,6 +189,8 @@ type syntheticExpiryEnv struct {
 	// authURL is the upstream authorize redirect BuildAuthorizationUrl minted
 	// for the login, so a test can assert on its query parameters.
 	authURL string
+	// parentID is the original consent challenge to resume after callback.
+	parentID string
 	// issuerMetadata and issuerMetadataReader are set by withIssuerMetadataRefresh.
 	issuerMetadata       *remotesessions.IssuerMetadataRefresher
 	issuerMetadataReader *sdkmetric.ManualReader
@@ -664,6 +666,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		options.callbackQuery(cbQuery)
 	}
 	env := syntheticExpiryEnv{
+		parentID:  parent.ID,
 		mgr:       mgr,
 		service:   ti.service,
 		refresher: refresher,
