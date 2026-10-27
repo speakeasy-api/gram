@@ -285,6 +285,8 @@ func (s *StaffProposalApproval) decide(w http.ResponseWriter, r *http.Request, i
 
 func writeApprovalError(w http.ResponseWriter, r *http.Request, status int, description string, reason oauthui.Reason) {
 	_ = oauthui.WriteAuthorizationError(r.Context(), w, oauthui.AuthorizationError{
+		Recovery:       nil,
+		Setup:          false,
 		Status:         status,
 		Reason:         reason,
 		Approval:       true,
