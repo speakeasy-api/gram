@@ -61,7 +61,7 @@ func (s *PostgresStore) TrustedIssuer(ctx context.Context, organizationID string
 		return TrustedIssuer{}, fmt.Errorf("load linked remote issuer: %w", err)
 	}
 	if !trusted.JwksUri.Valid || trusted.JwksUri.String == "" {
-		return TrustedIssuer{}, errors.New("linked remote issuer has no jwks_uri")
+		return TrustedIssuer{}, ErrTrustedIssuerHasNoKeys
 	}
 	return TrustedIssuer{ID: trusted.ID, Issuer: trusted.Issuer, JWKSURI: trusted.JwksUri.String}, nil
 }

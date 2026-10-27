@@ -111,11 +111,16 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		return oops.E(oops.CodeUnexpected, err, "validate DCR request").LogError(ctx, logger)
 	}
 
-	registered, err := usersessions.CreateClientRegistration(ctx, usersessions_repo.New(s.db), issuerID, req)
+	credential, err := usersessions.MintClientCredential(req.TokenEndpointAuthMethod)
 	if err != nil {
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
 		}
+		return oops.E(oops.CodeUnexpected, err, "failed to generate client secret").LogError(ctx, logger)
+	}
+
+	row, err := usersessions.CreateClientRegistration(ctx, usersessions_repo.New(s.db), issuerID, req, credential)
+	if err != nil {
 		// The insert re-reads the issuer under lock, so a registration that
 		// resolved the endpoint before a migration or delete retired its
 		// issuer lands here instead of on a tombstone.
@@ -124,9 +129,8 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").LogError(ctx, logger)
 	}
-	row := registered.Row
 	clientID := row.ClientID
-	clientSecret := registered.ClientSecret
+	clientSecret := credential.Secret
 	clientSecretHash := row.ClientSecretHash
 
 	logger.InfoContext(ctx, "user session client registered",

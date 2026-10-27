@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -127,24 +128,71 @@ func TestCreateJWTBearerClient_ReportsTrustedIdentityProvider(t *testing.T) {
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	target := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "jwt-bearer-trusted", uuid.NullUUID{}, pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true}).String()
-	issuer, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
-		SessionToken:                 nil,
-		Slug:                         "jwt-bearer-trusted",
-		AuthnChallengeMode:           "chain",
-		SessionDurationHours:         24,
-		TrustedRemoteSessionIssuerID: &target,
+
+	// The token path needs a live linked issuer with keys; a link to one
+	// without a jwks_uri still rejects every assertion.
+	for _, tc := range []struct {
+		name    string
+		jwksURI pgtype.Text
+		want    bool
+	}{
+		{name: "with-keys", jwksURI: pgtype.Text{String: "https://idp.example.com/keys", Valid: true}, want: true},
+		{name: "without-keys", jwksURI: pgtype.Text{}, want: false},
+	} {
+		remote, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+			OrganizationID:                    pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+			Slug:                              "jwt-bearer-trusted-" + tc.name,
+			Issuer:                            "https://" + tc.name + ".idp.example.com",
+			JwksUri:                           tc.jwksURI,
+			ScopesSupported:                   []string{},
+			GrantTypesSupported:               []string{},
+			ResponseTypesSupported:            []string{},
+			TokenEndpointAuthMethodsSupported: []string{},
+		})
+		require.NoError(t, err)
+		target := remote.ID.String()
+		issuer, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+			SessionToken:                 nil,
+			Slug:                         "jwt-bearer-trusted-" + tc.name,
+			AuthnChallengeMode:           "chain",
+			SessionDurationHours:         24,
+			TrustedRemoteSessionIssuerID: &target,
+		})
+		require.NoError(t, err)
+
+		created, err := ti.service.CreateJWTBearerClient(ctx, &orggen.CreateJWTBearerClientPayload{
+			SessionToken:            nil,
+			UserSessionIssuerID:     issuer.ID,
+			ClientName:              "Codex",
+			TokenEndpointAuthMethod: oauthwire.AuthMethodNone,
+		})
+		require.NoError(t, err)
+		require.Equal(t, tc.want, created.TrustedIdentityProviderConfigured, tc.name)
+	}
+}
+
+func TestCreateJWTBearerClient_RejectsWhitespaceName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := createOrganizationIssuerForJWTBearer(t, ctx, ti, "jwt-bearer-blank-name")
+
+	_, err := ti.service.CreateJWTBearerClient(ctx, &orggen.CreateJWTBearerClientPayload{
+		SessionToken:            nil,
+		UserSessionIssuerID:     issuerID,
+		ClientName:              "   ",
+		TokenEndpointAuthMethod: oauthwire.AuthMethodNone,
 	})
-	require.NoError(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	created, err := ti.service.CreateJWTBearerClient(ctx, &orggen.CreateJWTBearerClientPayload{
 		SessionToken:            nil,
-		UserSessionIssuerID:     issuer.ID,
-		ClientName:              "Codex",
+		UserSessionIssuerID:     issuerID,
+		ClientName:              "  Codex  ",
 		TokenEndpointAuthMethod: oauthwire.AuthMethodNone,
 	})
 	require.NoError(t, err)
-	require.True(t, created.TrustedIdentityProviderConfigured)
+	require.Equal(t, "Codex", created.Client.ClientName)
 }
 
 func TestCreateJWTBearerClient_RequiresOrgAdmin(t *testing.T) {

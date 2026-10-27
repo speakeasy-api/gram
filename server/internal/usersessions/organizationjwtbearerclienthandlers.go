@@ -3,9 +3,12 @@ package usersessions
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -16,12 +19,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// jwtBearerClientAuthMethods are the token endpoint auth methods an
-// administrator may register a jwt-bearer client with.
-var jwtBearerClientAuthMethods = []string{oauthwire.AuthMethodNone, oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost}
+// TrustedIdentityProviderConfigured reports whether the token endpoint would
+// find a usable trusted issuer for this organization-level issuer: the same
+// predicate the ID-JAG validator resolves.
+func TrustedIdentityProviderConfigured(ctx context.Context, db *pgxpool.Pool, organizationID string, issuerID uuid.UUID) (bool, error) {
+	store, err := idjag.NewPostgresStore(db)
+	if err != nil {
+		return false, fmt.Errorf("build id-jag store: %w", err)
+	}
+	_, err = store.TrustedIssuer(ctx, organizationID, issuerID)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, idjag.ErrNoTrustedIssuer), errors.Is(err, idjag.ErrTrustedIssuerHasNoKeys):
+		return false, nil
+	default:
+		return false, fmt.Errorf("resolve trusted issuer: %w", err)
+	}
+}
 
 // CreateJWTBearerClient registers an assertion-only client on an
 // organization-owned issuer, through the same path DCR uses.
@@ -41,7 +60,7 @@ func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.Cre
 	)
 
 	req := RegistrationRequest{
-		ClientName:              payload.ClientName,
+		ClientName:              strings.TrimSpace(payload.ClientName),
 		RedirectURIs:            []string{},
 		GrantTypes:              []string{oauthwire.GrantTypeJWTBearer},
 		ResponseTypes:           []string{},
@@ -50,7 +69,7 @@ func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.Cre
 		JWKSURI:                 "",
 	}
 	req.SetDefaults()
-	if err := req.Validate(RegistrableGrantTypes, jwtBearerClientAuthMethods); err != nil {
+	if err := req.Validate(RegistrableGrantTypes, JWTBearerClientAuthMethods); err != nil {
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", oauthErr.Description).LogWarn(ctx, logger)
 		}
@@ -73,6 +92,17 @@ func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.Cre
 		return nil, oops.E(oops.CodeBadRequest, nil, "jwt-bearer clients can only be registered on organization-level user session issuers").LogWarn(ctx, logger)
 	}
 
+	trusted, err := TrustedIdentityProviderConfigured(ctx, s.db, authCtx.ActiveOrganizationID, issuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read issuer trust").LogError(ctx, logger)
+	}
+
+	// bcrypt is slow; mint before the issuer lock is taken.
+	credential, err := MintClientCredential(req.TokenEndpointAuthMethod)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "mint client credential").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -91,7 +121,7 @@ func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.Cre
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization user session issuer").LogError(ctx, logger)
 	}
 
-	registered, err := CreateClientRegistration(ctx, txRepo, issuer.ID, req)
+	row, err := CreateClientRegistration(ctx, txRepo, issuer.ID, req, credential)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogWarn(ctx, logger)
@@ -99,16 +129,16 @@ func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.Cre
 		return nil, oops.E(oops.CodeUnexpected, err, "create user session client").LogError(ctx, logger)
 	}
 
-	view := mv.BuildUserSessionClientView(registered.Row, 0)
+	view := mv.BuildUserSessionClientView(row, 0)
 	if err := s.audit.LogUserSessionClientCreate(ctx, dbtx, audit.LogUserSessionClientCreateEvent{
 		OrganizationID:                 authCtx.ActiveOrganizationID,
 		ProjectID:                      uuid.Nil,
 		Actor:                          urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:               authCtx.Email,
 		ActorSlug:                      nil,
-		UserSessionClientURN:           urn.NewUserSessionClient(registered.Row.ID),
-		ClientID:                       registered.Row.ClientID,
-		ClientName:                     registered.Row.ClientName,
+		UserSessionClientURN:           urn.NewUserSessionClient(row.ID),
+		ClientID:                       row.ClientID,
+		ClientName:                     row.ClientName,
 		UserSessionClientSnapshotAfter: view,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log user session client creation").LogError(ctx, logger)
@@ -119,19 +149,19 @@ func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.Cre
 	}
 
 	logger.InfoContext(ctx, "jwt-bearer user session client registered",
-		attr.SlogOAuthClientID(registered.Row.ClientID),
+		attr.SlogOAuthClientID(row.ClientID),
 		attr.SlogOAuthRegisteredAuthMethod(req.TokenEndpointAuthMethod),
-		attr.SlogOAuthClientSecretGenerated(registered.ClientSecret != ""),
+		attr.SlogOAuthClientSecretGenerated(credential.Secret != ""),
 	)
 
 	var clientSecret *string
-	if registered.ClientSecret != "" {
-		clientSecret = &registered.ClientSecret
+	if credential.Secret != "" {
+		clientSecret = &credential.Secret
 	}
 	return &orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult{
 		Client:                            view,
 		ClientSecret:                      clientSecret,
 		Issuer:                            s.issuerView(ctx, issuer),
-		TrustedIdentityProviderConfigured: issuer.TrustedRemoteSessionIssuerID.Valid,
+		TrustedIdentityProviderConfigured: trusted,
 	}, nil
 }

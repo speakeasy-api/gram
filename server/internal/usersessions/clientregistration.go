@@ -216,54 +216,61 @@ func keySourceDescription(err error) string {
 	}
 }
 
-// RegisteredClient is a stored client registration. ClientSecret is the
-// plaintext secret, set only for methods that carry one; it is never stored
-// and cannot be recovered after the caller returns it.
-type RegisteredClient struct {
-	Row          repo.UserSessionClient
-	ClientSecret string
+// JWTBearerClientAuthMethods are the token endpoint auth methods an
+// administrator may register an assertion-only (jwt-bearer) client with.
+var JWTBearerClientAuthMethods = []string{oauthwire.AuthMethodNone, oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost}
+
+// ClientCredential is what a new registration authenticates with. Secret is
+// the plaintext, set only for methods that carry one; it is never stored and
+// cannot be recovered after the caller returns it.
+type ClientCredential struct {
+	Secret     string
+	SecretHash pgtype.Text
 }
 
 // clientSecretBytes is the client secret's entropy: 256 bits, base64url-encoded.
 const clientSecretBytes = 32
 
-// CreateClientRegistration stores a registration that has passed SetDefaults
-// and Validate on issuerID, minting a client_id and, for secret methods, a
-// secret whose bcrypt hash alone is persisted. Returns pgx.ErrNoRows, wrapped,
-// when the issuer is retired, and an *oauthwire.Error for an auth method the
-// registration path does not classify.
-func CreateClientRegistration(ctx context.Context, q *repo.Queries, issuerID uuid.UUID, req RegistrationRequest) (RegisteredClient, error) {
+// MintClientCredential generates the credential for authMethod. bcrypt is
+// deliberately slow, so callers mint before taking any lock. Returns an
+// *oauthwire.Error for a method the registration path does not classify.
+func MintClientCredential(authMethod string) (ClientCredential, error) {
 	// What credential the client gets is decided by an explicit list of the
 	// methods that carry a secret, not by "anything but none": an asymmetric
 	// client must not be handed a secret it never asked for, since a stored
 	// hash would make the token endpoint demand it on every request. The
 	// default arm refuses rather than mints if a method is ever added to an
 	// accepted set without being classified here.
-	var clientSecret string
-	var clientSecretHash pgtype.Text
-	switch req.TokenEndpointAuthMethod {
+	switch authMethod {
 	case oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost:
 		b := make([]byte, clientSecretBytes)
 		if _, err := rand.Read(b); err != nil {
-			return RegisteredClient{}, fmt.Errorf("generate client secret: %w", err)
+			return ClientCredential{}, fmt.Errorf("generate client secret: %w", err)
 		}
-		clientSecret = base64.RawURLEncoding.EncodeToString(b)
-		hashed, err := bcrypt.GenerateFromPassword([]byte(clientSecret), bcrypt.DefaultCost)
+		secret := base64.RawURLEncoding.EncodeToString(b)
+		hashed, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
 		if err != nil {
-			return RegisteredClient{}, fmt.Errorf("hash client secret: %w", err)
+			return ClientCredential{}, fmt.Errorf("hash client secret: %w", err)
 		}
-		clientSecretHash = pgtype.Text{String: string(hashed), Valid: true}
+		return ClientCredential{Secret: secret, SecretHash: pgtype.Text{String: string(hashed), Valid: true}}, nil
 	case oauthwire.AuthMethodNone, oauthwire.AuthMethodPrivateKeyJWT:
 		// Public clients prove PKCE possession; asymmetric clients prove
 		// possession of a key the server never holds. Neither gets a secret.
+		return ClientCredential{Secret: "", SecretHash: pgtype.Text{String: "", Valid: false}}, nil
 	default:
-		return RegisteredClient{}, &oauthwire.Error{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported token_endpoint_auth_method %q", req.TokenEndpointAuthMethod)}
+		return ClientCredential{}, &oauthwire.Error{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported token_endpoint_auth_method %q", authMethod)}
 	}
+}
 
+// CreateClientRegistration stores a registration that has passed SetDefaults
+// and Validate on issuerID with a credential from MintClientCredential,
+// minting its client_id. Returns pgx.ErrNoRows, wrapped, when the issuer is
+// retired.
+func CreateClientRegistration(ctx context.Context, q *repo.Queries, issuerID uuid.UUID, req RegistrationRequest, credential ClientCredential) (repo.UserSessionClient, error) {
 	row, err := q.CreateUserSessionClient(ctx, repo.CreateUserSessionClientParams{
 		UserSessionIssuerID: issuerID,
 		ClientID:            "client_" + uuid.NewString(),
-		ClientSecretHash:    clientSecretHash,
+		ClientSecretHash:    credential.SecretHash,
 		ClientName:          req.ClientName,
 		RedirectUris:        req.RedirectURIs,
 		// RFC 7591 §3.2.1 expires_at=0 = non-expiring; the column stays NULL.
@@ -273,7 +280,7 @@ func CreateClientRegistration(ctx context.Context, q *repo.Queries, issuerID uui
 		ClientJwksUri:           conv.ToPGTextEmpty(req.JWKSURI),
 	})
 	if err != nil {
-		return RegisteredClient{}, fmt.Errorf("create user session client: %w", err)
+		return repo.UserSessionClient{}, fmt.Errorf("create user session client: %w", err)
 	}
-	return RegisteredClient{Row: row, ClientSecret: clientSecret}, nil
+	return row, nil
 }

@@ -392,69 +392,96 @@ func TestTokenIDJAGExchangeRejectsTrustedIssuerFromAnotherOrganization(t *testin
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"assertion is invalid"}`, w.Body.String())
 }
 
-func TestTokenIDJAGExchangeAuthenticatesRegisteredConfidentialClient(t *testing.T) {
+func TestTokenIDJAGExchangeAuthenticatesRegisteredJWTBearerClient(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
+	for _, method := range usersessions.JWTBearerClientAuthMethods {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
 
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	upstreamIssuer := "https://identity.example.test"
-	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksURL)
-	toolset, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+			ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.ProjectID)
 
-	// The same registration path the management API uses for jwt-bearer clients.
-	req := usersessions.RegistrationRequest{
-		ClientName:              "Assertion-only confidential client",
-		RedirectURIs:            []string{},
-		GrantTypes:              []string{oauthwire.GrantTypeJWTBearer},
-		ResponseTypes:           []string{},
-		TokenEndpointAuthMethod: oauthwire.AuthMethodClientSecretBasic,
+			toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			upstreamIssuer := "https://identity.example.test"
+			issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksURL)
+			toolset, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+				UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+				Slug:                toolset.Slug,
+				ProjectID:           *authCtx.ProjectID,
+			})
+			require.NoError(t, err)
+
+			// The same mint and registration path the management API uses.
+			req := usersessions.RegistrationRequest{
+				ClientName:              "Assertion-only client",
+				RedirectURIs:            []string{},
+				GrantTypes:              []string{oauthwire.GrantTypeJWTBearer},
+				ResponseTypes:           []string{},
+				TokenEndpointAuthMethod: method,
+			}
+			req.SetDefaults()
+			require.NoError(t, req.Validate(usersessions.RegistrableGrantTypes, usersessions.JWTBearerClientAuthMethods))
+			credential, err := usersessions.MintClientCredential(method)
+			require.NoError(t, err)
+			row, err := usersessions.CreateClientRegistration(ctx, usersessionsrepo.New(ti.conn), issuer.ID, req, credential)
+			require.NoError(t, err)
+			clientID := row.ClientID
+			confidential := method != oauthwire.AuthMethodNone
+			require.Equal(t, confidential, credential.Secret != "")
+
+			seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
+			seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
+			resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
+
+			post := func(secret string) *httptest.ResponseRecorder {
+				form := url.Values{
+					"grant_type": {oauthwire.GrantTypeJWTBearer},
+					"assertion":  {assertionSigner.sign(t, upstreamIssuer, resource, resource, clientID, mockidp.MockUserEmail, uuid.NewString())},
+				}
+				switch method {
+				case oauthwire.AuthMethodClientSecretPost:
+					form.Set("client_id", clientID)
+					form.Set("client_secret", secret)
+				case oauthwire.AuthMethodNone:
+					form.Set("client_id", clientID)
+				}
+				r := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if method == oauthwire.AuthMethodClientSecretBasic {
+					r.SetBasicAuth(clientID, secret)
+				}
+				routeCtx := chi.NewRouteContext()
+				routeCtx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+				r = r.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
+				w := httptest.NewRecorder()
+				require.NoError(t, ti.service.HandleToken(w, r))
+				return w
+			}
+
+			if confidential {
+				// RFC 6749 §5.2: 401 only when the client authenticated via the
+				// Authorization header.
+				wrong := post("not-the-secret")
+				wantStatus := http.StatusBadRequest
+				if method == oauthwire.AuthMethodClientSecretBasic {
+					wantStatus = http.StatusUnauthorized
+				}
+				require.Equal(t, wantStatus, wrong.Code, wrong.Body.String())
+				require.Contains(t, wrong.Body.String(), `"invalid_client"`)
+			}
+
+			w := post(credential.Secret)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			var token struct {
+				AccessToken string `json:"access_token"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &token))
+			validated, err := usersessions.NewSigner("test-jwt-secret").ValidateExactAudienceBearer(ctx, token.AccessToken, resource, ti.chatSessionsManager)
+			require.NoError(t, err)
+			require.Equal(t, clientID, validated.ClientID())
+		})
 	}
-	req.SetDefaults()
-	require.NoError(t, req.Validate(usersessions.RegistrableGrantTypes, usersessions.SupportedAuthMethods))
-	registered, err := usersessions.CreateClientRegistration(ctx, usersessionsrepo.New(ti.conn), issuer.ID, req)
-	require.NoError(t, err)
-	require.NotEmpty(t, registered.ClientSecret)
-	clientID := registered.Row.ClientID
-
-	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
-	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
-	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
-
-	post := func(secret string) *httptest.ResponseRecorder {
-		form := url.Values{
-			"grant_type": {oauthwire.GrantTypeJWTBearer},
-			"assertion":  {assertionSigner.sign(t, upstreamIssuer, resource, resource, clientID, mockidp.MockUserEmail, uuid.NewString())},
-		}
-		r := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		r.SetBasicAuth(clientID, secret)
-		routeCtx := chi.NewRouteContext()
-		routeCtx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
-		r = r.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
-		w := httptest.NewRecorder()
-		require.NoError(t, ti.service.HandleToken(w, r))
-		return w
-	}
-
-	wrong := post("not-the-secret")
-	require.Equal(t, http.StatusUnauthorized, wrong.Code, wrong.Body.String())
-
-	w := post(registered.ClientSecret)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	var token struct {
-		AccessToken string `json:"access_token"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &token))
-	validated, err := usersessions.NewSigner("test-jwt-secret").ValidateExactAudienceBearer(ctx, token.AccessToken, resource, ti.chatSessionsManager)
-	require.NoError(t, err)
-	require.Equal(t, clientID, validated.ClientID())
 }
