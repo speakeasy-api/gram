@@ -1,6 +1,7 @@
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { WorkloadIssuerSelector } from "./WorkloadIssuerSelector";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
+import { AssertionReuseField } from "../WorkloadIssuerPolicy";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
 import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/registerWorkloadIssuer.js";
@@ -137,6 +138,7 @@ export function useWorkloadSetup({
     setValues(initialValues);
   }, [initialValues, values]);
   const [connecting, setConnecting] = useState(false);
+  const [reuseIssuer, setReuseIssuer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const setupValues = useSetupValues(targetProjectId);
 
@@ -252,6 +254,7 @@ export function useWorkloadSetup({
               description: connection.description,
               issuer: connection.issuer,
               jwksUri: connection.jwksUri,
+              allowAssertionReuse: reuseIssuer === connection.issuer,
               tags: [],
             },
           },
@@ -349,7 +352,18 @@ export function useWorkloadSetup({
           }}
         />
       ) : (
-        <div className="space-y-4">{step.body(context)}</div>
+        <div className="space-y-4">
+          {step.body(context)}
+          {step.phase === "create" && !isTrusted && !settled && (
+            <AssertionReuseField
+              checked={connection !== null && reuseIssuer === connection.issuer}
+              disabled={connecting || connection === null}
+              onChange={(checked) =>
+                setReuseIssuer(checked ? (connection?.issuer ?? null) : null)
+              }
+            />
+          )}
+        </div>
       ),
     complete: (step) =>
       customFlow && step.id === "issuer"

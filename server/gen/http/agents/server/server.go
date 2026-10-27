@@ -27,6 +27,7 @@ type Server struct {
 	Rename                 http.Handler
 	ListDelegableGrants    http.Handler
 	ListPolicyGrants       http.Handler
+	CheckPolicyGrants      http.Handler
 	CreatePolicyGrant      http.Handler
 	UpdatePolicyGrant      http.Handler
 	DeletePolicyGrant      http.Handler
@@ -76,6 +77,7 @@ func New(
 			{"Rename", "POST", "/rpc/agents.rename"},
 			{"ListDelegableGrants", "GET", "/rpc/agents.listDelegableGrants"},
 			{"ListPolicyGrants", "GET", "/rpc/agents.listPolicyGrants"},
+			{"CheckPolicyGrants", "POST", "/rpc/agents.checkPolicyGrants"},
 			{"CreatePolicyGrant", "POST", "/rpc/agents.createPolicyGrant"},
 			{"UpdatePolicyGrant", "POST", "/rpc/agents.updatePolicyGrant"},
 			{"DeletePolicyGrant", "POST", "/rpc/agents.deletePolicyGrant"},
@@ -97,6 +99,7 @@ func New(
 		Rename:                 NewRenameHandler(e.Rename, mux, decoder, encoder, errhandler, formatter),
 		ListDelegableGrants:    NewListDelegableGrantsHandler(e.ListDelegableGrants, mux, decoder, encoder, errhandler, formatter),
 		ListPolicyGrants:       NewListPolicyGrantsHandler(e.ListPolicyGrants, mux, decoder, encoder, errhandler, formatter),
+		CheckPolicyGrants:      NewCheckPolicyGrantsHandler(e.CheckPolicyGrants, mux, decoder, encoder, errhandler, formatter),
 		CreatePolicyGrant:      NewCreatePolicyGrantHandler(e.CreatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
 		UpdatePolicyGrant:      NewUpdatePolicyGrantHandler(e.UpdatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
 		DeletePolicyGrant:      NewDeletePolicyGrantHandler(e.DeletePolicyGrant, mux, decoder, encoder, errhandler, formatter),
@@ -125,6 +128,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Rename = m(s.Rename)
 	s.ListDelegableGrants = m(s.ListDelegableGrants)
 	s.ListPolicyGrants = m(s.ListPolicyGrants)
+	s.CheckPolicyGrants = m(s.CheckPolicyGrants)
 	s.CreatePolicyGrant = m(s.CreatePolicyGrant)
 	s.UpdatePolicyGrant = m(s.UpdatePolicyGrant)
 	s.DeletePolicyGrant = m(s.DeletePolicyGrant)
@@ -152,6 +156,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRenameHandler(mux, h.Rename)
 	MountListDelegableGrantsHandler(mux, h.ListDelegableGrants)
 	MountListPolicyGrantsHandler(mux, h.ListPolicyGrants)
+	MountCheckPolicyGrantsHandler(mux, h.CheckPolicyGrants)
 	MountCreatePolicyGrantHandler(mux, h.CreatePolicyGrant)
 	MountUpdatePolicyGrantHandler(mux, h.UpdatePolicyGrant)
 	MountDeletePolicyGrantHandler(mux, h.DeletePolicyGrant)
@@ -572,6 +577,59 @@ func NewListPolicyGrantsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listPolicyGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCheckPolicyGrantsHandler configures the mux to serve the "agents"
+// service "checkPolicyGrants" endpoint.
+func MountCheckPolicyGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agents.checkPolicyGrants", f)
+}
+
+// NewCheckPolicyGrantsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "checkPolicyGrants" endpoint.
+func NewCheckPolicyGrantsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCheckPolicyGrantsRequest(mux, decoder)
+		encodeResponse = EncodeCheckPolicyGrantsResponse(encoder)
+		encodeError    = EncodeCheckPolicyGrantsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "checkPolicyGrants")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
 		payload, err := decodeRequest(r)
 		if err != nil {

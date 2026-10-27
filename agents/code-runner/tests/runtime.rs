@@ -206,7 +206,7 @@ async fn filesystem_environment_and_unknown_external_functions_are_denied() {
     ] {
         let result = run(state.clone(), code).await;
         assert!(
-            matches!(&result, ServerFrame::Error { code, message } if code == "execution_failed" && message.contains(denial)),
+            matches!(&result, ServerFrame::Error { code, message, .. } if code == "execution_failed" && message.contains(denial)),
             "{code}: {result:?}"
         );
     }
@@ -243,6 +243,133 @@ async fn output_is_bounded_without_corrupting_utf8() {
     assert_eq!(value, json!(7));
     assert!(output_truncated);
     assert!(output.len() <= 16 << 10);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn failed_runs_keep_printed_output() {
+    let state = state(1).await;
+    for (code, failure) in [
+        ("print('before traceback')\n1 / 0", "ZeroDivisionError"),
+        (
+            "print('before traceback')\nlen('x' * (80 * 1024 * 1024))",
+            "MemoryError",
+        ),
+        (
+            "print('before traceback')\n'x' * 300000",
+            "JSON result exceeds limit",
+        ),
+        (
+            "print('before traceback')\nfor _ in range(65):\n    await tools.call('a--write', {})",
+            "attempt limit",
+        ),
+    ] {
+        let mut run = Run::new(state.clone(), Uuid::new_v4().to_string(), code, 5000).await;
+        run.started().await;
+        let result = loop {
+            match run.next().await {
+                ServerFrame::Callback { id, .. } => write_frame(
+                    &mut run.stream,
+                    &ClientFrame::CallbackResult {
+                        id,
+                        value: Some(Value::Null),
+                        error: None,
+                    },
+                )
+                .await
+                .unwrap(),
+                frame => break frame,
+            }
+        };
+        run.close().await.unwrap();
+        assert!(
+            matches!(&result, ServerFrame::Error { code, message, output, output_truncated: false } if code == "execution_failed" && message.contains(failure) && output == "before traceback\n"),
+            "{code}: {result:?}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn failed_run_output_is_bounded_without_corrupting_utf8() {
+    let result = run(state(1).await, "print('🌍' * 10000)\n1 / 0").await;
+    let ServerFrame::Error {
+        output,
+        output_truncated,
+        ..
+    } = result
+    else {
+        panic!("expected error")
+    };
+    assert!(output_truncated);
+    assert!(output.len() <= 16 << 10 && output.len() > (16 << 10) - 4);
+    assert!(output.chars().all(|c| c == '🌍'));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn truncated_output_stays_a_prefix() {
+    // The cut leaves three bytes free, which the later print would fit. The
+    // name lookup suspends the program, which flushes the first print, so the
+    // later one arrives separately.
+    let result = run(
+        state(1).await,
+        "print('a' + '🌍' * 5000)\ntry:\n    undefined_name\nexcept NameError:\n    pass\nprint('b')\n7",
+    )
+    .await;
+    let ServerFrame::Complete {
+        output,
+        output_truncated,
+        ..
+    } = result
+    else {
+        panic!("expected result")
+    };
+    assert!(output_truncated);
+    assert_eq!(output, format!("a{}", "🌍".repeat(4095)));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn deadline_keeps_printed_output() {
+    let mut pending = Run::new(
+        state(1).await,
+        Uuid::new_v4().to_string(),
+        "print('waiting')\nawait tools.servers()",
+        2000,
+    )
+    .await;
+    pending.started().await;
+    assert!(matches!(pending.next().await, ServerFrame::Callback { .. }));
+    let result = pending.next().await;
+    assert!(
+        matches!(&result, ServerFrame::Error { code, output, output_truncated: false, .. } if code == "deadline_exceeded" && output == "waiting\n"),
+        "{result:?}"
+    );
+    pending.close().await.unwrap();
+}
+
+#[test]
+fn error_frames_without_output_decode() {
+    let ServerFrame::Error {
+        code,
+        output,
+        output_truncated,
+        ..
+    } = serde_json::from_value(
+        json!({"type":"error","code":"admission_refused","message":"runner draining"}),
+    )
+    .unwrap()
+    else {
+        panic!("expected error")
+    };
+    assert_eq!(
+        (code.as_str(), output.as_str(), output_truncated),
+        ("admission_refused", "", false)
+    );
+    // Refusals before admission keep their original encoding.
+    let refusal =
+        serde_json::to_value(ServerFrame::error("admission_refused", "runner draining")).unwrap();
+    assert_eq!(
+        refusal,
+        json!({"type":"error","code":"admission_refused","message":"runner draining"})
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -322,15 +449,22 @@ async fn the_worker_cpu_budget_ends_a_busy_program() {
     let mut busy = Run::new(
         state_for(&shim.binary(), 1).await,
         Uuid::new_v4().to_string(),
-        "while True:\n    pass",
+        "print('busy')\nwhile True:\n    pass",
         20_000,
     )
     .await;
     busy.started().await;
     let started = std::time::Instant::now();
+    let result = busy.next().await;
     assert!(
-        matches!(busy.next().await, ServerFrame::Error { code, message } if code == "execution_failed" && message == "Python CPU time limit exceeded"),
+        matches!(&result, ServerFrame::Error { code, message, .. } if code == "execution_failed" && message == "Python CPU time limit exceeded"),
         "the CPU budget, not the wall deadline, ends the program"
+    );
+    // The worker flushes a print while it computes in silence, so the output
+    // reached the runner before the budget ended the worker.
+    assert!(
+        matches!(&result, ServerFrame::Error { output, output_truncated: false, .. } if output == "busy\n"),
+        "{result:?}"
     );
     assert!(started.elapsed() < Duration::from_secs(10));
     busy.close().await.unwrap();
@@ -411,7 +545,7 @@ async fn empty_code_is_refused_before_admission() {
     let id = Uuid::new_v4().to_string();
     let mut empty = Run::new(state.clone(), id.clone(), "", 5000).await;
     assert!(
-        matches!(empty.next().await, ServerFrame::Error { code, message } if code == "admission_refused" && message.contains("empty"))
+        matches!(empty.next().await, ServerFrame::Error { code, message, .. } if code == "admission_refused" && message.contains("empty"))
     );
     empty.close().await.unwrap();
     // A refused attempt consumes neither capacity nor its execution ID.
@@ -692,7 +826,7 @@ async fn exceeding_the_result_budget_reports_callback_limit() {
     let mut run = Run::new(
         state(1).await,
         Uuid::new_v4().to_string(),
-        "for _ in range(9):\n    await tools.call('a--read', {})",
+        "print('fetching')\nfor _ in range(9):\n    await tools.call('a--read', {})",
         5000,
     )
     .await;
@@ -701,8 +835,10 @@ async fn exceeding_the_result_budget_reports_callback_limit() {
     for _ in 0..9 {
         answer_with_text(&mut run, 1_000_000).await;
     }
+    let result = run.next().await;
     assert!(
-        matches!(run.next().await, ServerFrame::Error { code, message } if code == "callback_limit" && message.contains("budget exceeded"))
+        matches!(&result, ServerFrame::Error { code, message, output, output_truncated: false } if code == "callback_limit" && message.contains("budget exceeded") && output == "fetching\n"),
+        "{result:?}"
     );
     run.close().await.unwrap();
 }
@@ -719,7 +855,7 @@ async fn an_oversized_callback_result_reports_callback_limit() {
     run.started().await;
     answer_with_text(&mut run, MAX_CALLBACK + 1).await;
     assert!(
-        matches!(run.next().await, ServerFrame::Error { code, message } if code == "callback_limit" && message.contains("budget exceeded"))
+        matches!(run.next().await, ServerFrame::Error { code, message, .. } if code == "callback_limit" && message.contains("budget exceeded"))
     );
     run.close().await.unwrap();
 }

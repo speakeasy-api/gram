@@ -117,6 +117,7 @@ trackedFiles:
   src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/agentUpsertAiScanTarget.ts: {}
   src/funcs/agentsBlockOnConnection.ts: {}
+  src/funcs/agentsCheckPolicyGrants.ts: {}
   src/funcs/agentsCreate.ts: {}
   src/funcs/agentsCreatePolicyGrant.ts: {}
   src/funcs/agentsDelete.ts: {}
@@ -760,7 +761,6 @@ trackedFiles:
   src/funcs/tokenExchangeExchange.ts: {}
   src/funcs/toolsList.ts: {}
   src/funcs/toolsetsAddExternalOAuthServer.ts: {}
-  src/funcs/toolsetsCheckMCPSlugAvailability.ts: {}
   src/funcs/toolsetsCloneBySlug.ts: {}
   src/funcs/toolsetsCreate.ts: {}
   src/funcs/toolsetsDeleteBySlug.ts: {}
@@ -912,6 +912,7 @@ trackedFiles:
   src/models/components/agentplugin.ts: {}
   src/models/components/agentpluginserver.ts: {}
   src/models/components/agentpolicygrant.ts: {}
+  src/models/components/agentpolicygrantcheck.ts: {}
   src/models/components/agentpolicygrantform.ts: {}
   src/models/components/agentpolicyselector.ts: {}
   src/models/components/agentpollingprincipal.ts: {}
@@ -1020,6 +1021,8 @@ trackedFiles:
   src/models/components/chatsessionlink.ts: {}
   src/models/components/chatsummary.ts: {}
   src/models/components/chattotals.ts: {}
+  src/models/components/checkagentpolicygrantsform.ts: {}
+  src/models/components/checkagentpolicygrantsresult.ts: {}
   src/models/components/cimdclientpreset.ts: {}
   src/models/components/claudeagentusage.ts: {}
   src/models/components/claudehookpayload.ts: {}
@@ -1286,6 +1289,7 @@ trackedFiles:
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
+  src/models/components/hookdeliveryfailuredata.ts: {}
   src/models/components/hookingestdata.ts: {}
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
@@ -2200,9 +2204,9 @@ trackedFiles:
   src/models/operations/blockagentonconnection.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
   src/models/operations/captureevent.ts: {}
+  src/models/operations/checkagentpolicygrants.ts: {}
   src/models/operations/checkdomainhealth.ts: {}
   src/models/operations/checkmcpendpointslugavailability.ts: {}
-  src/models/operations/checkmcpslugavailability.ts: {}
   src/models/operations/checknetworkingresshealth.ts: {}
   src/models/operations/clearmcpregistrycache.ts: {}
   src/models/operations/cliauthauthorize.ts: {}
@@ -3102,9 +3106,8 @@ trackedFiles:
   src/react-query/chatSessionsRevoke.ts: {}
   src/react-query/chatSetPinned.ts: {}
   src/react-query/chatSubmitFeedback.ts: {}
+  src/react-query/checkAgentPolicyGrants.ts: {}
   src/react-query/checkDomainHealth.ts: {}
-  src/react-query/checkMCPSlugAvailability.core.ts: {}
-  src/react-query/checkMCPSlugAvailability.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.core.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.ts: {}
   src/react-query/cimdClientPresets.core.ts: {}
@@ -4746,6 +4749,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  checkAgentPolicyGrants:
+    speakeasy-default-check-agent-policy-grants:
+      requestBody:
+        application/json: {"policy_grants": []}
+      responses:
+        "200":
+          application/json: {"results": [{"allowed": false}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   checkDomainHealth:
     speakeasy-default-check-domain-health:
       responses:
@@ -8490,7 +8504,7 @@ examples:
   getToolUsageFilterOptions:
     speakeasy-default-get-tool-usage-filter-options:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
           application/json: {"clients": [{"client_key": "<value>", "client_label": "<value>", "event_count": 411092}], "gateways": [{"event_count": 411092, "meta_mcp_server_id": "<id>", "name": "<value>"}], "hosted_servers": [{"event_count": 411092, "toolset_name": "<value>", "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
@@ -11006,7 +11020,7 @@ examples:
     speakeasy-default-list-workload-identities:
       responses:
         "200":
-          application/json: {"admissions": [], "issuers": [{"allow_wildcard_admission": false, "created_at": "2026-04-05T08:16:34.528Z", "description": "preclude pocket-watch shakily usually warmly great", "id": "7f2a8883-57ab-4de9-846b-7a2c31e8601f", "issuer": "visa", "jwks_uri": "https://rewarding-developing.net", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": ["<value 1>"], "updated_at": "2025-04-11T13:58:43.672Z"}]}
+          application/json: {"admissions": [], "issuers": [{"allow_assertion_reuse": true, "allow_wildcard_admission": false, "created_at": "2026-04-05T08:16:34.528Z", "description": "preclude pocket-watch shakily usually warmly great", "id": "7f2a8883-57ab-4de9-846b-7a2c31e8601f", "issuer": "visa", "jwks_uri": "https://rewarding-developing.net", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": ["<value 1>"], "updated_at": "2025-04-11T13:58:43.672Z"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -13880,7 +13894,7 @@ examples:
         application/json: {"id": "59fe3ec7-33f6-48fc-9d36-7c3e31122287"}
       responses:
         "200":
-          application/json: {"admissions": [], "issuers": [{"allow_wildcard_admission": false, "created_at": "2024-11-19T20:12:14.378Z", "description": "barring eek dampen", "id": "5b893d0e-f5b7-4389-83f3-9db4a472304b", "issuer": "mastercard", "jwks_uri": "https://utter-airman.org", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": [], "updated_at": "2024-05-15T18:17:39.606Z"}]}
+          application/json: {"admissions": [], "issuers": [{"allow_assertion_reuse": true, "allow_wildcard_admission": false, "created_at": "2024-11-19T20:12:14.378Z", "description": "barring eek dampen", "id": "5b893d0e-f5b7-4389-83f3-9db4a472304b", "issuer": "mastercard", "jwks_uri": "https://utter-airman.org", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": [], "updated_at": "2024-05-15T18:17:39.606Z"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

@@ -21,6 +21,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
+
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -28,10 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/trace"
-	goahttp "goa.design/goa/v3/http"
-	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -671,9 +672,6 @@ func NewService(
 		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
 	}
-	// Discovery and token dispatch share this production issuer. Only explicitly
-	// provisioned, live assistant workload registrations can obtain tokens.
-	service.assistantWorkloadTokens = &registeredAssistantWorkloadIssuer{service: service}
 	return service, nil
 }
 
@@ -1735,10 +1733,10 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 	schemes := describeToolSecurity(described.SecurityVariables)
 	if len(schemes) == 0 {
 		// No per-tool security annotations, but the toolset may still require
-		// OAuth at the server level (proxy or external). If so, require the
+		// external OAuth at the server level. If so, require the
 		// user to have provided a token — otherwise the 401 + WWW-Authenticate
 		// must be sent so MCP clients can initiate the OAuth flow.
-		oauthRequired := isPublic && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid)
+		oauthRequired := isPublic && toolset.ExternalOauthServerID.Valid
 		if oauthRequired {
 			for _, t := range payload.oauthTokenInputs {
 				if t.Token != "" {
@@ -1857,7 +1855,7 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 	if err != nil {
 		return nil, noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)
 	}
-	if !hostedmcp.InSync(toolset, &wrapper) {
+	if !hostedmcp.IsCanonical(&wrapper, toolset.ID) {
 		return nil, noWrapper, errToolsetNotFound
 	}
 	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.

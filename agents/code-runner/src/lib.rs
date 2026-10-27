@@ -232,7 +232,7 @@ async fn handle_http(
                             streams.spawn(async move {
                                 if draining {
                                     let mut stream = stream.compat();
-                                    let _ = finish_stream(&mut stream, &ServerFrame::Error { code: "admission_refused".into(), message: "runner draining".into() }).await;
+                                    let _ = finish_stream(&mut stream, &ServerFrame::error("admission_refused", "runner draining")).await;
                                 } else {
                                     let _ = serve_stream(stream.compat(), state, shutdown).await;
                                 }
@@ -282,10 +282,7 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     let Ok(reading) = tokio::time::timeout_at(deadline, state.start_reads.acquire()).await else {
         finish_stream(
             &mut stream,
-            &ServerFrame::Error {
-                code: "admission_refused".into(),
-                message: "runner busy reading other executions".into(),
-            },
+            &ServerFrame::error("admission_refused", "runner busy reading other executions"),
         )
         .await?;
         return Ok(());
@@ -296,10 +293,7 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     else {
         finish_stream(
             &mut stream,
-            &ServerFrame::Error {
-                code: "admission_refused".into(),
-                message: "start frame not received in time".into(),
-            },
+            &ServerFrame::error("admission_refused", "start frame not received in time"),
         )
         .await?;
         return Ok(());
@@ -342,14 +336,7 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     let _capacity = match admission {
         Ok(permit) => permit,
         Err((code, message)) => {
-            finish_stream(
-                &mut stream,
-                &ServerFrame::Error {
-                    code: code.into(),
-                    message,
-                },
-            )
-            .await?;
+            finish_stream(&mut stream, &ServerFrame::error(code, message)).await?;
             return Ok(());
         }
     };
@@ -387,14 +374,20 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
         }
         reader_cancel.cancel();
     }));
+    // Held outside the execution so a failure or the deadline still reports
+    // what the program printed.
+    let output = runtime::Output::default();
     let mut result = tokio::select! {
         biased;
         _ = cancelled.cancelled() => cancelled_error(),
-        result = tokio::time::timeout(Duration::from_millis(wall_ms), runtime::execute(&state.pool, code, &mut replies, &frames)) => {
+        result = tokio::time::timeout(Duration::from_millis(wall_ms), runtime::execute(&state.pool, code, &output, &mut replies, &frames)) => {
             match result {
                 Ok(Ok(result)) => result,
-                Ok(Err(error)) => runtime::public_error(&error),
-                Err(_) => ServerFrame::Error { code: "deadline_exceeded".into(), message: "execution deadline exceeded; dispatched tool outcomes may be unknown".into() },
+                Ok(Err(error)) => runtime::public_error(&error, &output),
+                Err(_) => {
+                    let (output, output_truncated) = output.take();
+                    ServerFrame::Error { code: "deadline_exceeded".into(), message: "execution deadline exceeded; dispatched tool outcomes may be unknown".into(), output, output_truncated }
+                }
             }
         }
     };
@@ -417,10 +410,10 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 }
 
 fn cancelled_error() -> ServerFrame {
-    ServerFrame::Error {
-        code: "cancelled".into(),
-        message: "execution cancelled; dispatched tool outcomes may be unknown".into(),
-    }
+    ServerFrame::error(
+        "cancelled",
+        "execution cancelled; dispatched tool outcomes may be unknown",
+    )
 }
 
 async fn finish_stream<W: AsyncWrite + Unpin>(stream: &mut W, result: &ServerFrame) -> Result<()> {

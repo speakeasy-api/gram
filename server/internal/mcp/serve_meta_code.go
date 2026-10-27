@@ -44,7 +44,7 @@ Search returns summaries; describe returns full definitions. Exact paths: server
 
 Calls return {ok, data, content, outcome, error?}; check ok. data preserves structuredContent; None when absent. A server refusing the call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and its reason in content: describe the tool and fix the call. Disallowed paths and non-object arguments raise RuntimeError.
 
-Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment access, direct network or sleep. Limits: 64 KiB source, 64 MiB heap, 30 s wall, 2 s active Python (tool waits excluded), 64 helper attempts, 8 concurrent helpers, 1 MiB per reply/8 MiB total, 256 KiB result, 16 KiB printed output (truncated).
+Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment access, direct network or sleep. Limits: 64 KiB source, 64 MiB heap, 30 s wall, 2 s active Python (tool waits excluded), 64 helper attempts, 8 concurrent helpers, 1 MiB per reply/8 MiB total, 256 KiB result, 16 KiB printed output (truncated). Output printed before a Python error, limit or timeout is still returned.
 
 Optional tools argument restricts every helper to exact paths; omit = all permitted, [] = none.
 
@@ -84,7 +84,7 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	if len(members) == 0 {
 		description.WriteString("No tool prefixes are currently permitted.\n")
 	}
-	body, err := json.Marshal(&result[toolsListResultTools]{ID: req.ID, Result: toolsListResultTools{Tools: []*toolListEntry{{Name: "execute", Description: description.String(), InputSchema: codeExecuteSchema, Annotations: nil, Meta: nil}}}, serverIdentity: serverInfoMetaServer, cacheHints: cacheHintsCallerVarying})
+	body, err := json.Marshal(&result[toolsListResultTools]{ID: req.ID, Result: toolsListResultTools{Tools: []*toolListEntry{{Name: metamcp.ToolCodeExecute, Description: description.String(), InputSchema: codeExecuteSchema, Annotations: nil, Meta: nil}}}, serverIdentity: serverInfoMetaServer, cacheHints: cacheHintsCallerVarying})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code tool catalog").LogError(ctx, logger)
 	}

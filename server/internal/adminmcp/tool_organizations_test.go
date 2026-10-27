@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 type recordingOrganizationReader struct {
@@ -35,6 +36,7 @@ func (r *recordingOrganizationReader) GetOrganization(_ context.Context, input *
 func callStaffReadTool(t *testing.T, reads OrganizationReader, name, args string) (int, string, json.RawMessage) {
 	t.Helper()
 	auth := &testAuthenticator{principal: staffPrincipal()}
+	auth.principal.staff = &contextvalues.AdminAuthContext{SessionID: "test-staff-session", OIDCSubject: auth.principal.Subject, Email: auth.principal.Email}
 	handler := NewRuntime(auth, "", reads).Handler()
 	request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+name+`","arguments":`+args+`}}`))
 	request.Header.Set("Authorization", "Bearer test-token")

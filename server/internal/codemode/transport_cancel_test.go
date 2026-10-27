@@ -159,8 +159,8 @@ func (deadlineHost) Call(ctx context.Context, path string, _ json.RawMessage) (*
 const (
 	// deadlineBatches runs of deadlineBatch executions each end at their
 	// deadline. A stream timeout firing a moment before the context reported
-	// about two runs in three as outcome_unknown, so 100 runs catch it.
-	deadlineBatches = 25
+	// about two runs in three as outcome_unknown, so 20 runs catch it.
+	deadlineBatches = 5
 
 	// deadlineBatch is the stream capacity startedRunner reports.
 	deadlineBatch = 4
@@ -190,7 +190,9 @@ func TestDeadlineReportsDeadlineExceeded(t *testing.T) {
 		var runs sync.WaitGroup
 		for range deadlineBatch {
 			runs.Go(func() {
-				ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+				// The program is submitted only with more than
+				// runnerDeadlineLead left; this runner ignores its wall deadline.
+				ctx, cancel := context.WithTimeout(t.Context(), runnerDeadlineLead+100*time.Millisecond)
 				defer cancel()
 				results <- client.Run(ctx, uuid.New(), "1", factory)
 			})

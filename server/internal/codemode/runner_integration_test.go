@@ -103,6 +103,49 @@ message`, func(context.Context) (Host, error) { return host, nil })
 	require.JSONEq(t, `"tool operation unavailable or arguments invalid"`, string(result.Value))
 }
 
+func TestCodeRunnerFailedRunKeepsPrintedOutput(t *testing.T) {
+	t.Parallel()
+	client := realRunnerClient(t)
+	for _, tc := range []struct {
+		name      string
+		code      string
+		message   string
+		output    string
+		truncated bool
+	}{
+		{"traceback", "print(\"before traceback\")\n1 / 0", "ZeroDivisionError", "before traceback\n", false},
+		{"result too large", "print(\"building\")\n\"x\" * 300000", "JSON result exceeds limit", "building\n", false},
+		{"truncated output", "print(\"x\" * 20000)\n1 / 0", "ZeroDivisionError", strings.Repeat("x", maxPrintBytes), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result := client.Run(t.Context(), uuid.New(), tc.code, func(context.Context) (Host, error) { return &runnerHost{}, nil })
+			require.NotNil(t, result.Error)
+			require.Equal(t, "execution_failed", result.Error.Code)
+			require.Contains(t, result.Error.Message, tc.message)
+			require.Equal(t, tc.output, result.Output)
+			require.Equal(t, tc.truncated, result.OutputTruncated)
+			require.JSONEq(t, `null`, string(result.Value))
+		})
+	}
+}
+
+// The runner's wall deadline falls before the server's, so its deadline
+// report, with what the program printed, reaches the server first.
+func TestCodeRunnerDeadlineKeepsPrintedOutput(t *testing.T) {
+	t.Parallel()
+	client := realRunnerClient(t)
+	host := &runnerHost{entered: make(chan struct{}, 1), block: true}
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	result := client.Run(ctx, uuid.New(), `print("waiting")
+await tools.call("remote--write", {})`, func(context.Context) (Host, error) { return host, nil })
+	require.NotNil(t, result.Error)
+	require.Equal(t, "deadline_exceeded", result.Error.Code)
+	require.Equal(t, "waiting\n", result.Output)
+	require.Equal(t, []CallOutcome{{Path: "remote--write", Outcome: "unknown"}}, result.ToolCalls)
+}
+
 func TestCodeRunnerCancellationPreservesUnknownWrite(t *testing.T) {
 	t.Parallel()
 	client := realRunnerClient(t)
@@ -133,8 +176,8 @@ func TestCodeRunnerCancellationPreservesUnknownWrite(t *testing.T) {
 }
 
 // codeRunnerDeadlineRuns is how many runs end at their deadline in
-// TestCodeRunnerDeadlineKeepsUnknownWrite. The client and the runner time
-// out at nearly the same instant, so each run is one draw of that race.
+// TestCodeRunnerDeadlineKeepsUnknownWrite. The runner's wall deadline falls
+// runnerDeadlineLead before the client's, so the runner reports each one.
 const codeRunnerDeadlineRuns = 10
 
 func TestCodeRunnerDeadlineKeepsUnknownWrite(t *testing.T) {
@@ -145,7 +188,7 @@ func TestCodeRunnerDeadlineKeepsUnknownWrite(t *testing.T) {
 	require.Nil(t, client.Run(t.Context(), uuid.New(), "None", factory).Error)
 	session := client.session
 	for range codeRunnerDeadlineRuns {
-		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), runnerDeadlineLead+250*time.Millisecond)
 		result := client.Run(ctx, uuid.New(), `await tools.call("remote--write", {})`, factory)
 		cancel()
 		require.NotNil(t, result.Error)

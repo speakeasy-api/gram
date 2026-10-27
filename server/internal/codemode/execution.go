@@ -33,6 +33,11 @@ const (
 	// budget. The runner sends the same message with callback_limit when it
 	// detects the overrun first.
 	callbackBudgetMessage = "callback result budget exceeded; dispatched tool outcomes are recorded separately"
+	// runnerDeadlineLead is how much earlier the runner's wall deadline falls
+	// than the server's, so the runner reports its own deadline, with the
+	// output the program printed, before the server closes the stream. Half a
+	// second covers stopping the worker and sending one frame on the pod network.
+	runnerDeadlineLead = 500 * time.Millisecond
 )
 
 // errCallbackBudget is the cause of a run ended by its reply budget.
@@ -52,7 +57,7 @@ var errRunnerFull = errors.New("code runner capacity is full")
 type ExecutionResult struct {
 	// Value is the final JSON-compatible expression, or null on failure.
 	Value json.RawMessage `json:"value"`
-	// Output is bounded Python print output.
+	// Output is bounded Python print output, including output printed before a failure.
 	Output string `json:"output"`
 	// OutputTruncated indicates omitted print bytes.
 	OutputTruncated bool `json:"output_truncated"`
@@ -234,9 +239,9 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 		result.ToolCalls = append(result.ToolCalls, state.calls...)
 		state.mu.Unlock()
 	}()
-	remaining := time.Until(deadline).Milliseconds()
+	remaining := (time.Until(deadline) - runnerDeadlineLead).Milliseconds()
 	if remaining < 1 {
-		fail("deadline_exceeded", "execution deadline elapsed before submission; program was not submitted")
+		fail("deadline_exceeded", "too little execution time remained to run the program; program was not submitted")
 		return result
 	}
 	// Everything before the start frame is admission; the coordinator reports
@@ -341,7 +346,7 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 				fail("protocol_error", "runtime contradicted its admission; do not replay automatically")
 				return result
 			}
-			if len(message.Code) > 128 || len(message.Message) > 4096 || message.Code == "" {
+			if len(message.Code) > 128 || len(message.Message) > 4096 || message.Code == "" || len(message.Output) > maxPrintBytes {
 				fail("protocol_error", "invalid runtime error")
 				return result
 			}
@@ -349,11 +354,13 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 			// reports its overrun as execution_failed, and can still serve from
 			// the previous image pool during a rollout. Report the same code as
 			// the client's own budget check.
-			if message.Code == "execution_failed" && slices.Contains(runnerBudgetFailures, message.Message) {
-				fail("callback_limit", callbackBudgetMessage)
-				return result
+			code, text := message.Code, message.Message
+			if code == "execution_failed" && slices.Contains(runnerBudgetFailures, text) {
+				code, text = "callback_limit", callbackBudgetMessage
 			}
-			fail(message.Code, message.Message)
+			fail(code, text)
+			// Output printed before the failure; a runner that omits it leaves it empty.
+			result.Output, result.OutputTruncated = message.Output, message.OutputTruncated
 			return result
 		default:
 			fail("protocol_error", "unknown runtime message")

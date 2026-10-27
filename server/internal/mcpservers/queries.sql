@@ -221,7 +221,15 @@ SET
     name = @name,
     slug = @slug,
     environment_id = @environment_id,
-    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
+    user_session_issuer_id = CASE
+        WHEN @clear_user_session_issuer::boolean THEN NULL
+        ELSE COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id)
+    END,
+    -- Detaching the issuer clears the derived remote issuer, which no resync can reach.
+    remote_session_issuer_id = CASE
+        WHEN @clear_user_session_issuer::boolean THEN NULL
+        ELSE remote_session_issuer_id
+    END,
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,

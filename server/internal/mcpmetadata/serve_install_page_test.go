@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1098,11 +1099,41 @@ func TestServeInstallPage_AntigravityClients_WithSecurityInputs(t *testing.T) {
 	assert.Contains(t, body, "${VAR}", "should mention Antigravity env-var expansion")
 }
 
-// TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
-// AGE-1962: a private MCP server with a Speakeasy OAuth proxy attached must not render
-// the SPEAKEASY_AI_API_KEY Authorization header (or speakeasy-ai-environment) in the install snippets.
-// OAuth handles identity auth at the HTTP layer, so the install command must not
-// instruct users to set those headers manually.
+// A private toolset whose only OAuth reference is the retired proxy link is
+// served with an API key, so its install page asks for one.
+func TestServeInstallPage_PrivateWithRetiredOAuthProxyLink_AsksForGramKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "private-proxy-mcp-" + uuid.NewString()[:8]
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private Proxy Toolset",
+		Slug:                   "private-proxy-ts-" + uuid.NewString()[:8],
+		Description:            conv.ToPGText("Private toolset with the retired proxy link"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText(mcpSlug),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	testenv.LinkRetiredOAuthProxy(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "SPEAKEASY_AI_API_KEY")
+}
+
 // TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey covers the new
 // OAuth scheme: a private toolset gated by a user_session_issuer (rather than
 // the legacy oauth_proxy/external_oauth fields) delegates identity to OAuth, so
@@ -3029,9 +3060,12 @@ func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
 			req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 			rr := httptest.NewRecorder()
 			require.NoError(t, ti.service.ServeInstallPage(rr, req))
-			if visibility == mcpservers.VisibilityPublic {
+			switch visibility {
+			case mcpservers.VisibilityPublic:
 				require.Equal(t, http.StatusOK, rr.Code)
-			} else {
+			case mcpservers.VisibilityPrivate:
+				require.Equal(t, http.StatusFound, rr.Code, "a private wrapper sends the visitor to sign in")
+			default:
 				require.Equal(t, http.StatusNotFound, rr.Code)
 			}
 		})

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -110,7 +111,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 			toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: projectID})
 			switch {
 			case err == nil:
-				return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, &server, toolset.CustomDomainID)
+				return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, &server, toolset)
 			case !errors.Is(err, pgx.ErrNoRows):
 				return none, oops.E(oops.CodeUnexpected, err, "get toolset").LogError(ctx, logger)
 			}
@@ -139,7 +140,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if wrapper == nil {
 			return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
 		}
-		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset.CustomDomainID)
+		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset)
 	default:
 		id, err := uuid.Parse(*payload.MetaMcpServerID)
 		if err != nil {
@@ -164,15 +165,21 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 	}
 }
 
-// canonicalAttachTarget previews a toolset's canonical wrapper, which owns the issuer; the toolset's legacy
-// alias answers on its own host beside any live endpoints.
-func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, wrapper *mcpserversrepo.McpServer, aliasDomainID uuid.NullUUID) (attachTarget, error) {
+// canonicalAttachTarget previews a toolset's canonical wrapper, which owns the issuer: its live endpoints and,
+// while the server is enabled, the toolset's mirrored address, which still serves on its own host.
+func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, wrapper *mcpserversrepo.McpServer, toolset toolsetsrepo.Toolset) (attachTarget, error) {
 	customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
 	if err != nil {
 		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, err
 	}
-	onPlatformHost := !aliasDomainID.Valid || (len(customDomainIDs) > 0 && anyOnPlatformHost(customDomainIDs))
-	return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: onPlatformHost}, nil
+	// The toolset's mirrored address still serves on its own host while the server is enabled.
+	if toolset.McpSlug.Valid && toolset.McpSlug.String != "" && (wrapper.Visibility == visibility.Public || wrapper.Visibility == visibility.Private) {
+		customDomainIDs = append(customDomainIDs, toolset.CustomDomainID)
+	}
+	if len(customDomainIDs) == 0 {
+		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+	}
+	return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 }
 
 // liveEndpointDomains lists the custom domain of each endpoint the server serves on.

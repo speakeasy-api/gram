@@ -53,7 +53,26 @@ pub enum ServerFrame {
     Error {
         code: String,
         message: String,
+        // Output printed before the failure. Omitted when empty, so refusals
+        // before admission keep their encoding and a frame without it decodes.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        output: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        output_truncated: bool,
     },
+}
+
+impl ServerFrame {
+    /// An error that carries no printed output, such as a refusal before the
+    /// program started.
+    pub fn error(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::Error {
+            code: code.into(),
+            message: message.into(),
+            output: String::new(),
+            output_truncated: false,
+        }
+    }
 }
 
 // Distinguishes an explicit `"value": null` from a missing value.

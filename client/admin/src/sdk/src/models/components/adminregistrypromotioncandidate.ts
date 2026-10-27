@@ -13,6 +13,10 @@ import {
 } from "./adminregistrypromotionsuggestions.js";
 
 export type AdminRegistryPromotionCandidate = {
+  /**
+   * Whether staff may explicitly accept this candidate's health evidence.
+   */
+  canOverrideEligibility: boolean;
   checkedAt?: Date | undefined;
   createdAt: Date;
   curationRevision: string;
@@ -53,6 +57,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    can_override_eligibility: z.boolean(),
     checked_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -100,6 +105,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "can_override_eligibility": "canOverrideEligibility",
       "checked_at": "checkedAt",
       "created_at": "createdAt",
       "curation_revision": "curationRevision",

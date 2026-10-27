@@ -82,14 +82,14 @@ func TestRunnerCallbackProtocolViolations(t *testing.T) {
 
 // A runner that counts callback arguments toward the reply budget reports an
 // overrun as execution_failed; the client reports it as callback_limit, the
-// code of its own budget check.
+// code of its own budget check, and keeps the output printed before it.
 func TestRunnerReplyBudgetFailureReportsCallbackLimit(t *testing.T) {
 	t.Parallel()
 	for _, message := range []string{"callback result budget exceeded", "callback budget exceeded"} {
 		t.Run(message, func(t *testing.T) {
 			t.Parallel()
 			budget := func(string) []runnerMessage {
-				return []runnerMessage{{Type: "error", Code: "execution_failed", Message: message}}
+				return []runnerMessage{{Type: "error", Code: "execution_failed", Message: message, Output: "fetching\n"}}
 			}
 			client, err := NewRunnerClient(startedRunner(t, true, budget, func(runnerMessage) bool { return false }), strings.Repeat("t", 32), &net.Dialer{})
 			require.NoError(t, err)
@@ -98,6 +98,39 @@ func TestRunnerReplyBudgetFailureReportsCallbackLimit(t *testing.T) {
 			require.NotNil(t, result.Error)
 			require.Equal(t, "callback_limit", result.Error.Code)
 			require.Equal(t, callbackBudgetMessage, result.Error.Message)
+			require.Equal(t, "fetching\n", result.Output)
+		})
+	}
+}
+
+// A runner error keeps the output printed before the failure. A runner that
+// sends no output field still has its error reported.
+func TestRunnerErrorCarriesPrintedOutput(t *testing.T) {
+	t.Parallel()
+	never := func(runnerMessage) bool { return false }
+	for _, tc := range []struct {
+		name      string
+		message   runnerMessage
+		code      string
+		output    string
+		truncated bool
+	}{
+		{"without output", runnerMessage{Type: "error", Code: "execution_failed", Message: "ZeroDivisionError: division by zero"}, "execution_failed", "", false},
+		{"with output", runnerMessage{Type: "error", Code: "execution_failed", Message: "ZeroDivisionError: division by zero", Output: "before traceback\n"}, "execution_failed", "before traceback\n", false},
+		{"with truncated output", runnerMessage{Type: "error", Code: "deadline_exceeded", Message: "execution deadline exceeded", Output: strings.Repeat("x", maxPrintBytes), OutputTruncated: true}, "deadline_exceeded", strings.Repeat("x", maxPrintBytes), true},
+		{"with oversized output", runnerMessage{Type: "error", Code: "execution_failed", Message: "failed", Output: strings.Repeat("x", maxPrintBytes+1)}, "protocol_error", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			script := func(string) []runnerMessage { return []runnerMessage{tc.message} }
+			client, err := NewRunnerClient(startedRunner(t, true, script, never), strings.Repeat("t", 32), &net.Dialer{})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = client.Close() })
+			result := client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
+			require.NotNil(t, result.Error)
+			require.Equal(t, tc.code, result.Error.Code)
+			require.Equal(t, tc.output, result.Output)
+			require.Equal(t, tc.truncated, result.OutputTruncated)
 		})
 	}
 }

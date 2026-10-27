@@ -93,6 +93,15 @@ first, and keeps its recorded tool outcomes. Stream cleanup adds at most one
 second. The provider release path also has a bounded
 cleanup context. Incomplete writes remain `unknown` even when Python fails.
 
+A failed run still returns what its program printed before the failure, within
+the same 16 KiB bound and with `output_truncated` set when cut. The runner's
+error frame carries that output for Python exceptions, its CPU, memory, result
+and callback limits, and its wall deadline. The server gives the runner a wall
+deadline half a second before its own, so the runner's deadline report arrives
+first. A failure without a runner report, such as cancellation or a lost
+connection, leaves the output empty, as does an error frame from a runner that
+sends no output.
+
 ## Local runtime
 
 Run `mise run zero:code-mode`, then `mise exec -- pitchfork start code-runtime`.
@@ -157,7 +166,9 @@ Callback replies are limited to 1 MiB each and 8 MiB per execution. Speakeasy
 and the runner count the same bytes, the encoded reply frames and not the
 callback arguments, and Speakeasy checks before sending each reply, so the
 runner's own check is only a backstop. A reply over either limit ends the
-execution with `callback_limit`, whichever side detects it. A call that
+execution with `callback_limit`, whichever side detects it. The printed
+output comes back only when the runner detects it, since Speakeasy's own check
+ends the run without a runner report. A call that
 returned keeps the outcome its result recorded. A call still in flight is
 cancelled: it is `not_dispatched` if it had not reached the member yet, and
 `unknown` otherwise. The runner connection stays open for later executions.
@@ -372,6 +383,13 @@ then contains one `execute` tool. Its description lists the caller's permitted
 member prefixes and the Python helper workflow. Tools chosen on the consent
 screen limit the underlying tools that search, describe and calls can reach, not
 the native execute tool.
+
+A connection approved with "Gateway default" records the default in effect at
+consent and keeps it until it reconnects, as does an explicit choice, so a
+change to the gateway's default reaches only new connections. Clients cache
+`tools/list` and the gateway advertises no `listChanged`, so a call for a tool
+the connection's mode does not serve, such as `execute` after leaving Code
+Mode, is refused with a message to reconnect and refresh the tool list.
 
 The organization gateway has no stored default: its connections choose Code
 Mode on the consent page, the default stays Progressive, and agent gateways

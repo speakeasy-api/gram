@@ -661,6 +661,53 @@ func (q *Queries) ListMCPEndpointsByProject(ctx context.Context, projectID uuid.
 	return items, nil
 }
 
+const listMCPEndpointsByProjectAndSlug = `-- name: ListMCPEndpointsByProjectAndSlug :many
+SELECT id, project_id, custom_domain_id, mcp_server_id, meta_mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE project_id = $1
+  AND slug = $2
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at, id
+`
+
+type ListMCPEndpointsByProjectAndSlugParams struct {
+	ProjectID uuid.UUID
+	Slug      string
+}
+
+// Live endpoints with a slug in the project, platform addresses first.
+func (q *Queries) ListMCPEndpointsByProjectAndSlug(ctx context.Context, arg ListMCPEndpointsByProjectAndSlugParams) ([]McpEndpoint, error) {
+	rows, err := q.db.Query(ctx, listMCPEndpointsByProjectAndSlug, arg.ProjectID, arg.Slug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEndpoint
+	for rows.Next() {
+		var i McpEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.MetaMcpServerID,
+			&i.Slug,
+			&i.IsDomainRoot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPEndpointsOnLiveDomainsByMCPServerID = `-- name: ListMCPEndpointsOnLiveDomainsByMCPServerID :many
 SELECT e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted
 FROM mcp_endpoints e

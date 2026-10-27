@@ -128,8 +128,9 @@ func newCatalogUpstream(t *testing.T, tools int) *catalogUpstream {
 }
 
 type catalogConnection struct {
-	token  string
-	policy *toolfilter.SessionPolicy
+	token   string
+	refresh string
+	policy  *toolfilter.SessionPolicy
 }
 
 func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
@@ -335,10 +336,11 @@ func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, 
 	issued := postForm(t, ti, slug, "token", tokenForm)
 	require.Equal(t, http.StatusOK, issued.Code, issued.Body.String())
 	var tokens struct {
-		AccessToken string `json:"access_token"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 	require.NoError(t, json.Unmarshal(issued.Body.Bytes(), &tokens))
-	return catalogConnection{token: tokens.AccessToken, policy: grant.GatewayPolicy}
+	return catalogConnection{token: tokens.AccessToken, refresh: tokens.RefreshToken, policy: grant.GatewayPolicy}
 }
 
 func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {

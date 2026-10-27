@@ -24,6 +24,10 @@ func TestRecordAuthenticatedActorOverridesForgedAttributes(t *testing.T) {
 	}
 	h.RecordAuthenticatedActor(ctx)
 	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
+		if value == "" {
+			require.NotContains(t, h, attr.Key(key), "a forged %s must be removed", key)
+			continue
+		}
 		require.Equal(t, value, h[attr.Key(key)])
 	}
 	require.Equal(t, "test", h[attr.Key("test.property")])
@@ -68,6 +72,10 @@ func TestCaptureEventTrustedActor(t *testing.T) {
 	require.Empty(t, capture.properties["user_id"])
 	require.NotContains(t, capture.properties, "email")
 	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
+		if value == "" {
+			require.NotContains(t, capture.properties, key, "a forged %s must be removed", key)
+			continue
+		}
 		require.Equal(t, value, capture.properties[key])
 	}
 }

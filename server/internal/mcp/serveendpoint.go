@@ -279,8 +279,20 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
-		if mcpServer.ID == mcpServer.ToolsetID.UUID && !toolset.McpEnabled {
-			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+		// Re-read after issuer auth: a hosted server disabled meanwhile stops serving, and one whose access changed
+		// meanwhile is refused rather than served under the access it had when the request resolved.
+		if mcpServer.ID == mcpServer.ToolsetID.UUID {
+			fresh, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServer.ID, ProjectID: mcpEndpoint.ProjectID})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return oops.E(oops.CodeNotFound, err, "mcp server not found")
+			case err != nil:
+				return oops.E(oops.CodeUnexpected, err, "reload hosted MCP server").LogError(ctx, logger)
+			case fresh.Visibility == mcpservers.VisibilityDisabled:
+				return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+			case fresh.Visibility != mcpServer.Visibility || fresh.UserSessionIssuerID != mcpServer.UserSessionIssuerID:
+				return oops.E(oops.CodeConflict, nil, "mcp server access changed during the request; retry")
+			}
 		}
 		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpEndpoint.ID, mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
@@ -735,6 +747,12 @@ func (s *Service) serveRemoteBackend(
 	ctx, organizationID, err := s.prepareProxyBackendContext(ctx, w, r, logger, endpoint, mcpServer)
 	if err != nil {
 		return err
+	}
+
+	// Identity auth above stamps an AuthContext for every caller that
+	// presented a Speakeasy credential, so its absence marks an anonymous caller.
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
+		buildOptions = append(buildOptions, remotemcp.WithAnonymousCaller())
 	}
 
 	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstream.Token, wwwAuthenticate, selection, buildOptions...)

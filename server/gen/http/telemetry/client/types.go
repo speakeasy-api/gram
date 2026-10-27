@@ -856,6 +856,34 @@ type GetToolUsageFilterOptionsRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Filter option types to include. Empty means all option types.
 	OptionTypes []string `form:"option_types,omitempty" json:"option_types,omitempty" xml:"option_types,omitempty"`
+	// Target types to include. Empty means all target types.
+	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not
+	// applied to the server options.
+	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to narrow by. Not applied to the server options.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
+	// Shadow MCP server names to narrow by. Not applied to the server options.
+	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
+	// Gateway (meta MCP server) ids to narrow by. Not applied to the server
+	// options.
+	MetaMcpServerIds []string `form:"meta_mcp_server_ids,omitempty" json:"meta_mcp_server_ids,omitempty" xml:"meta_mcp_server_ids,omitempty"`
+	// Typed user identities to narrow by. Not applied to the email user options.
+	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Agent identities to narrow by. Not applied to the agent user options.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	// Hook plugin sources to narrow by.
+	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// MCP client keys to narrow by. Not applied to the client options.
+	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Trace outcomes to narrow by. Empty means all.
+	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
+	// Free-text attribute search string from the q URL param.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
 }
 
 // GetMcpServerActivityRequestBody is the type of the "telemetry" service
@@ -10695,13 +10723,89 @@ func NewListToolUsageTracesRequestBody(p *telemetry.ListToolUsageTracesPayload) 
 // service.
 func NewGetToolUsageFilterOptionsRequestBody(p *telemetry.GetToolUsageFilterOptionsPayload) *GetToolUsageFilterOptionsRequestBody {
 	body := &GetToolUsageFilterOptionsRequestBody{
-		From: p.From,
-		To:   p.To,
+		From:        p.From,
+		To:          p.To,
+		AccountType: p.AccountType,
+		Query:       p.Query,
 	}
 	if p.OptionTypes != nil {
 		body.OptionTypes = make([]string, len(p.OptionTypes))
 		for i, val := range p.OptionTypes {
 			body.OptionTypes[i] = string(val)
+		}
+	}
+	if p.TargetTypes != nil {
+		body.TargetTypes = make([]string, len(p.TargetTypes))
+		for i, val := range p.TargetTypes {
+			body.TargetTypes[i] = string(val)
+		}
+	}
+	if p.HostedToolsetSlugs != nil {
+		body.HostedToolsetSlugs = make([]string, len(p.HostedToolsetSlugs))
+		for i, val := range p.HostedToolsetSlugs {
+			body.HostedToolsetSlugs[i] = val
+		}
+	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
+		}
+	}
+	if p.ShadowServerNames != nil {
+		body.ShadowServerNames = make([]string, len(p.ShadowServerNames))
+		for i, val := range p.ShadowServerNames {
+			body.ShadowServerNames[i] = val
+		}
+	}
+	if p.MetaMcpServerIds != nil {
+		body.MetaMcpServerIds = make([]string, len(p.MetaMcpServerIds))
+		for i, val := range p.MetaMcpServerIds {
+			body.MetaMcpServerIds[i] = val
+		}
+	}
+	if p.UserFilters != nil {
+		body.UserFilters = make([]*ToolUsageUserFilterRequestBody, len(p.UserFilters))
+		for i, val := range p.UserFilters {
+			if val == nil {
+				body.UserFilters[i] = nil
+				continue
+			}
+			body.UserFilters[i] = marshalTelemetryToolUsageUserFilterToToolUsageUserFilterRequestBody(val)
+		}
+	}
+	if p.AgentIds != nil {
+		body.AgentIds = make([]string, len(p.AgentIds))
+		for i, val := range p.AgentIds {
+			body.AgentIds[i] = val
+		}
+	}
+	if p.HookSources != nil {
+		body.HookSources = make([]string, len(p.HookSources))
+		for i, val := range p.HookSources {
+			body.HookSources[i] = val
+		}
+	}
+	if p.ClientKeys != nil {
+		body.ClientKeys = make([]string, len(p.ClientKeys))
+		for i, val := range p.ClientKeys {
+			body.ClientKeys[i] = val
+		}
+	}
+	if p.Statuses != nil {
+		body.Statuses = make([]string, len(p.Statuses))
+		for i, val := range p.Statuses {
+			body.Statuses[i] = string(val)
+		}
+	}
+	if p.Filters != nil {
+		body.Filters = make([]*LogFilterRequestBody, len(p.Filters))
+		for i, val := range p.Filters {
+			if val == nil {
+				body.Filters[i] = nil
+				continue
+			}
+			body.Filters[i] = marshalTelemetryLogFilterToLogFilterRequestBody(val)
 		}
 	}
 	return body

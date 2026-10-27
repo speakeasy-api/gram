@@ -88,6 +88,7 @@ func TestCatalogPromotionListBoundsAndCursor(t *testing.T) {
 	require.Len(t, page.Candidates, 1)
 	require.Equal(t, "next-page", page.NextCursor)
 	require.Equal(t, int64(12), page.Candidates[0].ObservedSuccesses)
+	require.False(t, page.Candidates[0].CanOverrideEligibility)
 }
 
 func TestCatalogPromotionListRejectsInvalidBoundsBeforeReading(t *testing.T) {
@@ -203,6 +204,7 @@ func TestCatalogPromotionListsSyntheticReviewStates(t *testing.T) {
 			require.NoError(t, json.Unmarshal(data, &result))
 			require.Len(t, result.Candidates, 1)
 			require.Equal(t, status, result.Candidates[0].Status)
+			require.Equal(t, status == "candidate", result.Candidates[0].CanOverrideEligibility)
 		})
 	}
 }
