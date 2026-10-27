@@ -47,7 +47,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSessionMeta:       NewGetSessionMetaEndpoint(s, a.APIKeyAuth),
 		ReportSessionMoved:   NewReportSessionMovedEndpoint(s, a.APIKeyAuth),
 		ReportAIScan:         NewReportAIScanEndpoint(s, a.APIKeyAuth),
-		ReportCrash:          NewReportCrashEndpoint(s, a.APIKeyAuth),
+		ReportCrash:          NewReportCrashEndpoint(s, a.JWTAuth, a.APIKeyAuth),
 		CreateSessionHandoff: NewCreateSessionHandoffEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -336,20 +336,32 @@ func NewReportAIScanEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 
 // NewReportCrashEndpoint returns an endpoint function that calls the method
 // "reportCrash" of service "agent".
-func NewReportCrashEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewReportCrashEndpoint(s Service, authJWTFn security.AuthJWTFunc, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ReportCrashPayload)
 		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"agent_user"},
+		sc := security.JWTScheme{
+			Name:           "device_agent_token",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		var token string
+		if p.DeviceAgentToken != nil {
+			token = *p.DeviceAgentToken
 		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		ctx, err = authJWTFn(ctx, token, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"agent_user"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}

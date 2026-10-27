@@ -150,3 +150,75 @@ func TestRecordCrash_UnreleasedVersionIsNotATag(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "unknown", version.AsString())
 }
+
+func validReport() *gen.AgentCrashReport {
+	file := "github.com/speakeasy-api/device-agent/core/policy/scheduler.go"
+	line := 204
+	return &gen.AgentCrashReport{
+		SchemaVersion: 1,
+		ID:            "0f3c9a2b4d5e6f70",
+		Kind:          "recovered",
+		Component:     "policy_scheduler",
+		OccurredAt:    "2026-10-27T12:00:00Z",
+		Count:         1,
+		Build:         &gen.AgentCrashBuild{Binary: "speakeasyd", Version: "0.42.0", Channel: nil, Os: nil, Arch: nil},
+		Message:       new("runtime error: index out of range [5] with length 3"),
+		PanicType:     nil,
+		Stack: []*gen.AgentCrashFrame{
+			{Function: agentModulePrefix + "core/policy.(*Scheduler).tick.func1", File: &file, Line: &line},
+			{Function: "github.com/example/dep.Map[...]", File: new("github.com/example/dep@v1.2.3/map.go"), Line: &line},
+			{Function: "runtime.gopanic", File: new("runtime/panic.go"), Line: &line},
+		},
+		OtherGoroutines: nil,
+		Rollback:        nil,
+	}
+}
+
+func TestValidCrashReport(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, validCrashReport(validReport()))
+
+	rollback := validReport()
+	rollback.Kind, rollback.Stack, rollback.Message = "rollback", nil, nil
+	rollback.Rollback = &gen.AgentCrashRollback{From: new("0.42.0"), To: new("0.41.3")}
+	require.Empty(t, validCrashReport(rollback))
+
+	cases := map[string]func(r *gen.AgentCrashReport){
+		"id":             func(r *gen.AgentCrashReport) { r.ID = "not an id" },
+		"schema_version": func(r *gen.AgentCrashReport) { r.SchemaVersion = 2 },
+		"build.version":  func(r *gen.AgentCrashReport) { r.Build.Version = "0.42.0 see attached" },
+		"panic_type":     func(r *gen.AgentCrashReport) { r.PanicType = new("*fs.PathError\nhello") },
+		"stack":          func(r *gen.AgentCrashReport) { r.Stack = nil },
+		"stack.function": func(r *gen.AgentCrashReport) { r.Stack[0].Function = "my customer list" },
+		"stack.file":     func(r *gen.AgentCrashReport) { r.Stack[0].File = new("/Users/jane/src/main.go") },
+		"rollback":       func(r *gen.AgentCrashReport) { r.Rollback = &gen.AgentCrashRollback{From: new("x"), To: new("y")} },
+	}
+	for want, mutate := range cases {
+		r := validReport()
+		mutate(r)
+		require.Equal(t, want, validCrashReport(r), want)
+	}
+	for _, file := range []string{"../etc/passwd.go", `C:\Users\jane\main.go`, "a//b.go", "notes.txt"} {
+		r := validReport()
+		r.Stack[0].File = new(file)
+		require.Equal(t, "stack.file", validCrashReport(r), file)
+	}
+}
+
+func TestCrashMessage_KeepsOnlyRuntimeMessages(t *testing.T) {
+	t.Parallel()
+
+	kept := []string{
+		"runtime error: invalid memory address or nil pointer dereference",
+		"fatal error: concurrent map writes",
+		"interface conversion: interface {} is string, not int",
+		"assignment to entry in nil map",
+	}
+	for _, m := range kept {
+		require.Equal(t, m, crashMessage(m))
+	}
+	for _, m := range []string{"open /Users/jane/x: denied", "customer acme churned", "runtime error: x\nsecret", ""} {
+		require.Empty(t, crashMessage(m), m)
+	}
+}

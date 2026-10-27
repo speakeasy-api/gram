@@ -11,6 +11,7 @@ import {
 } from "../components/reportcrashrequestbody.js";
 
 export type ReportAgentCrashSecurity = {
+  deviceAgentTokenHeaderAuthorization?: string | undefined;
   apikeyHeaderGramKey?: string | undefined;
 };
 
@@ -36,6 +37,7 @@ export type ReportAgentCrashRequest = {
 
 /** @internal */
 export type ReportAgentCrashSecurity$Outbound = {
+  device_agent_token_header_Authorization?: string | undefined;
   "apikey_header_Gram-Key"?: string | undefined;
 };
 
@@ -45,10 +47,13 @@ export const ReportAgentCrashSecurity$outboundSchema: z.ZodMiniType<
   ReportAgentCrashSecurity
 > = z.pipe(
   z.object({
+    deviceAgentTokenHeaderAuthorization: z.optional(z.string()),
     apikeyHeaderGramKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      deviceAgentTokenHeaderAuthorization:
+        "device_agent_token_header_Authorization",
       apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
   }),

@@ -447,7 +447,7 @@ func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApi
 
 // BuildReportCrashPayload builds the payload for the agent reportCrash
 // endpoint from CLI flags.
-func BuildReportCrashPayload(agentReportCrashBody string, agentReportCrashApikeyToken string, agentReportCrashEmail string, agentReportCrashSerialNumber string, agentReportCrashEnvironment string) (*agent.ReportCrashPayload, error) {
+func BuildReportCrashPayload(agentReportCrashBody string, agentReportCrashDeviceAgentToken string, agentReportCrashApikeyToken string, agentReportCrashEmail string, agentReportCrashSerialNumber string, agentReportCrashEnvironment string) (*agent.ReportCrashPayload, error) {
 	var err error
 	var body ReportCrashRequestBody
 	{
@@ -473,6 +473,12 @@ func BuildReportCrashPayload(agentReportCrashBody string, agentReportCrashApikey
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var deviceAgentToken *string
+	{
+		if agentReportCrashDeviceAgentToken != "" {
+			deviceAgentToken = &agentReportCrashDeviceAgentToken
 		}
 	}
 	var apikeyToken *string
@@ -512,6 +518,7 @@ func BuildReportCrashPayload(agentReportCrashBody string, agentReportCrashApikey
 	} else {
 		v.Reports = []*agent.AgentCrashReport{}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.Email = email
 	v.SerialNumber = serialNumber

@@ -54,7 +54,7 @@ export type ReportAgentCrashMutationError =
  * reportCrash agent
  *
  * @remarks
- * Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring and not stored. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan. The agent scrubs every report before sending it; the server scrubs again.
+ * Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.
  */
 export function useReportAgentCrashMutation(
   options?: MutationHookOptions<

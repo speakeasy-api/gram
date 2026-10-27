@@ -169,14 +169,19 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
-	// Only getPlugins accepts device-agent tokens.
+	// Only the agentPrincipalMethods accept device-agent tokens.
 	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
-	server.ReportCrash = limitCrashReportBody(server.ReportCrash)
+	server.ReportCrash = deviceagenttoken.BearerChallenge(limitCrashReportBody(server.ReportCrash))
 	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
 	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
+
+// agentPrincipalMethods are the only methods agent-principal keys and
+// device-agent tokens may call: polling plugins, and reporting crashes, which
+// on a server or CI box are our bugs as much as on a laptop.
+var agentPrincipalMethods = []string{"getPlugins", "reportCrash"}
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	// A refused device-agent token is the better answer than a missing key
@@ -194,8 +199,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 		return ctx, nil
 	}
 
-	// Agent-principal keys may only poll plugins, and only with an explicit grant.
-	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+	// Agent-principal keys may only call agentPrincipalMethods, and only with
+	// an explicit grant.
+	if method, _ := ctx.Value(goa.MethodKey).(string); !slices.Contains(agentPrincipalMethods, method) {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -224,7 +230,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
 		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
 	}
-	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+	if method, _ := ctx.Value(goa.MethodKey).(string); !slices.Contains(agentPrincipalMethods, method) {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 

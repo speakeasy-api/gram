@@ -15,6 +15,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
@@ -97,20 +98,33 @@ var (
 )
 
 // ReportCrash forwards device agent crash reports to monitoring as one log
-// line each plus a counter. Nothing is stored. The reporting identity mirrors
-// ReportAIScan.
+// line each plus a counter. Nothing is stored. It accepts getPlugins'
+// credentials, so a server or CI box reports as its agent.
+//
+// A report is logged only if it has the shape of a crash the agent produces
+// (see validCrashReport). Any key holder can still forge a well-formed report,
+// but what reaches the logs is limited to closed sets, Go symbols, relative
+// file paths and the runtime's own messages: no free text.
 func (s *Service) ReportCrash(ctx context.Context, payload *gen.ReportCrashPayload) (*gen.ReportCrashResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	email, err := pollingEmail(authCtx, conv.PtrValOr(payload.Email, ""))
-	if err != nil {
-		return nil, err
+	// An agent key, or a workload acting for its agent, has no person to vouch
+	// for; the auth step already required the device-sync grant.
+	reporter := ""
+	if agent, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		reporter = "agent:" + agent.String()
+	} else {
+		email, err := pollingEmail(authCtx, conv.PtrValOr(payload.Email, ""))
+		if err != nil {
+			return nil, err
+		}
+		reporter = "email:" + email
 	}
 
 	serial := deviceidentity.NormalizeSerial(payload.SerialNumber)
-	if err := s.allowCrashReport(ctx, authCtx.ActiveOrganizationID, serial, email); err != nil {
+	if err := s.allowCrashReport(ctx, authCtx.ActiveOrganizationID, serial, reporter); err != nil {
 		return nil, err
 	}
 	environment := deviceidentity.NormalizeEnvironment(payload.Environment)
@@ -120,21 +134,28 @@ func (s *Service) ReportCrash(ctx context.Context, payload *gen.ReportCrashPaylo
 			return nil, oops.E(oops.CodeBadRequest, nil, "reports must not contain null entries")
 		}
 	}
+	accepted := 0
 	for _, report := range payload.Reports {
+		if reason := validCrashReport(report); reason != "" {
+			s.rejectCrash(ctx, authCtx.ActiveOrganizationID, serial, reason)
+			continue
+		}
 		s.recordCrash(ctx, authCtx.ActiveOrganizationID, serial, environment, report)
+		accepted++
 	}
-	return &gen.ReportCrashResult{Accepted: len(payload.Reports)}, nil
+	return &gen.ReportCrashResult{Accepted: accepted}, nil
 }
 
 // allowCrashReport charges one batch to the device's budget, keyed like
-// reportState's. A limiter store outage fails open: it isn't a throttle.
-func (s *Service) allowCrashReport(ctx context.Context, organizationID, serial, email string) error {
+// reportState's, or by reporter when the device has no serial. A limiter
+// store outage fails open: it isn't a throttle.
+func (s *Service) allowCrashReport(ctx context.Context, organizationID, serial, reporter string) error {
 	if s.crashReportLimiter == nil {
 		return nil
 	}
 	key := organizationID + ":serial:" + serial
 	if serial == "" {
-		key = organizationID + ":email:" + email
+		key = organizationID + ":" + reporter
 	}
 	res, err := s.crashReportLimiter.Allow(ctx, key)
 	switch {
@@ -145,6 +166,108 @@ func (s *Service) allowCrashReport(ctx context.Context, organizationID, serial, 
 		return oops.E(oops.CodeRateLimitExceeded, nil, "too many crash reports from this device; retry shortly")
 	}
 	return nil
+}
+
+// Shapes a device agent crash report's fields take (ADR-0030). They are
+// checked after Goa's length caps.
+var (
+	// crashIDPattern is the agent's random hex id.
+	crashIDPattern = regexp.MustCompile(`^[0-9a-f]{16,64}$`)
+	// crashFunctionPattern is a Go symbol: package path, receiver, closures
+	// and generic brackets, never whitespace.
+	crashFunctionPattern = regexp.MustCompile(`^[A-Za-z0-9_.\-/()*\[\]{},~@]+$`)
+	// crashFilePattern is a module-relative or stdlib-relative .go path, which
+	// is what a -trimpath build records; the agent reduces anything absolute to
+	// its base name.
+	crashFilePattern = regexp.MustCompile(`^[A-Za-z0-9_.\-+@~]+(/[A-Za-z0-9_.\-+@~]+)*\.(go|s)$`)
+	// crashTypePattern is a Go type as reflect prints it.
+	crashTypePattern = regexp.MustCompile(`^[A-Za-z0-9_.*/\[\]{}(),\- ]+$`)
+	// crashBuildVersionPattern admits release and dev versions.
+	crashBuildVersionPattern = regexp.MustCompile(`^v?[0-9A-Za-z.+\-]{1,64}$`)
+	// crashMessagePattern is printable ASCII: the runtime's messages are built
+	// from types and numbers.
+	crashMessagePattern = regexp.MustCompile(`^[\x20-\x7E]+$`)
+)
+
+// crashMessagePrefixes and crashPlainMessages are the Go runtime's own panic
+// and fatal messages. The agent sends only those (ADR-0030); a message that is
+// not one is dropped here while the rest of the report is kept.
+var (
+	crashMessagePrefixes = []string{"runtime error: ", "fatal error: ", "interface conversion: "}
+	crashPlainMessages   = []string{
+		"assignment to entry in nil map",
+		"close of nil channel",
+		"close of closed channel",
+		"send on closed channel",
+	}
+)
+
+// validCrashReport returns why a report is not shaped like one the device
+// agent produces, or "" when it is. Closed-set fields are not checked here:
+// unknown values are recorded as crashUnknown.
+func validCrashReport(r *gen.AgentCrashReport) string {
+	switch {
+	case !crashIDPattern.MatchString(r.ID):
+		return "id"
+	case r.SchemaVersion != 1:
+		return "schema_version"
+	case !crashBuildVersionPattern.MatchString(r.Build.Version):
+		return "build.version"
+	case r.PanicType != nil && *r.PanicType != "" && !crashTypePattern.MatchString(*r.PanicType):
+		return "panic_type"
+	}
+	if r.Kind == "rollback" {
+		rb := r.Rollback
+		if rb == nil || !crashBuildVersionPattern.MatchString(conv.PtrValOr(rb.From, "")) || !crashBuildVersionPattern.MatchString(conv.PtrValOr(rb.To, "")) {
+			return "rollback"
+		}
+		return ""
+	}
+	if r.Rollback != nil {
+		return "rollback"
+	}
+	// Fatal crashes and recovered panics always have the crashing goroutine.
+	if len(r.Stack) == 0 {
+		return "stack"
+	}
+	for _, f := range r.Stack {
+		if f == nil || !crashFunctionPattern.MatchString(f.Function) {
+			return "stack.function"
+		}
+		if f.File != nil && *f.File != "" && (!crashFilePattern.MatchString(*f.File) || slices.ContainsFunc(strings.Split(*f.File, "/"), isDotSegment)) {
+			return "stack.file"
+		}
+	}
+	return ""
+}
+
+func isDotSegment(s string) bool { return s == "." || s == ".." }
+
+// crashMessage returns msg if it is a Go runtime message, else "".
+func crashMessage(msg string) string {
+	if !crashMessagePattern.MatchString(msg) {
+		return ""
+	}
+	if slices.Contains(crashPlainMessages, msg) || slices.ContainsFunc(crashMessagePrefixes, func(p string) bool { return strings.HasPrefix(msg, p) }) {
+		return msg
+	}
+	return ""
+}
+
+// rejectCrash records that a report was dropped and why, without any of its
+// content.
+func (s *Service) rejectCrash(ctx context.Context, organizationID, serial, reason string) {
+	attrs := []any{attr.SlogOrganizationID(organizationID), attr.SlogReason(reason)}
+	if serial != "" {
+		attrs = append(attrs, attr.SlogAgentDeviceSerial(serial))
+	}
+	s.logger.WarnContext(ctx, "device agent crash report rejected", attrs...)
+	if s.crashReports != nil {
+		s.crashReports.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("kind", "rejected"),
+			attribute.String("reason", reason),
+		))
+	}
 }
 
 // recordCrash logs one report and counts it. The email is deliberately left
@@ -163,7 +286,7 @@ func (s *Service) recordCrash(ctx context.Context, organizationID, serial, envir
 	goos := closedValue(conv.PtrValOr(build.Os, ""), crashOSes)
 	arch := closedValue(conv.PtrValOr(build.Arch, ""), crashArches)
 
-	message := scrubCrashText(conv.PtrValOr(report.Message, ""))
+	message := scrubCrashText(crashMessage(conv.PtrValOr(report.Message, "")))
 	panicType := scrubCrashText(conv.PtrValOr(report.PanicType, ""))
 	errorMessage := message
 	if errorMessage == "" {

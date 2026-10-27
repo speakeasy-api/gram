@@ -103,9 +103,11 @@ type Service interface {
 	ReportAIScan(context.Context, *ReportAIScanPayload) (err error)
 	// Report device agent crashes: fatal crashes, recovered panics and
 	// self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring
-	// and not stored. Accepts the per-user key and the org install key (with a
-	// vouched email), mirroring reportAIScan. The agent scrubs every report before
-	// sending it; the server scrubs again.
+	// and not stored. Accepts the credentials getPlugins accepts: the per-user
+	// key, the org install key (with a vouched email), and, with the device-sync
+	// grant, agent keys and device-agent tokens. The agent scrubs every report
+	// before sending it; the server accepts only reports shaped like a Go crash
+	// and scrubs them again.
 	ReportCrash(context.Context, *ReportCrashPayload) (res *ReportCrashResult, err error)
 	// Mint a short-lived capability URL for a rendered session-handoff document
 	// (session portability). The device agent uploads the handoff it rendered from
@@ -644,7 +646,8 @@ type ReportAIScanPayload struct {
 // ReportCrashPayload is the payload type of the agent service reportCrash
 // method.
 type ReportCrashPayload struct {
-	ApikeyToken *string
+	DeviceAgentToken *string
+	ApikeyToken      *string
 	// Queued crash reports, oldest first.
 	Reports []*AgentCrashReport
 	// Email of the enrolled user, sent in the Gram-User-Email header.
@@ -661,7 +664,8 @@ type ReportCrashPayload struct {
 
 // ReportCrashResult is the result type of the agent service reportCrash method.
 type ReportCrashResult struct {
-	// Reports accepted. The agent removes every report in the batch on success.
+	// Reports accepted. A report not shaped like a device agent crash is dropped
+	// and not counted. The agent removes every report in the batch on success.
 	Accepted int
 }
 

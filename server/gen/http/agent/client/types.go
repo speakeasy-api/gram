@@ -244,7 +244,8 @@ type GetSessionMetaResponseBody struct {
 // ReportCrashResponseBody is the type of the "agent" service "reportCrash"
 // endpoint HTTP response body.
 type ReportCrashResponseBody struct {
-	// Reports accepted. The agent removes every report in the batch on success.
+	// Reports accepted. A report not shaped like a device agent crash is dropped
+	// and not counted. The agent removes every report in the batch on success.
 	Accepted *int `form:"accepted,omitempty" json:"accepted,omitempty" xml:"accepted,omitempty"`
 }
 

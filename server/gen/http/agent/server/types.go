@@ -244,7 +244,8 @@ type GetSessionMetaResponseBody struct {
 // ReportCrashResponseBody is the type of the "agent" service "reportCrash"
 // endpoint HTTP response body.
 type ReportCrashResponseBody struct {
-	// Reports accepted. The agent removes every report in the batch on success.
+	// Reports accepted. A report not shaped like a device agent crash is dropped
+	// and not counted. The agent removes every report in the batch on success.
 	Accepted int `form:"accepted" json:"accepted" xml:"accepted"`
 }
 
@@ -5192,7 +5193,7 @@ func NewReportAIScanPayload(body *ReportAIScanRequestBody, apikeyToken *string, 
 }
 
 // NewReportCrashPayload builds a agent service reportCrash endpoint payload.
-func NewReportCrashPayload(body *ReportCrashRequestBody, apikeyToken *string, email *string, serialNumber *string, environment *string) *agent.ReportCrashPayload {
+func NewReportCrashPayload(body *ReportCrashRequestBody, deviceAgentToken *string, apikeyToken *string, email *string, serialNumber *string, environment *string) *agent.ReportCrashPayload {
 	v := &agent.ReportCrashPayload{}
 	v.Reports = make([]*agent.AgentCrashReport, len(body.Reports))
 	for i, val := range body.Reports {
@@ -5202,6 +5203,7 @@ func NewReportCrashPayload(body *ReportCrashRequestBody, apikeyToken *string, em
 		}
 		v.Reports[i] = unmarshalAgentCrashReportRequestBodyToAgentAgentCrashReport(val)
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.Email = email
 	v.SerialNumber = serialNumber

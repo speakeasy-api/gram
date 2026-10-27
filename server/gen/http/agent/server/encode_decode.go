@@ -2354,11 +2354,16 @@ func DecodeReportCrashRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		}
 
 		var (
-			apikeyToken  *string
-			email        *string
-			serialNumber *string
-			environment  *string
+			deviceAgentToken *string
+			apikeyToken      *string
+			email            *string
+			serialNumber     *string
+			environment      *string
 		)
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -2375,7 +2380,14 @@ func DecodeReportCrashRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if environmentRaw != "" {
 			environment = &environmentRaw
 		}
-		payload = NewReportCrashPayload(&body, apikeyToken, email, serialNumber, environment)
+		payload = NewReportCrashPayload(&body, deviceAgentToken, apikeyToken, email, serialNumber, environment)
+		if payload.DeviceAgentToken != nil {
+			if strings.Contains(*payload.DeviceAgentToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.DeviceAgentToken, " ", 2)[1]
+				payload.DeviceAgentToken = &cred
+			}
+		}
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

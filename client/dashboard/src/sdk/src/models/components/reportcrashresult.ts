@@ -9,7 +9,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ReportCrashResult = {
   /**
-   * Reports accepted. The agent removes every report in the batch on success.
+   * Reports accepted. A report not shaped like a device agent crash is dropped and not counted. The agent removes every report in the batch on success.
    */
   accepted: number;
 };
