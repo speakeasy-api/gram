@@ -23,6 +23,7 @@ export function MarketplaceCard({
   onSync,
   isSyncing = false,
   observabilityEnabled = true,
+  pausedPluginNames = [],
 }: {
   publishStatus: PublishStatusResult;
   onManageCollaborators?: () => void;
@@ -32,6 +33,8 @@ export function MarketplaceCard({
   isSyncing?: boolean;
   /** Drives the copy: a disabled project's marketplace has no observability plugins in it. */
   observabilityEnabled?: boolean;
+  /** Plugins whose auto sync is off: their changes publish only on Sync changes. */
+  pausedPluginNames?: string[];
 }): JSX.Element {
   const description = observabilityEnabled
     ? "This repo is your team's plugin marketplace. The observability plugins are already inside, and any plugins you build in Speakeasy later will be published here too."
@@ -179,10 +182,29 @@ export function MarketplaceCard({
               )}
             </div>
           </div>
+          {pausedPluginNames.length > 0 && (
+            <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+              {pausedPluginsNote(pausedPluginNames)}
+            </p>
+          )}
         </CollapsibleContent>
       </div>
     </Collapsible>
   );
+}
+
+// pausedPluginsNote names the plugins whose auto sync is off, so the admin knows
+// the "changes sync automatically" promise above does not cover them.
+function pausedPluginsNote(names: string[]): string {
+  const listed =
+    names.length <= 3
+      ? new Intl.ListFormat("en", {
+          style: "long",
+          type: "conjunction",
+        }).format(names)
+      : `${names.length} plugins`;
+  const pronoun = names.length === 1 ? "its" : "their";
+  return `Auto sync is off for ${listed}, so ${pronoun} changes publish only when someone clicks Sync changes.`;
 }
 
 // The not-yet-connected / no-collaborators-yet counterpart to MarketplaceCard

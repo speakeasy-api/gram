@@ -83,6 +83,7 @@ function plugin(agentPluginsV1Compatible: boolean): Plugin {
   return {
     agentPluginsV1Compatible,
     autoCreated: false,
+    autoSyncEnabled: true,
     createdAt: new Date("2026-08-07T00:00:00Z"),
     id: "plugin-id",
     name: "Portable plugin",
@@ -91,12 +92,15 @@ function plugin(agentPluginsV1Compatible: boolean): Plugin {
   };
 }
 
-function renderCard(agentPluginsV1Compatible: boolean): void {
+function renderCard(
+  agentPluginsV1Compatible: boolean,
+  overrides: Partial<Plugin> = {},
+): void {
   render(
     <MemoryRouter>
       <TooltipProvider>
         <PluginCard
-          plugin={plugin(agentPluginsV1Compatible)}
+          plugin={{ ...plugin(agentPluginsV1Compatible), ...overrides }}
           publishStatus={undefined}
         />
       </TooltipProvider>
@@ -157,5 +161,17 @@ describe("PluginCard Agent Plugins actions", () => {
     expect(tooltip.textContent).toBe(
       "Not Agent Plugin standard compatible. Plugin works normally in our supported harnesses.",
     );
+  });
+});
+
+describe("PluginCard auto sync", () => {
+  it("marks a plugin whose auto sync is off", () => {
+    renderCard(true, { autoSyncEnabled: false });
+    expect(screen.getByText("Auto sync off")).toBeTruthy();
+  });
+
+  it("stays quiet while auto sync is on", () => {
+    renderCard(true);
+    expect(screen.queryByText("Auto sync off")).toBeNull();
   });
 });

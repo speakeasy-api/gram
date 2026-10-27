@@ -171,6 +171,11 @@ export function PluginCard({
                     <Badge.Text>Needs syncing</Badge.Text>
                   </Badge>
                 )}
+                {plugin.autoSyncEnabled === false && (
+                  <Badge variant="neutral">
+                    <Badge.Text>Auto sync off</Badge.Text>
+                  </Badge>
+                )}
               </div>
               <Text
                 small

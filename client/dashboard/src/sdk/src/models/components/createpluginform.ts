@@ -3,8 +3,13 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreatePluginForm = {
+  /**
+   * Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.
+   */
+  autoSyncEnabled?: boolean | undefined;
   /**
    * Optional description.
    */
@@ -21,6 +26,7 @@ export type CreatePluginForm = {
 
 /** @internal */
 export type CreatePluginForm$Outbound = {
+  auto_sync_enabled?: boolean | undefined;
   description?: string | undefined;
   name: string;
   slug?: string | undefined;
@@ -30,11 +36,19 @@ export type CreatePluginForm$Outbound = {
 export const CreatePluginForm$outboundSchema: z.ZodMiniType<
   CreatePluginForm$Outbound,
   CreatePluginForm
-> = z.object({
-  description: z.optional(z.string()),
-  name: z.string(),
-  slug: z.optional(z.string()),
-});
+> = z.pipe(
+  z.object({
+    autoSyncEnabled: z.optional(z.boolean()),
+    description: z.optional(z.string()),
+    name: z.string(),
+    slug: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      autoSyncEnabled: "auto_sync_enabled",
+    });
+  }),
+);
 
 export function createPluginFormToJSON(
   createPluginForm: CreatePluginForm,

@@ -28,6 +28,19 @@ vi.mock("@/hooks/usePluginWriteAccess", () => ({
 const features = vi.hoisted(() => vi.fn(() => ({})));
 const publish = vi.hoisted(() => vi.fn());
 const update = vi.hoisted(() => vi.fn());
+// Runs after each update mutate with the hook's options, so a test can play the
+// server's answer back through onSuccess or onError.
+const updateOutcome = vi.hoisted(() =>
+  vi.fn<
+    (
+      options: {
+        onSuccess?: (data: unknown) => void;
+        onError?: (error: unknown) => void;
+      },
+      variables: unknown,
+    ) => void
+  >(),
+);
 const remove = vi.hoisted(() => vi.fn());
 const deletion = vi.hoisted(() => ({
   success: undefined as (() => Promise<void>) | undefined,
@@ -139,7 +152,15 @@ vi.mock("@gram/client/react-query/publishPlugins", () => ({
   usePublishPluginsMutation: () => ({ mutate: publish }),
 }));
 vi.mock("@gram/client/react-query/updatePlugin", () => ({
-  useUpdatePluginMutation: () => ({ mutate: update }),
+  useUpdatePluginMutation: (options: {
+    onSuccess?: (data: unknown) => void;
+    onError?: (error: unknown) => void;
+  }) => ({
+    mutate: (variables: unknown) => {
+      update(variables);
+      updateOutcome(options, variables);
+    },
+  }),
 }));
 vi.mock("@gram/client/react-query/deletePlugin", () => ({
   useDeletePluginMutation: (options: { onSuccess: () => Promise<void> }) => {
@@ -161,9 +182,18 @@ const hostedServer = {
   mcpServerId: "toolset-a",
   createdAt: new Date(),
 };
-function renderAdmin(section = "overview", servers: object[] = [hostedServer]) {
+function renderAdmin(
+  section = "overview",
+  servers: object[] = [hostedServer],
+  plugin: object = {},
+) {
   adminQuery.mockReturnValue({
-    data: { name: "Example plugin", slug: "example-plugin", servers },
+    data: {
+      name: "Example plugin",
+      slug: "example-plugin",
+      servers,
+      ...plugin,
+    },
   });
   return render(
     <TooltipProvider>
@@ -230,6 +260,55 @@ describe("plugin detail permission boundary", () => {
     expect(remove).toHaveBeenCalled();
     for (const query of Object.values(assignments))
       expect(query).not.toHaveBeenCalled();
+  });
+  it("turns auto sync off from settings and shows the server's refusal", () => {
+    state.pluginWrite = true;
+    renderAdmin("settings", [hostedServer], { autoSyncEnabled: true });
+    const toggle = screen.getByRole("switch", {
+      name: "Sync changes automatically",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+
+    const refusal =
+      "This plugin has changes that haven't been synced yet. Sync changes first, then turn off auto sync.";
+    updateOutcome.mockImplementationOnce((options) =>
+      options.onError?.(new Error(refusal)),
+    );
+    fireEvent.click(toggle);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          updatePluginForm: expect.objectContaining({
+            id: "plugin-a",
+            name: "Example plugin",
+            slug: "example-plugin",
+            autoSyncEnabled: false,
+          }),
+        },
+      }),
+    );
+    expect(screen.getByText(refusal)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sync changes" }));
+    expect(publish).toHaveBeenCalled();
+  });
+  it("says a paused plugin's changes wait for Sync changes", () => {
+    state.pluginWrite = true;
+    renderAdmin("settings", [hostedServer], { autoSyncEnabled: false });
+    expect(
+      screen
+        .getByRole("switch", { name: "Sync changes automatically" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+    expect(screen.getByLabelText("Slug").hasAttribute("readonly")).toBe(true);
+    updateOutcome.mockImplementationOnce((options) => options.onSuccess?.({}));
+    fireEvent.submit(screen.getByLabelText("Name").closest("form")!);
+    expect(toastSuccess).toHaveBeenCalledWith("Plugin updated", {
+      description:
+        "Auto sync is off for this plugin, so changes publish when someone clicks Sync changes.",
+    });
   });
   it("mounts only distribution UI without org:read", () => {
     render(<PluginDetail />);
