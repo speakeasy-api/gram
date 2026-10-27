@@ -107,15 +107,15 @@ func TestIssuerLifecycle_ProjectUserIssuerMutationHidesSiblingBindings(t *testin
 	siblingCtx := contextvalues.SetAuthContext(ctx, &siblingAuth)
 	var update usergen.UpdateUserSessionIssuerPayload
 	update.ID = in.UserSessionIssuerID.String()
-	// Change the fixture's one-hour duration: no-op patches do not affect bindings.
 	update.SessionDurationHours = conv.PtrEmpty(2)
 	_, err = service.UpdateUserSessionIssuer(siblingCtx, &update)
 	requireOopsCode(t, err, oops.CodeNotFound)
 	var deletion usergen.DeleteUserSessionIssuerPayload
 	deletion.ID = in.UserSessionIssuerID.String()
 	requireOopsCode(t, service.DeleteUserSessionIssuer(siblingCtx, &deletion), oops.CodeNotFound)
+	// Settings updates are allowed with active bindings; deletion is not.
 	_, err = service.UpdateUserSessionIssuer(ctx, &update)
-	requireOopsCode(t, err, oops.CodeConflict)
+	require.NoError(t, err)
 	requireOopsCode(t, service.DeleteUserSessionIssuer(ctx, &deletion), oops.CodeConflict)
 
 	// Organization mutation endpoints must not probe project-owned bindings.
