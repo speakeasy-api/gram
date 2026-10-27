@@ -1,6 +1,12 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AddCredentialSheet } from "./AddCredentialSheet";
@@ -141,9 +147,7 @@ describe("AddCredentialSheet", () => {
     mocks.clientPages = [];
     renderSheet();
 
-    fireEvent.click(
-      screen.getByRole("radio", { name: /New: static credential/ }),
-    );
+    fireEvent.click(screen.getByRole("radio", { name: /^Static credential/ }));
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Engineering token" },
     });
@@ -193,13 +197,13 @@ describe("AddCredentialSheet", () => {
     renderSheet(true);
 
     expect(
-      screen.queryByRole("radio", { name: /New: static credential/ }),
+      screen.queryByRole("radio", { name: /^Static credential/ }),
     ).toBeNull();
     expect(
-      screen.queryByRole("radio", { name: /New: caller-supplied header/ }),
+      screen.queryByRole("radio", { name: /^Caller-supplied header/ }),
     ).toBeNull();
     expect(
-      screen.getByRole("radio", { name: /New: service account/ }),
+      screen.getByRole("radio", { name: /^Service account/ }),
     ).toBeTruthy();
 
     fireEvent.click(await screen.findByRole("combobox"));
@@ -210,14 +214,28 @@ describe("AddCredentialSheet", () => {
     ).toBeNull();
   });
 
+  it("leaves out reuse when no other server has a credential to share", async () => {
+    mocks.clientPages = [];
+    renderSheet();
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("radio", { name: /Existing credential/ }),
+      ).toBeNull(),
+    );
+    expect(
+      screen
+        .getByRole("radio", { name: /^Service account/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
   it("says when sign-ins could not be loaded", () => {
     mocks.clientPages = [];
     mocks.registrationsFailed = true;
     renderSheet();
 
-    fireEvent.click(
-      screen.getByRole("radio", { name: /New: service account/ }),
-    );
+    fireEvent.click(screen.getByRole("radio", { name: /^Service account/ }));
     expect(screen.getByText(/Sign-ins could not be loaded/)).toBeTruthy();
     expect(screen.queryByText(/No sign-in that gets its own token/)).toBeNull();
   });

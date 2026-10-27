@@ -112,7 +112,7 @@ export function AddCredentialSheet({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const routes = useRoutes();
-  const [choice, setChoice] = useState<Choice>("existing");
+  const [picked, setPicked] = useState<Choice>("existing");
   const [existingId, setExistingId] = useState("");
   const [name, setName] = useState("");
   const [registrationId, setRegistrationId] = useState("");
@@ -126,6 +126,11 @@ export function AddCredentialSheet({
       (!client.projectId || client.projectId === projectId) &&
       !(tunneled && isHeadersOnly(client.clientType)),
   );
+  // Nothing to reuse means the reuse option only leads to a dead end, so it
+  // is left out and the first new kind is chosen instead.
+  const offersExisting = !reusable.isSuccess || candidates.length > 0;
+  const choice: Choice =
+    picked === "existing" && !offersExisting ? "service_account" : picked;
 
   const owner = REGISTRATION_OWNER[choice];
   const registrations = useAllRemoteSessionClients({}, { enabled: !!owner });
@@ -150,7 +155,7 @@ export function AddCredentialSheet({
   const pending = attach.isPending || create.isPending;
 
   const choose = (next: Choice) => {
-    setChoice(next);
+    setPicked(next);
     setRegistrationId("");
     setHeaders(initialHeaders(next));
   };
@@ -220,19 +225,21 @@ export function AddCredentialSheet({
             onValueChange={(next) => choose(next as Choice)}
             className="gap-1.5"
           >
-            <ChoiceRow
-              value="existing"
-              selected={choice}
-              label="A credential another server uses"
-              description="Share it instead of making a copy. Changing or rotating it later changes every server that uses it."
-            />
+            {offersExisting ? (
+              <ChoiceRow
+                value="existing"
+                selected={choice}
+                label="Existing credential"
+                description="Share one another server uses instead of making a copy. Changing or rotating it later changes every server that uses it."
+              />
+            ) : null}
             {NEW_KINDS.filter((kind) => !(tunneled && isHeadersOnly(kind))).map(
               (kind) => (
                 <ChoiceRow
                   key={kind}
                   value={kind}
                   selected={choice}
-                  label={`New: ${clientTypeLabel(kind).toLowerCase()}`}
+                  label={clientTypeLabel(kind)}
                   description={clientTypeHint(kind)}
                 />
               ),
@@ -251,11 +258,6 @@ export function AddCredentialSheet({
                   Credentials could not be loaded. Refresh the page to try
                   again.
                 </FieldError>
-              ) : candidates.length === 0 ? (
-                <Text muted small className="block">
-                  No other server has a credential this one can use. Add a new
-                  one instead.
-                </Text>
               ) : (
                 <Select value={existingId} onValueChange={setExistingId}>
                   <SelectTrigger id="existing-credential" className="w-full">
