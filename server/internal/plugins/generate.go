@@ -457,6 +457,20 @@ var platformMCPSkillsFS embed.FS
 // injected API keys) are normalized out so the same MCP configuration and
 // mcpGeneratorVersion always produce the same fingerprints.
 func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig, includeObservability bool) (map[string]string, error) {
+	return publishMCPFingerprints(plugins, nil, cfg, includeObservability)
+}
+
+// PluginMCPFingerprint returns one plugin's entry of MCPFingerprints without
+// generating the rest of the project: the fingerprint a publish would record
+// for this plugin's MCP files under cfg.
+func PluginMCPFingerprint(p PluginInfo, cfg GenerateConfig, includeObservability bool) (string, error) {
+	return pluginMCPFingerprint(p, fingerprintConfig(cfg, includeObservability))
+}
+
+// fingerprintConfig normalizes the per-publish fields of cfg (manifest version
+// and injected API keys) so the same MCP configuration always fingerprints the
+// same way.
+func fingerprintConfig(cfg GenerateConfig, includeObservability bool) GenerateConfig {
 	cfg.Version = ""
 	cfg.APIKey = fingerprintAPIKeySentinel
 	// Published repos that include observability carry a hooks key. Normalize
@@ -468,22 +482,17 @@ func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig, includeObservabil
 	} else {
 		cfg.HooksAPIKey = ""
 	}
+	return cfg
+}
 
-	out := make(map[string]string, len(plugins)+2)
-	for _, p := range plugins {
-		files, err := generateMCPFiles([]PluginInfo{p}, cfg)
-		if err != nil {
-			return nil, fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
-		}
-		out[p.Slug] = hashFiles(mcpGeneratorVersion, files)
-	}
-	shared, err := generateSharedFiles(plugins, cfg)
+// pluginMCPFingerprint hashes one plugin's generated MCP files under an
+// already-normalized fingerprint config.
+func pluginMCPFingerprint(p PluginInfo, cfg GenerateConfig) (string, error) {
+	files, err := generateMCPFiles([]PluginInfo{p}, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("generate shared files for fingerprint: %w", err)
+		return "", fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
 	}
-	out[mcpSharedFingerprintKey] = hashFiles(mcpGeneratorVersion, shared)
-
-	return out, nil
+	return hashFiles(mcpGeneratorVersion, files), nil
 }
 
 // hashFiles returns a stable sha256 over a salt plus the sorted (path, content)
@@ -728,6 +737,49 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 // observability entry is listed first (so it's the first thing team admins see)
 // and only when a hooks key is configured, matching generateHooksFiles.
 func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+	entries := make([]sharedPluginEntry, 0, len(plugins))
+	for _, p := range plugins {
+		entries = append(entries, sharedPluginEntryFor(p, cfg))
+	}
+	return generateSharedFilesFromEntries(entries, cfg)
+}
+
+// sharedPluginEntry is everything the shared marketplace manifests and README
+// read from one plugin. A publish builds it from the plugin's live state, or,
+// for a plugin whose auto sync is off, from the files it was last published
+// with (see heldPluginEntry), so the manifests keep listing it as published.
+type sharedPluginEntry struct {
+	Slug        string
+	Name        string
+	Description string
+	// ServerCount is shown in the README's plugin table.
+	ServerCount int
+	// CodexAuthentication is the plugin's Codex marketplace authentication
+	// policy (see codexAuthPolicy).
+	CodexAuthentication string
+	// AgentPluginsPackage reports whether the plugin ships the portable Agent
+	// Plugins package, which is what Copilot lists.
+	AgentPluginsPackage bool
+}
+
+func sharedPluginEntryFor(p PluginInfo, cfg GenerateConfig) sharedPluginEntry {
+	return sharedPluginEntry{
+		Slug:                p.Slug,
+		Name:                p.Name,
+		Description:         p.Description,
+		ServerCount:         len(p.Servers),
+		CodexAuthentication: codexAuthPolicy(p, cfg),
+		// Copilot consumes feature plugins through the portable Agent Plugins
+		// 1.0 package, which generateMCPFiles omits for plugins that fail the
+		// portability gate. Re-run the same classification here so the manifest
+		// never advertises a directory that was never written — Copilot
+		// resolves an entry's source eagerly and a dangling one breaks the
+		// whole catalog.
+		AgentPluginsPackage: classifyAgentPlugin(p).Compatible,
+	}
+}
+
+func generateSharedFilesFromEntries(plugins []sharedPluginEntry, cfg GenerateConfig) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
 	claudePlugins := make([]marketplaceEntry, 0)
@@ -792,15 +844,10 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 			},
 			Policy: codexMarketplacePolicy{
 				Installation:   "AVAILABLE",
-				Authentication: codexAuthPolicy(p, cfg),
+				Authentication: p.CodexAuthentication,
 			},
 		})
-		// Copilot consumes feature plugins through the portable Agent Plugins 1.0
-		// package, which generateMCPFiles omits for plugins that fail the
-		// portability gate. Re-run the same classification here so the manifest
-		// never advertises a directory that was never written — Copilot resolves
-		// an entry's source eagerly and a dangling one breaks the whole catalog.
-		if classifyAgentPlugin(p).Compatible {
+		if p.AgentPluginsPackage {
 			copilotPlugins = append(copilotPlugins, marketplaceEntry{
 				Name:        p.Slug,
 				DisplayName: p.Name,
@@ -900,7 +947,7 @@ func claudeCodeSettingsSnippet(marketplaceName, marketplaceURL, plugin string) s
 	return fmt.Sprintf("```json\n{\n  \"env\": {\n    \"FORCE_AUTOUPDATE_PLUGINS\": \"1\"\n  },\n  \"extraKnownMarketplaces\": {\n    \"%s\": {\n      \"autoUpdate\": true,\n      \"source\": {\n        \"source\": \"git\",\n        \"url\": \"%s\"\n      }\n    }\n  },\n  \"enabledPlugins\": {\n    \"%s@%s\": true\n  }\n}\n```\n\n", marketplaceName, marketplaceURL, plugin, marketplaceName)
 }
 
-func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
+func generateReadme(plugins []sharedPluginEntry, cfg GenerateConfig) []byte {
 	var b strings.Builder
 
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
@@ -923,7 +970,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 			if desc == "" {
 				desc = "—"
 			}
-			fmt.Fprintf(&b, "| %s | %s | %d |\n", escapeMarkdownCell(p.Name), escapeMarkdownCell(desc), len(p.Servers))
+			fmt.Fprintf(&b, "| %s | %s | %d |\n", escapeMarkdownCell(p.Name), escapeMarkdownCell(desc), p.ServerCount)
 		}
 		b.WriteString("\n")
 	}
@@ -1282,6 +1329,22 @@ func hooksOptionalSubtreePrefixes(orgName string) []string {
 	return []string{
 		conv.ToSlug(orgName) + "-observability-openclaw/",
 		conv.ToSlug(orgName) + "-observability-pi/",
+	}
+}
+
+// pluginSubtreePrefixes returns the repo directory prefixes one feature
+// plugin's MCP packages occupy, one per platform layout generateMCPFiles
+// writes: Claude (<slug>/), Cursor, Codex, OpenCode, and the portable Agent
+// Plugins package. A publish copies a plugin whose auto sync is off verbatim
+// by these prefixes, the same way carryHooksSubtree carries the hooks subtree,
+// so the copy does not depend on which files the live state would generate.
+func pluginSubtreePrefixes(slug string) []string {
+	return []string{
+		slug + "/",
+		cursorPluginRoot + "/" + slug + "-cursor/",
+		slug + "-codex/",
+		opencodePluginRoot + "/" + slug + "/",
+		agentPluginRoot + "/" + slug + "/",
 	}
 }
 

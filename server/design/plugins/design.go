@@ -110,11 +110,18 @@ var _ = Service("plugins", func() {
 
 		Result(PluginModel)
 
+		// Refused when turning auto sync off while the plugin has unsynced
+		// changes, or when changing the slug while auto sync is off.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
 		HTTP(func() {
 			PUT("/rpc/plugins.updatePlugin")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "updatePlugin")
@@ -566,7 +573,7 @@ var PluginAudienceModel = Type("PluginAudience", func() {
 
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "auto_created", "agent_plugins_v1_compatible", "created_at", "updated_at")
+	Required("id", "name", "slug", "auto_created", "auto_sync_enabled", "agent_plugins_v1_compatible", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin identifier.")
@@ -577,6 +584,7 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("description", String, "Optional description.")
 	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
 	Attribute("auto_created", Boolean, "Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.")
+	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. When false, they wait until someone syncs the marketplace by hand.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
 	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
@@ -599,6 +607,7 @@ var CreatePluginForm = Type("CreatePluginForm", func() {
 	Attribute("name", String, "Display name for the plugin.")
 	Attribute("slug", String, "Optional URL-safe identifier. Auto-generated from name if omitted.")
 	Attribute("description", String, "Optional description.")
+	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.")
 })
 
 var UpdatePluginForm = Type("UpdatePluginForm", func() {
@@ -610,6 +619,7 @@ var UpdatePluginForm = Type("UpdatePluginForm", func() {
 	Attribute("name", String, "Updated display name.")
 	Attribute("slug", String, "Updated slug.")
 	Attribute("description", String, "Updated description.")
+	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.")
 })
 
 var AddPluginServerForm = Type("AddPluginServerForm", func() {

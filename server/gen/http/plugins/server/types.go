@@ -21,6 +21,10 @@ type CreatePluginRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Defaults to true. When false, the plugin stays out of the marketplace until
+	// someone syncs it by hand.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 }
 
 // UpdatePluginRequestBody is the type of the "plugins" service "updatePlugin"
@@ -33,6 +37,11 @@ type UpdatePluginRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Updated description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Omit to keep the current setting. Turning it off is refused while the plugin
+	// has changes that haven't been synced, and the slug can't change while it is
+	// off.
+	AutoSyncEnabled *bool `form:"auto_sync_enabled,omitempty" json:"auto_sync_enabled,omitempty" xml:"auto_sync_enabled,omitempty"`
 }
 
 // AddPluginServerRequestBody is the type of the "plugins" service
@@ -145,6 +154,9 @@ type GetPluginResponseBody struct {
 	// Whether automatic role distribution created this plugin. Read-only;
 	// preserved after edits and reuse.
 	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -178,6 +190,9 @@ type CreatePluginResponseBody struct {
 	// Whether automatic role distribution created this plugin. Read-only;
 	// preserved after edits and reuse.
 	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -211,6 +226,9 @@ type UpdatePluginResponseBody struct {
 	// Whether automatic role distribution created this plugin. Read-only;
 	// preserved after edits and reuse.
 	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -1403,6 +1421,25 @@ type CreatePluginGatewayErrorResponseBody struct {
 // CreatePluginUnavailableResponseBody is the type of the "plugins" service
 // "createPlugin" endpoint HTTP response body for the "unavailable" error.
 type CreatePluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePluginFailedPreconditionResponseBody is the type of the "plugins"
+// service "updatePlugin" endpoint HTTP response body for the
+// "failed_precondition" error.
+type UpdatePluginFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4538,6 +4575,9 @@ type PluginResponseBody struct {
 	// Whether automatic role distribution created this plugin. Read-only;
 	// preserved after edits and reuse.
 	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool `form:"auto_sync_enabled" json:"auto_sync_enabled" xml:"auto_sync_enabled"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4696,6 +4736,7 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 		Description:              res.Description,
 		IsDefault:                res.IsDefault,
 		AutoCreated:              res.AutoCreated,
+		AutoSyncEnabled:          res.AutoSyncEnabled,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -4736,6 +4777,7 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 		Description:              res.Description,
 		IsDefault:                res.IsDefault,
 		AutoCreated:              res.AutoCreated,
+		AutoSyncEnabled:          res.AutoSyncEnabled,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -4776,6 +4818,7 @@ func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody 
 		Description:              res.Description,
 		IsDefault:                res.IsDefault,
 		AutoCreated:              res.AutoCreated,
+		AutoSyncEnabled:          res.AutoSyncEnabled,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -5742,6 +5785,20 @@ func NewCreatePluginGatewayErrorResponseBody(res *goa.ServiceError) *CreatePlugi
 // the result of the "createPlugin" endpoint of the "plugins" service.
 func NewCreatePluginUnavailableResponseBody(res *goa.ServiceError) *CreatePluginUnavailableResponseBody {
 	body := &CreatePluginUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePluginFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "updatePlugin" endpoint of the "plugins" service.
+func NewUpdatePluginFailedPreconditionResponseBody(res *goa.ServiceError) *UpdatePluginFailedPreconditionResponseBody {
+	body := &UpdatePluginFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8220,9 +8277,10 @@ func NewGetPluginPayload(id string, sessionToken *string, projectSlugInput *stri
 // payload.
 func NewCreatePluginPayload(body *CreatePluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.CreatePluginPayload {
 	v := &plugins.CreatePluginPayload{
-		Name:        *body.Name,
-		Slug:        body.Slug,
-		Description: body.Description,
+		Name:            *body.Name,
+		Slug:            body.Slug,
+		Description:     body.Description,
+		AutoSyncEnabled: body.AutoSyncEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -8234,10 +8292,11 @@ func NewCreatePluginPayload(body *CreatePluginRequestBody, sessionToken *string,
 // payload.
 func NewUpdatePluginPayload(body *UpdatePluginRequestBody, sessionToken *string, projectSlugInput *string) *plugins.UpdatePluginPayload {
 	v := &plugins.UpdatePluginPayload{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		Slug:        *body.Slug,
-		Description: body.Description,
+		ID:              *body.ID,
+		Name:            *body.Name,
+		Slug:            *body.Slug,
+		Description:     body.Description,
+		AutoSyncEnabled: body.AutoSyncEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

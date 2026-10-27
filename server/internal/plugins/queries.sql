@@ -2,8 +2,9 @@
 -- plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
 
 -- name: CreatePlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug, description)
-VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'))
+-- A NULL auto_sync_enabled means the plugin's changes publish automatically.
+INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled)
+VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'), sqlc.narg('auto_sync_enabled'))
 RETURNING *;
 
 -- name: CreateDefaultPlugin :one
@@ -159,16 +160,29 @@ WHERE project_id = @project_id
 ORDER BY slug ASC;
 
 -- name: UpdatePlugin :one
+-- A NULL auto_sync_enabled argument keeps the plugin's current setting.
 UPDATE plugins
 SET name = @name,
     slug = @slug,
     description = sqlc.narg('description'),
+    auto_sync_enabled = COALESCE(sqlc.narg('auto_sync_enabled')::boolean, auto_sync_enabled),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListAutoSyncPausedPluginSlugs :many
+-- Slugs of the project's plugins whose auto sync is off. An automatic publish
+-- keeps each of them as it was last published; only a manual sync publishes
+-- their pending changes.
+SELECT slug
+FROM plugins
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND auto_sync_enabled IS FALSE
+ORDER BY slug ASC;
 
 -- name: SoftDeletePluginServers :exec
 -- Soft-deletes all servers belonging to a plugin.

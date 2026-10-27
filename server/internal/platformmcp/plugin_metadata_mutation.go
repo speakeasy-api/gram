@@ -254,7 +254,10 @@ func (s *PluginsService) createPlugin(ctx context.Context, principal Principal, 
 		Name:           input.Name,
 		Slug:           optionalString(input.Slug),
 		Description:    optionalString(input.Description),
-		Actor:          plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
+		// Platform MCP does not expose auto sync yet, so new plugins keep the
+		// default: their changes publish automatically.
+		AutoSyncEnabled: nil,
+		Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 	}
 	return s.executePluginMetadataMutation(ctx, principal, project, operationCreatePlugin, key, normalized, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
 		created, err := s.metadataCore.CreateInTransaction(ctx, tx, mutation)
@@ -307,6 +310,7 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 			Slug:            nil,
 			Description:     nil,
 			KeepDescription: true,
+			AutoSyncEnabled: nil,
 			Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 		})
 		if err != nil {

@@ -58530,6 +58530,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -101946,6 +101952,9 @@ components:
         CreatePluginForm:
             type: object
             properties:
+                auto_sync_enabled:
+                    type: boolean
+                    description: Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.
                 description:
                     type: string
                     description: Optional description.
@@ -116536,6 +116545,9 @@ components:
                 auto_created:
                     type: boolean
                     description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
+                auto_sync_enabled:
+                    type: boolean
+                    description: Whether changes to this plugin publish to the marketplace automatically. When false, they wait until someone syncs the marketplace by hand.
                 created_at:
                     type: string
                     format: date-time
@@ -116576,6 +116588,7 @@ components:
                 - name
                 - slug
                 - auto_created
+                - auto_sync_enabled
                 - agent_plugins_v1_compatible
                 - created_at
                 - updated_at
@@ -130762,6 +130775,9 @@ components:
         UpdatePluginForm:
             type: object
             properties:
+                auto_sync_enabled:
+                    type: boolean
+                    description: Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.
                 description:
                     type: string
                     description: Updated description.

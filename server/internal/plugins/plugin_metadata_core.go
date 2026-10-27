@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -47,6 +48,12 @@ var (
 	// ErrPluginMetadataTargetNotFound is a plugin id that matches no plugin in
 	// the project.
 	ErrPluginMetadataTargetNotFound = errors.New("plugin not found")
+
+	// ErrPluginSlugLockedWhileAutoSyncOff is a slug change on a plugin whose
+	// auto sync is (or would be) off. An automatic publish matches such a
+	// plugin to its published files by slug, so the slug must stay put until
+	// auto sync is back on.
+	ErrPluginSlugLockedWhileAutoSyncOff = errors.New("the slug can't change while auto sync is off: turn on auto sync first, or keep the current slug")
 )
 
 // PluginMetadataCore creates and updates a plugin's own metadata inside a
@@ -92,6 +99,11 @@ type CreatePluginMutation struct {
 	// Description is the optional plugin description.
 	Description *string
 
+	// AutoSyncEnabled sets whether the plugin's changes publish automatically.
+	// Nil leaves the default, which is on. A plugin created with it off stays
+	// out of the marketplace until someone syncs it by hand.
+	AutoSyncEnabled *bool
+
 	// Actor is who the creation is attributed to.
 	Actor PluginMetadataActor
 }
@@ -122,6 +134,11 @@ type UpdatePluginMutation struct {
 	// KeepDescription leaves the current description in place and ignores
 	// Description.
 	KeepDescription bool
+
+	// AutoSyncEnabled turns automatic publishing of the plugin's changes on or
+	// off. Nil keeps the current setting. Callers that turn it off check first
+	// that the plugin has no unsynced changes (see Service.UpdatePlugin).
+	AutoSyncEnabled *bool
 
 	// Actor is who the update is attributed to.
 	Actor PluginMetadataActor
@@ -200,11 +217,12 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 
 	queries := repo.New(tx)
 	plugin, err := queries.CreatePlugin(ctx, repo.CreatePluginParams{
-		OrganizationID: mutation.OrganizationID,
-		ProjectID:      mutation.ProjectID,
-		Name:           mutation.Name,
-		Slug:           slug,
-		Description:    conv.PtrToPGText(mutation.Description),
+		OrganizationID:  mutation.OrganizationID,
+		ProjectID:       mutation.ProjectID,
+		Name:            mutation.Name,
+		Slug:            slug,
+		Description:     conv.PtrToPGText(mutation.Description),
+		AutoSyncEnabled: conv.PtrToPGBool(mutation.AutoSyncEnabled),
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -290,17 +308,25 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 	if mutation.Slug != nil {
 		slug = *mutation.Slug
 	}
+	autoSyncAfter := PluginAutoSyncEnabled(before.AutoSyncEnabled)
+	if mutation.AutoSyncEnabled != nil {
+		autoSyncAfter = *mutation.AutoSyncEnabled
+	}
+	if slug != before.Slug && !autoSyncAfter {
+		return PluginMetadataResult{}, ErrPluginSlugLockedWhileAutoSyncOff
+	}
 	description := conv.PtrToPGText(mutation.Description)
 	if mutation.KeepDescription {
 		description = before.Description
 	}
 	plugin, err := queries.UpdatePlugin(ctx, repo.UpdatePluginParams{
-		ID:             mutation.PluginID,
-		OrganizationID: mutation.OrganizationID,
-		ProjectID:      mutation.ProjectID,
-		Name:           mutation.Name,
-		Slug:           slug,
-		Description:    description,
+		ID:              mutation.PluginID,
+		OrganizationID:  mutation.OrganizationID,
+		ProjectID:       mutation.ProjectID,
+		Name:            mutation.Name,
+		Slug:            slug,
+		Description:     description,
+		AutoSyncEnabled: conv.PtrToPGBool(mutation.AutoSyncEnabled),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PluginMetadataResult{}, ErrPluginMetadataTargetNotFound
@@ -322,14 +348,16 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
 		SnapshotBefore: &audit.PluginSnapshot{
-			Name:        before.Name,
-			Slug:        before.Slug,
-			Description: conv.FromPGText[string](before.Description),
+			Name:            before.Name,
+			Slug:            before.Slug,
+			Description:     conv.FromPGText[string](before.Description),
+			AutoSyncEnabled: new(PluginAutoSyncEnabled(before.AutoSyncEnabled)),
 		},
 		SnapshotAfter: &audit.PluginSnapshot{
-			Name:        plugin.Name,
-			Slug:        plugin.Slug,
-			Description: conv.FromPGText[string](plugin.Description),
+			Name:            plugin.Name,
+			Slug:            plugin.Slug,
+			Description:     conv.FromPGText[string](plugin.Description),
+			AutoSyncEnabled: new(PluginAutoSyncEnabled(plugin.AutoSyncEnabled)),
 		},
 	}); err != nil {
 		return PluginMetadataResult{}, fmt.Errorf("audit log plugin update: %w", err)
@@ -340,6 +368,12 @@ func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx,
 		return PluginMetadataResult{}, fmt.Errorf("enqueue plugin publication: %w", err)
 	}
 	return PluginMetadataResult{Plugin: plugin, Before: &before, DeliveredToEveryone: false, Publication: outcome}, nil
+}
+
+// PluginAutoSyncEnabled resolves a plugin's stored auto sync setting: NULL
+// (never set) and TRUE both mean its changes publish automatically.
+func PluginAutoSyncEnabled(stored pgtype.Bool) bool {
+	return !stored.Valid || stored.Bool
 }
 
 func isUniqueViolation(err error) bool {

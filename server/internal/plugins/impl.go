@@ -360,6 +360,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			Description:              conv.FromPGText[string](r.Description),
 			IsDefault:                conv.FromPGBool[bool](r.IsDefault),
 			AutoCreated:              r.AutoCreated,
+			AutoSyncEnabled:          PluginAutoSyncEnabled(r.AutoSyncEnabled),
 			ServerCount:              &r.ServerCount,
 			SkillCount:               &r.SkillCount,
 			AssignmentCount:          &r.AssignmentCount,
@@ -534,12 +535,13 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	created, err := NewPluginMetadataCore(s.audit, s.publicationRequests).CreateInTransaction(ctx, tx, CreatePluginMutation{
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-		Name:           payload.Name,
-		Slug:           payload.Slug,
-		Description:    payload.Description,
-		Actor:          PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
+		OrganizationID:  ac.ActiveOrganizationID,
+		ProjectID:       *ac.ProjectID,
+		Name:            payload.Name,
+		Slug:            payload.Slug,
+		Description:     payload.Description,
+		AutoSyncEnabled: payload.AutoSyncEnabled,
+		Actor:           PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
 		return nil, s.pluginMetadataError(ctx, err, "create plugin")
@@ -564,6 +566,8 @@ func (s *Service) pluginMetadataError(ctx context.Context, err error, operation 
 		return oops.E(oops.CodeBadRequest, nil, "%s", err.Error())
 	case errors.Is(err, ErrPluginSlugConflict):
 		return oops.E(oops.CodeConflict, nil, "%s", err.Error())
+	case errors.Is(err, ErrPluginSlugLockedWhileAutoSyncOff):
+		return oops.E(oops.CodeFailedPrecondition, nil, "%s", err.Error())
 	case errors.Is(err, ErrPluginMetadataTargetNotFound):
 		return oops.C(oops.CodeNotFound)
 	default:
@@ -586,6 +590,12 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
+	if payload.AutoSyncEnabled != nil && !*payload.AutoSyncEnabled {
+		if err := s.requireAutoSyncCanTurnOff(ctx, ac, pluginID, payload); err != nil {
+			return nil, err
+		}
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -600,6 +610,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		Slug:            &payload.Slug,
 		Description:     payload.Description,
 		KeepDescription: false,
+		AutoSyncEnabled: payload.AutoSyncEnabled,
 		Actor:           PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
@@ -609,6 +620,8 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	// Also covers turning auto sync back on: the publish this signals sends
+	// the changes that were held while it was off.
 	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
 	plugin := updated.Plugin
 
@@ -631,6 +644,34 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
 	}
 	return s.filterPluginAudience(ctx, ac, pluginToGen(plugin, servers, wrappers, assignments, compatibility[plugin.Slug]))
+}
+
+// requireAutoSyncCanTurnOff refuses an update that turns a plugin's auto sync
+// off while the plugin has changes that haven't been synced, or while the same
+// update edits the plugin: from then on automatic publishes keep the plugin as
+// it was last published, so anything unsynced would be stranded. Turning it off
+// when it already is off needs no check.
+func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, ac *contextvalues.AuthContext, pluginID uuid.UUID, payload *gen.UpdatePluginPayload) error {
+	current, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get plugin").LogError(ctx, s.logger)
+	}
+	if !PluginAutoSyncEnabled(current.AutoSyncEnabled) {
+		return nil
+	}
+	if payload.Name != current.Name ||
+		payload.Slug != current.Slug ||
+		conv.PtrValOr(payload.Description, "") != conv.FromPGTextOrEmpty[string](current.Description) {
+		return oops.E(oops.CodeFailedPrecondition, nil, "%s", autoSyncOffWithOtherChangesMessage)
+	}
+	return s.requirePluginSyncedForPause(ctx, current)
 }
 
 func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPayload) error {
@@ -1839,17 +1880,26 @@ func (s *Service) cachedLiveManifestVersion(ctx context.Context, ac *contextvalu
 
 // liveManifestVersion reads the version stamped into the live repo's Claude
 // plugin.json, trying each of the project's current plugin slugs until one
-// resolves — a plugin created after the last publish has no file yet, but all
-// manifests in a publish share one version, so any live one answers for the
-// project. ok is false when the read failed transiently (GitHub error,
-// malformed manifest), so the caller skips negative caching; a clean "no live
-// manifest" returns ("", true).
+// resolves — a plugin created after the last publish has no file yet, but the
+// manifests a publish generates share one version, so any live one answers for
+// the project. Plugins whose auto sync is off are tried last: an automatic
+// publish copies their manifests unchanged, so theirs can be older. ok is false
+// when the read failed transiently (GitHub error, malformed manifest), so the
+// caller skips negative caching; a clean "no live manifest" returns ("", true).
 func (s *Service) liveManifestVersion(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) (version string, ok bool) {
 	pluginInfos, _, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
 	if err != nil {
 		// resolvePluginInfos already logged the underlying error.
 		return "", false
 	}
+	pausedSlugs, err := s.repo.ListAutoSyncPausedPluginSlugs(ctx, *ac.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "live version: list plugins with auto sync off", attr.SlogError(err))
+		return "", false
+	}
+	sort.SliceStable(pluginInfos, func(i, j int) bool {
+		return !slices.Contains(pausedSlugs, pluginInfos[i].Slug) && slices.Contains(pausedSlugs, pluginInfos[j].Slug)
+	})
 
 	for _, p := range pluginInfos {
 		content, err := s.github.Client.GetFileContent(ctx, s.github.InstallationID, conn.RepoOwner, conn.RepoName, "main", p.Slug+"/.claude-plugin/plugin.json")
@@ -2010,9 +2060,12 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		// bumps and installed copies refresh. The hooks component is still gated
 		// by the rollout inside publishProject — clicking Publish cannot force a
 		// hooks upgrade onto an org the rollout hasn't cleared.
-		SkipIfUnchanged:   false,
-		RotateHooksKey:    false,
-		HooksKeyCandidate: nil,
+		SkipIfUnchanged: false,
+		// The manual sync is the one publish that sends the pending changes of
+		// plugins whose auto sync is off.
+		IncludePausedPlugins: true,
+		RotateHooksKey:       false,
+		HooksKeyCandidate:    nil,
 	})
 	if err != nil {
 		return nil, err
@@ -2123,11 +2176,12 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 			Slug:            nil,
 			CreatedByUserID: input.CreatedByUserID,
 		},
-		GitHubUsernames:   nil,
-		CommitMessage:     conv.Default(input.CommitMessage, "Update plugin packages"),
-		SkipIfUnchanged:   input.SkipIfUnchanged,
-		RotateHooksKey:    false,
-		HooksKeyCandidate: nil,
+		GitHubUsernames:      nil,
+		CommitMessage:        conv.Default(input.CommitMessage, "Update plugin packages"),
+		SkipIfUnchanged:      input.SkipIfUnchanged,
+		IncludePausedPlugins: false,
+		RotateHooksKey:       false,
+		HooksKeyCandidate:    nil,
 	})
 	if err != nil {
 		return nil, err
@@ -2153,6 +2207,12 @@ type publishProjectInput struct {
 	GitHubUsernames  []string
 	CommitMessage    string
 	SkipIfUnchanged  bool
+	// IncludePausedPlugins publishes the pending changes of plugins whose auto
+	// sync is off. Only the dashboard's manual sync (PublishPlugins) sets it.
+	// Every other publish is automatic and keeps each such plugin as it was
+	// last published, or leaves it out if it was never published (see
+	// planPausedPlugins).
+	IncludePausedPlugins bool
 	// RotateHooksKey makes this a hooks-only publish: the hooks subtree
 	// regenerates so HooksKeyCandidate is baked into the published observability
 	// plugin, and the MCP component is carried untouched so the consumer key
@@ -2298,10 +2358,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read observability plugin setting").LogError(ctx, s.logger)
 	}
-	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg, observabilityEnabled)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
-	}
 	// rotateHooks is decided below, once the rollout gate has resolved the hooks
 	// version this org may receive; a rotation the gate holds back must not
 	// change what this publish does at all.
@@ -2390,6 +2446,23 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 	}
 
+	// Plugins whose auto sync is off keep what was last published on every
+	// publish except the manual sync: held ones are copied from the repo with
+	// their stored fingerprint, never-published ones are left out. Every
+	// decision below works from this plan, so a held plugin's pending changes
+	// neither trigger nor ride along with an automatic publish.
+	plan := allPluginsActive(pluginInfos)
+	if !input.IncludePausedPlugins {
+		plan, err = s.planPausedPlugins(ctx, input.ProjectID, repoOwner, repoName, pluginInfos, publishedMCPFingerprints, cfg, observabilityEnabled)
+		if err != nil {
+			return nil, err
+		}
+	}
+	mcpFingerprints, err := publishMCPFingerprints(plan.Active, plan.Held, cfg, observabilityEnabled)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
+	}
+
 	// Decide which components to (re)generate. A human publish refreshes customer
 	// MCP packages so installed copies pick up a new manifest version. A
 	// Platform-only transition deliberately carries those customer packages
@@ -2443,7 +2516,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// needs no fetch.
 	var mcpPaths []string
 	if !mcpChanged {
-		mcpPaths, err = mcpFilePaths(pluginInfos, cfg)
+		mcpPaths, err = mcpFilePaths(plan.Active, cfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
 		}
@@ -2496,6 +2569,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	files := make(map[string][]byte)
+	// Held plugins keep the files they were last published with, including the
+	// consumer key baked into them: publishing never revokes an older consumer
+	// key, so those packages keep working. They go in first, so on any path
+	// collision the files generated or carried below win.
+	for _, held := range plan.Held {
+		maps.Copy(files, held.Files)
+	}
 	var candidates []pluginAPIKeyCandidate
 	var hooksCandidate *pluginAPIKeyCandidate
 	if rotateHooks && input.HooksKeyCandidate != nil {
@@ -2522,7 +2602,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").LogError(ctx, s.logger)
 		}
 		cfg.APIKey = mcpCandidate.fullKey
-		mcpFiles, err := generateMCPFiles(pluginInfos, cfg)
+		mcpFiles, err := generateMCPFiles(plan.Active, cfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "generate mcp files").LogError(ctx, s.logger)
 		}
@@ -2598,7 +2678,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// manifests' observability entries at the carried directories so they stay
 	// resolvable.
 	sharedCfg.HooksOrgName = carriedHooksOrgName
-	sharedFiles, err := generateSharedFiles(pluginInfos, sharedCfg)
+	sharedFiles, err := generateSharedFilesFromEntries(sharedPublishEntries(plan.Active, plan.Held, sharedCfg), sharedCfg)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate shared files").LogError(ctx, s.logger)
 	}
@@ -2645,10 +2725,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 	}
 
-	pluginSlugs := make([]string, 0, len(pluginInfos))
-	for _, p := range pluginInfos {
-		pluginSlugs = append(pluginSlugs, p.Slug)
-	}
+	pluginSlugs := plan.Slugs()
 
 	// Persist the fingerprints of what the repo now actually holds. When the MCP
 	// component was carried verbatim, that is still the previously published set
@@ -2914,9 +2991,12 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				// which still republishes real drift (an org rename changes the
 				// manifests' owner name without touching these settings) but
 				// spares the marketplace a commit for a no-op save.
-				SkipIfUnchanged:   !settingsChanged,
-				RotateHooksKey:    false,
-				HooksKeyCandidate: nil,
+				SkipIfUnchanged: !settingsChanged,
+				// A settings change is not a sync: plugins whose auto sync is
+				// off keep what was last published.
+				IncludePausedPlugins: false,
+				RotateHooksKey:       false,
+				HooksKeyCandidate:    nil,
 			})
 			if err != nil {
 				return nil, err
@@ -3617,6 +3697,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, wrappers map[uuid.U
 		Description:              conv.FromPGText[string](p.Description),
 		IsDefault:                conv.FromPGBool[bool](p.IsDefault),
 		AutoCreated:              p.AutoCreated,
+		AutoSyncEnabled:          PluginAutoSyncEnabled(p.AutoSyncEnabled),
 		ServerCount:              nil,
 		SkillCount:               nil,
 		AssignmentCount:          nil,

@@ -138,6 +138,10 @@ type CreatePluginPayload struct {
 	Slug *string
 	// Optional description.
 	Description *string
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Defaults to true. When false, the plugin stays out of the marketplace until
+	// someone syncs it by hand.
+	AutoSyncEnabled *bool
 }
 
 // DeletePluginPayload is the payload type of the plugins service deletePlugin
@@ -311,6 +315,9 @@ type Plugin struct {
 	// Whether automatic role distribution created this plugin. Read-only;
 	// preserved after edits and reuse.
 	AutoCreated bool
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// When false, they wait until someone syncs the marketplace by hand.
+	AutoSyncEnabled bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
 	// Number of active skills in this plugin.
@@ -561,6 +568,11 @@ type UpdatePluginPayload struct {
 	Slug string
 	// Updated description.
 	Description *string
+	// Whether changes to this plugin publish to the marketplace automatically.
+	// Omit to keep the current setting. Turning it off is refused while the plugin
+	// has changes that haven't been synced, and the slug can't change while it is
+	// off.
+	AutoSyncEnabled *bool
 }
 
 // UpdatePluginServerPayload is the payload type of the plugins service

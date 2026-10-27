@@ -31,6 +31,9 @@ type PluginSnapshot struct {
 	Name        string  `json:"name"`
 	Slug        string  `json:"slug"`
 	Description *string `json:"description,omitempty"`
+	// AutoSyncEnabled reports whether the plugin's changes publish
+	// automatically. Nil when the entry predates the setting.
+	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
 }
 
 type LogPluginCreateEvent struct {
