@@ -46,6 +46,8 @@ type EMAClientRegistrationManagement interface {
 	ListIssuers(context.Context, *orggen.ListIssuersPayload) (*orggen.ListOrganizationUserSessionIssuersResult, error)
 	GetIssuer(context.Context, *orggen.GetIssuerPayload) (*types.UserSessionIssuer, error)
 	CreateJWTBearerClient(context.Context, *orggen.CreateJWTBearerClientPayload) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error)
+	PrepareJWTBearerClient(context.Context, *orggen.CreateJWTBearerClientPayload) (*usersessions.PreparedJWTBearerClient, error)
+	RegisterJWTBearerClientTx(context.Context, pgx.Tx, *usersessions.PreparedJWTBearerClient) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error)
 }
 
 type RegisterEMAClientInput struct {
@@ -107,6 +109,9 @@ type EMAClientRegistrationService struct {
 	db             *pgxpool.Pool
 	now            func() time.Time
 	resolveProject func(context.Context, string, FindMCPInput) (ResolvedProject, error)
+
+	// encodeReceipt overrides the secret-free receipt encoding in tests.
+	encodeReceipt func(RegisterEMAClientOutput) ([]byte, error)
 }
 
 func (r *PostgresReader) WithEMAClientRegistration(management EMAClientRegistrationManagement) *PostgresReader {
@@ -219,13 +224,17 @@ func (s *EMAClientRegistrationService) create(ctx context.Context, payload *orgg
 	if err != nil {
 		return RegisterEMAClientOutput{}, fmt.Errorf("register ema client: %w", err)
 	}
+	return emaCreatedOutput(created, payload.TokenEndpointAuthMethod)
+}
+
+func emaCreatedOutput(created *orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, authMethod string) (RegisterEMAClientOutput, error) {
 	if created == nil || created.Client == nil || created.Issuer == nil {
 		return RegisterEMAClientOutput{}, ErrUnavailable
 	}
 	out := emaIssuerOutput(created.Issuer, created.TrustedIdentityProviderConfigured)
 	out.ClientID = created.Client.ClientID
 	out.ClientName = created.Client.ClientName
-	out.TokenEndpointAuthMethod = payload.TokenEndpointAuthMethod
+	out.TokenEndpointAuthMethod = authMethod
 	if created.ClientSecret != nil {
 		out.ClientSecret = *created.ClientSecret
 	}
@@ -233,8 +242,19 @@ func (s *EMAClientRegistrationService) create(ctx context.Context, payload *orgg
 	return out, nil
 }
 
-// createWithReceipt stores the registration's projection, never its secret,
-// under the caller's idempotency key. Receipts are keyed by project, so the
+func encodeEMAClientReceipt(out RegisterEMAClientOutput) ([]byte, error) {
+	out.ClientSecret = ""
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		return nil, fmt.Errorf("encode ema client receipt: %w", err)
+	}
+	return encoded, nil
+}
+
+// createWithReceipt registers the client, its audit row, and the receipt in
+// one transaction, so a retry with the same key can never register a second
+// client. The receipt holds the registration's projection, never its secret,
+// which is returned only after commit. Receipts are keyed by project, so the
 // organization's default project carries this organization-level write.
 func (s *EMAClientRegistrationService) createWithReceipt(ctx context.Context, principal Principal, key string, payload *orggen.CreateJWTBearerClientPayload) (RegisterEMAClientOutput, error) {
 	if s.db == nil || s.now == nil || s.resolveProject == nil {
@@ -257,6 +277,16 @@ func (s *EMAClientRegistrationService) createWithReceipt(ctx context.Context, pr
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-ema-client-v1\x00"), normalized...))
 
+	// Validation and the bcrypt mint run before the receipt transaction.
+	prepared, err := s.management.PrepareJWTBearerClient(ctx, payload)
+	if err != nil {
+		return RegisterEMAClientOutput{}, fmt.Errorf("prepare ema client: %w", err)
+	}
+	encode := s.encodeReceipt
+	if encode == nil {
+		encode = encodeEMAClientReceipt
+	}
+
 	var secret string
 	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[RegisterEMAClientOutput]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationRegisterEMAClient,
@@ -268,16 +298,13 @@ func (s *EMAClientRegistrationService) createWithReceipt(ctx context.Context, pr
 			var stored RegisterEMAClientOutput
 			return json.Unmarshal(payload, &stored) == nil && stored.ClientID != "" && stored.ClientSecret == ""
 		},
-		EncodeResult: func(out RegisterEMAClientOutput) ([]byte, error) {
-			out.ClientSecret = ""
-			encoded, err := json.Marshal(out)
+		EncodeResult: encode,
+		Mutate: func(ctx context.Context, tx pgx.Tx) (RegisterEMAClientOutput, error) {
+			created, err := s.management.RegisterJWTBearerClientTx(ctx, tx, prepared)
 			if err != nil {
-				return nil, fmt.Errorf("encode ema client receipt: %w", err)
+				return RegisterEMAClientOutput{}, fmt.Errorf("register ema client: %w", err)
 			}
-			return encoded, nil
-		},
-		Mutate: func(ctx context.Context, _ pgx.Tx) (RegisterEMAClientOutput, error) {
-			out, err := s.create(ctx, payload)
+			out, err := emaCreatedOutput(created, payload.TokenEndpointAuthMethod)
 			secret = out.ClientSecret
 			return out, err
 		},
@@ -341,7 +368,7 @@ func emaClientToolResult(err error) (*mcp.CallToolResult, bool) {
 	if result, ok := externalAuthorizationToolResult(err); ok {
 		return result, true
 	}
-	refusal := emaClientRefusal{Code: unavailableCode, Message: "Registering an enterprise-managed authorization client is temporarily unavailable, and nothing was registered."}
+	refusal := emaClientRefusal{Code: unavailableCode, Message: "Registering an enterprise-managed authorization client is temporarily unavailable. With an idempotency_key nothing was registered, so retrying with the same key is safe; without one, check the issuer's clients before retrying."}
 	if required, ok := errors.AsType[*emaIssuerRequiredError](err); ok {
 		refusal = emaClientRefusal{Code: "issuer_required", Message: "Nothing was registered. Ask the user which organization-level issuer the client belongs to, then call again with its exact issuer_id.", Issuers: required.candidates, Truncated: required.truncated}
 		if required.truncated {

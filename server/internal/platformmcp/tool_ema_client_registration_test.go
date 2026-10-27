@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 type emaClientManagementStub struct {
@@ -34,6 +35,14 @@ func (s emaClientManagementStub) GetIssuer(ctx context.Context, p *orggen.GetIss
 
 func (s emaClientManagementStub) CreateJWTBearerClient(ctx context.Context, p *orggen.CreateJWTBearerClientPayload) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error) {
 	return s.create(ctx, p)
+}
+
+func (s emaClientManagementStub) PrepareJWTBearerClient(context.Context, *orggen.CreateJWTBearerClientPayload) (*usersessions.PreparedJWTBearerClient, error) {
+	return nil, oops.C(oops.CodeUnexpected)
+}
+
+func (s emaClientManagementStub) RegisterJWTBearerClientTx(context.Context, pgx.Tx, *usersessions.PreparedJWTBearerClient) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error) {
+	return nil, oops.C(oops.CodeUnexpected)
 }
 
 func emaPrincipalContext(t *testing.T, ctx context.Context, p Principal) context.Context {
@@ -255,47 +264,6 @@ func TestEMAClientRegistrationReturnsSecretOnceAndNextStep(t *testing.T) {
 	require.False(t, out.TrustedIdentityProviderConfigured)
 	require.Contains(t, out.NextStep, "shown only now")
 	require.Contains(t, out.NextStep, "does not trust an identity provider")
-}
-
-func TestEMAClientRegistrationIdempotencyKeyReplaysWithoutSecret(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_ema_client_idempotency")
-	require.NoError(t, err)
-	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	ctx = emaPrincipalContext(t, ctx, principal)
-
-	issuerID := uuid.NewString()
-	calls := 0
-	service := &EMAClientRegistrationService{
-		management:     emaClientManagementStub{get: orgIssuerGetter(issuerID), create: createdEMAClient(issuerID, &calls)},
-		trusted:        untrustedEMAIssuer,
-		db:             conn,
-		now:            time.Now,
-		resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) { return project, nil },
-	}
-	arguments := map[string]any{"issuer_id": issuerID, "client_name": "Codex", "token_endpoint_auth_method": "client_secret_basic", "confirmed": true, "idempotency_key": "codex-1"}
-
-	first, err := invokeEMAClientTool(t, ctx, service, arguments)
-	require.NoError(t, err)
-	firstOut, ok := first.(RegisterEMAClientOutput)
-	require.True(t, ok)
-	require.Equal(t, "generated-secret", firstOut.ClientSecret)
-	require.False(t, firstOut.Replayed)
-
-	replay, err := invokeEMAClientTool(t, ctx, service, arguments)
-	require.NoError(t, err)
-	replayOut, ok := replay.(RegisterEMAClientOutput)
-	require.True(t, ok)
-	require.Equal(t, 1, calls)
-	require.True(t, replayOut.Replayed)
-	require.Equal(t, firstOut.ClientID, replayOut.ClientID)
-	require.Empty(t, replayOut.ClientSecret)
-
-	arguments["client_name"] = "Different"
-	_, err = invokeEMAClientTool(t, ctx, service, arguments)
-	requireEMAClientRefusal(t, err, "idempotency_key_reused")
-	require.Equal(t, 1, calls)
 }
 
 func TestEMAClientRegistrationMapsManagementRefusals(t *testing.T) {

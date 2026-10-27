@@ -42,9 +42,21 @@ func TrustedIdentityProviderConfigured(ctx context.Context, db *pgxpool.Pool, or
 	}
 }
 
-// CreateJWTBearerClient registers an assertion-only client on an
-// organization-owned issuer, through the same path DCR uses.
-func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.CreateJWTBearerClientPayload) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error) {
+// PreparedJWTBearerClient is a validated jwt-bearer registration whose
+// credential is already minted, ready to commit in a caller's transaction.
+type PreparedJWTBearerClient struct {
+	organizationID string
+	issuerID       uuid.UUID
+	req            RegistrationRequest
+	credential     ClientCredential
+	trusted        bool
+}
+
+// PrepareJWTBearerClient runs every check that needs no lock: org:admin,
+// input validation, the organization-tier issuer, and its trust. It mints the
+// credential here because bcrypt is slow and must not run under the issuer
+// lock.
+func (s *Service) PrepareJWTBearerClient(ctx context.Context, payload *orggen.CreateJWTBearerClientPayload) (*PreparedJWTBearerClient, error) {
 	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
@@ -97,21 +109,40 @@ func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.Cre
 		return nil, oops.E(oops.CodeUnexpected, err, "read issuer trust").LogError(ctx, logger)
 	}
 
-	// bcrypt is slow; mint before the issuer lock is taken.
 	credential, err := MintClientCredential(req.TokenEndpointAuthMethod)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "mint client credential").LogError(ctx, logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	return &PreparedJWTBearerClient{
+		organizationID: authCtx.ActiveOrganizationID,
+		issuerID:       issuerID,
+		req:            req,
+		credential:     credential,
+		trusted:        trusted,
+	}, nil
+}
+
+// RegisterJWTBearerClientTx locks the organization-tier issuer, inserts the
+// client, and writes its audit row in dbtx, which the caller commits. The
+// result carries the plaintext secret; callers must return it only after
+// that commit and never persist it.
+func (s *Service) RegisterJWTBearerClientTx(ctx context.Context, dbtx pgx.Tx, prepared *PreparedJWTBearerClient) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error) {
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		return nil, err
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	if prepared == nil || prepared.organizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "prepared registration belongs to another organization")
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogUserSessionIssuerID(prepared.issuerID.String()),
+	)
 	txRepo := repo.New(dbtx)
 
 	issuer, err := txRepo.LockOrganizationUserSessionIssuer(ctx, repo.LockOrganizationUserSessionIssuerParams{
-		ID:             issuerID,
+		ID:             prepared.issuerID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
@@ -121,7 +152,7 @@ func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.Cre
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization user session issuer").LogError(ctx, logger)
 	}
 
-	row, err := CreateClientRegistration(ctx, txRepo, issuer.ID, req, credential)
+	row, err := CreateClientRegistration(ctx, txRepo, issuer.ID, prepared.req, prepared.credential)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogWarn(ctx, logger)
@@ -144,24 +175,49 @@ func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.Cre
 		return nil, oops.E(oops.CodeUnexpected, err, "log user session client creation").LogError(ctx, logger)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
-	}
-
-	logger.InfoContext(ctx, "jwt-bearer user session client registered",
-		attr.SlogOAuthClientID(row.ClientID),
-		attr.SlogOAuthRegisteredAuthMethod(req.TokenEndpointAuthMethod),
-		attr.SlogOAuthClientSecretGenerated(credential.Secret != ""),
-	)
-
 	var clientSecret *string
-	if credential.Secret != "" {
-		clientSecret = &credential.Secret
+	if prepared.credential.Secret != "" {
+		clientSecret = new(prepared.credential.Secret)
 	}
 	return &orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult{
 		Client:                            view,
 		ClientSecret:                      clientSecret,
 		Issuer:                            s.issuerView(ctx, issuer),
-		TrustedIdentityProviderConfigured: trusted,
+		TrustedIdentityProviderConfigured: prepared.trusted,
 	}, nil
+}
+
+// CreateJWTBearerClient registers an assertion-only client on an
+// organization-owned issuer, through the same path DCR uses.
+func (s *Service) CreateJWTBearerClient(ctx context.Context, payload *orggen.CreateJWTBearerClientPayload) (*orggen.CreateOrganizationUserSessionIssuerJWTBearerClientResult, error) {
+	prepared, err := s.PrepareJWTBearerClient(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(prepared.organizationID),
+		attr.SlogUserSessionIssuerID(prepared.issuerID.String()),
+	)
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	result, err := s.RegisterJWTBearerClientTx(ctx, dbtx, prepared)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "jwt-bearer user session client registered",
+		attr.SlogOAuthClientID(result.Client.ClientID),
+		attr.SlogOAuthRegisteredAuthMethod(prepared.req.TokenEndpointAuthMethod),
+		attr.SlogOAuthClientSecretGenerated(result.ClientSecret != nil),
+	)
+	return result, nil
 }
