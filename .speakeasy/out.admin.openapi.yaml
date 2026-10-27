@@ -10750,6 +10750,10 @@ components:
           type: integer
           description: Configured identities and server links decided.
           format: int64
+        attachments_waiting:
+          type: integer
+          description: Agent attachments whose grants a run does not write while the organization's upstream selector writes are not allowed. While any wait, complete is false.
+          format: int64
         complete:
           type: boolean
           description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
