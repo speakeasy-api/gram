@@ -40,6 +40,7 @@ func TestProductFeatureNameContract(t *testing.T) {
 		productfeatures.FeatureNetworkIngress,
 		productfeatures.FeatureSignalsIntelligence,
 		productfeatures.FeatureOrganizationGatewayDisabled,
+		productfeatures.FeatureCodeMode,
 	}, document.Components.Schemas["SetOrganizationFeatureRequestBody"].Properties["feature_name"].Enum)
 }
 
@@ -78,6 +79,7 @@ func TestClientSnapshot_ReturnsCompleteProductFeatureState(t *testing.T) {
 		SessionPortabilityEnabled:               false,
 		NetworkIngressEnabled:                   false,
 		SignalsIntelligenceEnabled:              false,
+		OrganizationGatewayDisabled:             true,
 		DeviceAgent:                             true,
 	}, ti.client.Snapshot(ctx, orgID))
 }

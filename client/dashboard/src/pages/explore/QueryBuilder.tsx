@@ -83,6 +83,7 @@ const OP_LABELS: Record<MeasureOp, string> = {
 /** A timeseries bucket as the rollup segment names it. */
 const GRAIN_LABELS: Record<Grain, string> = {
   none: "none",
+  minute: "1m",
   hour: "1h",
   day: "1d",
   week: "1w",
@@ -265,7 +266,14 @@ function Sentence({
                 ),
               )
             }
-            onRemove={() => patch(withMeasures(removeAt(spec.measures, index)))}
+            onRemove={
+              // A metric dataset has no rows to fall back to, so its last
+              // complete measure stays.
+              dataset?.kind === "metric" &&
+              completeMeasures(removeAt(spec.measures, index)).length === 0
+                ? undefined
+                : () => patch(withMeasures(removeAt(spec.measures, index)))
+            }
           />
         ))}
         {spec.measures.length === 0 ? (
@@ -330,7 +338,7 @@ function Sentence({
             >
               <Icon name="plus" className="size-4" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-w-[min(400px,var(--radix-select-content-available-width))] **:data-[slot=select-item-description]:line-clamp-3">
               {free.map((field) => (
                 <SelectItem
                   key={field.name}
@@ -412,10 +420,11 @@ function MeasureCells({
   measure: MeasureDraft;
   onOp: (op: MeasureOp) => void;
   onField: (field: string) => void;
-  onRemove: () => void;
+  /** Absent when the measure cannot be removed. */
+  onRemove: (() => void) | undefined;
 }): JSX.Element {
   const targets = fieldsForOp(dataset, measure.op);
-  const remove = (
+  const remove = onRemove ? (
     <button
       type="button"
       aria-label="Remove measure"
@@ -424,7 +433,7 @@ function MeasureCells({
     >
       <XIcon className="size-3" />
     </button>
-  );
+  ) : null;
   return (
     <>
       <Select value={measure.op} onValueChange={(op) => onOp(op as MeasureOp)}>
@@ -446,7 +455,7 @@ function MeasureCells({
       {measure.op === "count" ? (
         <Cell tone="measure">
           all rows
-          <span className="ml-1.5 flex">{remove}</span>
+          {remove ? <span className="ml-1.5 flex">{remove}</span> : null}
         </Cell>
       ) : (
         <span className={cn("flex items-stretch", TONES.measure)}>

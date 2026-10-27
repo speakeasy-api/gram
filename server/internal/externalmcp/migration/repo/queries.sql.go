@@ -118,13 +118,12 @@ func (q *Queries) FillRemoteSessionResources(ctx context.Context, arg FillRemote
 }
 
 const getPluginServerFixture = `-- name: GetPluginServerFixture :one
-SELECT toolset_id, mcp_server_id, deleted
+SELECT mcp_server_id, deleted
 FROM plugin_servers
 WHERE id = $1
 `
 
 type GetPluginServerFixtureRow struct {
-	ToolsetID   uuid.NullUUID
 	McpServerID uuid.NullUUID
 	Deleted     bool
 }
@@ -132,7 +131,7 @@ type GetPluginServerFixtureRow struct {
 func (q *Queries) GetPluginServerFixture(ctx context.Context, id uuid.UUID) (GetPluginServerFixtureRow, error) {
 	row := q.db.QueryRow(ctx, getPluginServerFixture, id)
 	var i GetPluginServerFixtureRow
-	err := row.Scan(&i.ToolsetID, &i.McpServerID, &i.Deleted)
+	err := row.Scan(&i.McpServerID, &i.Deleted)
 	return i, err
 }
 
@@ -207,14 +206,15 @@ scoped_toolsets AS (
     t.name,
     t.slug,
     t.mcp_slug,
-    t.mcp_enabled,
+    -- The canonical wrapper owns hosting state; the toolset columns stand only without one,
+    -- and a server that kept the toolset's id but left it leaves the toolset disabled.
+    (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)::boolean AS mcp_enabled,
     t.custom_domain_id,
-    t.user_session_issuer_id,
+    COALESCE(cw.user_session_issuer_id, CASE WHEN cw.id IS NULL THEN t.user_session_issuer_id END) AS user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     t.tool_variations_group_id,
     (
-      t.mcp_enabled
+      (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)
       OR EXISTS (
         SELECT 1
         FROM mcp_servers AS ms
@@ -223,6 +223,8 @@ scoped_toolsets AS (
     ) AS live
   FROM toolsets AS t
   JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
+  LEFT JOIN mcp_servers AS cw ON cw.id = t.id AND cw.toolset_id = t.id AND cw.project_id = t.project_id AND cw.deleted IS FALSE
+  LEFT JOIN mcp_servers AS kept ON kept.id = t.id AND kept.toolset_id IS DISTINCT FROM t.id AND kept.project_id = t.project_id AND kept.deleted IS FALSE
   WHERE t.deleted IS FALSE
     AND ($1::uuid[] IS NULL OR t.id = ANY($1::uuid[]))
 ),
@@ -283,7 +285,6 @@ SELECT
   t.custom_domain_id,
   t.user_session_issuer_id,
   t.external_oauth_server_id,
-  t.oauth_proxy_server_id,
   (t.tool_variations_group_id IS NOT NULL)::boolean AS toolset_has_variations,
   usi.slug AS user_session_issuer_slug,
   COALESCE(t.live, FALSE)::boolean AS live,
@@ -340,10 +341,8 @@ SELECT
     )
   )::boolean AS mcp_slug_is_endpoint,
   EXISTS (SELECT 1 FROM toolset_prompts AS tp WHERE tp.toolset_id = t.id)::boolean AS has_prompts,
-  EXISTS (SELECT 1 FROM assistant_toolsets AS at WHERE at.toolset_id = t.id)::boolean AS has_assistants,
   EXISTS (SELECT 1 FROM slack_app_toolsets AS sat WHERE sat.toolset_id = t.id)::boolean AS has_slack_apps,
   EXISTS (SELECT 1 FROM user_oauth_tokens AS uot WHERE uot.toolset_id = t.id AND uot.deleted IS FALSE)::boolean AS has_user_oauth_tokens,
-  EXISTS (SELECT 1 FROM plugin_servers AS ps WHERE ps.toolset_id = t.id AND ps.deleted IS FALSE)::boolean AS has_toolset_plugin_entries,
   EXISTS (
     SELECT 1
     FROM meta_mcp_server_members AS m
@@ -395,10 +394,12 @@ SELECT
     SELECT count(*)
     FROM toolsets AS other
     JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
-    WHERE other.user_session_issuer_id = t.user_session_issuer_id
+    LEFT JOIN mcp_servers AS ocw ON ocw.id = other.id AND ocw.toolset_id = other.id AND ocw.project_id = other.project_id AND ocw.deleted IS FALSE
+    LEFT JOIN mcp_servers AS okept ON okept.id = other.id AND okept.toolset_id IS DISTINCT FROM other.id AND okept.project_id = other.project_id AND okept.deleted IS FALSE
+    WHERE COALESCE(ocw.user_session_issuer_id, CASE WHEN ocw.id IS NULL THEN other.user_session_issuer_id END) = t.user_session_issuer_id
       AND other.id <> t.id
       AND other.deleted IS FALSE
-      AND other.mcp_enabled
+      AND (CASE WHEN ocw.id IS NOT NULL THEN ocw.visibility <> 'disabled' WHEN okept.id IS NOT NULL THEN FALSE ELSE other.mcp_enabled END)
   )::bigint AS other_toolsets_on_issuer,
   COALESCE((
     SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))
@@ -460,7 +461,6 @@ type ListCandidatesRow struct {
 	CustomDomainID                uuid.NullUUID
 	UserSessionIssuerID           uuid.NullUUID
 	ExternalOauthServerID         uuid.NullUUID
-	OauthProxyServerID            uuid.NullUUID
 	ToolsetHasVariations          bool
 	UserSessionIssuerSlug         pgtype.Text
 	Live                          bool
@@ -478,10 +478,8 @@ type ListCandidatesRow struct {
 	EndpointCount                 int64
 	McpSlugIsEndpoint             bool
 	HasPrompts                    bool
-	HasAssistants                 bool
 	HasSlackApps                  bool
 	HasUserOauthTokens            bool
-	HasToolsetPluginEntries       bool
 	InGateway                     bool
 	RemoteSessionIssuerIds        []uuid.UUID
 	RemoteIssuerNames             []string
@@ -528,7 +526,6 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.CustomDomainID,
 			&i.UserSessionIssuerID,
 			&i.ExternalOauthServerID,
-			&i.OauthProxyServerID,
 			&i.ToolsetHasVariations,
 			&i.UserSessionIssuerSlug,
 			&i.Live,
@@ -546,10 +543,8 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.EndpointCount,
 			&i.McpSlugIsEndpoint,
 			&i.HasPrompts,
-			&i.HasAssistants,
 			&i.HasSlackApps,
 			&i.HasUserOauthTokens,
-			&i.HasToolsetPluginEntries,
 			&i.InGateway,
 			&i.RemoteSessionIssuerIds,
 			&i.RemoteIssuerNames,
@@ -698,54 +693,6 @@ func (q *Queries) MakeClientSelfOwnedFixture(ctx context.Context, id uuid.UUID) 
 	return err
 }
 
-const rekeyToolsetMetadata = `-- name: RekeyToolsetMetadata :execrows
-UPDATE mcp_metadata AS md
-SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
-WHERE md.project_id = $2
-  AND md.toolset_id = $3
-  AND NOT EXISTS (
-    SELECT 1 FROM mcp_metadata AS existing
-    WHERE existing.project_id = $2 AND existing.mcp_server_id = $1
-  )
-`
-
-type RekeyToolsetMetadataParams struct {
-	McpServerID uuid.NullUUID
-	ProjectID   uuid.UUID
-	ToolsetID   uuid.NullUUID
-}
-
-// Moves the toolset's metadata row onto the server it now describes, unless
-// the server already has one.
-func (q *Queries) RekeyToolsetMetadata(ctx context.Context, arg RekeyToolsetMetadataParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rekeyToolsetMetadata, arg.McpServerID, arg.ProjectID, arg.ToolsetID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const seedAssistantToolsetFixture = `-- name: SeedAssistantToolsetFixture :exec
-WITH assistant AS (
-  INSERT INTO assistants (organization_id, project_id, name, model, instructions, created_by_user_id)
-  VALUES ($3, $2, 'fixture-assistant', 'fixture-model', 'fixture', 'fixture-user')
-  RETURNING id
-)
-INSERT INTO assistant_toolsets (assistant_id, toolset_id, project_id)
-SELECT id, $1, $2 FROM assistant
-`
-
-type SeedAssistantToolsetFixtureParams struct {
-	ToolsetID      uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) SeedAssistantToolsetFixture(ctx context.Context, arg SeedAssistantToolsetFixtureParams) error {
-	_, err := q.db.Exec(ctx, seedAssistantToolsetFixture, arg.ToolsetID, arg.ProjectID, arg.OrganizationID)
-	return err
-}
-
 const seedCompletedDeploymentFixture = `-- name: SeedCompletedDeploymentFixture :one
 
 WITH deployment AS (
@@ -828,17 +775,16 @@ func (q *Queries) SeedExternalMCPProxyFixture(ctx context.Context, arg SeedExter
 const seedPluginServerFixture = `-- name: SeedPluginServerFixture :one
 WITH plugin AS (
   INSERT INTO plugins (organization_id, project_id, name, slug)
-  VALUES ($5, $1, $4, $4)
+  VALUES ($4, $1, $3, $3)
   RETURNING id
 )
-INSERT INTO plugin_servers (plugin_id, project_id, toolset_id, mcp_server_id, display_name)
-SELECT id, $1, $2, $3, $4 FROM plugin
+INSERT INTO plugin_servers (plugin_id, project_id, mcp_server_id, display_name)
+SELECT id, $1, $2, $3 FROM plugin
 RETURNING id
 `
 
 type SeedPluginServerFixtureParams struct {
 	ProjectID      uuid.NullUUID
-	ToolsetID      uuid.NullUUID
 	McpServerID    uuid.NullUUID
 	Name           string
 	OrganizationID string
@@ -847,7 +793,6 @@ type SeedPluginServerFixtureParams struct {
 func (q *Queries) SeedPluginServerFixture(ctx context.Context, arg SeedPluginServerFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedPluginServerFixture,
 		arg.ProjectID,
-		arg.ToolsetID,
 		arg.McpServerID,
 		arg.Name,
 		arg.OrganizationID,

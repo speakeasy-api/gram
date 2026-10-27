@@ -1337,7 +1337,7 @@ function StaleBinding({
   });
   return (
     <>
-      <Alert variant="warning" alignTop>
+      <Alert variant="warning">
         <div className="flex flex-col items-start gap-2">
           <Text small className="block">
             {knownState ? (

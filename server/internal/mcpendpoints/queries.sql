@@ -319,7 +319,8 @@ RETURNING *;
 
 -- name: ListAddressableMCPEndpointsByMCPServerIDs :many
 -- Custom-domain endpoints count only on a verified, activated domain, the
--- same gate the custom-domain middleware applies before serving.
+-- same gate the custom-domain middleware applies before serving. Mirrored in
+-- assistants LoadAssistantMcpServers and ResolveMcpServersForWrite.
 SELECT sqlc.embed(e), cd.domain AS custom_domain
 FROM mcp_endpoints e
 JOIN projects p
@@ -335,3 +336,12 @@ WHERE e.project_id = ANY(@project_ids::uuid[])
   AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND e.deleted IS FALSE
   AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
+
+-- name: ListMCPEndpointsByProjectAndSlug :many
+-- Live endpoints with a slug in the project, platform addresses first.
+SELECT *
+FROM mcp_endpoints
+WHERE project_id = @project_id
+  AND slug = @slug
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at, id;

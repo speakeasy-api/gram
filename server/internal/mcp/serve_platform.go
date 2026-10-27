@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -500,6 +501,7 @@ func (s *Service) callPlatformToolsetTool(
 		})
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
+		logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(rw.statusCode, rw.resultIsError)
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
@@ -544,6 +546,12 @@ func (s *Service) callPlatformToolsetTool(
 		ToolAnnotations: desc.Annotations,
 	}, mcpriskscan.BorrowPayload(requestBodyBytes))
 	decision := s.scanEvaluator.Scan(ctx, requestSubject)
+	if decision.HeldForApproval() {
+		// A held call is an instruction, not a refusal: the agent reads the
+		// tool result, requests approval and retries.
+		rw.resultIsError = true
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, serverInfoPlatformToolset)
+	}
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)
@@ -556,11 +564,10 @@ func (s *Service) callPlatformToolsetTool(
 	}
 	outputBytes = int64(rw.body.Len())
 
-	chunk, structured, err := formatResult(*rw, plan.Kind)
+	responseContent, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to format platform tool call result").LogError(ctx, logger)
 	}
-	responseContent := []json.RawMessage{chunk}
 	responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
 	if parseErr != nil {
 		responsePayload = mcpriskscan.Payload{}

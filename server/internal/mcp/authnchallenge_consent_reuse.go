@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -248,7 +249,7 @@ func consentFullPageURL(endpoint *ResolvedMcpEndpoint, state AuthnChallengeState
 var consentReuseTemplateHTML string
 
 var consentReuseTemplate = template.Must(
-	template.Must(template.New("reuse").Parse(consentReuseTemplateHTML)).Parse(consentLogoHTML),
+	template.Must(template.New("reuse").Parse(consentReuseTemplateHTML)).Parse(consentpage.LogoTemplate),
 )
 
 func renderConsentReuse(w http.ResponseWriter, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) error {
@@ -265,7 +266,7 @@ func renderConsentReuse(w http.ResponseWriter, endpoint *ResolvedMcpEndpoint, st
 		State    string
 		CSRF     string
 		Script   string
-	}{Styles: consentPageStyles, Fallback: consentFullPageURL(endpoint, state), Path: endpoint.consentPath(), ToolsURL: endpoint.consentPath() + "/mcp", State: state.ID, CSRF: state.CSRFToken, Script: consentToolsScriptURL}); err != nil {
+	}{Styles: consentpage.Styles, Fallback: consentFullPageURL(endpoint, state), Path: endpoint.consentPath(), ToolsURL: endpoint.consentPath() + "/mcp", State: state.ID, CSRF: state.CSRFToken, Script: consentToolsScriptURL}); err != nil {
 		return fmt.Errorf("render saved consent check: %w", err)
 	}
 	return nil
@@ -284,7 +285,7 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, err
 	}
-	inventory, found, err := s.getCompletedConsentInventory(ctx, state.ID, attempt)
+	inventory, found, err := s.getCompletedConsentInventory(ctx, endpoint, state.ID, attempt)
 	if err != nil || !found {
 		return nil, err
 	}

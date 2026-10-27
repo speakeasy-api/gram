@@ -57,6 +57,34 @@ func GuardEMABindings(ctx context.Context, tx pgx.Tx, organizationID string, pro
 	return nil
 }
 
+// GuardServerIssuerEMABindings protects detaching an issuer from a server in serverProjectID. The issuer may be
+// owned by that project or by the organization, as attaching allows; ownership is checked at its own tier and only
+// the project's identity-chaining bindings count. The caller must retain tx through the mutation.
+func GuardServerIssuerEMABindings(ctx context.Context, tx pgx.Tx, organizationID string, serverProjectID, id uuid.UUID) error {
+	issuer, err := repo.New(tx).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{ID: id, ProjectID: serverProjectID, OrganizationID: organizationID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, err, "user session issuer not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load user session issuer")
+	}
+	ownerProjectID := uuid.Nil
+	if issuer.ProjectID.Valid {
+		ownerProjectID = issuer.ProjectID.UUID
+	}
+	if err := LockUserIssuer(ctx, tx, organizationID, ownerProjectID, id); err != nil {
+		return err
+	}
+	count, err := remotesessionsrepo.New(tx).CountActiveEMABindingsForUserIssuer(ctx, remotesessionsrepo.CountActiveEMABindingsForUserIssuerParams{IssuerID: id, OrganizationID: organizationID, ProjectID: serverProjectID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check identity-chaining issuer bindings")
+	}
+	if count > 0 {
+		return oops.E(oops.CodeConflict, nil, "active identity-chaining bindings reference this issuer; explicitly unlink them before reconfiguration or deletion")
+	}
+	return nil
+}
+
 // Verify ownership before the UUID-only advisory lock, then again after waiting
 // for it, so a foreign identifier cannot lock or reveal another tenant's state.
 func verifyUserIssuerEMAScope(ctx context.Context, q *repo.Queries, organizationID string, projectID, id uuid.UUID) error {

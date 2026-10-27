@@ -239,7 +239,11 @@ function StatusIndicator({
   status: ToolStatus;
 }): React.JSX.Element {
   return (
-    <div className={cn(statusVariants({ status }))}>
+    <div
+      role="img"
+      aria-label={`Tool ${status}`}
+      className={cn(statusVariants({ status }))}
+    >
       {status === "pending" && null}
       {status === "running" && <LoaderIcon className="size-4 animate-spin" />}
       {status === "complete" && <CheckIcon className="size-4" />}
@@ -1227,7 +1231,7 @@ interface ToolUIGroupProps {
   /** Optional icon */
   icon?: React.ReactNode;
   /** Overall status of the group */
-  status?: "running" | "complete";
+  status?: "pending" | "running" | "complete" | "error";
   /** Whether the group starts expanded */
   defaultExpanded?: boolean;
   /** Render without the group header, showing children directly. */
@@ -1265,11 +1269,7 @@ function ToolUIGroup({
           aria-expanded={isExpanded}
           className="flex w-fit cursor-pointer items-center gap-1.5 py-1 text-left"
         >
-          {icon || (
-            <StatusIndicator
-              status={status === "running" ? "running" : "complete"}
-            />
-          )}
+          {icon || <StatusIndicator status={status} />}
           <span
             className={cn(
               "text-sm font-medium text-muted-foreground",

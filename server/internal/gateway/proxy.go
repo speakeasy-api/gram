@@ -101,6 +101,14 @@ type toolcallErrorSchema struct {
 	Error string `json:"error"`
 }
 
+// ToolInputRejectedHeader marks a response the proxy wrote after the call's
+// input failed its schema, before any request reached the tool's server.
+const ToolInputRejectedHeader = "X-Gram-Tool-Input-Rejected"
+
+// ErrToolInputRejected marks an error returned for a call body that does not
+// decode, before any request reached the tool's server.
+var ErrToolInputRejected = errors.New("tool input rejected")
+
 type InstanceToolProxyConfig struct {
 	Source ToolCallSource
 	Logger *slog.Logger
@@ -579,7 +587,7 @@ func (tp *ToolProxy) doHTTP(
 	dec.UseNumber()
 
 	if err := dec.Decode(&toolCallBody); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid request body").LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, fmt.Errorf("%w: %w", ErrToolInputRejected, err), "invalid request body").LogError(ctx, logger)
 	}
 
 	if len(plan.Schema) > 0 {
@@ -596,6 +604,7 @@ func (tp *ToolProxy) doHTTP(
 			logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(err))
 			responseStatusCode = http.StatusBadRequest
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set(ToolInputRejectedHeader, "schema")
 			w.WriteHeader(http.StatusBadRequest)
 			if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
 				Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", err.Error()),

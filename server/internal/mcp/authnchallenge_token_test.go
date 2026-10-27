@@ -5,14 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -83,7 +84,7 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 	require.True(t, session.AuthorizerUserID.Valid)
 	require.Equal(t, fx.userID, session.AuthorizerUserID.String)
 	require.True(t, session.DelegatedGrantsVersion.Valid)
-	require.Equal(t, int32(runtimepolicy.CurrentDelegatedPolicyVersion), session.DelegatedGrantsVersion.Int32)
+	require.Equal(t, int32(runtimepolicy.IssuedDelegatedPolicyVersion), session.DelegatedGrantsVersion.Int32)
 	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(session.DelegatedGrantsVersion.Int32), session.DelegatedGrants)
 	require.NoError(t, err)
 	require.Len(t, policy.Requested, 1)

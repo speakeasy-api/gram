@@ -18,10 +18,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -188,6 +192,47 @@ func TestApplyIssuerGate_WorkloadSessionActsThroughItsAssignedAgent(t *testing.T
 	require.True(t, ok)
 	require.Empty(t, authorizer, "a workload session records no approving human")
 	require.Equal(t, fx.userID, owner)
+
+	identity, ok := mcpidentity.FromContext(admittedCtx)
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindAgent, identity.Kind())
+	require.Equal(t, agent.ID.String(), identity.AgentID())
+	require.Equal(t, session.Jti, identity.SessionJTI())
+	require.WithinDuration(t, session.ExpiresAt.Time, identity.ExpiresAt(), time.Second)
+
+	// Exercise the actual hosted checkpoint, not just context getters. The
+	// machine retains its workload actor but is controlled by its assigned agent.
+	serverID, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID: uuid.New(), ProjectID: fx.target.ProjectID, ToolsetID: conv.ToNullUUID(fx.toolset.ID), Visibility: "private",
+	})
+	require.NoError(t, err)
+	checkpoint, err := mcptoolexecution.NewHostedCheckpoint(ti.conn, nil, testenv.NewLogger(t), nil)
+	require.NoError(t, err)
+	source := mcptoolexecution.ServerSource{FrontingServerID: conv.ToNullUUID(serverID)}
+	disposition, err := checkpoint.Evaluate(admittedCtx, fx.orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
+
+	require.NoError(t, testrepo.New(ti.conn).InsertKillswitchPrescriptionFixture(ctx, testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: uuid.New(), OrganizationID: fx.orgID,
+		DefinitionKey: string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+		PrincipalKind: string(mcptoolexecution.PrincipalKindAgent), PrincipalKey: agent.ID.String(),
+		ResourceKind: string(mcptoolexecution.ResourceKindMCPServer), ResourceScope: "all",
+		InternalNote: "Machine regression", ExternalNote: "Agent paused.",
+	}))
+	disposition, err = checkpoint.Evaluate(admittedCtx, fx.orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionMatchedDenial, disposition.Kind())
+
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
+	require.NoError(t, err)
+	disposition, err = checkpoint.Evaluate(admittedCtx, fx.orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind(), "even an already admitted context must fail closed after suspension")
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time), ti.serverURL.String(), endpoint)
+	var suspended *oops.ShareableError
+	require.ErrorAs(t, err, &suspended)
+	require.Equal(t, oops.CodeUnauthorized, suspended.Code)
 }
 
 func TestApplyIssuerGate_WorkloadSessionFollowsLiveOwnerPermissions(t *testing.T) {
@@ -359,4 +404,64 @@ func TestApplyIssuerGate_WorkloadSessionDoesNotInheritAnUnassignedAgentsPolicy(t
 	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
 	require.NoError(t, err, "the same workload must be admitted through an agent that holds the grant, or the refusal above proves nothing")
+}
+
+func TestApplyIssuerGate_WorkloadSessionRefusedWhenItsOAuthClientIsRevoked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	fx := newWorkloadConsentFixture(t, ctx, ti)
+	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
+	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+	issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
+	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, agent.ID)
+	session := seedWorkloadSession(t, ctx, ti, fx, urn.NewWorkloadSubject(issuerID, workloadSessionSubject))
+	token := mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
+	endpoint := workloadSessionEndpoint(fx)
+
+	_, _, _, err := ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
+	require.NoError(t, err, "ordinary workload OAuth clients need no runtime binding")
+	_, err = usersessionsrepo.New(ti.conn).RevokeUserSessionClient(ctx, usersessionsrepo.RevokeUserSessionClientParams{
+		ID: fx.client.ID, ProjectID: fx.target.ProjectID, OrganizationID: fx.orgID,
+	})
+	require.NoError(t, err)
+	_, _, _, err = ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
+	require.Error(t, err, "removing runtime coupling must not bypass OAuth client revocation")
+	var denied *oops.ShareableError
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, oops.CodeUnauthorized, denied.Code)
+}
+
+func TestApplyIssuerGate_RejectsObsoleteRuntimeOAuthSession(t *testing.T) {
+	t.Parallel()
+	for _, retired := range []bool{false, true} {
+		name := "active registration"
+		if retired {
+			name = "retired registration"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			fx := newWorkloadConsentFixture(t, ctx, ti)
+			agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
+			seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
+			issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
+			assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, agent.ID)
+			client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
+				UserSessionIssuerID: fx.target.UserSessionIssuerID, ClientID: "assistant-runtime-" + uuid.NewString(), ClientName: "Obsolete runtime client", RedirectUris: []string{}, TokenEndpointAuthMethod: "none",
+			})
+			require.NoError(t, err)
+			fx.client = client
+			session := seedWorkloadSession(t, ctx, ti, fx, urn.NewWorkloadSubject(issuerID, workloadSessionSubject))
+			if retired {
+				_, err = usersessionsrepo.New(ti.conn).RevokeUserSessionClient(ctx, usersessionsrepo.RevokeUserSessionClientParams{ID: client.ID, ProjectID: fx.target.ProjectID, OrganizationID: fx.orgID})
+				require.NoError(t, err)
+			}
+			_, _, _, err = ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time), ti.serverURL.String(), workloadSessionEndpoint(fx))
+			require.Error(t, err, "superseded runtime credentials must not fall back to ordinary OAuth even after binding markers are cleared")
+			var denied *oops.ShareableError
+			require.ErrorAs(t, err, &denied)
+			require.Equal(t, oops.CodeUnauthorized, denied.Code)
+		})
+	}
 }
