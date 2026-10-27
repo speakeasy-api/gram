@@ -204,7 +204,7 @@ export function ConnectionHealthSheet({
   } else if (health.isError) {
     body = (
       <div className="flex items-center justify-between gap-3 px-4">
-        <Text small className="text-destructive">
+        <Text small destructive>
           Couldn&apos;t load this connection.
         </Text>
         <Button
@@ -778,10 +778,7 @@ function KeyedDetail({
                     }}
                   />
                 </span>
-                <Text
-                  small
-                  className="text-destructive text-right tabular-nums"
-                >
+                <Text small destructive className="text-right tabular-nums">
                   {reason.count.toLocaleString()}
                 </Text>
               </li>
@@ -844,7 +841,7 @@ function RecentAttempts({
   if (recent.isError) {
     content = (
       <div className="flex items-center justify-between gap-3">
-        <Text small className="text-destructive">
+        <Text small destructive>
           Couldn&apos;t load recent attempts.
         </Text>
         <Button

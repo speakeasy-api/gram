@@ -488,7 +488,7 @@ function Hotspots({
           </SimpleTooltip>
         </span>
       ),
-      width: "80px",
+      width: "96px",
       render: (row) => (
         <Text>{countOf(row.outcomes, "partial").toLocaleString()}</Text>
       ),
@@ -499,7 +499,7 @@ function Hotspots({
     {
       key: "subject",
       header: "Identity",
-      width: "1.2fr",
+      width: "160px",
       render: (row) => {
         // Only a person or agent the reader may see carries an id.
         let identifier: IdentityRef | null = null;
@@ -547,13 +547,10 @@ function Hotspots({
     {
       key: "failed",
       header: "Failed",
-      width: "136px",
+      width: "112px",
       render: (row) => (
         <div className="space-y-1.5">
-          <Text
-            small
-            className={row.failed > 0 ? "text-destructive" : undefined}
-          >
+          <Text small destructive={row.failed > 0}>
             {row.failed.toLocaleString()} of {row.attempts.toLocaleString()}
           </Text>
           <span aria-hidden="true" className="bg-muted block h-1.5 w-full">
@@ -592,7 +589,7 @@ function Hotspots({
                 </SimpleTooltip>
               </span>
             ),
-            width: "80px",
+            width: "104px",
             render: (row: HotspotRow) => (
               <Text>{row.blocked.toLocaleString()}</Text>
             ),
@@ -601,12 +598,10 @@ function Hotspots({
       : []),
     {
       key: "rate",
-      header: "Failure rate",
-      width: "88px",
+      header: <span title="Failure rate">Rate</span>,
+      width: "72px",
       render: (row) => (
-        <Text className={row.failed > 0 ? "text-destructive" : undefined}>
-          {failureRate(row)}
-        </Text>
+        <Text destructive={row.failed > 0}>{failureRate(row)}</Text>
       ),
     },
     {
@@ -654,7 +649,8 @@ function Hotspots({
     <>
       <div className="overflow-x-auto">
         <Table
-          className="min-w-3xl"
+          className="min-w-[960px]"
+          cellPadding="condensed"
           columns={columns}
           data={rows}
           // Hidden rows carry no key and may share labels, so rows are keyed
