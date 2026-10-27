@@ -14,7 +14,7 @@ func TestKitCompositionMachineConfigUsesAssertions(t *testing.T) {
 	resource, _ := url.Parse("https://mcp.example/mcp/resource")
 	raw, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource}, &KitWorkloadBinding{Audience: "https://issuer.example/oauth/usi/test"})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"mcpServers":{"workload":{"type":"streamable-http","url":"https://mcp.example/mcp/resource","auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://mcp.example/mcp/resource","scope":"mcp:connect"}}}}`, string(raw))
+	require.JSONEq(t, `{"mcpServers":{"workload":{"headers":{},"type":"streamable-http","url":"https://mcp.example/mcp/resource","auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://mcp.example/mcp/resource","scope":"mcp:connect"}}}}`, string(raw))
 	require.NotContains(t, string(raw), "client_id")
 }
 

@@ -11,6 +11,6 @@ func TestInferenceTranscriptOwnership(t *testing.T) {
 	t.Parallel()
 
 	require.False(t, InferenceTranscriptOwned(context.Background()))
-	ctx := context.WithValue(context.Background(), inferenceContextKey{}, assistantidentity.Identity{})
+	ctx := context.WithValue(context.Background(), inferenceContextKey{}, assistantidentity.RuntimeIdentity{})
 	require.True(t, InferenceTranscriptOwned(ctx))
 }
