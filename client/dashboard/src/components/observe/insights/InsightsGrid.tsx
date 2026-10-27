@@ -13,11 +13,12 @@ import {
   RankedList,
   type RankedRow,
 } from "@/components/observe/insights/RankedList";
-import {
-  useObserveLogsLink,
-  type ObserveDeepLinkScope,
-} from "@/components/observe/observeDeepLink";
+import { useObserveLogsLink } from "@/components/observe/observeDeepLink";
 import { buildToolUsageTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
+import { targetScope } from "./targetScope";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ToolUsageClientSummary } from "@gram/client/models/components/toolusageclientsummary.js";
 import type { ToolUsageTargetSummary } from "@gram/client/models/components/toolusagetargetsummary.js";
@@ -38,24 +39,6 @@ const SERVER_TARGET_TYPES = new Set([
 
 function percent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
-}
-
-function targetScope(target: ToolUsageTargetSummary): ObserveDeepLinkScope {
-  switch (target.targetType) {
-    case "hosted_mcp_server":
-      return { target: { type: "hosted", id: target.targetId } };
-    case "meta_mcp_server":
-      return { target: { type: "gateway", id: target.targetId } };
-    case "shadow_mcp_server":
-      return { target: { type: "shadow", id: target.targetId } };
-    case "tunneled_mcp_server":
-      return { target: { type: "shadow", id: target.targetId } };
-    case "skill":
-      return { targetTypes: ["skill"] };
-    case "local_tool":
-    default:
-      return { targetTypes: ["local_tool"] };
-  }
 }
 
 /**
@@ -218,6 +201,23 @@ export function InsightsGrid({
       .map(([, count]) => count);
   }, [timeSeries]);
 
+  // Agent names are not on a usage row — it carries "agent:<uuid>" and
+  // nothing else — so the inventory is read once for the card rather than per
+  // row. Asked for only when a row on screen actually names an agent.
+  const agents = useReadableAgents(
+    users.some((user) => user.userKind === "agent_id"),
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
+
   const servers = targets.filter((target) =>
     SERVER_TARGET_TYPES.has(target.targetType),
   );
@@ -261,14 +261,43 @@ export function InsightsGrid({
     href: logsLink({ clientKey: client.clientKey }),
   }));
 
-  const userRows: RankedRow[] = users.map((user) => ({
-    id: `user:${user.userKey}`,
-    label: user.userLabel,
-    value: Number(user.eventCount),
-    href: logsLink({
-      userEmail: user.userKind === "email" ? user.userKey : undefined,
-    }),
-  }));
+  const userRows: RankedRow[] = users.map((user) => {
+    // An agent's label arrives as the raw string "agent:<uuid>", so the name
+    // comes from the inventory read above and the row is drawn by the shared
+    // renderer — the same face and the same wording every other surface uses,
+    // instead of this card's own "Agent 1a2b3c4d".
+    const agent =
+      user.userKind === "agent_id" ? agentsById.get(user.userKey) : undefined;
+    return {
+      id: `user:${user.userKey}`,
+      label:
+        user.userKind === "agent_id"
+          ? actingPrincipalText({ id: user.userKey, name: agent?.name })
+          : user.userLabel,
+      ...(user.userKind === "agent_id"
+        ? {
+            content: (
+              <ActingPrincipal
+                agent={{ id: user.userKey, name: agent?.name }}
+                // Linked only once the agent resolved: an id read off a
+                // telemetry row is not proof the reader may open that agent.
+                // No authorizer either — telemetry attributes a call to one
+                // principal, so naming a person would invent a delegation.
+                linked={Boolean(agent)}
+              />
+            ),
+          }
+        : {}),
+      value: Number(user.eventCount),
+      // Only an email narrows the logs. Linking an agent row to an
+      // unfiltered page looked like a drill-down that silently did nothing,
+      // so it does not link at all.
+      href:
+        user.userKind === "email"
+          ? logsLink({ userEmail: user.userKey })
+          : undefined,
+    };
+  });
 
   // Tools are ranked across every target: "which tool is busiest" is a question
   // about the catalog, not about one server's slice of it.
@@ -334,8 +363,11 @@ export function InsightsGrid({
           />
         </InsightCard>
 
+        {/* "Callers", not "people": `uniqueUsers` counts distinct calling
+            identities, and an agent is one of them. The old title reported
+            a machine as a member of staff. */}
         <InsightCard
-          title="People"
+          title="Callers"
           href={logsLink()}
           loading={status.totals.pending}
           error={status.totals.error}
@@ -343,7 +375,7 @@ export function InsightsGrid({
           <MetricSpark
             value={(Number(totals?.uniqueUsers) || 0).toLocaleString()}
             series={[]}
-            caption="active in this window"
+            caption="people and agents active in this window"
           />
         </InsightCard>
       </div>
@@ -428,7 +460,9 @@ export function InsightsGrid({
         </InsightCard>
 
         <InsightCard
-          title="Busiest people"
+          // "Callers", not "people": an agent ranks here too, and the card
+          // counted it as a person because the title said so.
+          title="Busiest callers"
           href={logsLink()}
           loading={status.users.pending}
           error={status.users.error}

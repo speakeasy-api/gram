@@ -327,7 +327,7 @@ func TestRegistrationServiceReturnsPersistedSameOriginDashboardSetupURL(t *testi
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/x/server%20route/settings#authentication", setupURL)
+	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/server%20route/settings#authentication", setupURL)
 	require.Equal(t, 1, store.resolveCalls)
 }
 
@@ -349,7 +349,7 @@ func TestRegistrationServiceReturnsDashboardSetupURLForDirectRemote(t *testing.T
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/x/server%20route/settings#authentication", setupURL)
+	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/server%20route/settings#authentication", setupURL)
 	require.Equal(t, 1, store.resolveCalls)
 }
 
@@ -368,7 +368,7 @@ func TestRegistrationServiceBuildsInspectAuthorizationURLOnlyAfterAttachment(t *
 	authorizationURL, err := service.DashboardAuthorizationURL(t.Context(), registrationServicePrincipal(), project.Slug, registrationID.String())
 
 	require.NoError(t, err)
-	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/x/server%20route/inspect", authorizationURL)
+	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/server%20route/inspect", authorizationURL)
 }
 
 func TestRegistrationServiceStopsBeforeAttachmentWhenSetupBudgetDenies(t *testing.T) {

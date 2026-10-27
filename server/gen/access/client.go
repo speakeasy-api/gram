@@ -21,6 +21,7 @@ type Client struct {
 	UpdateRoleEndpoint                           goa.Endpoint
 	DeleteRoleEndpoint                           goa.Endpoint
 	ListDirectoryRoleMappingsEndpoint            goa.Endpoint
+	ListDirectoryPeopleEndpoint                  goa.Endpoint
 	SyncDirectoryGroupsEndpoint                  goa.Endpoint
 	SetDirectoryRoleMappingEndpoint              goa.Endpoint
 	SetDirectoryRoleMappingsEndpoint             goa.Endpoint
@@ -57,7 +58,7 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, syncDirectoryGroups, setDirectoryRoleMapping, setDirectoryRoleMappings, deleteDirectoryRoleMapping, previewDirectoryRoleSetup, applyDirectoryRoleSetup, listDirectoryReviewItems, resolveDirectoryReviewItem, getDirectoryReviewSettings, updateDirectoryReviewSettings, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, listDirectoryPeople, syncDirectoryGroups, setDirectoryRoleMapping, setDirectoryRoleMappings, deleteDirectoryRoleMapping, previewDirectoryRoleSetup, applyDirectoryRoleSetup, listDirectoryReviewItems, resolveDirectoryReviewItem, getDirectoryReviewSettings, updateDirectoryReviewSettings, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
@@ -65,6 +66,7 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirec
 		UpdateRoleEndpoint:                           updateRole,
 		DeleteRoleEndpoint:                           deleteRole,
 		ListDirectoryRoleMappingsEndpoint:            listDirectoryRoleMappings,
+		ListDirectoryPeopleEndpoint:                  listDirectoryPeople,
 		SyncDirectoryGroupsEndpoint:                  syncDirectoryGroups,
 		SetDirectoryRoleMappingEndpoint:              setDirectoryRoleMapping,
 		SetDirectoryRoleMappingsEndpoint:             setDirectoryRoleMappings,
@@ -228,6 +230,29 @@ func (c *Client) ListDirectoryRoleMappings(ctx context.Context, p *ListDirectory
 		return
 	}
 	return ires.(*ListDirectoryRoleMappingsResult), nil
+}
+
+// ListDirectoryPeople calls the "listDirectoryPeople" endpoint of the "access"
+// service.
+// ListDirectoryPeople may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListDirectoryPeople(ctx context.Context, p *ListDirectoryPeoplePayload) (res *ListDirectoryPeopleResult, err error) {
+	var ires any
+	ires, err = c.ListDirectoryPeopleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListDirectoryPeopleResult), nil
 }
 
 // SyncDirectoryGroups calls the "syncDirectoryGroups" endpoint of the "access"

@@ -3,6 +3,7 @@ package hooks
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/hookevents/vocab"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -160,9 +161,7 @@ var HookIngestEvent = Type("HookIngestEvent", func() {
 	Description("Canonical Speakeasy feature event.")
 	Required("type")
 	Attribute("type", String, "Canonical Speakeasy hook event type.", func() {
-		Enum("session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted",
-			"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
-			"assistant.thought", "usage.reported", "skill.activated", "notification.reported")
+		Enum(vocab.Any(vocab.EventTypes)...)
 	})
 	Attribute("occurred_at", String, "RFC3339 timestamp from the local agent. Defaults to receive time when absent.", func() {
 		Format(FormatDateTime)
@@ -262,6 +261,45 @@ var HookNotificationData = Type("HookNotificationData", func() {
 	Attribute("message", String, "Notification message.")
 })
 
+var HookDeliveryPhase = Type("HookDeliveryPhase", String, func() {
+	Description("Whether a failed send was a live hook or a spool-drain replay.")
+	Enum(vocab.Any(vocab.DeliveryPhases)...)
+})
+
+var HookDeliveryCause = Type("HookDeliveryCause", String, func() {
+	Description("Failure class the hook sender observed. http means the control plane answered with a retryable status.")
+	Enum(vocab.Any(vocab.DeliveryCauses)...)
+})
+
+var HookDeliveryFailedEventType = Type("HookDeliveryFailedEventType", String, func() {
+	Description("Canonical type of the event whose delivery failed. Bounded to the hook activity event vocabulary because it is a metric dimension; a report never describes another report.")
+	Enum(vocab.Any(vocab.FailedEventTypes)...)
+})
+
+var HookDeliveryFailureData = Type("HookDeliveryFailureData", func() {
+	Description("Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.")
+	Required("failed_event_type", "delivery_phase", "cause", "attempted_at")
+	Attribute("failed_event_type", HookDeliveryFailedEventType, "Canonical type of the event whose delivery failed.")
+	Attribute("delivery_phase", HookDeliveryPhase, "Whether the failed send was a live hook or a spool-drain replay.")
+	Attribute("cause", HookDeliveryCause, "Failure class the client observed.")
+	Attribute("status_code", Int, "HTTP status of the final attempt, 0 when no response arrived.")
+	Attribute("elapsed_ms", Int, "Wall time the client spent on the send across its attempts, in milliseconds.")
+	Attribute("attempts", Int, "Number of send attempts the client made.")
+	Attribute("gating", Boolean, "Whether the send gated an agent action (a verdict was awaited) rather than observing one.")
+	Attribute("attempted_at", String, "RFC3339 time the failed send started, on the device clock.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("binary_version", String, "speakeasy-hooks binary version that made the attempt.", func() { MaxLength(64) })
+	Attribute("os", String, "Operating system of the device.", func() { MaxLength(32) })
+	Attribute("arch", String, "CPU architecture of the device.", func() { MaxLength(32) })
+	Attribute("harness", String, "Coding agent harness the hook ran under.", func() { MaxLength(64) })
+	Attribute("harness_variant", String, "Harness variant, when the harness distinguishes one.", func() { MaxLength(64) })
+	Attribute("harness_version", String, "Harness version, when known.", func() { MaxLength(64) })
+	Attribute("failed_idempotency_key", String, "Idempotency key of the event that failed, so the report joins to the row its eventual replay produces.", func() { MaxLength(256) })
+	Attribute("session_id", String, "Session id of the event that failed.", func() { MaxLength(256) })
+	Attribute("spool_depth", Int, "Events waiting in the device's offline spool when the report was written.")
+})
+
 var HookMCPAttributionEntry = Type("HookMCPAttributionEntry", func() {
 	Description("Transcript-derived MCP attribution for one model API request. Claude redacts user-configured MCP server names to 'custom' on its OTEL telemetry, but records the real names in the local session transcript; hooks ship them here so ingest can restore the redacted names.")
 	Required("request_id")
@@ -299,6 +337,7 @@ var HookIngestData = Type("HookIngestData", func() {
 	Attribute("notification", HookNotificationData)
 	Attribute("mcp_attribution", ArrayOf(HookMCPAttributionEntry), "Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).")
 	Attribute("prompt_attachments", ArrayOf(HookPromptAttachmentEntry), "Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).")
+	Attribute("delivery_failure", HookDeliveryFailureData, "Device-side delivery failure report. Required on client.delivery_failed, where it must be the only block and the payload carries no session; rejected on every other event type.")
 })
 
 var IngestHookPayload = Type("IngestHookPayload", func() {

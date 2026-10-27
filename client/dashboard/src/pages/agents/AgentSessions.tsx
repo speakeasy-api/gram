@@ -8,11 +8,18 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime, dateTimeFormatters } from "@/lib/dates";
+import { IdentityLink } from "@/components/identity-link";
 
 /** Presentation model, populated only by the agent-scoped sessions endpoint. */
 export type AgentSessionRow = {
   id: string;
   clientName?: string;
+  /**
+   * The person whose authority this session acts under, when a person
+   * approved it. A session a key or a federated platform opened has none:
+   * the agent signed in as itself.
+   */
+  authorizerUserId?: string;
   issuerSlug?: string;
   refreshExpiresAt?: Date;
   createdAt: Date;
@@ -22,11 +29,20 @@ export type AgentSessionRow = {
 };
 
 export type AgentSessionsSectionProps = {
-  /** "bare" drops the section chrome for a caller that supplies its own. */
-  variant?: "section" | "bare";
+  /**
+   * "bare" drops the section chrome for a caller that supplies its own.
+   * "panel" also drops the table's frame, for a caller whose panel border
+   * already encloses it.
+   */
+  variant?: "section" | "bare" | "panel";
   sessions: AgentSessionRow[];
   isLoading: boolean;
   isError: boolean;
+  /**
+   * Resolves an authorizer's user id to their name. Omitted leaves the id,
+   * which is still true and still links.
+   */
+  authorizerName?: (userId: string) => string | undefined;
   /** Use the agent's server-calculated credential permission, not an RBAC scope. */
   canRevoke: boolean;
   canRead?: boolean;
@@ -65,10 +81,15 @@ export function AgentSessionsSection({
   isLoadingMore = false,
   loadMoreError = false,
   onLoadMore,
+  authorizerName,
 }: AgentSessionsSectionProps): JSX.Element {
   const [selected, setSelected] = useState<AgentSessionRow | null>(null);
   const [pending, setPending] = useState(false);
   const [revokeError, setRevokeError] = useState(false);
+  // Defaulted, not fetched here: this component is handed its data, and a
+  // query inside it would make every caller supply a client to render rows
+  // it already holds.
+  const nameFor = (id: string) => authorizerName?.(id) || id;
 
   const [clock, setClock] = useState(Date.now);
   const now = Math.max(clock, Date.now());
@@ -134,6 +155,22 @@ export function AgentSessionsSection({
       key: "clientName",
       header: "Client name (unverified)",
       render: (session) => session.clientName || "Unknown client",
+    },
+    {
+      key: "authorizerUserId",
+      // Who the agent is acting for. The endpoint has always returned this
+      // and the table dropped it, so a reader could revoke someone's
+      // delegation without being told whose it was.
+      header: "Acting for",
+      width: "200px",
+      render: (session) =>
+        session.authorizerUserId ? (
+          <IdentityLink identifier={{ userId: session.authorizerUserId }}>
+            {nameFor(session.authorizerUserId)}
+          </IdentityLink>
+        ) : (
+          <span className="text-muted-foreground">The agent itself</span>
+        ),
     },
     {
       key: "issuerSlug",
@@ -223,13 +260,15 @@ export function AgentSessionsSection({
     },
   ];
 
+  // The panel supplies its own frame, so inner tables and states drop theirs.
+  const frameless = variant === "panel" ? "border-none" : undefined;
   const body = (
     <>
       {!canRead ? (
         <Text>You do not have permission to view this agent's sessions.</Text>
       ) : isLoading ? (
         <div role="status" aria-label="Loading agent sessions">
-          <SkeletonTable />
+          <SkeletonTable className={frameless} />
         </div>
       ) : isError ? (
         <div role="alert" className="space-y-3">
@@ -243,12 +282,14 @@ export function AgentSessionsSection({
           icon="key-round"
           heading="No sessions yet"
           description="Choose this agent when authorizing an MCP connection to create a session."
+          className={frameless}
         />
       ) : (
         <Table
           columns={columns}
           data={sessions}
           rowKey={(session) => session.id}
+          className={frameless}
         />
       )}
       {canRead && loadMoreError && (
@@ -273,8 +314,11 @@ export function AgentSessionsSection({
 
   return (
     <>
-      {variant === "bare" ? (
-        <div className="border-border space-y-4 border p-4">{body}</div>
+      {variant !== "section" ? (
+        // No border and no padding: the table draws its own, and the caller
+        // supplying "bare" has already drawn the panel around it. Three
+        // nested rectangles read as a mistake, which it was.
+        <div className="space-y-4">{body}</div>
       ) : (
         <SettingsSection>
           <SettingsSection.Header>
@@ -308,6 +352,11 @@ export function AgentSessionsSection({
               Client name (unverified):{" "}
               {selected.clientName || "Unknown client"}. Created{" "}
               <HumanizeDateTime date={selected.createdAt} />.
+              {/* Whose delegation is ending. Revoking one without saying so
+                  is the one place this omission actually costs something. */}
+              {selected.authorizerUserId
+                ? ` Acting for ${nameFor(selected.authorizerUserId)}.`
+                : ""}
             </Text>
           )}
           {revokeError && (

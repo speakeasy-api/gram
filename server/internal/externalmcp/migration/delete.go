@@ -48,9 +48,12 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 	// Only an MCP-enabled toolset is in a generated package, so only its
 	// deletion can change one. Membership is read before the hosted server
 	// goes, since that detaches server-backed plugin entries.
+	served, _, err := hostedmcp.LoadServerState(ctx, tx, toolset)
+	if err != nil {
+		return fmt.Errorf("load hosted MCP server: %w", err)
+	}
 	carried := false
-	if toolset.McpEnabled {
-		var err error
+	if served.McpEnabled {
 		carried, err = pluginsrepo.New(tx).HasPluginMembershipForToolset(ctx, pluginsrepo.HasPluginMembershipForToolsetParams{ProjectID: toolset.ProjectID, ToolsetID: toolset.ID})
 		if err != nil {
 			return fmt.Errorf("check toolset plugin membership: %w", err)
@@ -64,9 +67,6 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 	}
 	if err != nil {
 		return fmt.Errorf("delete toolset: %w", err)
-	}
-	if err := toolsets.DeleteAssistantToolsetsByToolset(ctx, toolsetsrepo.DeleteAssistantToolsetsByToolsetParams{ToolsetID: deleted.ID, ProjectID: toolset.ProjectID}); err != nil {
-		return fmt.Errorf("detach assistant toolsets: %w", err)
 	}
 
 	// hostedmcp.Delete tombstones only a server the toolset still backs under
@@ -100,27 +100,7 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 		return fmt.Errorf("read toolset servers: %w", err)
 	}
 
-	detached, err := pluginsrepo.New(tx).SoftDeletePluginServersByToolsetID(ctx, pluginsrepo.SoftDeletePluginServersByToolsetIDParams{
-		ProjectID: toolset.ProjectID, OrganizationID: toolset.OrganizationID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
-	})
-	if err != nil {
-		return fmt.Errorf("detach toolset plugin servers: %w", err)
-	}
-	toolsetURN := urn.NewToolset(toolset.ID)
-	for _, server := range detached {
-		if err := m.audit.LogPluginServerRemove(ctx, tx, audit.LogPluginServerRemoveEvent{
-			OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID,
-			Actor: principal, ActorDisplayName: actor.Email, ActorSlug: nil,
-			PluginID: server.PluginID, PluginName: server.PluginName, PluginSlug: server.PluginSlug,
-			ServerID: server.ID, ToolsetURN: &toolsetURN, McpServerURN: nil, MetaMcpServerURN: nil,
-		}); err != nil {
-			return fmt.Errorf("audit toolset plugin server removal: %w", err)
-		}
-	}
-	if len(detached) > 0 {
-		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Remove the toolset from %d plugin entries", len(detached)))
-	}
-	if carried || (toolset.McpEnabled && len(detached) > 0) {
+	if carried {
 		if err := m.requestPublication(ctx, tx, toolset.OrganizationID, toolset.ProjectID, actor, outcome); err != nil {
 			return err
 		}
@@ -129,7 +109,7 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 	if err := m.audit.LogToolsetDelete(ctx, tx, audit.LogToolsetDeleteEvent{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID,
 		Actor: principal, ActorDisplayName: actor.Email, ActorSlug: nil,
-		ToolsetURN: toolsetURN, ToolsetName: deleted.Name, ToolsetSlug: deleted.Slug,
+		ToolsetURN: urn.NewToolset(toolset.ID), ToolsetName: deleted.Name, ToolsetSlug: deleted.Slug,
 	}); err != nil {
 		return fmt.Errorf("audit toolset deletion: %w", err)
 	}

@@ -19,6 +19,7 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 	create := unavailableAccessRoleMutationHandler[CreateMCPAccessRoleInput, CreateMCPAccessRoleOutput]()
 	update := unavailableAccessRoleMutationHandler[UpdateMCPAccessRoleInput, UpdateMCPAccessRoleOutput]()
 	assign := unavailableAccessRoleMutationHandler[AssignMCPAccessRoleInput, AssignMCPAccessRoleOutput]()
+	authClientAccess := unavailableAccessRoleMutationHandler[SetMCPRoleAuthClientAccessInput, SetMCPRoleAuthClientAccessOutput]()
 	if mutations != nil && mutations.valid() {
 		create = func(ctx context.Context, _ *mcp.CallToolRequest, input CreateMCPAccessRoleInput) (*mcp.CallToolResult, CreateMCPAccessRoleOutput, error) {
 			return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (CreateMCPAccessRoleOutput, error) {
@@ -29,6 +30,13 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 			return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (UpdateMCPAccessRoleOutput, error) {
 				return mutations.Update(ctx, principal, input)
 			})
+		}
+		if mutations.audit != nil {
+			authClientAccess = func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPRoleAuthClientAccessInput) (*mcp.CallToolResult, SetMCPRoleAuthClientAccessOutput, error) {
+				return principalToolCall(ctx, accessRoleMutationToolResult, func(principal Principal) (SetMCPRoleAuthClientAccessOutput, error) {
+					return mutations.SetRoleAuthClientAccess(ctx, principal, input)
+				})
+			}
 		}
 		if assignments, err := NewAccessRoleAssignmentService(mutations); err == nil {
 			assign = func(ctx context.Context, _ *mcp.CallToolRequest, input AssignMCPAccessRoleInput) (*mcp.CallToolResult, AssignMCPAccessRoleOutput, error) {
@@ -54,6 +62,11 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 		Description: "When enabled for the selected project, add one custom role confined to the selected MCP without removing current member roles. New assignments require mcp_id, expected_role_version, fresh opaque member and role references, the member's expected_version, explicit confirmation of the complete role scope, and an idempotency key. Disabled projects return feature_unavailable without changing anything. Results describe committed local desired state, not verified provider convergence.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, meta, assign)
+	addTool(reg, &mcp.Tool{
+		Name: operationSetMCPRoleAuthClientAccess, Title: "Set Role Access to a Shared Credential",
+		Description: "Set whether one role may use one shared credential an MCP server offers to reach its upstream service: allowed, blocked, or not_granted (removes the role's own rule). Read get_mcp_access first and pass a role reference and auth_client_id it returned. The rule is on the credential, so it applies on every server that offers it. Rules on every credential or credential type, and a member's other roles, can still allow or block it; the result reports the role's effective access after the change. Personal connections cannot be set here because each member only ever uses their own. Requires explicit confirmation.",
+		Annotations: writeAnnotations(true, true, false),
+	}, meta, authClientAccess)
 }
 
 func unavailableAccessRoleMutationHandler[In, Out any]() mcp.ToolHandlerFor[In, Out] {

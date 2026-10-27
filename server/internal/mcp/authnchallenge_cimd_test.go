@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 
@@ -238,11 +239,11 @@ func doCIMDAuthorize(t *testing.T, ti *testInstance, mcpSlug, clientID, redirect
 
 func requireAuthorizeOAuthError(t *testing.T, w *httptest.ResponseRecorder, status int, code string) {
 	t.Helper()
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 
 	require.Equal(t, status, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Equal(t, code, body["error"])
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, status)
+	require.Equal(t, code, body.Code)
 }
 
 // TestOAuthCIMD_FullFlow drives the complete authorize → consent → token
@@ -355,7 +356,7 @@ func TestOAuthCIMD_DisabledAfterResolution_RejectsAtAuthorize(t *testing.T) {
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeDisabled)
 
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
 	require.Equal(t, int64(1), ds.requests.Load(), "a denied client_id must not cost an outbound document fetch")
 }
@@ -367,7 +368,7 @@ func TestOAuthCIMD_ConfidentialAuthMethodRejected(t *testing.T) {
 	ds.set(t, func(ds *cimdDocServer) { ds.doc["token_endpoint_auth_method"] = "client_secret_basic" })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 }
 
 func TestOAuthCIMD_DocumentClientIDMismatchRejected(t *testing.T) {
@@ -377,7 +378,7 @@ func TestOAuthCIMD_DocumentClientIDMismatchRejected(t *testing.T) {
 	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json" })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 }
 
 // TestOAuthCIMD_CrossOriginRedirectURIAccepted: a document may register
@@ -401,6 +402,8 @@ func TestOAuthCIMD_UnregisteredRedirectURIRejected(t *testing.T) {
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/other-path", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+	require.Contains(t, w.Body.String(), "or its return address")
+	require.NotContains(t, w.Body.String(), "started sign-in in a way")
 }
 
 // TestOAuthCIMD_NonLoopbackPortVarianceRejected: the loopback variable-port
@@ -459,7 +462,7 @@ func TestOAuthCIMD_TokenRejectsSecretForCIMDClient(t *testing.T) {
 	tokenReq = tokenReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 	tw := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleToken(tw, tokenReq))
-	require.Equal(t, http.StatusUnauthorized, tw.Code)
+	require.Equal(t, http.StatusBadRequest, tw.Code)
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(tw.Body.Bytes(), &body))
 	require.Equal(t, "invalid_client", body["error"])
@@ -772,7 +775,7 @@ func TestOAuthCIMD_InvalidDocumentOnRefreshDoesNotPoisonCache(t *testing.T) {
 	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_secret"] = "leaked" })
 
 	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 
 	second := getCIMDClientRow(t, ctx, ti, toolset, ds.clientID)
 	require.Equal(t, "CIMD Integration Client", second.ClientName)
@@ -800,7 +803,7 @@ func TestOAuthCIMD_SecretBearingCollisionRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 
 	row, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
@@ -859,10 +862,9 @@ func TestOAuthCIMD_FetchFailureReturns503(t *testing.T) {
 	missingDocURL := ds.srv.URL + "/missing.json"
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, missingDocURL, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Equal(t, "temporarily_unavailable", body["error"])
-	require.Equal(t, "failed to fetch client metadata document", body["error_description"])
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusServiceUnavailable)
+	require.Equal(t, "temporarily_unavailable", body.Code)
+	require.Equal(t, "failed to fetch client metadata document", body.Description)
 }
 
 // TestOAuthCIMD_ConsentEscapesHostileClientName: client_name is

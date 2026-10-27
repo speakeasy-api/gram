@@ -89,6 +89,15 @@ overrides:
 
 sql:
   - schema: schema.sql
+    queries: ../internal/catalogpromotion/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/catalogpromotion/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+  - schema: schema.sql
     queries: ./stub.sql
     engine: postgresql
     database:
@@ -300,6 +309,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/externalkeys/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/authclients/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/authclients/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -688,6 +707,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/mcpservers/upstreamclients/executionprofiles/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "executionprofiles"
+        out: "../internal/mcpservers/upstreamclients/executionprofiles"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/mcpservers/upstreamclients/associationbackfill/queries.sql
     engine: postgresql
     gen:
@@ -886,6 +915,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/mcpapproval/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/risk/approval/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/risk/approval/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

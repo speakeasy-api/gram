@@ -642,6 +642,108 @@ func TestService_Transfer_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// storeTargetSession stores a session for the fixture's user that the browser
+// already holds on the target host, and returns a target-host context
+// carrying its cookie.
+func (f *transferFixture) storeTargetSession(ctx context.Context, t *testing.T) (context.Context, sessions.Session) {
+	t.Helper()
+	existing := f.source
+	existing.SessionID = "target-" + strings.ReplaceAll(t.Name(), "/", "-")
+	require.NoError(t, f.instance.sessionManager.StoreSessionIssuedAt(ctx, existing, time.Now()))
+	return contextvalues.SetSessionTokenInContext(ctx, existing.SessionID), existing
+}
+
+func TestService_TransferIn_KeepsExistingTargetSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	targetCtx, existing := f.storeTargetSession(ctx, t)
+	code, _, b := f.begin(ctx, t)
+	replay := b.clone()
+
+	result := f.in(targetCtx, t, testTargetBaseURL, code, b)
+	require.Equal(t, testTargetBaseURL+testTransferRedirect, result.Location)
+	require.Nil(t, result.SessionCookie, "the existing session cookie stays")
+	require.Nil(t, result.SessionToken)
+	require.Empty(t, b.transferCookies(), "the nonce cookie is cleared")
+
+	kept, err := f.instance.sessionManager.GetSession(ctx, existing.SessionID)
+	require.NoError(t, err)
+	require.Equal(t, existing, kept)
+
+	// The code is consumed even though no session was minted.
+	requireRefused(t, f.in(targetCtx, t, testTargetBaseURL, code, replay), errExpired)
+}
+
+func TestService_TransferIn_ReplaceSessionReplacesExistingTargetSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	targetCtx, _ := f.storeTargetSession(ctx, t)
+
+	b := newBrowser()
+	payload := startPayload(testServerURL.Host, new(testTransferRedirect))
+	payload.ReplaceSession = new(true)
+	started, err := f.instance.service.TransferIn(auth.WithTransferCookieJar(atHost(ctx, testTargetBaseURL), b), payload)
+	require.NoError(t, err)
+	location, err := url.Parse(started.Location)
+	require.NoError(t, err)
+	require.Len(t, b.transferCookies(), 2, "the nonce cookie and the replace marker")
+
+	code := codeFrom(t, f.out(f.sourceCtx(ctx), t, outPayload(location.Query().Get("nonce"))))
+	f.requireAccepted(ctx, t, f.in(targetCtx, t, testTargetBaseURL, code, b))
+	require.Empty(t, b.transferCookies(), "both cookies are cleared")
+}
+
+func TestService_TransferIn_ReplacesUnusableTargetSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	code, _, b := f.begin(ctx, t)
+
+	targetCtx := contextvalues.SetSessionTokenInContext(ctx, "expired-target-session")
+	f.requireAccepted(ctx, t, f.in(targetCtx, t, testTargetBaseURL, code, b))
+}
+
+func TestService_TransferIn_ReplacesAnotherUsersTargetSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	code, _, b := f.begin(ctx, t)
+
+	other := f.source
+	other.SessionID = "other-user-" + strings.ReplaceAll(t.Name(), "/", "-")
+	other.UserID = "other-user-" + uuid.NewString()[:8]
+	require.NoError(t, f.instance.sessionManager.StoreSessionIssuedAt(ctx, other, time.Now()))
+	targetCtx := contextvalues.SetSessionTokenInContext(ctx, other.SessionID)
+	f.requireAccepted(ctx, t, f.in(targetCtx, t, testTargetBaseURL, code, b))
+}
+
+func TestService_TransferIn_TargetSessionCheckFailureIsTemporary(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	targetCtx, existing := f.storeTargetSession(ctx, t)
+	code, _, b := f.begin(ctx, t)
+
+	// Transfer codes live in the fixture's Redis; sessions cannot be read.
+	codes, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	svc := serviceWithRedis(ctx, t, f, brokenRedis(t), codes)
+
+	result, err := svc.TransferIn(auth.WithTransferCookieJar(atHost(targetCtx, testTargetBaseURL), b.clone()), callbackPayload(code, new(testTransferRedirect)))
+	require.NoError(t, err)
+	requireRefused(t, result, errTemporary)
+
+	// The outage neither used up the code nor replaced the session.
+	result = f.in(targetCtx, t, testTargetBaseURL, code, b)
+	require.Equal(t, testTargetBaseURL+testTransferRedirect, result.Location)
+	require.Nil(t, result.SessionCookie)
+	kept, err := f.instance.sessionManager.GetSession(ctx, existing.SessionID)
+	require.NoError(t, err)
+	require.Equal(t, existing, kept)
+}
+
 func TestService_TransferIn_ReplayedCode(t *testing.T) {
 	t.Parallel()
 

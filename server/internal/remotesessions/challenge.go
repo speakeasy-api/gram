@@ -895,46 +895,50 @@ func (m *ChallengeManager) listClients(
 			noted[r.RemoteSessionIssuerID] = true
 			m.issuerMetadata.NoteUse(ctx, issuerUseFromClientListRow(r))
 		}
-		out = append(out, Client{
-			ID:                               r.ClientID,
-			ProjectID:                        r.ClientProjectID,
-			RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
-			ExternalClientID:                 r.ExternalClientID,
-			ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
-			IssuerSlug:                       r.IssuerSlug,
-			IssuerName:                       conv.FromPGText[string](r.IssuerName),
-			IssuerLogoAssetID:                r.IssuerLogoAssetID,
-			IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
-			IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
-			IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
-			ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
-			ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
-			ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
-			ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
-			ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
-			IssuerURL:                        r.IssuerUrl,
-			IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
-			ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
-			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
-			TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			ClientScope:                      r.ClientScope,
-			IssuerScopesSupported:            r.ScopesSupported,
-			IssuerScopeOverride:              r.ScopeOverride,
-			IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
-			IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
-			IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
-			IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
-			Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
-			Passthrough:                                      r.Passthrough,
-			LegacyCallbackUrl:                                r.LegacyCallbackUrl,
-			CallbackBaseURL:                                  r.CallbackBaseUrl,
-			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
-			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
-			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
-			CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
-		})
+		out = append(out, clientFromRow(r))
 	}
 	return out, nil
+}
+
+func clientFromRow(r remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) Client {
+	return Client{
+		ID:                               r.ClientID,
+		ProjectID:                        r.ClientProjectID,
+		RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
+		ExternalClientID:                 r.ExternalClientID,
+		ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
+		IssuerSlug:                       r.IssuerSlug,
+		IssuerName:                       conv.FromPGText[string](r.IssuerName),
+		IssuerLogoAssetID:                r.IssuerLogoAssetID,
+		IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
+		IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
+		IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
+		ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
+		ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
+		ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
+		ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
+		ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
+		IssuerURL:                        r.IssuerUrl,
+		IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
+		ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
+		AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
+		TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
+		ClientScope:                      r.ClientScope,
+		IssuerScopesSupported:            r.ScopesSupported,
+		IssuerScopeOverride:              r.ScopeOverride,
+		IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
+		IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
+		IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
+		IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
+		Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
+		Passthrough:                                      r.Passthrough,
+		LegacyCallbackUrl:                                r.LegacyCallbackUrl,
+		CallbackBaseURL:                                  r.CallbackBaseUrl,
+		IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
+		ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
+		UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
+		CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
+	}
 }
 
 // RemoteSessionStatus is the usability of a subject's stored remote_session
@@ -1048,6 +1052,11 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
+	return remoteSessionStates(rows), nil
+}
+
+// remoteSessionStates keys each status row by its client.
+func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	for _, row := range rows {
 		var accessExpiresAt *time.Time
@@ -1096,7 +1105,7 @@ func (m *ChallengeManager) remoteSessionStatuses(
 			ValidationReason:       row.ValidationReason.String,
 		}
 	}
-	return statuses, nil
+	return statuses
 }
 
 var ErrRemoteSessionNotRefreshable = errors.New("remote session has no usable refresh token")
@@ -1259,47 +1268,6 @@ func (m *ChallengeManager) mintAuthorization(
 		return "", fmt.Errorf("remote_session_issuer %s missing token_endpoint", client.IssuerSlug)
 	}
 
-	// A registration the issuer has stopped recognizing would send the user to
-	// an authorize page that errors without ever redirecting back. Replace it
-	// first, so the login proceeds under a client_id the issuer knows.
-	client = m.rotateRejectedRegistration(ctx, parent.OrganizationID, client)
-
-	stateID, err := randomToken(32)
-	if err != nil {
-		return "", fmt.Errorf("generate state: %w", err)
-	}
-	verifier, err := randomToken(32)
-	if err != nil {
-		return "", fmt.Errorf("generate code verifier: %w", err)
-	}
-	nonce, err := randomToken(16)
-	if err != nil {
-		return "", fmt.Errorf("generate nonce: %w", err)
-	}
-	codeChallenge := s256Challenge(verifier)
-	origin := m.origins.ForClient(client.CallbackBaseURL)
-	redirectURI := RemoteLoginCallbackURL(origin)
-	stateParam := stateID
-	if client.LegacyCallbackUrl {
-		// Upstream was registered against the legacy oauth_proxy_servers
-		// callback, so keep that exact redirect_uri — the upstream's
-		// strict-match check still requires it. /oauth/callback forwards the
-		// response into the canonical remote-login callback. The state is the
-		// bare stateID, same as the non-legacy path: with the proxy gone,
-		// /oauth/callback serves only these forwards, so there is nothing to
-		// tell them apart from and no envelope is needed.
-		redirectURI = LegacyProxyCallbackURL(origin)
-	}
-
-	// Parse the upstream authorize URL before the cache write so a malformed
-	// endpoint can't leave an orphaned RemoteLoginState in Redis (its key is
-	// keyed on the random stateID — nothing else can reach it to clean up,
-	// it just expires after TTL).
-	u, err := url.Parse(client.AuthorizationEndpoint)
-	if err != nil {
-		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
-	}
-
 	var (
 		scopes      []string
 		omitScope   bool
@@ -1361,6 +1329,48 @@ func (m *ChallengeManager) mintAuthorization(
 			attr.SlogOAuthScopeAdded(strings.Join(resolution.Widened, " ")),
 		)
 	}
+
+	// A registration the issuer has stopped recognizing would send the user to
+	// an authorize page that errors without ever redirecting back. Replace it
+	// first, so the login proceeds under a client_id the issuer knows.
+	client = m.rotateRejectedRegistration(ctx, parent.OrganizationID, client, scopes)
+
+	stateID, err := randomToken(32)
+	if err != nil {
+		return "", fmt.Errorf("generate state: %w", err)
+	}
+	verifier, err := randomToken(32)
+	if err != nil {
+		return "", fmt.Errorf("generate code verifier: %w", err)
+	}
+	nonce, err := randomToken(16)
+	if err != nil {
+		return "", fmt.Errorf("generate nonce: %w", err)
+	}
+	codeChallenge := s256Challenge(verifier)
+	origin := m.origins.ForClient(client.CallbackBaseURL)
+	redirectURI := RemoteLoginCallbackURL(origin)
+	stateParam := stateID
+	if client.LegacyCallbackUrl {
+		// Upstream was registered against the legacy oauth_proxy_servers
+		// callback, so keep that exact redirect_uri — the upstream's
+		// strict-match check still requires it. /oauth/callback forwards the
+		// response into the canonical remote-login callback. The state is the
+		// bare stateID, same as the non-legacy path: with the proxy gone,
+		// /oauth/callback serves only these forwards, so there is nothing to
+		// tell them apart from and no envelope is needed.
+		redirectURI = LegacyProxyCallbackURL(origin)
+	}
+
+	// Parse the upstream authorize URL before the cache write so a malformed
+	// endpoint can't leave an orphaned RemoteLoginState in Redis (its key is
+	// keyed on the random stateID — nothing else can reach it to clean up,
+	// it just expires after TTL).
+	u, err := url.Parse(client.AuthorizationEndpoint)
+	if err != nil {
+		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
+	}
+
 	// The resource stays on the session: a grant without one is unroutable.
 	omitResource := parent.Resource != "" && client.IssuerResourceIndicatorSupported != nil && !*client.IssuerResourceIndicatorSupported
 	expectedIssuer := ""
@@ -1435,6 +1445,34 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+// errRemoteLoginWithoutOrganization rejects a login state minted before it
+// carried an organization; without one the write could overwrite another
+// organization's grant.
+var errRemoteLoginWithoutOrganization = errors.New("remote login state has no organization")
+
+// storeRemoteSessionGrant records a consent for (subject, client). A live
+// grant consented through another organization's sign-in is tombstoned first,
+// so the new row records the organization the consent was made in; otherwise
+// the grant is updated in place. q must be the caller's transaction, holding
+// the sign-in and client locks.
+func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, params remotesessions_repo.UpsertRemoteSessionParams) (remotesessions_repo.RemoteSession, error) {
+	if organizationID == "" {
+		return remotesessions_repo.RemoteSession{}, errRemoteLoginWithoutOrganization
+	}
+	if _, err := q.SoftDeleteRemoteSessionConsentedInOtherOrganization(ctx, remotesessions_repo.SoftDeleteRemoteSessionConsentedInOtherOrganizationParams{
+		SubjectUrn:            params.SubjectUrn,
+		RemoteSessionClientID: params.RemoteSessionClientID,
+		OrganizationID:        organizationID,
+	}); err != nil {
+		return remotesessions_repo.RemoteSession{}, fmt.Errorf("tombstone grant from another organization: %w", err)
+	}
+	sess, err := q.UpsertRemoteSession(ctx, params)
+	if err != nil {
+		return sess, fmt.Errorf("upsert remote session: %w", err)
+	}
+	return sess, nil
 }
 
 // HandleRemoteLoginCallback is the GET handler for
@@ -1769,7 +1807,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
-	storedSession, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
@@ -1790,6 +1828,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		Enrichment:          enrichment,
 	})
 	if err != nil {
+		if errors.Is(err, errRemoteLoginWithoutOrganization) {
+			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
+		}
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 

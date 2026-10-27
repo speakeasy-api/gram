@@ -1,6 +1,7 @@
 import {
   encodeGatewayServerFilter,
   encodeHostedServerFilter,
+  encodeMcpServerFilter,
   encodeShadowServerFilter,
   type ParsedTargetFilter,
 } from "@/components/observe/observeTargetFilters";
@@ -30,6 +31,7 @@ export const OBSERVE_FILTER_PARAMS = [
   "status",
   "account_type",
   "client",
+  "agent",
   "range",
   "from",
   "to",
@@ -68,6 +70,8 @@ function appendCsv(
 
 function encodeTarget(target: ParsedTargetFilter): string | undefined {
   switch (target.type) {
+    case "mcp_server":
+      return encodeMcpServerFilter(target.id);
     case "hosted":
       return encodeHostedServerFilter(target.id);
     case "shadow":

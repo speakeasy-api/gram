@@ -3,6 +3,18 @@ import { isAuditAction, staticActionPhrase } from "@/lib/audit-actions";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
 export function getActorLabel(log: AuditLog): string {
+  // The server nulls the display name and slug for an agent actor, so
+  // without this every agent-made change read as "Someone". An agent is a
+  // named thing; saying so beats a word that suggests we lost the name.
+  if (log.actorType === "agent") {
+    // Some writers prefix the actor id with its type, as the principal
+    // parser already allows for. Shortening that gives "Agent agent:ab":
+    // the type twice and two characters of the id.
+    const id = log.actorId.startsWith("agent:")
+      ? log.actorId.slice("agent:".length)
+      : log.actorId;
+    return `Agent ${id.slice(0, 8)}`;
+  }
   return log.actorDisplayName || log.actorSlug || "Someone";
 }
 
@@ -179,6 +191,13 @@ function describeInvitation(log: AuditLog): string | undefined {
   return undefined;
 }
 
+function describeAuthClientDetach(log: AuditLog): string | undefined {
+  const server =
+    recordString(log.metadata, "mcp_server_name") ??
+    recordString(log.metadata, "mcp_server_id");
+  return server ? `removed MCP server ${server} from auth client` : undefined;
+}
+
 function describeProductFeatureToggle(log: AuditLog): string | undefined {
   const feature = recordString(log.metadata, "feature_name");
   if (!feature) return undefined;
@@ -278,7 +297,7 @@ export function formatAuditActionLabel(action: string): string {
   const phrase = isAuditAction(action)
     ? staticActionPhrase(action)
     : describeUnknownAction(action);
-  const trimmed = phrase.replace(/\s+(for|to|from|on)$/, "");
+  const trimmed = phrase.replace(/\s+(for|to|from|on|under)$/, "");
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
@@ -293,6 +312,8 @@ export function renderVerb(log: AuditLog): string {
     case "organization_invitation:create":
     case "organization_invitation:update_role":
       return describeInvitation(log) ?? staticActionPhrase(log.action);
+    case "auth-client:detach-mcp-server":
+      return describeAuthClientDetach(log) ?? staticActionPhrase(log.action);
     case "organization:product_feature_enabled":
     case "organization:product_feature_disabled":
       return (

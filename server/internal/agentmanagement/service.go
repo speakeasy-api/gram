@@ -73,6 +73,13 @@ import (
 //     the tool's discovery and live authorization cannot reuse an existing
 //     member-default scope.
 //
+//   - Connection blocks (an owner blocking an agent on their own
+//     connection) and auth client restrictions in agent policy are deferred.
+//     They take effect only once auth client permissions are enforced, and no
+//     dashboard surface uses them yet; add the tool beside that UI so both
+//     share one product contract. The existing Platform MCP access tools never
+//     touch agent principals, so they need no change.
+//
 //   - Agent role assignment is deferred with the rest, for the same reason and
 //     not by oversight. The access API and the role dialog now take agent_ids,
 //     while Platform MCP's CreateRoleTx and UpdateRoleTx still pass
@@ -130,7 +137,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+	srv.Mount(mux, srv.New(endpoints, mux, requestDecoder, goahttp.ResponseEncoder, nil, nil))
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
