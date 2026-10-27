@@ -2295,3 +2295,15 @@ UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
 WHERE organization_id = @organization_id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND id = @id AND deleted IS FALSE;
+
+-- name: SetWorkloadIssuerAssertionReuseFixture :exec
+UPDATE workload_issuers SET allow_assertion_reuse = @allow_assertion_reuse::boolean
+WHERE id = @id AND organization_id = @organization_id;
+
+-- name: WorkloadIssuerWriteIsBlockedFixture :one
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database()
+      AND wait_event_type = 'Lock'
+      AND query LIKE '%LockWorkloadIssuerForWrite%'
+)::boolean;

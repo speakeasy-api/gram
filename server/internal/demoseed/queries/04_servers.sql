@@ -36,6 +36,8 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
   (@slack_id::uuid, @project_id::uuid, @org_id::text, 'slack',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   (@gateway_id::uuid, @project_id::uuid, @org_id::text, 'acme-agent-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+  (@code_gateway_id::uuid, @project_id::uuid, @org_id::text, 'python-code-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
 -- name: ServersInsertMCPServers :exec
@@ -56,30 +58,51 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
    NULL, @remote_github_id::uuid,
    @issuer_workforce_id::uuid, 'private');
 
--- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
--- toolset id) and one endpoint at its address, mirroring its hosting
--- columns. The fresh-id servers above stay separate servers over the same
--- toolsets.
+-- name: ServersInsertRegistryPromotionCandidate :exec
+-- Synthetic evidence stays ineligible and queues no public publication or messages.
+INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, curation_status, created_at)
+VALUES (@id::uuid, @org_id::text, @project_id::uuid, @mcp_server_id::uuid, @remote_mcp_server_id::uuid, 'unobserved', false, 'insufficient_evidence', @curation_status::text, clock_timestamp() - make_interval(days => @age_days::integer))
+ON CONFLICT (project_id,mcp_server_id) DO NOTHING;
+
+-- Each hosted toolset owns a canonical wrapper (id = the toolset id) that
+-- holds its hosting state, and one platform endpoint at the wrapper's slug.
+-- The fresh-id servers above stay separate servers over the same toolsets.
 -- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         user_session_issuer_id, tool_variations_group_id,
-                         visibility)
-SELECT t.id, t.project_id, t.name, t.mcp_slug, t.id, t.user_session_issuer_id,
-       t.tool_variations_group_id,
-       CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-            WHEN t.mcp_is_public THEN 'public'
-            ELSE 'private' END
-FROM toolsets t
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+                         user_session_issuer_id, visibility)
+SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
+FROM (VALUES
+  (@toolset_1::uuid, @support_mcp_slug::text, NULL::uuid, 'private'),
+  (@toolset_2::uuid, @ops_mcp_slug::text, NULL::uuid, 'private'),
+  (@toolset_3::uuid, @partner_mcp_slug::text, @partner_issuer_id::uuid, 'private'),
+  (@toolset_4::uuid, @discovery_mcp_slug::text, NULL::uuid, 'public')
+) AS v(toolset_id, slug, user_session_issuer_id, visibility)
+JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = @project_id::uuid AND t.deleted IS FALSE;
 
 -- The endpoint id is det_uuid(<name seed> || 'endpoint-hosted-' || slug),
 -- computed in SQL with the same md5 formula as detUUID in names.go.
 -- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5(@endpoint_name_prefix::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
-       t.project_id, t.id, t.custom_domain_id, t.mcp_slug
-FROM toolsets t
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+       s.project_id, s.id, NULL, s.slug
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
+
+-- Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
+-- name: ServersMirrorHostedToolsets :exec
+UPDATE toolsets AS t
+SET
+    mcp_slug = e.slug
+  , custom_domain_id = e.custom_domain_id
+  , mcp_enabled = s.visibility <> 'disabled'
+  , mcp_is_public = s.visibility = 'public'
+  , user_session_issuer_id = s.user_session_issuer_id
+  , tool_variations_group_id = s.tool_variations_group_id
+FROM mcp_servers AS s
+JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
+  AND t.project_id = @project_id::uuid AND t.deleted IS FALSE;
 
 -- Check Access scenarios on GitHub. Contractors blocks connecting, which
 -- wins over every other role's grant: Mateo (a contractor through the
@@ -299,6 +322,26 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
    @meta_id::uuid, @linear_server_id::uuid, 2),
   (@slack_member_id::uuid, @project_id::uuid,
    @meta_id::uuid, @slack_server_id::uuid, 3);
+
+-- Stored as Progressive (the column default) because the shared demo org has
+-- no code runtime; local fixtures switch it to code_mode (RunLocalFixtures).
+-- name: ServersInsertCodeGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id) VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, 'Python Code Gateway',
+   @user_session_issuer_id::uuid);
+
+-- name: ServersInsertCodeGatewayMembers :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  (@support_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @support_server_id::uuid, 0),
+  (@ops_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @ops_server_id::uuid, 1);
+
+-- name: ServersInsertCodeGatewayEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, @meta_id::uuid, NULL, @slug::text);
 
 -- GitHub was a member until three days ago. Its dispatches are still in
 -- ClickHouse (gwgone rows), so the Activity section can show that a removed

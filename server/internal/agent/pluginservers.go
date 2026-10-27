@@ -61,6 +61,7 @@ func (s *Service) pluginServers(ctx context.Context, organizationID string, prin
 			return nil, err
 		}
 		servers[row.PluginID] = append(servers[row.PluginID], &gen.AgentPluginServer{
+			ID:           pluginServerID(row),
 			Name:         row.DisplayName,
 			DashboardURL: dashboardURL,
 		})
@@ -125,4 +126,17 @@ func grantPrincipals(principals []string) []urn.Principal {
 		}
 	}
 	return out
+}
+
+// pluginServerID is the server's id, shared by every plugin that contains it:
+// the MCP server's, or the gateway's when the membership is a gateway.
+func pluginServerID(row repo.ListAgentPluginServersRow) *string {
+	switch {
+	case row.McpServerID.Valid:
+		return new(row.McpServerID.UUID.String())
+	case row.GatewayID.Valid:
+		return new(row.GatewayID.UUID.String())
+	default:
+		return nil
+	}
 }

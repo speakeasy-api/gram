@@ -50,7 +50,9 @@ RETURNING *;
 -- expires_at is enforced here rather than in Go so every credential shape --
 -- agent principal keys and scoped keys given a grace expiry by a rotation --
 -- stops authenticating at the same moment.
-SELECT api_keys.*, users.email
+SELECT api_keys.*, users.email,
+       EXISTS (SELECT 1 FROM assistant_inference_credentials c
+               WHERE c.api_key_id = api_keys.id AND c.project_id = api_keys.project_id) AS superseded_kit_credential
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = @key_hash

@@ -248,6 +248,84 @@ func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg Ser
 	return err
 }
 
+const serversInsertCodeGateway = `-- name: ServersInsertCodeGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id) VALUES
+  ($1::uuid, $2::text, $3::uuid, 'Python Code Gateway',
+   $4::uuid)
+`
+
+type ServersInsertCodeGatewayParams struct {
+	ID                  uuid.UUID
+	OrgID               string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Stored as Progressive (the column default) because the shared demo org has
+// no code runtime; local fixtures switch it to code_mode (RunLocalFixtures).
+func (q *Queries) ServersInsertCodeGateway(ctx context.Context, arg ServersInsertCodeGatewayParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCodeGateway,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+	)
+	return err
+}
+
+const serversInsertCodeGatewayEndpoint = `-- name: ServersInsertCodeGatewayEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, $3::uuid, NULL, $4::text)
+`
+
+type ServersInsertCodeGatewayEndpointParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	MetaID    uuid.UUID
+	Slug      string
+}
+
+func (q *Queries) ServersInsertCodeGatewayEndpoint(ctx context.Context, arg ServersInsertCodeGatewayEndpointParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCodeGatewayEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.MetaID,
+		arg.Slug,
+	)
+	return err
+}
+
+const serversInsertCodeGatewayMembers = `-- name: ServersInsertCodeGatewayMembers :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  ($1::uuid, $2::uuid,
+   $3::uuid, $4::uuid, 0),
+  ($5::uuid, $2::uuid,
+   $3::uuid, $6::uuid, 1)
+`
+
+type ServersInsertCodeGatewayMembersParams struct {
+	SupportMemberID uuid.UUID
+	ProjectID       uuid.UUID
+	MetaID          uuid.UUID
+	SupportServerID uuid.UUID
+	OpsMemberID     uuid.UUID
+	OpsServerID     uuid.UUID
+}
+
+func (q *Queries) ServersInsertCodeGatewayMembers(ctx context.Context, arg ServersInsertCodeGatewayMembersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertCodeGatewayMembers,
+		arg.SupportMemberID,
+		arg.ProjectID,
+		arg.MetaID,
+		arg.SupportServerID,
+		arg.OpsMemberID,
+		arg.OpsServerID,
+	)
+	return err
+}
+
 const serversInsertEMABindings = `-- name: ServersInsertEMABindings :exec
 INSERT INTO remote_session_ema_bindings
   (id, project_id, organization_id, user_session_issuer_id,
@@ -697,9 +775,10 @@ func (q *Queries) ServersInsertGitHubUserGrants(ctx context.Context, arg Servers
 const serversInsertHostedToolsetEndpoints = `-- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5($1::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
-       t.project_id, t.id, t.custom_domain_id, t.mcp_slug
-FROM toolsets t
-WHERE t.project_id = $2::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
+       s.project_id, s.id, NULL, s.slug
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = $2::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE
 `
 
 type ServersInsertHostedToolsetEndpointsParams struct {
@@ -716,23 +795,46 @@ func (q *Queries) ServersInsertHostedToolsetEndpoints(ctx context.Context, arg S
 
 const serversInsertHostedToolsetMCPServers = `-- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         user_session_issuer_id, tool_variations_group_id,
-                         visibility)
-SELECT t.id, t.project_id, t.name, t.mcp_slug, t.id, t.user_session_issuer_id,
-       t.tool_variations_group_id,
-       CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-            WHEN t.mcp_is_public THEN 'public'
-            ELSE 'private' END
-FROM toolsets t
-WHERE t.project_id = $1::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
+                         user_session_issuer_id, visibility)
+SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
+FROM (VALUES
+  ($1::uuid, $2::text, NULL::uuid, 'private'),
+  ($3::uuid, $4::text, NULL::uuid, 'private'),
+  ($5::uuid, $6::text, $7::uuid, 'private'),
+  ($8::uuid, $9::text, NULL::uuid, 'public')
+) AS v(toolset_id, slug, user_session_issuer_id, visibility)
+JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = $10::uuid AND t.deleted IS FALSE
 `
 
-// Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
-// toolset id) and one endpoint at its address, mirroring its hosting
-// columns. The fresh-id servers above stay separate servers over the same
-// toolsets.
-func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers, projectID)
+type ServersInsertHostedToolsetMCPServersParams struct {
+	Toolset1         uuid.UUID
+	SupportMcpSlug   string
+	Toolset2         uuid.UUID
+	OpsMcpSlug       string
+	Toolset3         uuid.UUID
+	PartnerMcpSlug   string
+	PartnerIssuerID  uuid.UUID
+	Toolset4         uuid.UUID
+	DiscoveryMcpSlug string
+	ProjectID        uuid.UUID
+}
+
+// Each hosted toolset owns a canonical wrapper (id = the toolset id) that
+// holds its hosting state, and one platform endpoint at the wrapper's slug.
+// The fresh-id servers above stay separate servers over the same toolsets.
+func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, arg ServersInsertHostedToolsetMCPServersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers,
+		arg.Toolset1,
+		arg.SupportMcpSlug,
+		arg.Toolset2,
+		arg.OpsMcpSlug,
+		arg.Toolset3,
+		arg.PartnerMcpSlug,
+		arg.PartnerIssuerID,
+		arg.Toolset4,
+		arg.DiscoveryMcpSlug,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -1238,6 +1340,36 @@ func (q *Queries) ServersInsertPrivateInventoryTunnel(ctx context.Context, arg S
 	return err
 }
 
+const serversInsertRegistryPromotionCandidate = `-- name: ServersInsertRegistryPromotionCandidate :exec
+INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, curation_status, created_at)
+VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, $5::uuid, 'unobserved', false, 'insufficient_evidence', $6::text, clock_timestamp() - make_interval(days => $7::integer))
+ON CONFLICT (project_id,mcp_server_id) DO NOTHING
+`
+
+type ServersInsertRegistryPromotionCandidateParams struct {
+	ID                uuid.UUID
+	OrgID             string
+	ProjectID         uuid.UUID
+	McpServerID       uuid.UUID
+	RemoteMcpServerID uuid.UUID
+	CurationStatus    string
+	AgeDays           int32
+}
+
+// Synthetic evidence stays ineligible and queues no public publication or messages.
+func (q *Queries) ServersInsertRegistryPromotionCandidate(ctx context.Context, arg ServersInsertRegistryPromotionCandidateParams) error {
+	_, err := q.db.Exec(ctx, serversInsertRegistryPromotionCandidate,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.RemoteMcpServerID,
+		arg.CurationStatus,
+		arg.AgeDays,
+	)
+	return err
+}
+
 const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
 
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
@@ -1622,16 +1754,19 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
   ($5::uuid, $4::uuid, $2::text, 'slack',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   ($6::uuid, $4::uuid, $2::text, 'acme-agent-gateway',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+  ($7::uuid, $4::uuid, $2::text, 'python-code-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
 `
 
 type ServersInsertUserSessionIssuersParams struct {
-	WorkforceID uuid.UUID
-	OrgID       string
-	LinearID    uuid.UUID
-	ProjectID   uuid.UUID
-	SlackID     uuid.UUID
-	GatewayID   uuid.UUID
+	WorkforceID   uuid.UUID
+	OrgID         string
+	LinearID      uuid.UUID
+	ProjectID     uuid.UUID
+	SlackID       uuid.UUID
+	GatewayID     uuid.UUID
+	CodeGatewayID uuid.UUID
 }
 
 // Remote-backed servers must carry a Speakeasy-as-AS issuer for their lifetime
@@ -1651,6 +1786,7 @@ func (q *Queries) ServersInsertUserSessionIssuers(ctx context.Context, arg Serve
 		arg.ProjectID,
 		arg.SlackID,
 		arg.GatewayID,
+		arg.CodeGatewayID,
 	)
 	return err
 }
@@ -1715,6 +1851,27 @@ type ServersMarkRequiresUpstreamAuthParams struct {
 
 func (q *Queries) ServersMarkRequiresUpstreamAuth(ctx context.Context, arg ServersMarkRequiresUpstreamAuthParams) error {
 	_, err := q.db.Exec(ctx, serversMarkRequiresUpstreamAuth, arg.ProjectID, arg.Ids)
+	return err
+}
+
+const serversMirrorHostedToolsets = `-- name: ServersMirrorHostedToolsets :exec
+UPDATE toolsets AS t
+SET
+    mcp_slug = e.slug
+  , custom_domain_id = e.custom_domain_id
+  , mcp_enabled = s.visibility <> 'disabled'
+  , mcp_is_public = s.visibility = 'public'
+  , user_session_issuer_id = s.user_session_issuer_id
+  , tool_variations_group_id = s.tool_variations_group_id
+FROM mcp_servers AS s
+JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
+  AND t.project_id = $1::uuid AND t.deleted IS FALSE
+`
+
+// Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
+func (q *Queries) ServersMirrorHostedToolsets(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, serversMirrorHostedToolsets, projectID)
 	return err
 }
 

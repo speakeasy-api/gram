@@ -183,7 +183,7 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 
 	if !opts.noWrapper {
 		tx := testenv.BeginTx(t, ctx, ti.conn)
-		_, err := hostedmcp.Sync(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), server.toolset, nil)
+		_, err := hostedmcp.BackfillSync(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), server.toolset)
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit(ctx))
 	}

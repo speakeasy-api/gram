@@ -59,12 +59,13 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}
 
 	if err := s.q.ServersInsertUserSessionIssuers(ctx, repo.ServersInsertUserSessionIssuersParams{
-		WorkforceID: s.det("issuer-workforce"),
-		OrgID:       org,
-		LinearID:    s.det("issuer-linear"),
-		ProjectID:   proj,
-		SlackID:     s.det("issuer-slack"),
-		GatewayID:   s.det("issuer-gateway"),
+		WorkforceID:   s.det("issuer-workforce"),
+		OrgID:         org,
+		LinearID:      s.det("issuer-linear"),
+		ProjectID:     proj,
+		SlackID:       s.det("issuer-slack"),
+		GatewayID:     s.det("issuer-gateway"),
+		CodeGatewayID: s.det("issuer-code-gateway"),
 	}); err != nil {
 		return fmt.Errorf("insert demo user session issuers: %w", err)
 	}
@@ -88,14 +89,45 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo mcp servers: %w", err)
 	}
 
-	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, proj); err != nil {
+	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, repo.ServersInsertHostedToolsetMCPServersParams{
+		Toolset1:         s.toolset1(),
+		SupportMcpSlug:   s.spec.OrgSlug + "-support",
+		Toolset2:         s.toolset2(),
+		OpsMcpSlug:       s.spec.OrgSlug + "-ops",
+		Toolset3:         s.toolset3(),
+		PartnerMcpSlug:   s.spec.OrgSlug + "-partner",
+		PartnerIssuerID:  s.usIssuer(),
+		Toolset4:         s.toolset4(),
+		DiscoveryMcpSlug: s.spec.OrgSlug + "-oauth-discovery",
+		ProjectID:        proj,
+	}); err != nil {
 		return fmt.Errorf("insert demo hosted toolset mcp servers: %w", err)
+	}
+	for _, candidate := range []struct {
+		server  string
+		status  string
+		ageDays int32
+	}{
+		{server: "linear", status: "active", ageDays: 1},
+		{server: "slack", status: "rejected", ageDays: 2},
+		{server: "github", status: "archived", ageDays: 3},
+	} {
+		if err := s.q.ServersInsertRegistryPromotionCandidate(ctx, repo.ServersInsertRegistryPromotionCandidateParams{
+			ID: s.det("registry-promotion-" + candidate.status), OrgID: org, ProjectID: proj,
+			McpServerID: s.det("mcpserver-" + candidate.server), RemoteMcpServerID: s.det("remotemcp-" + candidate.server),
+			CurationStatus: candidate.status, AgeDays: candidate.ageDays,
+		}); err != nil {
+			return fmt.Errorf("insert synthetic catalogue promotion %s: %w", candidate.status, err)
+		}
 	}
 	if err := s.q.ServersInsertHostedToolsetEndpoints(ctx, repo.ServersInsertHostedToolsetEndpointsParams{
 		EndpointNamePrefix: s.name("endpoint-hosted-"),
 		ProjectID:          proj,
 	}); err != nil {
 		return fmt.Errorf("insert demo hosted toolset endpoints: %w", err)
+	}
+	if err := s.q.ServersMirrorHostedToolsets(ctx, proj); err != nil {
+		return fmt.Errorf("mirror demo hosted toolsets: %w", err)
 	}
 
 	if err := s.q.ServersInsertGitHubContractorsBlock(ctx, repo.ServersInsertGitHubContractorsBlockParams{
@@ -239,6 +271,32 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		SlackServerID:   s.det("mcpserver-slack"),
 	}); err != nil {
 		return fmt.Errorf("insert demo meta mcp server members: %w", err)
+	}
+	if err := s.q.ServersInsertCodeGateway(ctx, repo.ServersInsertCodeGatewayParams{
+		ID:                  s.det("metamcp-code"),
+		OrgID:               org,
+		ProjectID:           proj,
+		UserSessionIssuerID: s.det("issuer-code-gateway"),
+	}); err != nil {
+		return fmt.Errorf("insert demo code gateway: %w", err)
+	}
+	if err := s.q.ServersInsertCodeGatewayMembers(ctx, repo.ServersInsertCodeGatewayMembersParams{
+		SupportMemberID: s.det("metamember-code-support"),
+		ProjectID:       proj,
+		MetaID:          s.det("metamcp-code"),
+		SupportServerID: s.det("mcpserver-support"),
+		OpsMemberID:     s.det("metamember-code-ops"),
+		OpsServerID:     s.det("mcpserver-ops"),
+	}); err != nil {
+		return fmt.Errorf("insert demo code gateway members: %w", err)
+	}
+	if err := s.q.ServersInsertCodeGatewayEndpoint(ctx, repo.ServersInsertCodeGatewayEndpointParams{
+		ID:        s.det("endpoint-code"),
+		ProjectID: proj,
+		MetaID:    s.det("metamcp-code"),
+		Slug:      s.spec.OrgSlug + "-code-gateway",
+	}); err != nil {
+		return fmt.Errorf("insert demo code gateway endpoint: %w", err)
 	}
 	if err := s.q.ServersInsertRemovedGitHubMember(ctx, repo.ServersInsertRemovedGitHubMemberParams{
 		ID:             s.det("metamember-github"),

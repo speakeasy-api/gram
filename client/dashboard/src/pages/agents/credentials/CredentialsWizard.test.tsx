@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   createKey: vi.fn(),
   listKeys: vi.fn(),
   listDelegableGrants: vi.fn(),
+  checkPolicyGrants: vi.fn(),
   mcpServers: vi.fn(),
   toolsets: vi.fn(),
   fetch: vi.fn(),
@@ -62,6 +63,7 @@ vi.mock("@/contexts/Sdk", () => ({
     agents: {
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
+      checkPolicyGrants: mocks.checkPolicyGrants,
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
   }),
@@ -213,6 +215,38 @@ async function reachCredentialStep() {
   return screen.findByRole("button", { name: "Create agent" });
 }
 
+type CheckRequest = {
+  checkAgentPolicyGrantsForm: {
+    policyGrants: { selector: { resourceId: string } }[];
+  };
+};
+
+/**
+ * Answers a policy check grant by grant: refused where `refuse` names the
+ * grant's resource ("*" for All servers), allowed everywhere else.
+ */
+function answerChecks(refuse: Record<string, "caller" | "owner"> = {}) {
+  return (request: CheckRequest) =>
+    Promise.resolve({
+      results: request.checkAgentPolicyGrantsForm.policyGrants.map((grant) => {
+        const limitedBy = refuse[grant.selector.resourceId];
+        return limitedBy === undefined
+          ? { allowed: true }
+          : { allowed: false, limitedBy };
+      }),
+    });
+}
+
+/**
+ * The "All servers" box, once the check of whether it can be saved has
+ * answered: until then it cannot be ticked.
+ */
+async function enabledAllServers() {
+  const box = await screen.findByRole("checkbox", { name: "All servers" });
+  await waitFor(() => expect(box.hasAttribute("disabled")).toBe(false));
+  return box;
+}
+
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
@@ -246,6 +280,7 @@ beforeEach(() => {
   mocks.toolsets.mockResolvedValue({ toolsets: [] });
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
   mocks.listDelegableGrants.mockResolvedValue([grant]);
+  mocks.checkPolicyGrants.mockImplementation(answerChecks());
   mocks.createKey.mockResolvedValue({ id: "key_new", key: "gram_secret" });
   mocks.listKeys.mockResolvedValue({ keys: [] });
   mocks.fetch.mockResolvedValue({
@@ -593,38 +628,148 @@ describe("Federating a platform's own tokens", () => {
     expect(screen.getByText(/Choose an API key instead/)).toBeTruthy();
   });
 
-  it("creates the agent, trusts the platform and admits the subject to it", async () => {
-    await reachPlatformSetup();
+  it.each([false, true])(
+    "creates the agent with issuer assertion reuse %s",
+    async (allowAssertionReuse) => {
+      await reachPlatformSetup();
 
-    fireEvent.change(screen.getByLabelText("Anthropic organization ID"), {
-      target: { value: "org-123" },
+      fireEvent.change(screen.getByLabelText("Anthropic organization ID"), {
+        target: { value: "org-123" },
+      });
+      // Saving asked only for the agent, which this wizard answers, so it is
+      // not a step of its own: it joined the step that collects.
+      expect(
+        screen.queryByRole("heading", { name: "Save the access rule" }),
+      ).toBeNull();
+      expect(screen.queryByLabelText("Agent")).toBeNull();
+      expect(
+        (
+          screen.getByRole("checkbox", {
+            name: "Allow assertion reuse",
+          }) as HTMLInputElement
+        ).checked,
+      ).toBe(false);
+      if (allowAssertionReuse) {
+        fireEvent.click(
+          screen.getByRole("checkbox", { name: "Allow assertion reuse" }),
+        );
+      }
+      fireEvent.click(
+        screen.getByRole("button", { name: "Connect Claude Tag" }),
+      );
+
+      await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+      // Nothing is created until the setup's own create step runs, and then the
+      // agent comes first: the access rule names it.
+      expect(mocks.createAgent).toHaveBeenCalledTimes(1);
+      expect(mocks.createKey).not.toHaveBeenCalled();
+      expect(
+        mocks.admitSubject.mock.calls[0]?.[0]?.request
+          ?.admitWorkloadSubjectForm,
+      ).toEqual({
+        issuer: "https://issuer.example",
+        subject: "spiffe://example/org/org-123/agent/*",
+        matchKind: "wildcard",
+        agentId: "agent_new",
+        tags: [],
+      });
+      expect(
+        mocks.registerIssuer.mock.calls[0]?.[0]?.request
+          ?.registerWorkloadIssuerForm?.issuer,
+      ).toBe("https://issuer.example");
+      expect(
+        mocks.registerIssuer.mock.calls[0]?.[0]?.request
+          ?.registerWorkloadIssuerForm?.allowAssertionReuse,
+      ).toBe(allowAssertionReuse);
+    },
+  );
+});
+
+const gkeCluster =
+  "https://container.googleapis.com/v1/projects/{project}/locations/{location}/clusters/{cluster}";
+
+const gke = {
+  key: "gke",
+  displayName: "GKE",
+  description: "Workloads on one cluster.",
+  icon: "",
+  enabled: true,
+  issuer: { value: gkeCluster, visibility: "read-only" },
+  jwksUri: { value: `${gkeCluster}/jwks`, visibility: "hidden" },
+  variables: [
+    ["project", "platform", "Project ID", "[a-z][a-z0-9-]{4,28}[a-z0-9]"],
+    ["location", "platform", "Location", "[a-z0-9-]+"],
+    ["cluster", "platform", "Cluster name", "[a-z0-9-]+"],
+    ["namespace", "rule", "Namespace", "[a-z0-9-]+"],
+    ["service_account", "rule", "Service account", "[a-z0-9.-]+"],
+  ].map(([key, tier, label, pattern]) => ({
+    key,
+    tier,
+    label,
+    help: "",
+    placeholder: "",
+    pattern,
+    patternMessage: "",
+  })),
+  subject: {
+    template: "system:serviceaccount:{namespace}:{service_account}",
+    wildcard: false,
+  },
+};
+
+describe("Connecting a GKE cluster", () => {
+  it("trusts the cluster on its own and admits one service account", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Billing Worker" },
     });
-    // Saving asked only for the agent, which this wizard answers, so it is
-    // not a step of its own: it joined the step that collects.
-    expect(
-      screen.queryByRole("heading", { name: "Save the access rule" }),
-    ).toBeNull();
-    expect(screen.queryByLabelText("Agent")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Connect Claude Tag" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your cluster" });
+
+    for (const [label, value] of [
+      ["Project ID", "acme-prod"],
+      ["Location", "us-central1"],
+      ["Cluster name", "payments"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your workload" });
+    for (const [label, value] of [
+      ["Namespace", "billing"],
+      ["Service account", "invoice-worker"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Connect GKE" }));
 
     await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
-    // Nothing is created until the setup's own create step runs, and then the
-    // agent comes first: the access rule names it.
-    expect(mocks.createAgent).toHaveBeenCalledTimes(1);
-    expect(mocks.createKey).not.toHaveBeenCalled();
+    const issuer =
+      "https://container.googleapis.com/v1/projects/acme-prod/locations/us-central1/clusters/payments";
+    // Each cluster signs its own tokens, so it is its own trusted platform,
+    // named so a second cluster does not collide with it.
+    expect(
+      mocks.registerIssuer.mock.calls[0]?.[0]?.request
+        ?.registerWorkloadIssuerForm,
+    ).toMatchObject({
+      name: "GKE payments (acme-prod, us-central1)",
+      issuer,
+      jwksUri: `${issuer}/jwks`,
+    });
     expect(
       mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
     ).toEqual({
-      issuer: "https://issuer.example",
-      subject: "spiffe://example/org/org-123/agent/*",
-      matchKind: "wildcard",
+      issuer,
+      subject: "system:serviceaccount:billing:invoice-worker",
+      matchKind: "exact",
       agentId: "agent_new",
       tags: [],
     });
-    expect(
-      mocks.registerIssuer.mock.calls[0]?.[0]?.request
-        ?.registerWorkloadIssuerForm?.issuer,
-    ).toBe("https://issuer.example");
   });
 });
 
@@ -676,12 +821,333 @@ describe("Agent project", () => {
       target: { value: "Everything here" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: "All servers" }),
-    );
+    fireEvent.click(await enabledAllServers());
 
     // The individual rows are not the choice, so counting them would read as
     // "0 of 1 servers selected" beside a toggle that reaches every one.
+    expect(screen.getByText("All servers selected.")).toBeTruthy();
+  });
+
+  it("does not offer All servers to someone who cannot reach every server", async () => {
+    // A wildcard is refused when its creator is kept off any server it covers,
+    // including one they never see in this list. Offering it anyway ended in
+    // "requested agent access exceeds your permissions" on Create agent.
+    mocks.checkPolicyGrants.mockImplementation(answerChecks({ "*": "caller" }));
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Everything here" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    expect(
+      await screen.findByText(
+        /You cannot reach every server in Project one, so this agent cannot either/,
+      ),
+    ).toBeTruthy();
+    expect(all.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(all);
+    expect(all.getAttribute("data-state")).toBe("unchecked");
+    expect(screen.getByText("Select at least one MCP server.")).toBeTruthy();
+    // Asked about the grants Create agent could write, for an agent that does
+    // not exist yet: every server in its project, and each server on its own.
+    expect(mocks.checkPolicyGrants.mock.calls[0]?.[0]).toEqual({
+      checkAgentPolicyGrantsForm: {
+        policyGrants: [
+          {
+            effect: "allow",
+            scope: "mcp:connect",
+            selector: {
+              resourceKind: "mcp",
+              resourceId: "*",
+              projectId: "project_one",
+            },
+          },
+          {
+            effect: "allow",
+            scope: "mcp:connect",
+            selector: {
+              resourceKind: "mcp",
+              resourceId: "toolset_one",
+              projectId: "project_one",
+            },
+          },
+        ],
+      },
+    });
+
+    // The servers it can reach are still a choice.
+    fireEvent.click(screen.getByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants?.[0]
+        ?.selector?.resourceId,
+    ).toBe("toolset_one");
+  });
+
+  it("does not offer a server its creator cannot reach", async () => {
+    // The same refusal, one server at a time: a server the creator can see
+    // but not connect to is listed, and a grant on it is refused just the
+    // same. "Select shown" must not walk into it either.
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        {
+          id: "server_one",
+          name: "GitHub",
+          slug: "github",
+          projectId: "project_one",
+          toolsetId: "toolset_one",
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "server_two",
+          name: "Linear",
+          slug: "linear",
+          projectId: "project_one",
+          toolsetId: "toolset_two",
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    mocks.checkPolicyGrants.mockImplementation(
+      answerChecks({ "*": "caller", toolset_two: "caller" }),
+    );
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Some servers" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText(
+        "You cannot reach this server, so this agent cannot either.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("checkbox", { name: "Linear" }).hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Select shown" }));
+    expect(screen.getByText("1 of 2 servers selected.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants?.map(
+        (form: { selector: { resourceId: string } }) =>
+          form.selector.resourceId,
+      ),
+    ).toEqual(["toolset_one"]);
+  });
+
+  it("saves no server the check has not answered for", async () => {
+    // Ticked before the answer arrived, or after the check failed: either way
+    // the server has not said the grant fits, so nothing is written yet.
+    mocks.checkPolicyGrants.mockRejectedValueOnce(new Error("network down"));
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Unchecked" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByText("Could not check which servers you can reach."),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "GitHub" }));
+    const next = screen.getByRole("button", {
+      name: "Continue",
+    }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Could not check that you can reach the servers you chose. Check again above the list.",
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(next.disabled).toBe(false));
+  });
+
+  it.each(["All servers", "GitHub"])(
+    "blocks %s after a failed recheck until a retry succeeds",
+    async (selection) => {
+      setup();
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "Rechecked access" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await enabledAllServers();
+      fireEvent.click(screen.getByRole("checkbox", { name: selection }));
+      const next = screen.getByRole("button", {
+        name: "Continue",
+      }) as HTMLButtonElement;
+      expect(next.disabled).toBe(false);
+
+      mocks.checkPolicyGrants.mockRejectedValueOnce(new Error("network down"));
+      fireEvent(window, new Event("visibilitychange"));
+      await screen.findByText("Could not check which servers you can reach.");
+      expect(next.disabled).toBe(true);
+      fireEvent.click(next);
+      expect(mocks.createAgent).not.toHaveBeenCalled();
+
+      let resolveRetry!: (answer: { results: { allowed: boolean }[] }) => void;
+      mocks.checkPolicyGrants.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRetry = resolve;
+          }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      await waitFor(() =>
+        expect(mocks.checkPolicyGrants).toHaveBeenCalledTimes(3),
+      );
+      expect(next.disabled).toBe(true);
+      resolveRetry({ results: [{ allowed: true }, { allowed: true }] });
+      await waitFor(() => expect(next.disabled).toBe(false));
+
+      fireEvent.click(next);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Create agent" }),
+      );
+      await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+      expect(
+        mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants?.[0]
+          ?.selector?.resourceId,
+      ).toBe(selection === "All servers" ? "*" : "toolset_one");
+    },
+  );
+
+  it("waits for pending permission checks before continuing or offering All servers", async () => {
+    let resolveCheck!: (answer: { results: { allowed: boolean }[] }) => void;
+    mocks.checkPolicyGrants.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCheck = resolve;
+        }),
+    );
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Waiting for access" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    expect(all.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    const next = screen.getByRole("button", {
+      name: "Continue",
+    }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    fireEvent.click(next);
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(mocks.checkPolicyGrants).toHaveBeenCalledTimes(1),
+    );
+    resolveCheck({ results: [{ allowed: true }, { allowed: true }] });
+    await waitFor(() => expect(next.disabled).toBe(false));
+    expect(all.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(next);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps selections unsavable when a later permission batch fails and maps retried answers correctly", async () => {
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: Array.from({ length: 101 }, (_, index) => ({
+        id: `server_${index}`,
+        name: `Server ${index}`,
+        slug: `server-${index}`,
+        projectId: "project_one",
+        toolsetId: `toolset_${index}`,
+        visibility: "private",
+        networkAccessMode: "dual",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })),
+    });
+    const answer = answerChecks({ "*": "caller", toolset_100: "caller" });
+    mocks.checkPolicyGrants
+      .mockImplementation(answer)
+      .mockImplementationOnce(answer)
+      .mockRejectedValueOnce(new Error("second batch unavailable"));
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Several batches" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Could not check which servers you can reach.");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Server 100" }));
+    const next = screen.getByRole("button", {
+      name: "Continue",
+    }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await screen.findByText(/Deselect Server 100:/);
+    expect(next.disabled).toBe(true);
+    expect(
+      mocks.checkPolicyGrants.mock.calls.map(
+        (call) =>
+          (call[0] as CheckRequest).checkAgentPolicyGrantsForm.policyGrants
+            .length,
+      ),
+    ).toEqual([100, 2, 100, 2]);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Server 100" }));
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Server 100" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Server 0" }));
+    expect(next.disabled).toBe(false);
+    fireEvent.click(next);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants?.map(
+        (form: { selector: { resourceId: string } }) =>
+          form.selector.resourceId,
+      ),
+    ).toEqual(["toolset_0"]);
+  });
+
+  it("holds All servers until the check answers, and retries one that failed", async () => {
+    mocks.checkPolicyGrants.mockRejectedValueOnce(new Error("network down"));
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Everything here" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    expect(
+      await screen.findByText(
+        /Could not check that you can reach every server in Project one/,
+      ),
+    ).toBeTruthy();
+    expect(all.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    fireEvent.click(await enabledAllServers());
     expect(screen.getByText("All servers selected.")).toBeTruthy();
   });
 
@@ -693,9 +1159,7 @@ describe("Agent project", () => {
       target: { value: "Everything here" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: "All servers" }),
-    );
+    fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Create agent" }),
@@ -949,9 +1413,7 @@ describe("Editing an agent that already exists", () => {
   it("replaces the wildcard grant with the list when All servers is turned off", async () => {
     editing({ grants: [WILDCARD] });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: "All servers" }),
-    );
+    fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Save changes and exit" }),
@@ -978,9 +1440,7 @@ describe("Editing an agent that already exists", () => {
     // today's inventory, and the promise covers servers added later.
     editing({ grants: [] });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: "All servers" }),
-    );
+    fireEvent.click(await enabledAllServers());
     fireEvent.click(
       screen.getByRole("button", { name: "Save changes and exit" }),
     );
@@ -996,6 +1456,48 @@ describe("Editing an agent that already exists", () => {
       resourceId: "*",
       projectId: "project_one",
     });
+  });
+
+  it("says so when the agent's owner cannot reach every server", async () => {
+    mocks.checkPolicyGrants.mockImplementation(answerChecks({ "*": "owner" }));
+    editing({ grants: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    expect(
+      await screen.findByText(
+        /This agent's owner cannot reach every server in Project one/,
+      ),
+    ).toBeTruthy();
+    expect(all.hasAttribute("disabled")).toBe(true);
+    // Asked about this agent, so the server weighs its owner's access too.
+    expect(
+      mocks.checkPolicyGrants.mock.calls[0]?.[0]?.checkAgentPolicyGrantsForm
+        ?.agentId,
+    ).toBe("agent_one");
+  });
+
+  it("does not ask about a wildcard the agent already holds", async () => {
+    // Turning All servers off and on again writes nothing, so there is
+    // nothing for the check to refuse.
+    mocks.checkPolicyGrants.mockImplementation(
+      answerChecks({ "*": "caller", toolset_one: "caller" }),
+    );
+    editing({ grants: [WILDCARD] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    await waitFor(() => expect(all.getAttribute("data-state")).toBe("checked"));
+    fireEvent.click(all);
+    fireEvent.click(all);
+    expect(all.getAttribute("data-state")).toBe("checked");
+    expect(
+      mocks.checkPolicyGrants.mock.calls.flatMap((call) =>
+        (call[0] as CheckRequest).checkAgentPolicyGrantsForm.policyGrants.map(
+          (grant) => grant.selector.resourceId,
+        ),
+      ),
+    ).not.toContain("*");
   });
 
   const WILDCARD_TWO = { ...WILDCARD, id: "grant_all_two" };
@@ -1077,9 +1579,7 @@ describe("Editing an agent that already exists", () => {
     mocks.createGrant.mockResolvedValue({ id: "grant_all_new" });
     editing();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: "All servers" }),
-    );
+    fireEvent.click(await enabledAllServers());
     const save = screen.getByRole("button", { name: "Save changes and exit" });
     fireEvent.click(save);
     expect(await screen.findByText("Grant is locked")).toBeTruthy();
@@ -1099,9 +1599,7 @@ describe("Editing an agent that already exists", () => {
       .mockRejectedValueOnce(new Error("Grant is locked"));
     editing({ grants: [WILDCARD, WILDCARD_TWO] });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(
-      await screen.findByRole("checkbox", { name: "All servers" }),
-    );
+    fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Save changes and exit" }),

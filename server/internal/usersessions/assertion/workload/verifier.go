@@ -33,8 +33,8 @@ type Result struct {
 	// ExpiresAt is the assertion's verified expiration.
 	ExpiresAt time.Time
 
-	// ReusedAssertion is true when the exact same identifier-less platform
-	// token was presented again within its validity window.
+	// ReusedAssertion reports a previously reserved identifier or token digest.
+	// It never authorizes reusing a session or skipping live admission.
 	ReusedAssertion bool
 }
 
@@ -108,7 +108,7 @@ func (v *Verifier) Verify(ctx context.Context, raw string, expect Expectation) (
 	if err != nil {
 		return nil, rejectWith(ReasonReplayStoreUnavailable, err)
 	}
-	if !claimed && exact {
+	if !claimed && exact && !expect.AllowAssertionReuse {
 		return nil, reject(ReasonReplayed, "assertion identifier has already been presented")
 	}
 	return &Result{ExpiresAt: expiresAt, ReusedAssertion: !claimed}, nil

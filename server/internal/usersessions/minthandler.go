@@ -127,6 +127,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		if !hasMeta || !mode.Valid() {
 			return nil, oops.E(oops.CodeBadRequest, nil, "discovery_mode requires a gateway and a supported mode")
 		}
+		if mode == metamcp.DiscoveryModeCode && !s.codeModeSelection.Allows(ctx, authCtx.ActiveOrganizationID) {
+			return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+		}
 		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{
 			Resource:  "meta_mcp_server:" + target.resourceID,
 			Selection: nil,
@@ -303,7 +306,7 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
 	if toolset.McpSlug.String == "" {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated toolset has no mcp slug").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "the hosted MCP server has no address; add one before minting a user-session token").LogWarn(ctx, s.logger)
 	}
 
 	issuerURL, err := url.JoinPath(s.serverURL, "mcp", toolset.McpSlug.String)

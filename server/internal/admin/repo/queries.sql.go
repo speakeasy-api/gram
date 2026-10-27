@@ -22,6 +22,26 @@ func (q *Queries) AdminAcquireStripeSubscriptionLock(ctx context.Context, stripe
 	return err
 }
 
+const adminAuditProjectBelongsToOrganization = `-- name: AdminAuditProjectBelongsToOrganization :one
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = $1 AND organization_id = $2
+)
+`
+
+type AdminAuditProjectBelongsToOrganizationParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Audit history remains readable after a project is soft-deleted.
+func (q *Queries) AdminAuditProjectBelongsToOrganization(ctx context.Context, arg AdminAuditProjectBelongsToOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, adminAuditProjectBelongsToOrganization, arg.ProjectID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
 UPDATE organization_metadata
 SET
@@ -336,7 +356,6 @@ SELECT
     m.created_at,
     m.user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     COALESCE((
         SELECT e.slug FROM mcp_endpoints e
         WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
@@ -375,7 +394,6 @@ SELECT
     t.created_at,
     t.user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     COALESCE(t.mcp_slug, '')::text AS url_slug,
     t.slug AS toolset_slug,
     0::bigint AS toolset_wrapper_count
@@ -404,7 +422,6 @@ type AdminGetMcpServerAuthRow struct {
 	CreatedAt             pgtype.Timestamptz
 	UserSessionIssuerID   uuid.NullUUID
 	ExternalOauthServerID uuid.NullUUID
-	OauthProxyServerID    uuid.NullUUID
 	UrlSlug               string
 	ToolsetSlug           string
 	ToolsetWrapperCount   int64
@@ -436,7 +453,6 @@ func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServ
 		&i.CreatedAt,
 		&i.UserSessionIssuerID,
 		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
 		&i.UrlSlug,
 		&i.ToolsetSlug,
 		&i.ToolsetWrapperCount,

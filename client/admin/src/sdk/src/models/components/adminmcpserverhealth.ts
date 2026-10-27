@@ -30,7 +30,6 @@ import {
  */
 export const LegacyAuth = {
   ExternalOauth: "external_oauth",
-  OauthProxy: "oauth_proxy",
   GramPrivate: "gram_private",
 } as const;
 /**

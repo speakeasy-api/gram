@@ -254,7 +254,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 	if err == nil && gate.memberChoices != nil {
 		if gate.catalog == nil {
 			gate.memberChoices.apply(ctx, logger, members, false)
-		} else if gate.catalogMode != toolfilter.CatalogModeCached || gate.execute {
+		} else if gate.catalogRef.Mode != toolfilter.CatalogModeCached || gate.execute {
 			gate.memberChoices.apply(ctx, logger, members, true)
 		}
 	}
