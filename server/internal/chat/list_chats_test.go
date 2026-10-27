@@ -627,6 +627,32 @@ func TestListChats_Member_SeesOwnedAgentSessions(t *testing.T) {
 	require.Equal(t, 2, result.Total)
 }
 
+// A chat that carries a human's user_id belongs to that human, even if an
+// agent the caller owns was stamped onto it, so owning the agent does not
+// reveal it.
+func TestListChats_Member_AgentStampedOnOtherUsersChatHidden(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	owned := seedAgent(t, ctx, ti, authCtx.UserID, "My Agent")
+	humanChat := seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+	linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
+		AgentID:   uuid.NullUUID{UUID: owned, Valid: true},
+		ID:        humanChat,
+		ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), linked)
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+	require.Empty(t, result.Chats)
+}
+
 // An owner whose agent is latched for reassignment no longer answers for it,
 // so its sessions stop being theirs.
 func TestListChats_Member_LatchedAgentSessionsHidden(t *testing.T) {

@@ -126,8 +126,9 @@ WITH candidate_chats AS (
     AND ($4 = '' OR c.external_user_id = $4)
     -- @owned_agent_ids widens a @user_id scope to the sessions of agents that
     -- user owns: agent-actor capture leaves user_id NULL, so an agent's
-    -- sessions would otherwise belong to nobody.
-    AND ($5 = '' OR c.user_id = $5 OR c.agent_id = ANY($6::uuid[]))
+    -- sessions would otherwise belong to nobody. A row that
+    -- also carries a human user_id is that human's, whatever agent_id says.
+    AND ($5 = '' OR c.user_id = $5 OR (c.user_id IS NULL AND c.agent_id = ANY($6::uuid[])))
     AND ($7::uuid IS NULL OR c.agent_id = $7::uuid)
     AND (
       $8::text = ''
@@ -2649,10 +2650,10 @@ SELECT
 FROM chat_session_links l
 LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
   AND ($1::text = '' OR pc.external_user_id = $1::text)
-  AND ($2::text = '' OR pc.user_id = $2::text OR pc.agent_id = ANY($3::uuid[]))
+  AND ($2::text = '' OR pc.user_id = $2::text OR (pc.user_id IS NULL AND pc.agent_id = ANY($3::uuid[])))
 LEFT JOIN chats cc ON l.child_chat_id IS NOT NULL AND cc.id = l.child_chat_id AND cc.project_id = l.project_id AND cc.deleted IS FALSE
   AND ($1::text = '' OR cc.external_user_id = $1::text)
-  AND ($2::text = '' OR cc.user_id = $2::text OR cc.agent_id = ANY($3::uuid[]))
+  AND ($2::text = '' OR cc.user_id = $2::text OR (cc.user_id IS NULL AND cc.agent_id = ANY($3::uuid[])))
 WHERE l.project_id = $4
   AND (l.parent_chat_id = ANY ($5::uuid[]) OR l.child_chat_id = ANY ($5::uuid[]))
   AND (
@@ -2752,7 +2753,7 @@ WITH RECURSIVE ancestry AS (
  JOIN chats parent ON parent.id = l.parent_chat_id AND parent.project_id = $1 AND parent.deleted IS FALSE
  WHERE a.slack_channel_id IS NULL AND NOT parent.id = ANY(a.visited)
   AND ($3::text = '' OR parent.external_user_id = $3::text)
-  AND ($4::text = '' OR parent.user_id = $4::text OR parent.agent_id = ANY($5::uuid[]))
+  AND ($4::text = '' OR parent.user_id = $4::text OR (parent.user_id IS NULL AND parent.agent_id = ANY($5::uuid[])))
 )
 SELECT DISTINCT ON (root_id) root_id AS id,
  coalesce(slack_team_id, '')::text AS slack_team_id,
@@ -2826,7 +2827,7 @@ WHERE c.project_id = $1
   AND (latest.source IS NOT NULL OR c.session_surface IS NOT NULL OR EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag'))
   AND c.deleted IS FALSE
   AND ($2::text = '' OR c.external_user_id = $2::text)
-  AND ($3::text = '' OR c.user_id = $3::text OR c.agent_id = ANY($4::uuid[]))
+  AND ($3::text = '' OR c.user_id = $3::text OR (c.user_id IS NULL AND c.agent_id = ANY($4::uuid[])))
 UNION
 SELECT 'litellm'
 WHERE EXISTS (
@@ -2836,7 +2837,7 @@ WHERE EXISTS (
     AND pc.deleted IS FALSE
     AND pc.litellm_proxied
     AND ($2::text = '' OR pc.external_user_id = $2::text)
-    AND ($3::text = '' OR pc.user_id = $3::text OR pc.agent_id = ANY($4::uuid[]))
+    AND ($3::text = '' OR pc.user_id = $3::text OR (pc.user_id IS NULL AND pc.agent_id = ANY($4::uuid[])))
 )
 ORDER BY source
 `
@@ -3015,7 +3016,7 @@ WITH candidate_chats AS (
     -- @owned_agent_ids widens a @user_id scope to the sessions of agents that
     -- user owns: agent-actor capture leaves user_id NULL, so an agent's
     -- sessions would otherwise belong to nobody.
-    AND ($4 = '' OR c.user_id = $4 OR c.agent_id = ANY($5::uuid[]))
+    AND ($4 = '' OR c.user_id = $4 OR (c.user_id IS NULL AND c.agent_id = ANY($5::uuid[])))
     AND ($6::uuid IS NULL OR c.agent_id = $6::uuid)
     AND (
       $7::text = ''
