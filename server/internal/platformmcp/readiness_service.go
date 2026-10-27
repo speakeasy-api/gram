@@ -99,27 +99,47 @@ func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal
 
 	if !force {
 		readiness, found, err := s.store.GetProviderReadiness(ctx, principal, project.ID, parsedRegistrationID)
-		return project, readiness, found, err
+		if err != nil || found || !consumeBudget || s.adapters == nil {
+			return project, readiness, found, err
+		}
+		// No check has been stored yet, typically right after the server was
+		// added. Run the first check now rather than report the server as
+		// degraded. A refused or failed check keeps the unchecked result.
+		probed, err := s.probe(ctx, principal, project.ID, parsedRegistrationID, "first_probe")
+		if err != nil {
+			return project, readiness, false, nil
+		}
+		return project, probed, true, nil
 	}
 
-	if s.forceLimiter == nil {
-		return ResolvedProject{}, Readiness{}, false, ErrUnavailable
-	}
-	limitKey := principal.OrganizationID + ":" + parsedRegistrationID.String()
-	decision, err := s.forceLimiter.Allow(ctx, limitKey)
+	readiness, err := s.probe(ctx, principal, project.ID, parsedRegistrationID, "forced_probe")
 	if err != nil {
-		return ResolvedProject{}, Readiness{}, false, fmt.Errorf("limit platform mcp forced readiness probe: %w", ErrOperationBudgetUnavailable)
-	}
-	if !decision.Allowed {
-		return ResolvedProject{}, Readiness{}, false, ErrReadinessRateLimited
-	}
-	readiness, err := s.store.ProbeProviderReadiness(ctx, principal, project.ID, parsedRegistrationID, s.adapters, s.generic)
-	if err != nil {
-		s.telemetry.Record(ctx, LifecycleEvent{Operation: "readiness", Phase: "forced_probe", Outcome: lifecycleOutcome(err), State: ""})
 		return ResolvedProject{}, Readiness{}, false, err
 	}
-	s.telemetry.Record(ctx, LifecycleEvent{Operation: "readiness", Phase: "forced_probe", Outcome: "succeeded", State: readiness.State})
 	return project, readiness, true, nil
+}
+
+// probe runs one authenticated provider check under the per-registration
+// probe limit.
+func (s *ReadinessService) probe(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID, phase string) (Readiness, error) {
+	if s.forceLimiter == nil {
+		return Readiness{}, ErrUnavailable
+	}
+	limitKey := principal.OrganizationID + ":" + registrationID.String()
+	decision, err := s.forceLimiter.Allow(ctx, limitKey)
+	if err != nil {
+		return Readiness{}, fmt.Errorf("limit platform mcp forced readiness probe: %w", ErrOperationBudgetUnavailable)
+	}
+	if !decision.Allowed {
+		return Readiness{}, ErrReadinessRateLimited
+	}
+	readiness, err := s.store.ProbeProviderReadiness(ctx, principal, projectID, registrationID, s.adapters, s.generic)
+	if err != nil {
+		s.telemetry.Record(ctx, LifecycleEvent{Operation: "readiness", Phase: phase, Outcome: lifecycleOutcome(err), State: ""})
+		return Readiness{}, err
+	}
+	s.telemetry.Record(ctx, LifecycleEvent{Operation: "readiness", Phase: phase, Outcome: "succeeded", State: readiness.State})
+	return readiness, nil
 }
 
 func (s *ReadinessService) GetRepairPlan(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, Readiness, bool, error) {

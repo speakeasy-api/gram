@@ -94,7 +94,7 @@ type FindMCPInput struct {
 	// selectors from its model-visible schema.
 	ProjectID   string `json:"project_id,omitempty" jsonschema:"optional project ID; defaults to the organization's Default project when query is omitted"`
 	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional project slug; defaults to the organization's Default project when query is omitted"`
-	Query       string `json:"query,omitempty" jsonschema:"optional MCP name, slug, or ID search; without a project selector, searches the organization"`
+	Query       string `json:"query,omitempty" jsonschema:"optional MCP name, slug, ID, or source URL search; without a project selector, searches the organization"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous unfiltered find_mcp result"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; server clamps this to 100"`
 	Readiness   string `json:"readiness,omitempty" jsonschema:"optional persisted readiness state filter"`
