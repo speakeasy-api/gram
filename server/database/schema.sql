@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS projects (
   organization_id TEXT NOT NULL,
   logo_asset_id uuid,
   functions_runner_version TEXT,
+  require_mcp_gateway boolean,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -52,6 +53,8 @@ COMMENT ON COLUMN projects.slug IS '@access: confidential';
 COMMENT ON COLUMN projects.organization_id IS '@access: confidential';
 COMMENT ON COLUMN projects.logo_asset_id IS '@access: confidential';
 COMMENT ON COLUMN projects.functions_runner_version IS '@access: confidential';
+COMMENT ON COLUMN projects.require_mcp_gateway IS 'Require MCP connections through a gateway. NULL and false allow direct connections.
+@access: confidential';
 COMMENT ON COLUMN projects.created_at IS '@access: confidential';
 COMMENT ON COLUMN projects.updated_at IS '@access: confidential';
 COMMENT ON COLUMN projects.deleted_at IS '@access: confidential';
