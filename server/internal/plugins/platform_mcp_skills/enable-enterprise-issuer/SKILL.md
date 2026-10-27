@@ -5,7 +5,7 @@ description: Guide an organization administrator through Speakeasy AI Control Pl
 
 # Set up enterprise-managed authorization
 
-If this connection lists `call_platform_tool` instead of the tools this workflow names, reach each named tool through it: describe the tool with `describe_platform_tool` first, then run it with `call_platform_tool` and the same arguments. When `execute` is also listed, you may instead run a multi-step part in `execute`, using `tools.describe` and `tools.call` with the path `platform--<tool name>`.
+If this connection lists `call_platform_tool` instead of the tools this workflow names, find each named tool with `search_platform_tools`, describe it with `describe_platform_tool`, then run it with `call_platform_tool` and the same arguments. A tool is available when search finds it, not when `tools/list` shows it; if search cannot find a tool, it is unavailable to you, so say so rather than guess. When `execute` is also listed, a multi-step read may run in `execute` with `tools.search`, `tools.describe` and `tools.call` on `platform--<tool name>` paths. End each `execute` run at a confirmation point and ask the user before any write.
 
 Use the executing client's authenticated Speakeasy AI Control Plane (AICP)
 Platform MCP connection. This workflow retrieves one organization's issuer and
