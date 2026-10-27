@@ -1851,8 +1851,8 @@ describe("gateway candidates", () => {
     await gateway?.run("open");
     expect(mocks.goToGatewayOverview).toHaveBeenCalledWith("gateway-example");
     expect(mocks.rbacCalls).toContainEqual({
-      fn: "hasScope",
-      scopes: ["mcp:read"],
+      fn: "hasAnyScope",
+      scopes: ["mcp:read", "mcp:write"],
       resourceId: "project-default",
     });
   });
