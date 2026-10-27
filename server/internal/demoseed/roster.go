@@ -120,8 +120,11 @@ const demoCIMDURL = "https://agents.example.com/.well-known/oauth-client"
 
 const (
 	skillContentRefunds = "---\nname: support-refunds\ndescription: How to process customer refunds safely.\n---\n\n# Refund handling\n\n1. Verify the order id and amount with the customer.\n2. Use the process_refund tool with the confirmed amount.\n3. Never accept full card numbers in chat.\n"
-	skillContentTriage  = "---\nname: triage-incident\ndescription: Steps for triaging a production incident.\n---\n\n# Incident triage\n\n1. Pull error logs with search_logs for the affected window.\n2. Correlate with recent deploys via list_deploys.\n3. Escalate to on-call when the error budget is at risk.\n"
-	skillContentRunbook = "---\nname: runbook\ndescription: General operational runbook for the Acme stack.\n---\n\n# Acme runbook\n\n- check_health before and after every rollout.\n- fetch_traces for latency regressions.\n- get_metrics to confirm recovery.\n"
+	// skillContentRefundsCaptured is a local rewrite of skillContentRefunds
+	// that a teammate's agent loaded before anyone uploaded it.
+	skillContentRefundsCaptured = "---\nname: support-refunds\ndescription: How to process customer refunds safely.\n---\n\n# Refunds\n\n## Before you refund\n\n- Confirm the order id, amount, and payment method with the customer.\n- Check search_logs for a failed charge on the same order.\n- Never accept full card numbers in chat.\n\n## Issuing the refund\n\n1. Call process_refund with the confirmed amount.\n2. Share the refund id and expected settlement time.\n3. Escalate refunds over $500 to the billing lead.\n"
+	skillContentTriage          = "---\nname: triage-incident\ndescription: Steps for triaging a production incident.\n---\n\n# Incident triage\n\n1. Pull error logs with search_logs for the affected window.\n2. Correlate with recent deploys via list_deploys.\n3. Escalate to on-call when the error budget is at risk.\n"
+	skillContentRunbook         = "---\nname: runbook\ndescription: General operational runbook for the Acme stack.\n---\n\n# Acme runbook\n\n- check_health before and after every rollout.\n- fetch_traces for latency regressions.\n- get_metrics to confirm recovery.\n"
 )
 
 // Fixed ids. Each is the tenant's uuid prefix plus a fixed suffix, so every

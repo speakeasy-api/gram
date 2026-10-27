@@ -68,6 +68,43 @@ func (q *Queries) SkillsInsertActivation(ctx context.Context, arg SkillsInsertAc
 	return err
 }
 
+const skillsInsertCapturedRefundsVersion = `-- name: SkillsInsertCapturedRefundsVersion :exec
+WITH captured_version AS (
+  INSERT INTO skill_versions (id, skill_id, content, canonical_sha256, raw_sha256,
+                              description, spec_valid, created_by_user_id, created_at)
+  SELECT $2::uuid, $3::uuid, c,
+         encode(sha256(convert_to(c, 'UTF8')), 'hex'),
+         encode(sha256(convert_to(c, 'UTF8')), 'hex'),
+         'How to process customer refunds safely.', TRUE, 'system', now() - interval '2 days'
+  FROM (SELECT $4::text AS c) s
+  RETURNING id, skill_id
+)
+INSERT INTO skill_version_origins (skill_version_id, skill_id, project_id, origin)
+SELECT captured_version.id, captured_version.skill_id, $1::uuid, 'captured'
+FROM captured_version
+`
+
+type SkillsInsertCapturedRefundsVersionParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+	SkillID   uuid.UUID
+	Content   string
+}
+
+// A rewrite of the refunds skill captured from a teammate's machine. It is
+// newer than the uploaded version but ranks below it, so plugins keep
+// shipping the uploaded version and the open suggestion stays based on it
+// until someone promotes the capture.
+func (q *Queries) SkillsInsertCapturedRefundsVersion(ctx context.Context, arg SkillsInsertCapturedRefundsVersionParams) error {
+	_, err := q.db.Exec(ctx, skillsInsertCapturedRefundsVersion,
+		arg.ProjectID,
+		arg.ID,
+		arg.SkillID,
+		arg.Content,
+	)
+	return err
+}
+
 const skillsInsertDistributions = `-- name: SkillsInsertDistributions :exec
 INSERT INTO skill_distributions (id, project_id, skill_id, channel, created_by_user_id, created_at)
 VALUES
