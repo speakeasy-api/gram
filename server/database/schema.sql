@@ -4068,8 +4068,6 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   -- Normalized issuer URL from discovery. Several organizations may connect
   -- the same Okta org. Pinned to the authoritative remote_session_issuers.issuer by the scope FK.
   issuer_url TEXT NOT NULL,
-  -- Unused; dropped once no deployed build reads it.
-  issuer_url_override_reason TEXT,
   -- Set only by successful credential proof.
   ownership_claimed boolean NOT NULL DEFAULT FALSE,
   remote_session_issuer_id uuid NOT NULL,
@@ -4094,9 +4092,6 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   CONSTRAINT okta_identity_provider_connections_pkey PRIMARY KEY (identity_provider_connection_id),
   CONSTRAINT okta_identity_provider_connections_provider_check CHECK (identity_provider_connections_provider = 'okta'),
   CONSTRAINT okta_identity_provider_connections_listing_mode_check CHECK (listing_mode IN ('custom_app', 'oin')),
-  CONSTRAINT okta_identity_provider_connections_override_reason_check CHECK (
-    issuer_url_override_reason IS NULL OR issuer_url_override_reason ~ '[^[:space:]]'
-  ),
   CONSTRAINT okta_identity_provider_connections_fkey FOREIGN KEY (identity_provider_connection_id, identity_provider_connections_provider) REFERENCES identity_provider_connections (id, provider) ON DELETE CASCADE,
   CONSTRAINT okta_identity_provider_connections_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT okta_identity_provider_connections_issuer_scope_fkey FOREIGN KEY (remote_session_issuer_id, issuer_url, attachment_scope) REFERENCES remote_session_issuers (id, issuer, attachment_scope),
@@ -4109,7 +4104,6 @@ COMMENT ON COLUMN okta_identity_provider_connections.organization_id IS '@access
 COMMENT ON COLUMN okta_identity_provider_connections.attachment_scope IS '@access: confidential';
 COMMENT ON COLUMN okta_identity_provider_connections.org_url IS '@access: restricted';
 COMMENT ON COLUMN okta_identity_provider_connections.issuer_url IS '@access: restricted';
-COMMENT ON COLUMN okta_identity_provider_connections.issuer_url_override_reason IS '@access: opaque-restricted';
 COMMENT ON COLUMN okta_identity_provider_connections.ownership_claimed IS '@access: confidential';
 COMMENT ON COLUMN okta_identity_provider_connections.remote_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN okta_identity_provider_connections.remote_session_client_id IS '@access: confidential';
