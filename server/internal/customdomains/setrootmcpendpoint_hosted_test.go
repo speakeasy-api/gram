@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -101,8 +100,6 @@ func TestSetRootMcpEndpoint_ByServerHostedOnDomainReusesItsEndpoint(t *testing.T
 	require.Len(t, endpoints, 1, "the hosted server keeps exactly one endpoint")
 	require.Equal(t, endpoints[0].ID.String(), requireValue(t, result.RootMcpEndpointID))
 	require.True(t, endpoints[0].IsDomainRoot.Valid && endpoints[0].IsDomainRoot.Bool)
-	// Setting the root only marks the endpoint, so the toolset columns still mirror it and an older pod's sync keeps it.
-	hostedmcptest.RequireMirrored(t, ctx, ti.conn, *authCtx.ProjectID, serverID)
 
 	// A later hosted reconcile must still see one endpoint and keep the root marker.
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: SetHostedNetworkAccessInTransaction needs a caller-owned transaction
@@ -117,7 +114,6 @@ func TestSetRootMcpEndpoint_ByServerHostedOnDomainReusesItsEndpoint(t *testing.T
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
 	require.True(t, endpoints[0].IsDomainRoot.Valid && endpoints[0].IsDomainRoot.Bool, "the root marker survives a hosted update")
-	hostedmcptest.RequireMirrored(t, ctx, ti.conn, *authCtx.ProjectID, serverID)
 }
 
 func TestSetRootMcpEndpoint_ByServerRejectsHostedServerOnAnotherAddress(t *testing.T) {

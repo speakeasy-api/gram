@@ -590,6 +590,18 @@ WHERE e.project_id = @project_id
           AND t.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
           AND t.deleted IS FALSE
       )
+      -- The platform host also serves a custom-domain alias in a live project.
+      AND (
+        e.custom_domain_id IS NOT NULL
+        OR NOT EXISTS (
+          SELECT 1
+          FROM toolsets t
+          JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+          WHERE t.mcp_slug = e.slug
+            AND t.custom_domain_id IS NOT NULL
+            AND t.deleted IS FALSE
+        )
+      )
     )
   )
 ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;

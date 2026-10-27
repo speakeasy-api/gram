@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -269,7 +268,7 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.True(t, reloaded.McpEnabled, "the toolset column mirrors the wrapper")
+	require.False(t, reloaded.McpEnabled, "the toolset column is a frozen alias; the wrapper owns MCP state")
 	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility, "assistant attachment must also enable the hosted wrapper")
@@ -546,7 +545,7 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.True(t, reloaded.McpEnabled, "the toolset column mirrors the wrapper")
+	require.False(t, reloaded.McpEnabled, "the toolset column is a frozen alias; the wrapper owns MCP state")
 	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility, "updating assistant toolsets must also enable the hosted wrapper")
@@ -584,8 +583,7 @@ func TestServiceAssistantEnableTurnsCanonicalWrapperPrivate(t *testing.T) {
 	require.Contains(t, string(record.AfterSnapshot), `"private"`)
 	reloaded, err := toolsetsRepo.New(conn).GetToolsetByIDAndProject(t.Context(), toolsetsRepo.GetToolsetByIDAndProjectParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.True(t, reloaded.McpEnabled, "the toolset column mirrors the wrapper")
-	hostedmcptest.RequireMirrored(t, t.Context(), conn, projectID, ts.ID)
+	require.False(t, reloaded.McpEnabled, "the toolset column is not written")
 }
 
 func TestServiceAssistantEnableRestoresPublicAndChecksIngress(t *testing.T) {
@@ -622,8 +620,7 @@ func TestServiceAssistantEnableRestoresPublicAndChecksIngress(t *testing.T) {
 	require.NoError(t, err)
 	server, err := servers.GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, "private", server.Visibility, "a public flag without OAuth comes back private")
-	hostedmcptest.RequireMirrored(t, t.Context(), conn, projectID, ts.ID)
+	require.Equal(t, "private", server.Visibility, "a frozen public alias without OAuth comes back private")
 
 	withOAuth, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: projectID, Name: "OAuth", Slug: "oauth",
@@ -648,7 +645,6 @@ func TestServiceAssistantEnableRestoresPublicAndChecksIngress(t *testing.T) {
 	server, err = servers.GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: withOAuth.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "public", server.Visibility, "external OAuth comes back public")
-	hostedmcptest.RequireMirrored(t, t.Context(), conn, projectID, withOAuth.ID)
 
 	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		Name: "Private Network", Model: "openai/gpt-4o-mini",
