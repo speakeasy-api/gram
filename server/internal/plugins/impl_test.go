@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -56,6 +58,9 @@ type mockGitHubPublisher struct {
 	collaborators           []string
 	collaboratorPermissions []string
 	lastPushedFiles         map[string][]byte
+	// lastFetchedFiles holds what the last GetRepoFiles returned after its
+	// include filter, i.e. the blobs a real client would have downloaded.
+	lastFetchedFiles map[string][]byte
 	// repoFiles, when set, is returned by GetRepoFiles; otherwise it falls back
 	// to lastPushedFiles so a second publish carries the first publish's files.
 	repoFiles       map[string][]byte
@@ -127,18 +132,26 @@ func (m *mockGitHubPublisher) HasDirectCollaborator(_ context.Context, _ int64, 
 	return len(m.collaborators) > 0, nil
 }
 
-func (m *mockGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, _, _, _ string) (map[string][]byte, error) {
+func (m *mockGitHubPublisher) GetRepoFiles(_ context.Context, _ int64, _, _, _ string, include func(path string) bool) (map[string][]byte, error) {
 	m.getRepoFilesCalled = true
 	if m.getRepoFilesErr != nil {
 		return nil, m.getRepoFilesErr
 	}
-	if m.repoFiles != nil {
-		return m.repoFiles, nil
+	files := m.repoFiles
+	if files == nil {
+		files = m.lastPushedFiles
 	}
-	if m.lastPushedFiles != nil {
-		return m.lastPushedFiles, nil
+	if files == nil {
+		return nil, ghclient.ErrRepoNotFound
 	}
-	return nil, ghclient.ErrRepoNotFound
+	fetched := make(map[string][]byte, len(files))
+	for path, content := range files {
+		if include == nil || include(path) {
+			fetched[path] = content
+		}
+	}
+	m.lastFetchedFiles = fetched
+	return fetched, nil
 }
 
 // GetFileContent serves single files from the same state GetRepoFiles uses, so
@@ -2865,6 +2878,69 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
 	require.Equal(t, hooksBefore, hooksAfter, "hooks subtree must be carried verbatim across an MCP-only publish")
 	require.Equal(t, hooksKeysBefore, countPluginHooksKeys(t, ctx, ti.conn, orgID), "MCP regeneration must not mint a hooks key")
+
+	// Each fetched file is a GitHub round trip, so an MCP-only publish must
+	// download exactly the hooks subtree it carries, not the MCP files it is
+	// about to regenerate.
+	observabilityPushed := slices.Sorted(maps.Keys(filesWithSubstring(mock.lastPushedFiles, "-observability")))
+	require.NotEmpty(t, observabilityPushed)
+	require.Equal(t, observabilityPushed, slices.Sorted(maps.Keys(mock.lastFetchedFiles)), "an MCP-only publish must fetch only the hooks subtree it carries")
+}
+
+// A hooks-only change carries the MCP component, so the publish must fetch the
+// MCP files and none of the hooks subtree it is about to regenerate.
+func TestPluginsService_PublishProject_HooksChangeFetchesOnlyMCPFiles(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	phasedRolloutFixture(t, ctx, ti, mock, "Fetch MCP Only")
+	mcpBefore := filesWithoutSubstring(mock.lastPushedFiles, "-observability")
+
+	orgID := publishOrgID(t, ctx, ti.conn, *authCtx.ProjectID)
+	features := &feature.InMemory{}
+	features.SetFlagPayload(feature.FlagHooksRollout, orgID, []byte(`{"version": 9999}`))
+	pub := newTestPluginPublisher(t, ti, mock, features)
+
+	res, err := pub.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "hooks only",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, res.Skipped)
+
+	require.NotEmpty(t, mock.lastFetchedFiles, "carrying MCP requires fetching its files")
+	for path := range mock.lastFetchedFiles {
+		require.NotContains(t, path, "-observability", "a hooks-only publish must not fetch the hooks subtree it regenerates")
+	}
+	for path, content := range mock.lastFetchedFiles {
+		require.Equal(t, mcpBefore[path], string(content), "fetched MCP files must be the published ones")
+	}
+}
+
+func filesWithSubstring(files map[string][]byte, substr string) map[string]string {
+	out := make(map[string]string)
+	for p, content := range files {
+		if strings.Contains(p, substr) {
+			out[p] = string(content)
+		}
+	}
+	return out
+}
+
+func filesWithoutSubstring(files map[string][]byte, substr string) map[string]string {
+	out := make(map[string]string)
+	for p, content := range files {
+		if !strings.Contains(p, substr) {
+			out[p] = string(content)
+		}
+	}
+	return out
 }
 
 // phasedRolloutFixture creates a published project and rewinds its stored hooks
