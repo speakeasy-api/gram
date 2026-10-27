@@ -6,9 +6,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Every plugin mutation must enqueue a republish for its own project. Before
@@ -60,6 +63,45 @@ func TestPluginsService_MutationsSignalRepublish(t *testing.T) {
 
 	require.NoError(t, ti.service.DeletePlugin(ctx, &gen.DeletePluginPayload{ID: plugin.ID}))
 	assertSignalled(t, 6, "deleting a plugin")
+}
+
+// An assignment change that adds or removes servers through role delivery
+// changes the package, so it must signal like any other plugin mutation. One
+// that leaves the package alone has nothing to publish.
+func TestPluginsService_AssignmentContentChangeSignalsRepublish(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	deliveringRole := createTestRolePrincipal(t, ctx, ti, "signal-delivering")
+	emptyRole := createTestRolePrincipal(t, ctx, ti, "signal-empty")
+	server := createTestToolset(t, ctx, ti.conn, "signal-role-server")
+	principal, err := urn.ParsePrincipal(deliveringRole)
+	require.NoError(t, err)
+	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, server.ID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors,
+	})
+	require.NoError(t, err)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Assignment Signal"})
+	require.NoError(t, err)
+	require.Len(t, ti.publisher.captured(), 1)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{emptyRole}})
+	require.NoError(t, err)
+	require.Len(t, ti.publisher.captured(), 1, "an assignment change that leaves the package alone must not enqueue")
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{deliveringRole}})
+	require.NoError(t, err)
+	captured := ti.publisher.captured()
+	require.Len(t, captured, 2, "an assignment change that delivers servers should enqueue a republish")
+	require.Equal(t, *authCtx.ProjectID, captured[1].projectID)
+	require.Equal(t, authCtx.UserID, captured[1].createdByUserID)
 }
 
 // ListPlugins lazily provisions the Default plugin for a project that predates

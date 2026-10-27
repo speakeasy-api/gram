@@ -1331,6 +1331,10 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
+	if result.ContentChanged {
+		s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+	}
+
 	assignments := make([]*gen.PluginAssignment, 0, len(result.Assignments))
 	for _, assignment := range result.Assignments {
 		assignments = append(assignments, pluginAssignmentToGen(assignment))
