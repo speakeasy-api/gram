@@ -32,6 +32,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -470,4 +473,45 @@ func TestServeAgentGateway_ListsPrivateOnlyMembersOnPrivateIngress(t *testing.T)
 	require.Contains(t, w.Body.String(), fx.granted)
 	// public_only members are the ones excluded here.
 	require.NotContains(t, w.Body.String(), fx.open)
+}
+
+func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	upstream := newRecordingUpstream(t, "ping")
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: projectID, TransportType: "streamable-http", Url: upstream.url})
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: projectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
+	require.NoError(t, err)
+	q := remotesessionsrepo.New(ti.conn)
+	provider, err := q.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{ProjectID: conv.ToNullUUID(projectID), Slug: "gateway-owner-provider", Issuer: upstream.url, ScopesSupported: []string{}, GrantTypesSupported: []string{"authorization_code"}, ResponseTypesSupported: []string{"code"}, TokenEndpointAuthMethodsSupported: []string{"none"}})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(projectID), RemoteSessionIssuerID: provider.ID, ClientID: "gateway-owner-client"})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: issuerID}))
+	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, client.ID, urn.NewUserSubject(authCtx.UserID), "owner-assigned-token", upstream.url)
+	sessions, err := q.ListPrincipalRemoteSessionCandidates(ctx, remotesessionsrepo.ListPrincipalRemoteSessionCandidatesParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, UserSessionIssuerID: issuerID, SubjectUrn: urn.NewUserSubject(authCtx.UserID)})
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.AttachPrincipalRemoteSessionBindingParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, PrincipalID: fx.agent.ID, UserSessionIssuerID: issuerID, SubjectUrn: urn.NewUserSubject(authCtx.UserID).String(), RemoteSessionID: sessions[0].RemoteSession.ID})
+	require.NoError(t, err)
+	body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
+	require.NoError(t, err)
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.False(t, isError, text)
+	upstream.requireToolCallAuth(t, "Bearer owner-assigned-token")
+	_, err = testrepo.New(ti.conn).RevokeAttachmentByIDFixture(ctx, binding.ID)
+	require.NoError(t, err)
+	upstream.mu.Lock()
+	upstream.requests = nil
+	upstream.mu.Unlock()
+	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
+	require.NoError(t, err)
+	upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
 }

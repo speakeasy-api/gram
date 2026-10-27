@@ -46,6 +46,8 @@ import (
 	externalkeysc "github.com/speakeasy-api/gram/server/gen/http/external_keys/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
+	gatewaysessionsc "github.com/speakeasy-api/gram/server/gen/http/gateway_sessions/client"
+	hiddenmcpserversc "github.com/speakeasy-api/gram/server/gen/http/hidden_mcp_servers/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
@@ -147,6 +149,7 @@ func UsageCommands() []string {
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|verify-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
 		"functions get-signed-asset-url",
+		"hidden-mcp-servers (list|hide|unhide)",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
@@ -187,7 +190,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
-		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|get-server-identity-impact|list-server-client-associations|detach-server-client-association|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
+		"remote-sessions (begin-binding-refresh|complete-binding-refresh|list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|get-server-identity-impact|list-server-client-associations|detach-server-client-association|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|list-risk-presets|suggest-risk-policy|compile-expr|get-risk-user-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|list-risk-policy-approvals|get-risk-policy-approval|decide-risk-policy-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"sigint (create-signal|get-signal|list-signals|update-signal|delete-signal|create-sensor|get-sensor|list-sensors|update-sensor|delete-sensor)",
@@ -211,6 +214,7 @@ func UsageCommands() []string {
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
+		"gateway-sessions (list-gateway-sessions|list-gateway-session-facets)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|register-device)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
@@ -912,7 +916,8 @@ func ParseEndpoint(
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
 		authCallbackFlags     = flag.NewFlagSet("callback", flag.ExitOnError)
-		authCallbackCodeFlag  = authCallbackFlags.String("code", "REQUIRED", "")
+		authCallbackCodeFlag  = authCallbackFlags.String("code", "", "")
+		authCallbackErrorFlag = authCallbackFlags.String("error", "", "")
 		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
 		authLoginFlags              = flag.NewFlagSet("login", flag.ExitOnError)
@@ -1607,6 +1612,19 @@ func ParseEndpoint(
 		functionsGetSignedAssetURLBodyFlag          = functionsGetSignedAssetURLFlags.String("body", "REQUIRED", "")
 		functionsGetSignedAssetURLFunctionTokenFlag = functionsGetSignedAssetURLFlags.String("function-token", "", "")
 
+		hiddenMcpServersFlags = flag.NewFlagSet("hidden-mcp-servers", flag.ContinueOnError)
+
+		hiddenMcpServersListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		hiddenMcpServersListSessionTokenFlag = hiddenMcpServersListFlags.String("session-token", "", "")
+
+		hiddenMcpServersHideFlags            = flag.NewFlagSet("hide", flag.ExitOnError)
+		hiddenMcpServersHideBodyFlag         = hiddenMcpServersHideFlags.String("body", "REQUIRED", "")
+		hiddenMcpServersHideSessionTokenFlag = hiddenMcpServersHideFlags.String("session-token", "", "")
+
+		hiddenMcpServersUnhideFlags            = flag.NewFlagSet("unhide", flag.ExitOnError)
+		hiddenMcpServersUnhideBodyFlag         = hiddenMcpServersUnhideFlags.String("body", "REQUIRED", "")
+		hiddenMcpServersUnhideSessionTokenFlag = hiddenMcpServersUnhideFlags.String("session-token", "", "")
+
 		hooksServerNamesFlags = flag.NewFlagSet("hooks-server-names", flag.ContinueOnError)
 
 		hooksServerNamesListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
@@ -1964,6 +1982,7 @@ func ParseEndpoint(
 		mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags                = flag.NewFlagSet("check-mcp-endpoint-slug-availability", flag.ExitOnError)
 		mcpEndpointsCheckMcpEndpointSlugAvailabilitySlugFlag             = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("slug", "REQUIRED", "")
 		mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainIDFlag   = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("custom-domain-id", "", "")
+		mcpEndpointsCheckMcpEndpointSlugAvailabilityMcpServerIDFlag      = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("mcp-server-id", "", "")
 		mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionTokenFlag     = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("session-token", "", "")
 		mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyTokenFlag      = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("apikey-token", "", "")
 		mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInputFlag = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("project-slug-input", "", "")
@@ -3133,12 +3152,17 @@ func ParseEndpoint(
 
 		organizationRemoteSessionsFlags = flag.NewFlagSet("organization-remote-sessions", flag.ContinueOnError)
 
-		organizationRemoteSessionsListClientSessionsFlags            = flag.NewFlagSet("list-client-sessions", flag.ExitOnError)
-		organizationRemoteSessionsListClientSessionsClientIDFlag     = organizationRemoteSessionsListClientSessionsFlags.String("client-id", "REQUIRED", "")
-		organizationRemoteSessionsListClientSessionsCursorFlag       = organizationRemoteSessionsListClientSessionsFlags.String("cursor", "", "")
-		organizationRemoteSessionsListClientSessionsLimitFlag        = organizationRemoteSessionsListClientSessionsFlags.String("limit", "", "")
-		organizationRemoteSessionsListClientSessionsSessionTokenFlag = organizationRemoteSessionsListClientSessionsFlags.String("session-token", "", "")
-		organizationRemoteSessionsListClientSessionsApikeyTokenFlag  = organizationRemoteSessionsListClientSessionsFlags.String("apikey-token", "", "")
+		organizationRemoteSessionsListClientSessionsFlags             = flag.NewFlagSet("list-client-sessions", flag.ExitOnError)
+		organizationRemoteSessionsListClientSessionsClientIDFlag      = organizationRemoteSessionsListClientSessionsFlags.String("client-id", "REQUIRED", "")
+		organizationRemoteSessionsListClientSessionsSearchFlag        = organizationRemoteSessionsListClientSessionsFlags.String("search", "", "")
+		organizationRemoteSessionsListClientSessionsStatusFlag        = organizationRemoteSessionsListClientSessionsFlags.String("status", "", "")
+		organizationRemoteSessionsListClientSessionsCreatedAfterFlag  = organizationRemoteSessionsListClientSessionsFlags.String("created-after", "", "")
+		organizationRemoteSessionsListClientSessionsCreatedBeforeFlag = organizationRemoteSessionsListClientSessionsFlags.String("created-before", "", "")
+		organizationRemoteSessionsListClientSessionsSortFlag          = organizationRemoteSessionsListClientSessionsFlags.String("sort", "", "")
+		organizationRemoteSessionsListClientSessionsCursorFlag        = organizationRemoteSessionsListClientSessionsFlags.String("cursor", "", "")
+		organizationRemoteSessionsListClientSessionsLimitFlag         = organizationRemoteSessionsListClientSessionsFlags.String("limit", "", "")
+		organizationRemoteSessionsListClientSessionsSessionTokenFlag  = organizationRemoteSessionsListClientSessionsFlags.String("session-token", "", "")
+		organizationRemoteSessionsListClientSessionsApikeyTokenFlag   = organizationRemoteSessionsListClientSessionsFlags.String("apikey-token", "", "")
 
 		organizationRemoteSessionsRevokeSessionFlags            = flag.NewFlagSet("revoke-session", flag.ExitOnError)
 		organizationRemoteSessionsRevokeSessionIDFlag           = organizationRemoteSessionsRevokeSessionFlags.String("id", "REQUIRED", "")
@@ -3156,6 +3180,16 @@ func ParseEndpoint(
 		organizationRemoteSessionsRevokeAllClientSessionsApikeyTokenFlag  = organizationRemoteSessionsRevokeAllClientSessionsFlags.String("apikey-token", "", "")
 
 		remoteSessionsFlags = flag.NewFlagSet("remote-sessions", flag.ContinueOnError)
+
+		remoteSessionsBeginBindingRefreshFlags                = flag.NewFlagSet("begin-binding-refresh", flag.ExitOnError)
+		remoteSessionsBeginBindingRefreshBodyFlag             = remoteSessionsBeginBindingRefreshFlags.String("body", "REQUIRED", "")
+		remoteSessionsBeginBindingRefreshSessionTokenFlag     = remoteSessionsBeginBindingRefreshFlags.String("session-token", "", "")
+		remoteSessionsBeginBindingRefreshProjectSlugInputFlag = remoteSessionsBeginBindingRefreshFlags.String("project-slug-input", "", "")
+
+		remoteSessionsCompleteBindingRefreshFlags                = flag.NewFlagSet("complete-binding-refresh", flag.ExitOnError)
+		remoteSessionsCompleteBindingRefreshBodyFlag             = remoteSessionsCompleteBindingRefreshFlags.String("body", "REQUIRED", "")
+		remoteSessionsCompleteBindingRefreshSessionTokenFlag     = remoteSessionsCompleteBindingRefreshFlags.String("session-token", "", "")
+		remoteSessionsCompleteBindingRefreshProjectSlugInputFlag = remoteSessionsCompleteBindingRefreshFlags.String("project-slug-input", "", "")
 
 		remoteSessionsListBindingsFlags                   = flag.NewFlagSet("list-bindings", flag.ExitOnError)
 		remoteSessionsListBindingsPrincipalIDFlag         = remoteSessionsListBindingsFlags.String("principal-id", "REQUIRED", "")
@@ -5170,6 +5204,27 @@ func ParseEndpoint(
 		userSessionsRevokeUserSessionApikeyTokenFlag      = userSessionsRevokeUserSessionFlags.String("apikey-token", "", "")
 		userSessionsRevokeUserSessionProjectSlugInputFlag = userSessionsRevokeUserSessionFlags.String("project-slug-input", "", "")
 
+		gatewaySessionsFlags = flag.NewFlagSet("gateway-sessions", flag.ContinueOnError)
+
+		gatewaySessionsListGatewaySessionsFlags             = flag.NewFlagSet("list-gateway-sessions", flag.ExitOnError)
+		gatewaySessionsListGatewaySessionsGatewayIDFlag     = gatewaySessionsListGatewaySessionsFlags.String("gateway-id", "", "")
+		gatewaySessionsListGatewaySessionsSearchFlag        = gatewaySessionsListGatewaySessionsFlags.String("search", "", "")
+		gatewaySessionsListGatewaySessionsServerIDFlag      = gatewaySessionsListGatewaySessionsFlags.String("server-id", "", "")
+		gatewaySessionsListGatewaySessionsProviderIDFlag    = gatewaySessionsListGatewaySessionsFlags.String("provider-id", "", "")
+		gatewaySessionsListGatewaySessionsStatusFlag        = gatewaySessionsListGatewaySessionsFlags.String("status", "active", "")
+		gatewaySessionsListGatewaySessionsCreatedAfterFlag  = gatewaySessionsListGatewaySessionsFlags.String("created-after", "", "")
+		gatewaySessionsListGatewaySessionsCreatedBeforeFlag = gatewaySessionsListGatewaySessionsFlags.String("created-before", "", "")
+		gatewaySessionsListGatewaySessionsSortFlag          = gatewaySessionsListGatewaySessionsFlags.String("sort", "newest", "")
+		gatewaySessionsListGatewaySessionsCursorFlag        = gatewaySessionsListGatewaySessionsFlags.String("cursor", "", "")
+		gatewaySessionsListGatewaySessionsLimitFlag         = gatewaySessionsListGatewaySessionsFlags.String("limit", "50", "")
+		gatewaySessionsListGatewaySessionsSessionTokenFlag  = gatewaySessionsListGatewaySessionsFlags.String("session-token", "", "")
+		gatewaySessionsListGatewaySessionsApikeyTokenFlag   = gatewaySessionsListGatewaySessionsFlags.String("apikey-token", "", "")
+
+		gatewaySessionsListGatewaySessionFacetsFlags            = flag.NewFlagSet("list-gateway-session-facets", flag.ExitOnError)
+		gatewaySessionsListGatewaySessionFacetsGatewayIDFlag    = gatewaySessionsListGatewaySessionFacetsFlags.String("gateway-id", "", "")
+		gatewaySessionsListGatewaySessionFacetsSessionTokenFlag = gatewaySessionsListGatewaySessionFacetsFlags.String("session-token", "", "")
+		gatewaySessionsListGatewaySessionFacetsApikeyTokenFlag  = gatewaySessionsListGatewaySessionFacetsFlags.String("apikey-token", "", "")
+
 		widgetsFlags = flag.NewFlagSet("widgets", flag.ContinueOnError)
 
 		widgetsListWidgetsFlags                = flag.NewFlagSet("list-widgets", flag.ExitOnError)
@@ -5612,6 +5667,11 @@ func ParseEndpoint(
 	functionsFlags.Usage = functionsUsage
 	functionsGetSignedAssetURLFlags.Usage = functionsGetSignedAssetURLUsage
 
+	hiddenMcpServersFlags.Usage = hiddenMcpServersUsage
+	hiddenMcpServersListFlags.Usage = hiddenMcpServersListUsage
+	hiddenMcpServersHideFlags.Usage = hiddenMcpServersHideUsage
+	hiddenMcpServersUnhideFlags.Usage = hiddenMcpServersUnhideUsage
+
 	hooksServerNamesFlags.Usage = hooksServerNamesUsage
 	hooksServerNamesListFlags.Usage = hooksServerNamesListUsage
 	hooksServerNamesUpsertFlags.Usage = hooksServerNamesUpsertUsage
@@ -5984,6 +6044,8 @@ func ParseEndpoint(
 	organizationRemoteSessionsRevokeAllClientSessionsFlags.Usage = organizationRemoteSessionsRevokeAllClientSessionsUsage
 
 	remoteSessionsFlags.Usage = remoteSessionsUsage
+	remoteSessionsBeginBindingRefreshFlags.Usage = remoteSessionsBeginBindingRefreshUsage
+	remoteSessionsCompleteBindingRefreshFlags.Usage = remoteSessionsCompleteBindingRefreshUsage
 	remoteSessionsListBindingsFlags.Usage = remoteSessionsListBindingsUsage
 	remoteSessionsAttachBindingFlags.Usage = remoteSessionsAttachBindingUsage
 	remoteSessionsDetachBindingFlags.Usage = remoteSessionsDetachBindingUsage
@@ -6391,6 +6453,10 @@ func ParseEndpoint(
 	userSessionsMintUserSessionFlags.Usage = userSessionsMintUserSessionUsage
 	userSessionsRevokeUserSessionFlags.Usage = userSessionsRevokeUserSessionUsage
 
+	gatewaySessionsFlags.Usage = gatewaySessionsUsage
+	gatewaySessionsListGatewaySessionsFlags.Usage = gatewaySessionsListGatewaySessionsUsage
+	gatewaySessionsListGatewaySessionFacetsFlags.Usage = gatewaySessionsListGatewaySessionFacetsUsage
+
 	widgetsFlags.Usage = widgetsUsage
 	widgetsListWidgetsFlags.Usage = widgetsListWidgetsUsage
 	widgetsGetWidgetFlags.Usage = widgetsGetWidgetUsage
@@ -6493,6 +6559,8 @@ func ParseEndpoint(
 			svcf = mcpRegistriesFlags
 		case "functions":
 			svcf = functionsFlags
+		case "hidden-mcp-servers":
+			svcf = hiddenMcpServersFlags
 		case "hooks-server-names":
 			svcf = hooksServerNamesFlags
 		case "hooks":
@@ -6621,6 +6689,8 @@ func ParseEndpoint(
 			svcf = organizationUserSessionIssuersFlags
 		case "user-sessions":
 			svcf = userSessionsFlags
+		case "gateway-sessions":
+			svcf = gatewaySessionsFlags
 		case "widgets":
 			svcf = widgetsFlags
 		case "workload-identities":
@@ -7526,6 +7596,19 @@ func ParseEndpoint(
 			switch epn {
 			case "get-signed-asset-url":
 				epf = functionsGetSignedAssetURLFlags
+
+			}
+
+		case "hidden-mcp-servers":
+			switch epn {
+			case "list":
+				epf = hiddenMcpServersListFlags
+
+			case "hide":
+				epf = hiddenMcpServersHideFlags
+
+			case "unhide":
+				epf = hiddenMcpServersUnhideFlags
 
 			}
 
@@ -8564,6 +8647,12 @@ func ParseEndpoint(
 
 		case "remote-sessions":
 			switch epn {
+			case "begin-binding-refresh":
+				epf = remoteSessionsBeginBindingRefreshFlags
+
+			case "complete-binding-refresh":
+				epf = remoteSessionsCompleteBindingRefreshFlags
+
 			case "list-bindings":
 				epf = remoteSessionsListBindingsFlags
 
@@ -9738,6 +9827,16 @@ func ParseEndpoint(
 
 			}
 
+		case "gateway-sessions":
+			switch epn {
+			case "list-gateway-sessions":
+				epf = gatewaySessionsListGatewaySessionsFlags
+
+			case "list-gateway-session-facets":
+				epf = gatewaySessionsListGatewaySessionFacetsFlags
+
+			}
+
 		case "widgets":
 			switch epn {
 			case "list-widgets":
@@ -10294,7 +10393,7 @@ func ParseEndpoint(
 			switch epn {
 			case "callback":
 				endpoint = c.Callback()
-				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackStateFlag)
+				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackErrorFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
 				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginPartnerCodeFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag)
@@ -10743,6 +10842,19 @@ func ParseEndpoint(
 				endpoint = c.GetSignedAssetURL()
 				data, err = functionsc.BuildGetSignedAssetURLPayload(*functionsGetSignedAssetURLBodyFlag, *functionsGetSignedAssetURLFunctionTokenFlag)
 			}
+		case "hidden-mcp-servers":
+			c := hiddenmcpserversc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = hiddenmcpserversc.BuildListPayload(*hiddenMcpServersListSessionTokenFlag)
+			case "hide":
+				endpoint = c.Hide()
+				data, err = hiddenmcpserversc.BuildHidePayload(*hiddenMcpServersHideBodyFlag, *hiddenMcpServersHideSessionTokenFlag)
+			case "unhide":
+				endpoint = c.Unhide()
+				data, err = hiddenmcpserversc.BuildUnhidePayload(*hiddenMcpServersUnhideBodyFlag, *hiddenMcpServersUnhideSessionTokenFlag)
+			}
 		case "hooks-server-names":
 			c := hooksservernamesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -10991,7 +11103,7 @@ func ParseEndpoint(
 				data, err = mcpendpointsc.BuildUpdateMcpEndpointPayload(*mcpEndpointsUpdateMcpEndpointBodyFlag, *mcpEndpointsUpdateMcpEndpointSessionTokenFlag, *mcpEndpointsUpdateMcpEndpointApikeyTokenFlag, *mcpEndpointsUpdateMcpEndpointProjectSlugInputFlag)
 			case "check-mcp-endpoint-slug-availability":
 				endpoint = c.CheckMcpEndpointSlugAvailability()
-				data, err = mcpendpointsc.BuildCheckMcpEndpointSlugAvailabilityPayload(*mcpEndpointsCheckMcpEndpointSlugAvailabilitySlugFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainIDFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionTokenFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyTokenFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInputFlag)
+				data, err = mcpendpointsc.BuildCheckMcpEndpointSlugAvailabilityPayload(*mcpEndpointsCheckMcpEndpointSlugAvailabilitySlugFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainIDFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityMcpServerIDFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionTokenFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyTokenFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInputFlag)
 			case "delete-mcp-endpoint":
 				endpoint = c.DeleteMcpEndpoint()
 				data, err = mcpendpointsc.BuildDeleteMcpEndpointPayload(*mcpEndpointsDeleteMcpEndpointIDFlag, *mcpEndpointsDeleteMcpEndpointSessionTokenFlag, *mcpEndpointsDeleteMcpEndpointApikeyTokenFlag, *mcpEndpointsDeleteMcpEndpointProjectSlugInputFlag)
@@ -11777,7 +11889,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-client-sessions":
 				endpoint = c.ListClientSessions()
-				data, err = organizationremotesessionsc.BuildListClientSessionsPayload(*organizationRemoteSessionsListClientSessionsClientIDFlag, *organizationRemoteSessionsListClientSessionsCursorFlag, *organizationRemoteSessionsListClientSessionsLimitFlag, *organizationRemoteSessionsListClientSessionsSessionTokenFlag, *organizationRemoteSessionsListClientSessionsApikeyTokenFlag)
+				data, err = organizationremotesessionsc.BuildListClientSessionsPayload(*organizationRemoteSessionsListClientSessionsClientIDFlag, *organizationRemoteSessionsListClientSessionsSearchFlag, *organizationRemoteSessionsListClientSessionsStatusFlag, *organizationRemoteSessionsListClientSessionsCreatedAfterFlag, *organizationRemoteSessionsListClientSessionsCreatedBeforeFlag, *organizationRemoteSessionsListClientSessionsSortFlag, *organizationRemoteSessionsListClientSessionsCursorFlag, *organizationRemoteSessionsListClientSessionsLimitFlag, *organizationRemoteSessionsListClientSessionsSessionTokenFlag, *organizationRemoteSessionsListClientSessionsApikeyTokenFlag)
 			case "revoke-session":
 				endpoint = c.RevokeSession()
 				data, err = organizationremotesessionsc.BuildRevokeSessionPayload(*organizationRemoteSessionsRevokeSessionIDFlag, *organizationRemoteSessionsRevokeSessionSessionTokenFlag, *organizationRemoteSessionsRevokeSessionApikeyTokenFlag)
@@ -11791,6 +11903,12 @@ func ParseEndpoint(
 		case "remote-sessions":
 			c := remotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "begin-binding-refresh":
+				endpoint = c.BeginBindingRefresh()
+				data, err = remotesessionsc.BuildBeginBindingRefreshPayload(*remoteSessionsBeginBindingRefreshBodyFlag, *remoteSessionsBeginBindingRefreshSessionTokenFlag, *remoteSessionsBeginBindingRefreshProjectSlugInputFlag)
+			case "complete-binding-refresh":
+				endpoint = c.CompleteBindingRefresh()
+				data, err = remotesessionsc.BuildCompleteBindingRefreshPayload(*remoteSessionsCompleteBindingRefreshBodyFlag, *remoteSessionsCompleteBindingRefreshSessionTokenFlag, *remoteSessionsCompleteBindingRefreshProjectSlugInputFlag)
 			case "list-bindings":
 				endpoint = c.ListBindings()
 				data, err = remotesessionsc.BuildListBindingsPayload(*remoteSessionsListBindingsPrincipalIDFlag, *remoteSessionsListBindingsUserSessionIssuerIDFlag, *remoteSessionsListBindingsSessionTokenFlag, *remoteSessionsListBindingsProjectSlugInputFlag)
@@ -12965,6 +13083,16 @@ func ParseEndpoint(
 			case "revoke-user-session":
 				endpoint = c.RevokeUserSession()
 				data, err = usersessionsc.BuildRevokeUserSessionPayload(*userSessionsRevokeUserSessionIDFlag, *userSessionsRevokeUserSessionSessionTokenFlag, *userSessionsRevokeUserSessionApikeyTokenFlag, *userSessionsRevokeUserSessionProjectSlugInputFlag)
+			}
+		case "gateway-sessions":
+			c := gatewaysessionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-gateway-sessions":
+				endpoint = c.ListGatewaySessions()
+				data, err = gatewaysessionsc.BuildListGatewaySessionsPayload(*gatewaySessionsListGatewaySessionsGatewayIDFlag, *gatewaySessionsListGatewaySessionsSearchFlag, *gatewaySessionsListGatewaySessionsServerIDFlag, *gatewaySessionsListGatewaySessionsProviderIDFlag, *gatewaySessionsListGatewaySessionsStatusFlag, *gatewaySessionsListGatewaySessionsCreatedAfterFlag, *gatewaySessionsListGatewaySessionsCreatedBeforeFlag, *gatewaySessionsListGatewaySessionsSortFlag, *gatewaySessionsListGatewaySessionsCursorFlag, *gatewaySessionsListGatewaySessionsLimitFlag, *gatewaySessionsListGatewaySessionsSessionTokenFlag, *gatewaySessionsListGatewaySessionsApikeyTokenFlag)
+			case "list-gateway-session-facets":
+				endpoint = c.ListGatewaySessionFacets()
+				data, err = gatewaysessionsc.BuildListGatewaySessionFacetsPayload(*gatewaySessionsListGatewaySessionFacetsGatewayIDFlag, *gatewaySessionsListGatewaySessionFacetsSessionTokenFlag, *gatewaySessionsListGatewaySessionFacetsApikeyTokenFlag)
 			}
 		case "widgets":
 			c := widgetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16146,6 +16274,7 @@ func authCallbackUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth callback", os.Args[0])
 	fmt.Fprint(os.Stderr, " -code STRING")
+	fmt.Fprint(os.Stderr, " -error STRING")
 	fmt.Fprint(os.Stderr, " -state STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -16155,11 +16284,12 @@ func authCallbackUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -code STRING: `)
+	fmt.Fprintln(os.Stderr, `    -error STRING: `)
 	fmt.Fprintln(os.Stderr, `    -state STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"abc123\" --state \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"abc123\" --error \"abc123\" --state \"abc123\"")
 }
 
 func authLoginUsage() {
@@ -19301,6 +19431,77 @@ func functionsGetSignedAssetURLUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --body '{\n      \"asset_id\": \"abc123\"\n   }' --function-token \"abc123\"")
 }
 
+// hiddenMcpServersUsage displays the usage of the hidden-mcp-servers command
+// and its subcommands.
+func hiddenMcpServersUsage() {
+	fmt.Fprintln(os.Stderr, `MCP servers the signed-in user hid. Gateways leave hidden servers out of the user's tools and list them last on the consent page. Each user manages only their own list.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] hidden-mcp-servers COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list: List the MCP servers the signed-in user hid in the active organization.`)
+	fmt.Fprintln(os.Stderr, `    hide: Hide an MCP server for the signed-in user. Hiding a hidden server changes nothing.`)
+	fmt.Fprintln(os.Stderr, `    unhide: Show a hidden MCP server again for the signed-in user. Unhiding a server that is not hidden changes nothing.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s hidden-mcp-servers COMMAND --help\n", os.Args[0])
+}
+func hiddenMcpServersListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hidden-mcp-servers list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the MCP servers the signed-in user hid in the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hidden-mcp-servers list --session-token \"abc123\"")
+}
+
+func hiddenMcpServersHideUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hidden-mcp-servers hide", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Hide an MCP server for the signed-in user. Hiding a hidden server changes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hidden-mcp-servers hide --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func hiddenMcpServersUnhideUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hidden-mcp-servers unhide", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Show a hidden MCP server again for the signed-in user. Unhiding a server that is not hidden changes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hidden-mcp-servers unhide --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
 // hooksServerNamesUsage displays the usage of the hooks-server-names command
 // and its subcommands.
 func hooksServerNamesUsage() {
@@ -20934,6 +21135,7 @@ func mcpEndpointsCheckMcpEndpointSlugAvailabilityUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] mcp-endpoints check-mcp-endpoint-slug-availability", os.Args[0])
 	fmt.Fprint(os.Stderr, " -slug STRING")
 	fmt.Fprint(os.Stderr, " -custom-domain-id STRING")
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -20946,13 +21148,14 @@ func mcpEndpointsCheckMcpEndpointSlugAvailabilityUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
 	fmt.Fprintln(os.Stderr, `    -custom-domain-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints check-mcp-endpoint-slug-availability --slug \"aaa\" --custom-domain-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints check-mcp-endpoint-slug-availability --slug \"aaa\" --custom-domain-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpEndpointsDeleteMcpEndpointUsage() {
@@ -26357,6 +26560,11 @@ func organizationRemoteSessionsListClientSessionsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-sessions list-client-sessions", os.Args[0])
 	fmt.Fprint(os.Stderr, " -client-id STRING")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -created-after STRING")
+	fmt.Fprint(os.Stderr, " -created-before STRING")
+	fmt.Fprint(os.Stderr, " -sort STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -26369,6 +26577,11 @@ func organizationRemoteSessionsListClientSessionsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -client-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -created-after STRING: `)
+	fmt.Fprintln(os.Stderr, `    -created-before STRING: `)
+	fmt.Fprintln(os.Stderr, `    -sort STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -26376,7 +26589,7 @@ func organizationRemoteSessionsListClientSessionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-sessions list-client-sessions --client-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-sessions list-client-sessions --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --status \"expired\" --created-after \"1970-01-01T00:00:01Z\" --created-before \"1970-01-01T00:00:01Z\" --sort \"oldest\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionsRevokeSessionUsage() {
@@ -26451,20 +26664,66 @@ func remoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `Operator visibility into remote_sessions Speakeasy is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-sessions COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-bindings: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
-	fmt.Fprintln(os.Stderr, `    attach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
-	fmt.Fprintln(os.Stderr, `    detach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    begin-binding-refresh: Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.`)
+	fmt.Fprintln(os.Stderr, `    complete-binding-refresh: Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.`)
+	fmt.Fprintln(os.Stderr, `    list-bindings: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    attach-binding: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    detach-binding: Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
 	fmt.Fprintln(os.Stderr, `    commit-server-identity-configuration: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.`)
 	fmt.Fprintln(os.Stderr, `    get-server-identity-impact: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.`)
 	fmt.Fprintln(os.Stderr, `    list-server-client-associations: List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer's bindings. Requires mcp:read on the server.`)
 	fmt.Fprintln(os.Stderr, `    detach-server-client-association: Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.`)
-	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
+	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).`)
 	fmt.Fprintln(os.Stderr, `    count-remote-sessions: Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.`)
 	fmt.Fprintln(os.Stderr, `    revoke-remote-session: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s remote-sessions COMMAND --help\n", os.Args[0])
 }
+func remoteSessionsBeginBindingRefreshUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions begin-binding-refresh", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions begin-binding-refresh --body '{\n      \"binding_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionsCompleteBindingRefreshUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions complete-binding-refresh", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions complete-binding-refresh --body '{\n      \"attempt_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteSessionsListBindingsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions list-bindings", os.Args[0])
@@ -26476,7 +26735,7 @@ func remoteSessionsListBindingsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -principal-id STRING: `)
@@ -26499,7 +26758,7 @@ func remoteSessionsAttachBindingUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -26521,7 +26780,7 @@ func remoteSessionsDetachBindingUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -26653,7 +26912,7 @@ func remoteSessionsListRemoteSessionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
+	fmt.Fprintln(os.Stderr, `List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -principal-id STRING: `)
@@ -35301,6 +35560,80 @@ func userSessionsRevokeUserSessionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-user-session --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// gatewaySessionsUsage displays the usage of the gateway-sessions command and
+// its subcommands.
+func gatewaySessionsUsage() {
+	fmt.Fprintln(os.Stderr, `Sessions authorized for a project gateway or the Organization Gateway. Issuer-scoped sessions may authorize several endpoints; resource-bound sessions are restricted to the selected endpoint. Server filters describe configured upstream associations, not historical usage.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] gateway-sessions COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-gateway-sessions: ListGatewaySessions implements listGatewaySessions.`)
+	fmt.Fprintln(os.Stderr, `    list-gateway-session-facets: Complete configured member server and provider choices, independent of pagination and active filters.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s gateway-sessions COMMAND --help\n", os.Args[0])
+}
+func gatewaySessionsListGatewaySessionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] gateway-sessions list-gateway-sessions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -gateway-id STRING")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -server-id STRING")
+	fmt.Fprint(os.Stderr, " -provider-id STRING")
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -created-after STRING")
+	fmt.Fprint(os.Stderr, " -created-before STRING")
+	fmt.Fprint(os.Stderr, " -sort STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListGatewaySessions implements listGatewaySessions.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -gateway-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -provider-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -created-after STRING: `)
+	fmt.Fprintln(os.Stderr, `    -created-before STRING: `)
+	fmt.Fprintln(os.Stderr, `    -sort STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "gateway-sessions list-gateway-sessions --gateway-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --server-id \"550e8400-e29b-41d4-a716-446655440000\" --provider-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --created-after \"1970-01-01T00:00:01Z\" --created-before \"1970-01-01T00:00:01Z\" --sort \"oldest\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func gatewaySessionsListGatewaySessionFacetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] gateway-sessions list-gateway-session-facets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -gateway-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Complete configured member server and provider choices, independent of pagination and active filters.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -gateway-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "gateway-sessions list-gateway-session-facets --gateway-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // widgetsUsage displays the usage of the widgets command and its subcommands.

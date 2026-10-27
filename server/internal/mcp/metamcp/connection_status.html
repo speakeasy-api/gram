@@ -43,7 +43,7 @@
       reportSize();
       return;
     }
-    let ready = 0, needs = 0, consented = false, needsConsent = false;
+    let ready = 0, needs = 0, hidden = 0, consented = false, needsConsent = false;
     for (const s of data.servers) {
       const li = document.createElement("li");
       const name = document.createElement("div");
@@ -63,6 +63,18 @@
         state.className = "warn";
         state.textContent = s.detail || "Give consent again to review access";
         li.append(state);
+      } else if (s.status === "hidden") {
+        hidden++;
+        state.textContent = "Hidden by you";
+        li.append(state);
+        if (data.connectUrl) {
+          const btn = document.createElement("button");
+          btn.textContent = "Show";
+          btn.onclick = () => request("ui/open-link", { url: data.connectUrl }).catch(() => {
+            state.textContent = "Open " + data.connectUrl + " in your browser";
+          });
+          li.append(btn);
+        }
       } else if (s.status === "connected" || s.status === "not_required") {
         ready++;
         state.className = "ok";
@@ -85,8 +97,8 @@
       list.append(li);
     }
     document.getElementById("title").textContent = consented
-      ? `Gateway access · ${ready} of ${data.servers.length} verified at consent`
-      : `Gateway sign-in · ${ready} of ${data.servers.length} ready`;
+      ? `Gateway access · ${ready} of ${data.servers.length - hidden} verified at consent`
+      : `Gateway sign-in · ${ready} of ${data.servers.length - hidden} ready`;
     const hint = document.getElementById("hint");
     hint.textContent = needsConsent ? "Start authorization again in your AI client to review access."
       : consented ? "Current sign-in has not been checked. Tool calls check authorization."

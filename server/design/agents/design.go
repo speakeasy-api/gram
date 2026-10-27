@@ -183,6 +183,7 @@ var Agent = Type("ManagedAgent", func() {
 	Attribute("name", String)
 	Attribute("project_id", String, "The optional project this agent is scoped to; absent for an organization-wide agent", func() { Format(FormatUUID) })
 	Attribute("lifecycle", Lifecycle)
+	Attribute("connection_needs_refresh", Boolean, "An assigned connection has expired or is no longer available; an authorized editor must reconnect their own account and assign it again")
 	Attribute("permissions", Permissions)
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })

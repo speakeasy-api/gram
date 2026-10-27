@@ -10355,9 +10355,39 @@ components:
           type: string
       required:
         - entries
+    AdminRegistryPromotionAuthDiscovery:
+      type: object
+      properties:
+        auth_setup:
+          type: string
+          enum:
+            - none
+            - dcr
+            - cimd
+            - manual
+            - unknown
+        status:
+          type: string
+          enum:
+            - complete
+            - partial
+            - unavailable
+            - not_required
+        supports_cimd:
+          type: boolean
+        supports_dcr:
+          type: boolean
+      description: Publicly advertised authentication capabilities, not a verified OAuth connection.
+      required:
+        - supports_dcr
+        - supports_cimd
+        - auth_setup
+        - status
     AdminRegistryPromotionCandidate:
       type: object
       properties:
+        auth_discovery:
+          $ref: '#/components/schemas/AdminRegistryPromotionAuthDiscovery'
         can_override_eligibility:
           type: boolean
           description: Whether staff may explicitly accept this candidate's health evidence.
@@ -10719,6 +10749,10 @@ components:
         associations:
           type: integer
           description: Configured identities and server links decided.
+          format: int64
+        attachments_waiting:
+          type: integer
+          description: Agent attachments whose grants a run does not write while the organization's upstream selector writes are not allowed. While any wait, complete is false.
           format: int64
         complete:
           type: boolean

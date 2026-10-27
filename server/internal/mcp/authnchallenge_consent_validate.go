@@ -308,6 +308,7 @@ func (s *Service) metaValidationTarget(
 		catalogRef:          nil,
 		authentication:      nil,
 		unapprovedMembers:   nil,
+		hiddenMembers:       nil,
 		execute:             false,
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
 		sessionID:           sessionID,

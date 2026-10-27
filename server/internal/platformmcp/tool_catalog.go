@@ -31,6 +31,13 @@ type InspectCatalogCandidateInput struct {
 // candidate paths. Direct remote URLs are always marked unreviewed and never
 // enter the reviewed catalogue.
 type CandidateInspection struct {
+	// SupportsDCR is advertised dynamic registration support for a reviewed catalogue entry.
+	SupportsDCR *bool `json:"supports_dcr,omitempty" jsonschema:"reviewed catalog only: advertised dynamic client registration support, not a verified OAuth connection; false alone does not establish manual setup"`
+	// SupportsCIMD is advertised compatible metadata-document support for a reviewed catalogue entry.
+	SupportsCIMD *bool `json:"supports_cimd,omitempty" jsonschema:"reviewed catalog only: advertised client ID metadata document support compatible with public clients, not a verified OAuth connection"`
+	// AuthSetup is the reviewed catalogue setup classification; unknown is not manual setup.
+	AuthSetup string `json:"auth_setup,omitempty" jsonschema:"reviewed catalog only: none, dcr, cimd, manual, or unknown; unknown means insufficient evidence, not manual setup"`
+
 	ProviderKey            string                      `json:"provider_key,omitempty"`
 	CatalogRef             string                      `json:"catalog_ref,omitempty"`
 	CanonicalURL           string                      `json:"canonical_url,omitempty"`
@@ -120,7 +127,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 	addTool(reg, &mcp.Tool{
 		Name:        "inspect_mcp_candidate",
 		Title:       "Inspect an MCP Server",
-		Description: "Look at one MCP server before adding it — either a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. Looking changes nothing: the server is not added to a project and nobody receives it. For a URL that requires sign-in, automatic_client_registration says whether its OAuth provider can be connected automatically (dynamic client registration or a client ID metadata document) or needs a client configured by hand.",
+		Description: "Look at one MCP server before adding it — either a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. Looking changes nothing: the server is not added to a project and nobody receives it. For a reviewed catalog entry, supports_dcr, supports_cimd, and auth_setup report advertised capabilities, not a verified connection; unknown setup is not manual setup. For a URL that requires sign-in, automatic_client_registration says whether its OAuth provider can be connected automatically (dynamic client registration or a client ID metadata document) or needs a client configured by hand.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input InspectCatalogCandidateInput) (*mcp.CallToolResult, CandidateInspection, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -169,7 +176,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 			}
 			return nil, CandidateInspection{}, ErrCatalogUnavailable
 		}
-		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, ToolNames: details.ToolNames, ToolCount: details.ToolCount, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SetupIntent: details.SetupIntent}, nil
+		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, ToolNames: details.ToolNames, ToolCount: details.ToolCount, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SupportsDCR: new(details.SupportsDCR), SupportsCIMD: new(details.SupportsCIMD), AuthSetup: details.AuthSetup, SetupIntent: details.SetupIntent}, nil
 	})
 }
 

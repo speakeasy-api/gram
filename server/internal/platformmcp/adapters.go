@@ -368,6 +368,7 @@ type PostgresReader struct {
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
 	organizationGateway       *OrganizationGatewayService
+	gatewaySessions           GatewaySessionManagement
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -409,6 +410,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		chatMetadata:              nil,
 		chatSearch:                nil,
 		organizationGateway:       nil,
+		gatewaySessions:           nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -1118,10 +1120,22 @@ func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
 	if len(mcps) == 0 {
 		return mcps
 	}
-	if mcps[0].ID == query || strings.EqualFold(mcps[0].Name, query) || strings.EqualFold(mcps[0].Slug, query) {
-		if len(mcps) == 1 || (mcps[1].ID != query && !strings.EqualFold(mcps[1].Name, query) && !strings.EqualFold(mcps[1].Slug, query)) {
+	if inventoryExactMatch(mcps[0], query) {
+		if len(mcps) == 1 || !inventoryExactMatch(mcps[1], query) {
 			return mcps[:1]
 		}
 	}
 	return mcps[:min(len(mcps), limit)]
+}
+
+// WithGatewaySessions shares the dashboard gateway connection reads.
+func (r *PostgresReader) WithGatewaySessions(service GatewaySessionManagement) *PostgresReader {
+	if r != nil {
+		r.gatewaySessions = service
+	}
+	return r
+}
+
+func inventoryExactMatch(mcp MCP, query string) bool {
+	return mcp.ID == query || strings.EqualFold(mcp.Name, query) || strings.EqualFold(mcp.Slug, query) || strings.EqualFold(mcp.Source.Reference, query)
 }

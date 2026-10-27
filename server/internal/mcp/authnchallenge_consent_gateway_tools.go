@@ -156,6 +156,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		catalogRef:          nil,
 		authentication:      nil,
 		unapprovedMembers:   nil,
+		hiddenMembers:       nil,
 		execute:             false,
 		discoveryMode:       "",
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
@@ -252,7 +253,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 				status = gatewayServerNoAccess
 			}
 		}
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", cardIDs: nil}).StatusLabel()})
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", ServerID: "", Hidden: false, cardIDs: nil}).StatusLabel()})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}
