@@ -19,7 +19,9 @@ import (
 const InstrumentMCPRequestRejected = "mcp.request.rejected"
 
 // InstrumentOAuthIDJAGExchange is the OTel instrument name for the counter of
-// ID-JAG token exchanges by outcome and rejection reason.
+// ID-JAG token exchanges by outcome and rejection reason. Only exchanges that
+// reach the jwt-bearer grant handler are counted: refusals during client
+// authentication, client admission, or AI tool blocking happen earlier.
 const InstrumentOAuthIDJAGExchange = "oauth.id_jag.exchange"
 
 // RequestRejectionReason is the closed set of reasons [Metrics] records on
@@ -278,7 +280,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 
 	oauthIDJAGExchangeCounter, err := meter.Int64Counter(
 		InstrumentOAuthIDJAGExchange,
-		metric.WithDescription("ID-JAG token exchanges at Speakeasy's authorization server, by user session issuer, outcome, and rejection reason"),
+		metric.WithDescription("ID-JAG token exchanges reaching Speakeasy's jwt-bearer grant handler, by user session issuer, outcome, and rejection reason; refusals during client authentication, client admission, or AI tool blocking happen earlier and are not counted"),
 		metric.WithUnit("{exchange}"),
 	)
 	if err != nil {
@@ -690,34 +692,6 @@ func (m *Metrics) RecordOAuthResourceRejected(ctx context.Context, issuerID, rea
 		attr.OAuthFailureReason(reason),
 		attr.OAuthFlowStage(string(stage)),
 	))
-}
-
-// IDJAGExchangeOutcome is the closed set of ID-JAG token exchange outcomes.
-type IDJAGExchangeOutcome string
-
-const (
-	// IDJAGExchangeAccepted: the exchange minted a session.
-	IDJAGExchangeAccepted IDJAGExchangeOutcome = "accepted"
-	// IDJAGExchangeRejected: the exchange was refused with invalid_request or invalid_grant.
-	IDJAGExchangeRejected IDJAGExchangeOutcome = "rejected"
-)
-
-// RecordIDJAGExchange records one ID-JAG token exchange. reason is empty for
-// an accepted exchange and otherwise one of a closed set of rejection
-// reasons. The client ID is deliberately not a dimension: it may be a client
-// metadata document URL chosen by the caller.
-func (m *Metrics) RecordIDJAGExchange(ctx context.Context, issuerID string, outcome IDJAGExchangeOutcome, reason string) {
-	if m == nil || m.oauthIDJAGExchangeCounter == nil {
-		return
-	}
-	kv := []attribute.KeyValue{
-		attr.UserSessionIssuerID(issuerID),
-		attr.OAuthIDJAGOutcome(string(outcome)),
-	}
-	if reason != "" {
-		kv = append(kv, attr.OAuthIDJAGRejectionReason(reason))
-	}
-	m.oauthIDJAGExchangeCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
 
 // RecordOAuthRefreshTokenReplayServed records a successful response from the

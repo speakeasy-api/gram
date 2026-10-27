@@ -4030,3 +4030,11 @@ SELECT n.id, n.seq, n.created_at, n.role, n.generation,
                ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
        ), '[]')::jsonb AS participants
 FROM neighbors n ORDER BY n.seq;
+
+-- name: AcquireInboundEMAProviderLock :exec
+-- Serialize finding or creating an organization's identity provider record
+-- for one issuer URL, so concurrent trusts never create two.
+SELECT pg_advisory_lock(hashtextextended('inbound-ema-provider:' || @organization_id::text || ':' || @issuer::text, 0));
+
+-- name: ReleaseInboundEMAProviderLock :one
+SELECT pg_advisory_unlock(hashtextextended('inbound-ema-provider:' || @organization_id::text || ':' || @issuer::text, 0)) AS unlocked;

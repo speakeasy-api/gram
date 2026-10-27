@@ -331,14 +331,25 @@ WHERE du.organization_id = @organization_id
 ORDER BY candidate.id
 LIMIT 2;
 
--- name: CountActiveDirectoryUsers :one
--- Active synced directory users in an organization. ID-JAG exchanges resolve
--- users only through these rows, so zero means every exchange is refused.
-SELECT count(*)
-FROM directory_users
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE
-  AND workos_deleted IS FALSE;
+-- name: CountIDJAGResolvableDirectoryUsers :one
+-- Directory users an ID-JAG can resolve to, under ResolveIDJAGUsersByEmail's
+-- predicate: an active directory row linked, or matched by email, to an active
+-- user with live membership in the same organization. Zero means every ID-JAG
+-- exchange is refused.
+SELECT count(DISTINCT du.id)
+FROM directory_users AS du
+JOIN users AS candidate
+  ON (du.user_id IS NOT NULL AND candidate.id = du.user_id)
+  OR (du.user_id IS NULL AND LOWER(candidate.email) = LOWER(du.email))
+JOIN organization_user_relationships AS membership
+  ON membership.user_id = candidate.id
+  AND membership.organization_id = du.organization_id
+  AND membership.deleted_at IS NULL
+WHERE du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND candidate.deleted_at IS NULL
+  AND candidate.workos_deleted_at IS NULL;
 
 -- name: DirectoryAttributeValueExists :one
 SELECT EXISTS(

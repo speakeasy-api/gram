@@ -13,6 +13,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const acquireInboundEMAProviderLock = `-- name: AcquireInboundEMAProviderLock :exec
+SELECT pg_advisory_lock(hashtextextended('inbound-ema-provider:' || $1::text || ':' || $2::text, 0))
+`
+
+type AcquireInboundEMAProviderLockParams struct {
+	OrganizationID string
+	Issuer         string
+}
+
+// Serialize finding or creating an organization's identity provider record
+// for one issuer URL, so concurrent trusts never create two.
+func (q *Queries) AcquireInboundEMAProviderLock(ctx context.Context, arg AcquireInboundEMAProviderLockParams) error {
+	_, err := q.db.Exec(ctx, acquireInboundEMAProviderLock, arg.OrganizationID, arg.Issuer)
+	return err
+}
+
 const attachPlatformMCPOperationReceiptRegistration = `-- name: AttachPlatformMCPOperationReceiptRegistration :one
 UPDATE platform_mcp_operation_receipts
 SET registration_id = $1,
@@ -8023,6 +8039,22 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 		arg.AttemptID,
 	)
 	return err
+}
+
+const releaseInboundEMAProviderLock = `-- name: ReleaseInboundEMAProviderLock :one
+SELECT pg_advisory_unlock(hashtextextended('inbound-ema-provider:' || $1::text || ':' || $2::text, 0)) AS unlocked
+`
+
+type ReleaseInboundEMAProviderLockParams struct {
+	OrganizationID string
+	Issuer         string
+}
+
+func (q *Queries) ReleaseInboundEMAProviderLock(ctx context.Context, arg ReleaseInboundEMAProviderLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseInboundEMAProviderLock, arg.OrganizationID, arg.Issuer)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }
 
 const resolvePlatformMCPAssignedPluginTarget = `-- name: ResolvePlatformMCPAssignedPluginTarget :many

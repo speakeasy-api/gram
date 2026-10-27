@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 )
 
 func TestNewMetrics(t *testing.T) {
@@ -475,8 +476,8 @@ func TestRecordIDJAGExchange_PinsInstrumentAndDimensions(t *testing.T) {
 	issuerID := uuid.NewString()
 
 	m := NewMetrics(meter, testenv.NewLogger(t))
-	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeRejected, "subject_not_provisioned")
-	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeAccepted, "")
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeRejected, IDJAGRejectionFromValidator(idjag.ReasonNotProvisioned))
+	m.RecordIDJAGExchange(t.Context(), issuerID, IDJAGExchangeAccepted, IDJAGRejectionNone)
 
 	got := collectMetric(t, reader, InstrumentOAuthIDJAGExchange)
 	sum, ok := got.Data.(metricdata.Sum[int64])
@@ -496,6 +497,8 @@ func TestRecordIDJAGExchange_PinsInstrumentAndDimensions(t *testing.T) {
 			require.Equal(t, "subject_not_provisioned", reason.AsString())
 		case IDJAGExchangeAccepted:
 			require.False(t, hasReason, "accepted exchanges carry no rejection reason")
+		case IDJAGExchangeError:
+			t.Fatal("no exchange failed")
 		default:
 			t.Fatalf("unexpected outcome %q", outcome.AsString())
 		}
@@ -506,8 +509,16 @@ func TestRecordIDJAGExchange_NilSafe(t *testing.T) {
 	t.Parallel()
 
 	var nilMetrics *Metrics
-	nilMetrics.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeRejected, "assertion_expired")
+	nilMetrics.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeRejected, IDJAGRejectionInvalidRequest)
 
 	empty := &Metrics{}
-	empty.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeAccepted, "")
+	empty.RecordIDJAGExchange(t.Context(), uuid.NewString(), IDJAGExchangeError, IDJAGRejectionNone)
+}
+
+func TestIDJAGRejectionFromValidator_MapsUnknownReasonsGenerically(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, IDJAGRejectionReason(idjag.ReasonAudienceMismatch), IDJAGRejectionFromValidator(idjag.ReasonAudienceMismatch))
+	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(idjag.Reason("a_reason_added_later")))
+	require.Equal(t, IDJAGRejectionAssertionOther, IDJAGRejectionFromValidator(""))
 }

@@ -1384,7 +1384,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	return nil
 }
 
-func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *http.Request, message, clientID, presentedMethod, grantType, failureReason string) {
+func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *http.Request, message, clientID, presentedMethod, grantType, failureReason string, extra ...slog.Attr) {
 	args := []any{
 		attr.SlogURLOriginal(r.URL.Path),
 		attr.SlogHTTPRequestHeaderUserAgent(r.UserAgent()),
@@ -1400,6 +1400,9 @@ func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *
 	}
 	if failureReason != "" {
 		args = append(args, attr.SlogOAuthFailureReason(failureReason))
+	}
+	for _, a := range extra {
+		args = append(args, a)
 	}
 	logger.InfoContext(ctx, message, args...)
 }

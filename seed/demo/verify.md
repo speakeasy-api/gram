@@ -587,9 +587,11 @@ open their effective assignments; the dropdown always offers compact member sear
       **Use default**.
     - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
       Its sign-in client is unset on purpose, so interactive sign-in through
-      it (GitHub, the organization gateway) keeps working. **MCP → Acme
-      Tracker → Settings** shows the Enterprise Managed Authorization section
-      with Acme Identity as the provider.
+      it (GitHub, the organization gateway) keeps working, and the trust
+      changes nothing outbound: **MCP → Acme Tracker → Settings** still has no
+      Enterprise Managed Authorization section, and Acme Identity is not
+      offered as a provider a service can accept on the strength of this
+      trust.
     - The Platform MCP `get_inbound_ema_trust` tool reports `acme-workforce`
       trusting Acme Identity (`https://login.acme-identity.example`, key set
       `/oauth2/v1/keys`) with the workforce shared authorization server as the

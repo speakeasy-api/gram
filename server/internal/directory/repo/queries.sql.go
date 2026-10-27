@@ -128,23 +128,6 @@ func (q *Queries) CloseDirectoryUserGroupMembershipsForGroup(ctx context.Context
 	return result.RowsAffected(), nil
 }
 
-const countActiveDirectoryUsers = `-- name: CountActiveDirectoryUsers :one
-SELECT count(*)
-FROM directory_users
-WHERE organization_id = $1
-  AND deleted IS FALSE
-  AND workos_deleted IS FALSE
-`
-
-// Active synced directory users in an organization. ID-JAG exchanges resolve
-// users only through these rows, so zero means every exchange is refused.
-func (q *Queries) CountActiveDirectoryUsers(ctx context.Context, organizationID string) (int64, error) {
-	row := q.db.QueryRow(ctx, countActiveDirectoryUsers, organizationID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countDirectoryUserGroupMembershipsByWorkOSIDs = `-- name: CountDirectoryUserGroupMembershipsByWorkOSIDs :one
 SELECT COUNT(*)
 FROM directory_user_group_memberships
@@ -160,6 +143,34 @@ type CountDirectoryUserGroupMembershipsByWorkOSIDsParams struct {
 
 func (q *Queries) CountDirectoryUserGroupMembershipsByWorkOSIDs(ctx context.Context, arg CountDirectoryUserGroupMembershipsByWorkOSIDsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countDirectoryUserGroupMembershipsByWorkOSIDs, arg.WorkosDirectoryGroupID, arg.WorkosDirectoryUserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countIDJAGResolvableDirectoryUsers = `-- name: CountIDJAGResolvableDirectoryUsers :one
+SELECT count(DISTINCT du.id)
+FROM directory_users AS du
+JOIN users AS candidate
+  ON (du.user_id IS NOT NULL AND candidate.id = du.user_id)
+  OR (du.user_id IS NULL AND LOWER(candidate.email) = LOWER(du.email))
+JOIN organization_user_relationships AS membership
+  ON membership.user_id = candidate.id
+  AND membership.organization_id = du.organization_id
+  AND membership.deleted_at IS NULL
+WHERE du.organization_id = $1
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND candidate.deleted_at IS NULL
+  AND candidate.workos_deleted_at IS NULL
+`
+
+// Directory users an ID-JAG can resolve to, under ResolveIDJAGUsersByEmail's
+// predicate: an active directory row linked, or matched by email, to an active
+// user with live membership in the same organization. Zero means every ID-JAG
+// exchange is refused.
+func (q *Queries) CountIDJAGResolvableDirectoryUsers(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countIDJAGResolvableDirectoryUsers, organizationID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

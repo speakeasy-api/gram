@@ -9,38 +9,40 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 )
 
-// ID-JAG rejections decided by the token endpoint rather than the assertion
-// validator. Together with idjag.Reason they are the closed set recorded on
-// oauth.id_jag.exchange.
-const (
-	idJAGRejectionInvalidRequest       idjag.Reason = "invalid_request"
-	idJAGRejectionResourceMismatch     idjag.Reason = "resource_mismatch"
-	idJAGRejectionSubjectNotAuthorized idjag.Reason = "subject_not_authorized"
-
-	// idJAGRejectionUnclassified is a validator error without a typed reason.
-	idJAGRejectionUnclassified idjag.Reason = "unclassified"
-)
-
-// idJAGRejectionReason is the validator's typed reason for err.
-func idJAGRejectionReason(err error) idjag.Reason {
-	if reason := idjag.ReasonOf(err); reason != "" {
-		return reason
-	}
-	return idJAGRejectionUnclassified
+// idJAGExchange records one ID-JAG exchange on oauth.id_jag.exchange when the
+// grant handler returns. It starts as an error, so every server failure is
+// counted without marking each return.
+type idJAGExchange struct {
+	metrics  *mcpmetrics.Metrics
+	issuerID string
+	outcome  mcpmetrics.IDJAGExchangeOutcome
+	reason   mcpmetrics.IDJAGRejectionReason
 }
 
-// recordIDJAGRejection logs and counts one rejected ID-JAG exchange. err is
-// logged but never returned to the client.
-func (s *Service) recordIDJAGRejection(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, reason idjag.Reason, err error) {
-	args := []any{attr.SlogOAuthIDJAGRejectionReason(reason), attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String())}
+func (s *Service) startIDJAGExchange(endpoint *ResolvedMcpEndpoint) *idJAGExchange {
+	return &idJAGExchange{metrics: s.metrics, issuerID: endpoint.UserSessionIssuerID.String(), outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}
+}
+
+// reject marks the exchange rejected and returns the attributes its
+// rejection log line carries. err is logged, never returned to the client.
+func (e *idJAGExchange) reject(reason mcpmetrics.IDJAGRejectionReason, err error) []slog.Attr {
+	e.outcome, e.reason = mcpmetrics.IDJAGExchangeRejected, reason
+	attrs := []slog.Attr{attr.SlogOAuthIDJAGRejectionReason(reason), attr.SlogUserSessionIssuerID(e.issuerID)}
 	if err != nil {
-		args = append(args, attr.SlogError(err))
+		attrs = append(attrs, attr.SlogError(err))
 	}
-	logger.InfoContext(ctx, "oauth ID-JAG token request rejected", args...)
-	s.metrics.RecordIDJAGExchange(ctx, endpoint.UserSessionIssuerID.String(), mcpmetrics.IDJAGExchangeRejected, string(reason))
+	return attrs
 }
 
-// recordIDJAGAccepted counts one ID-JAG exchange that minted a session.
-func (s *Service) recordIDJAGAccepted(ctx context.Context, endpoint *ResolvedMcpEndpoint) {
-	s.metrics.RecordIDJAGExchange(ctx, endpoint.UserSessionIssuerID.String(), mcpmetrics.IDJAGExchangeAccepted, "")
+// rejectAssertion is reject for a validator refusal.
+func (e *idJAGExchange) rejectAssertion(err error) []slog.Attr {
+	return e.reject(mcpmetrics.IDJAGRejectionFromValidator(idjag.ReasonOf(err)), err)
+}
+
+func (e *idJAGExchange) accept() {
+	e.outcome, e.reason = mcpmetrics.IDJAGExchangeAccepted, mcpmetrics.IDJAGRejectionNone
+}
+
+func (e *idJAGExchange) record(ctx context.Context) {
+	e.metrics.RecordIDJAGExchange(ctx, e.issuerID, e.outcome, e.reason)
 }
