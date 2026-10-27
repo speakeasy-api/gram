@@ -110,9 +110,17 @@ vi.mock("react-router", async (importOriginal) => ({
   Navigate: ({ to }: { to: string }) => <div data-testid="navigate">{to}</div>,
 }));
 
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { MCPSkillsTab, MCPSkillsTabRoute } from "./MCPSkillsTab";
 
-const toolset = { id: "toolset-a", slug: "toolset-a", name: "Billing" };
+// A hosted toolset's canonical wrapper shares the toolset's id.
+const mcpServer: Pick<McpServer, "id" | "name" | "toolsetId" | "visibility"> =
+  {
+    id: "toolset-a",
+    toolsetId: "toolset-a",
+    name: "Billing",
+    visibility: "private",
+  };
 
 function link(id: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -144,7 +152,7 @@ function infinite(
   return { ...result, isError: !!result.error };
 }
 
-function renderTab(ui: ReactNode = <MCPSkillsTab toolset={toolset} />) {
+function renderTab(ui: ReactNode = <MCPSkillsTab mcpServer={mcpServer} />) {
   return render(
     <TooltipProvider>
       <MemoryRouter>{ui}</MemoryRouter>
@@ -268,7 +276,7 @@ describe("MCPSkillsTab", () => {
   });
 
   it("warns when the server is disabled", () => {
-    renderTab(<MCPSkillsTab toolset={{ ...toolset, mcpEnabled: false }} />);
+    renderTab(<MCPSkillsTab mcpServer={{ ...mcpServer, visibility: "disabled" }} />);
     expect(screen.getByText(/This server is disabled/)).toBeDefined();
   });
 });
@@ -276,7 +284,7 @@ describe("MCPSkillsTab", () => {
 describe("MCPSkillsTabRoute", () => {
   it("redirects to the overview while the flag is off", () => {
     state.flag = { status: "disabled" } as FeatureFlagResult;
-    renderTab(<MCPSkillsTabRoute toolset={toolset} />);
+    renderTab(<MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug="toolset-a" />);
     expect(screen.getByTestId("navigate").textContent).toBe(
       "/mcp/toolset-a/overview",
     );
@@ -287,13 +295,13 @@ describe("MCPSkillsTabRoute", () => {
     state.grants = [
       { scope: "skill:read", selectors: [{ resourceId: "project-b" }] },
     ];
-    renderTab(<MCPSkillsTabRoute toolset={toolset} />);
+    renderTab(<MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug="toolset-a" />);
     expect(screen.getByText("Access restricted")).toBeDefined();
     expect(state.links).not.toHaveBeenCalled();
   });
 
   it("renders the tab while the flag is on", () => {
-    renderTab(<MCPSkillsTabRoute toolset={toolset} />);
+    renderTab(<MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug="toolset-a" />);
     expect(screen.getByText("Skill 1")).toBeDefined();
   });
 });

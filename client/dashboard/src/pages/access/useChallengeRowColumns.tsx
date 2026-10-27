@@ -1,4 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
+import { actingPrincipalText } from "@/components/ui/ActingPrincipal/text";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   Tooltip,
@@ -8,17 +9,15 @@ import {
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
-import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Column } from "@/components/ui/Table";
-import { KeyRound } from "lucide-react";
+import { Bot, KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";
 import { ResourceLink } from "./ResourceLink";
+import { useResourceLinkMaps } from "./useResourceLinkMaps";
 import {
   getInitials,
   principalDisplayName,
@@ -31,42 +30,17 @@ export function useChallengeRowColumns(
   onToggleBucket?: (bucketId: string) => void,
   expandedChildIds?: Set<string>,
   recentlyResolvedIds?: Set<string>,
+  /**
+   * Readable agents by id. A challenge row carries only the urn, so without
+   * this every agent reads as `agent:<uuid>` — and an id off a challenge is
+   * not permission to open the agent, so a row outside this map is named by
+   * its id and does not link.
+   */
+  agentsById?: Map<string, { name: string }>,
 ): Column<ChallengeBucket>[] {
   const { orgSlug } = useSlugs();
-  const { organization } = useSession();
   const { data: membersData } = useMembers();
-  const { data: toolsetsData } = useListToolsetsForOrg();
-  const { data: mcpServersData } = useListMcpServersForOrg();
-  const projectMap = useMemo(() => {
-    const m = new Map<string, { slug: string; name: string }>();
-    for (const p of organization.projects) {
-      m.set(p.id, { slug: p.slug, name: p.name });
-    }
-    return m;
-  }, [organization.projects]);
-  const toolsetMap = useMemo(() => {
-    const m = new Map<
-      string,
-      { slug: string; name: string; projectId: string }
-    >();
-    for (const t of toolsetsData?.toolsets ?? []) {
-      m.set(t.id, { slug: t.slug, name: t.name, projectId: t.projectId });
-    }
-    return m;
-  }, [toolsetsData]);
-  // Resolves grants stored against mcp_servers row ids (remote/tunneled
-  // backends). Toolset-backed grants store the toolset id and resolve via
-  // toolsetMap instead.
-  const mcpServerMap = useMemo(() => {
-    const m = new Map<
-      string,
-      { slug?: string; name?: string; projectId: string }
-    >();
-    for (const s of mcpServersData?.mcpServers ?? []) {
-      m.set(s.id, { slug: s.slug, name: s.name, projectId: s.projectId });
-    }
-    return m;
-  }, [mcpServersData]);
+  const { projectMap, toolsetMap, mcpServerMap } = useResourceLinkMaps();
   const memberMap = useMemo(() => {
     const m = new Map<string, { email: string; photoUrl?: string }>();
     for (const member of membersData?.members ?? []) {
@@ -96,21 +70,32 @@ export function useChallengeRowColumns(
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const isApiKey = row.principalType === "api_key";
+          const isAgent = row.principalType === "agent";
           const display = principalDisplayName(row.userEmail, row.principalUrn);
           return (
-            <div className={cn(rowFade(row))}>
-              <Avatar className="h-8 w-8">
-                {row.photoUrl && (
-                  <AvatarImage src={row.photoUrl} alt={display} />
-                )}
-                <AvatarFallback className="text-[11px]">
-                  {isApiKey ? (
-                    <KeyRound className="h-4 w-4" />
-                  ) : (
-                    getInitials(display)
+            <div className={cn("shrink-0", rowFade(row))}>
+              {isAgent ? (
+                <span
+                  role="img"
+                  aria-label="Agent"
+                  className="bg-muted text-muted-foreground flex h-8 w-8 shrink-0 items-center justify-center"
+                >
+                  <Bot aria-hidden="true" className="h-4 w-4" />
+                </span>
+              ) : (
+                <Avatar className="h-8 w-8">
+                  {row.photoUrl && (
+                    <AvatarImage src={row.photoUrl} alt={display} />
                   )}
-                </AvatarFallback>
-              </Avatar>
+                  <AvatarFallback className="text-[11px]">
+                    {isApiKey ? (
+                      <KeyRound className="h-4 w-4" />
+                    ) : (
+                      getInitials(display)
+                    )}
+                  </AvatarFallback>
+                </Avatar>
+              )}
             </div>
           );
         },
@@ -121,6 +106,44 @@ export function useChallengeRowColumns(
         width: "1.2fr",
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
+          // An agent's face is rendered in the avatar column, so this column
+          // renders just the name/link. No authorizer — a challenge records
+          // the one principal that was checked, so naming a person here would
+          // invent a delegation this row knows nothing about.
+          if (row.principalType === "agent") {
+            const agentId = row.principalUrn.replace(/^agent:/, "");
+            const agent = agentsById?.get(agentId);
+            const agentLabel = actingPrincipalText({
+              id: agentId,
+              name: agent?.name,
+            });
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Text
+                    variant="body"
+                    className={cn(
+                      "min-w-0 truncate text-sm font-medium",
+                      rowFade(row),
+                    )}
+                  >
+                    {agent !== undefined ? (
+                      <IdentityLink identifier={{ urn: row.principalUrn }}>
+                        {agentLabel}
+                      </IdentityLink>
+                    ) : (
+                      agentLabel
+                    )}
+                  </Text>
+                </TooltipTrigger>
+                {row.roleSlugs.length > 0 && (
+                  <TooltipContent side="bottom">
+                    Roles: {row.roleSlugs.join(", ")}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            );
+          }
           const display = principalDisplayName(row.userEmail, row.principalUrn);
           // Only user principals are people; an api_key principal resolves to
           // no identity page.
@@ -279,6 +302,7 @@ export function useChallengeRowColumns(
     toolsetMap,
     mcpServerMap,
     memberMap,
+    agentsById,
     animatingOutIds,
     outcomeFilter,
     onToggleBucket,

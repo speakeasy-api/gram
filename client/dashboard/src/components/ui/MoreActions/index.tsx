@@ -136,7 +136,7 @@ export function MoreActions({
               className={cn(
                 "group flex cursor-pointer items-center justify-between",
                 action.destructive &&
-                  "text-destructive hover:bg-destructive! hover:text-background! trans",
+                  "text-destructive hover:bg-accent focus:text-destructive",
               )}
             >
               <div className="min-w-0">
@@ -152,8 +152,7 @@ export function MoreActions({
                   name={action.icon}
                   className={cn(
                     "size-3 opacity-0 group-hover:opacity-100",
-                    action.destructive &&
-                      "text-destructive group-hover:text-background",
+                    action.destructive && "text-destructive",
                   )}
                 />
               )}

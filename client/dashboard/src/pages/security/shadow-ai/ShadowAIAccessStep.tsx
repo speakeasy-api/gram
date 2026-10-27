@@ -180,7 +180,7 @@ function PostureNote({
     );
   }
   return (
-    <Alert variant="info" alignTop>
+    <Alert variant="info">
       <AlertDescription>
         Unreviewed MCP servers are blocked by this policy's default, so allow
         the ones your teams need on the Shadow MCP inventory. Unreviewed

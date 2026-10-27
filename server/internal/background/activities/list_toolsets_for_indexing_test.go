@@ -14,6 +14,7 @@ import (
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	packagesrepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -53,6 +54,44 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	createHTTPToolDefinition(t, db, project.ID, deploymentID, validToolURN)
 
 	validToolset := createMCPToolset(t, db, organizationID, project.ID, "valid", []urn.Tool{validToolURN})
+	// A toolset created with its hosting state on its canonical wrapper: the frozen columns say disabled.
+	hostedToolset := createMCPToolset(t, db, organizationID, project.ID, "hosted", []urn.Tool{validToolURN})
+	require.NoError(t, testrepo.New(db).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: false, ID: hostedToolset.ID, ProjectID: project.ID}))
+	_, err = mcpserversrepo.New(db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    hostedToolset.ID,
+		ProjectID:             project.ID,
+		Name:                  pgtype.Text{String: "hosted", Valid: true},
+		Slug:                  pgtype.Text{String: "hosted", Valid: true},
+		EnvironmentID:         uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		TunneledMcpServerID:   uuid.NullUUID{},
+		ToolsetID:             uuid.NullUUID{UUID: hostedToolset.ID, Valid: true},
+		UnproxiedMcpServerID:  uuid.NullUUID{},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility:            "private",
+		NetworkAccessMode:     pgtype.Text{},
+	})
+	require.NoError(t, err)
+	// A server that kept a toolset's id after leaving it leaves the toolset unserved.
+	keptToolset := createMCPToolset(t, db, organizationID, project.ID, "kept", []urn.Tool{validToolURN})
+	keptTarget := createMCPToolset(t, db, organizationID, project.ID, "kept-target", []urn.Tool{})
+	_, err = mcpserversrepo.New(db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    keptToolset.ID,
+		ProjectID:             project.ID,
+		Name:                  pgtype.Text{String: "kept", Valid: true},
+		Slug:                  pgtype.Text{String: "kept", Valid: true},
+		EnvironmentID:         uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		TunneledMcpServerID:   uuid.NullUUID{},
+		ToolsetID:             uuid.NullUUID{UUID: keptTarget.ID, Valid: true},
+		UnproxiedMcpServerID:  uuid.NullUUID{},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility:            "private",
+		NetworkAccessMode:     pgtype.Text{},
+	})
+	require.NoError(t, err)
 	packageProject, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
 		Name:           "Package Project",
 		Slug:           "package-project-" + uuid.NewString()[:8],
@@ -154,6 +193,12 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 		DeploymentID:   deploymentID,
 	}, {
 		ProjectID:      project.ID,
+		ToolsetID:      hostedToolset.ID,
+		ToolsetSlug:    "hosted",
+		ToolsetVersion: 1,
+		DeploymentID:   deploymentID,
+	}, {
+		ProjectID:      project.ID,
 		ToolsetID:      packageToolset.ID,
 		ToolsetSlug:    "package",
 		ToolsetVersion: 1,
@@ -178,6 +223,17 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	})
 	require.NoError(t, err)
 	require.True(t, indexed)
+	_, err = ragrepo.New(db).InsertToolsetEmbedding(ctx, ragrepo.InsertToolsetEmbeddingParams{
+		ProjectID:      project.ID,
+		ToolsetID:      hostedToolset.ID,
+		ToolsetVersion: 1,
+		EntryKey:       "tools:hosted",
+		EmbeddingModel: "test-model",
+		Embedding1536:  pgvector.NewVector(make([]float32, 1536)),
+		Payload:        []byte(fmt.Sprintf(`{"_gramIndexDeploymentId":%q}`, deploymentID)),
+		Tags:           []string{},
+	})
+	require.NoError(t, err)
 	_, err = ragrepo.New(db).InsertToolsetEmbedding(ctx, ragrepo.InsertToolsetEmbeddingParams{
 		ProjectID:      project.ID,
 		ToolsetID:      packageToolset.ID,
@@ -215,6 +271,12 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 		ProjectID:      project.ID,
 		ToolsetID:      validToolset.ID,
 		ToolsetSlug:    "valid",
+		ToolsetVersion: 1,
+		DeploymentID:   newDeploymentID,
+	}, {
+		ProjectID:      project.ID,
+		ToolsetID:      hostedToolset.ID,
+		ToolsetSlug:    "hosted",
 		ToolsetVersion: 1,
 		DeploymentID:   newDeploymentID,
 	}, {

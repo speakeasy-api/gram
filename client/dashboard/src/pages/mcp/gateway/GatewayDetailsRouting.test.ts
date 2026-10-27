@@ -37,7 +37,7 @@ describe("activeTabFromPath", () => {
 
   it("requires the mcp/gateway prefix, so a lookalike path misses", () => {
     expect(
-      activeTabFromPath(`/acme/projects/demo/mcp/x/${ID}/settings`, ID),
+      activeTabFromPath(`/acme/projects/demo/mcp/${ID}/settings`, ID),
     ).toBeUndefined();
   });
 

@@ -17,6 +17,7 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Row, Section } from "./PanelSection";
+import { AssistantRuntimeSettings } from "./AssistantRuntimeSettings";
 
 type OverviewDraft = {
   name: string;
@@ -183,6 +184,11 @@ export function AssistantOverviewSettings({
           onUpdated={onUpdated}
         />
       </Row>
+      <AssistantRuntimeSettings
+        assistant={assistant}
+        canWrite={canWrite}
+        onUpdated={onUpdated}
+      />
       <Row label="Name">
         {editing ? (
           <Input

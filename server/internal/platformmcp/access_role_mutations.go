@@ -17,6 +17,7 @@ import (
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -112,6 +113,7 @@ type AccessRoleMutationBackend interface {
 	AddMemberRoleTx(context.Context, pgx.Tx, string, string, string, access.RoleAuditActor, access.MemberRoleValidation) (access.MemberRoleAddResult, access.MemberRoleReconciliation, error)
 	CurrentMemberRoleReconciliationTx(context.Context, pgx.Tx, string, string) (access.MemberRoleReconciliation, error)
 	ReconcileRoleIdentity(context.Context, string, string, string, string, bool)
+	ReconcileRoleDelivery(context.Context, access.RoleReconciliation)
 	ReconcileMemberRoles(context.Context, access.MemberRoleReconciliation)
 }
 
@@ -143,6 +145,9 @@ type AccessRoleMutationService struct {
 	backend    AccessRoleMutationBackend
 	receipts   *AccessRoleMutationReceiptStore
 	versionKey []byte
+	// audit records shared-credential rule changes; nil leaves
+	// set_mcp_role_auth_client_access unavailable.
+	audit *audit.Logger
 }
 
 func NewAccessRoleMutationService(reads *AccessReadService, flags feature.Provider, budget OperationBudget, keyMaterial string, backend AccessRoleMutationBackend) (*AccessRoleMutationService, error) {
@@ -152,7 +157,7 @@ func NewAccessRoleMutationService(reads *AccessReadService, flags feature.Provid
 	key := sha256.Sum256([]byte("platform-mcp-access-role-version:" + keyMaterial))
 	return &AccessRoleMutationService{
 		reads: reads, flags: flags, budget: budget, backend: backend,
-		receipts: NewAccessRoleMutationReceiptStore(reads.db), versionKey: key[:],
+		receipts: NewAccessRoleMutationReceiptStore(reads.db), versionKey: key[:], audit: nil,
 	}, nil
 }
 
@@ -250,6 +255,9 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		ProjectID: project.ID.String(), RoleID: roleID, ExpectedVersion: input.ExpectedVersion,
 		AddRules: addRules, RemoveRules: removeRules,
 	}
+	// Only a fresh commit changes role plugins; a replayed receipt runs no
+	// transaction and must not republish again.
+	var delivery access.RoleReconciliation
 	receipt, err := s.receipts.ExecuteUpdate(ctx, principal, project, input.IdempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
 		roleUUID, parseErr := uuid.Parse(roleID)
 		if parseErr != nil || roleUUID == uuid.Nil {
@@ -271,17 +279,21 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		if versionErr != nil || !hmac.Equal([]byte(version), []byte(input.ExpectedVersion)) {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationConflict("The access role changed after it was read. Read it again and retry with the new version.")
 		}
-		result, _, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil, AgentIds: nil})
+		result, reconciliation, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil, AgentIds: nil})
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
 		}
 		if result.After == nil {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
+		delivery = reconciliation
 		return s.receiptResult(result.After, result.Slug, "updated", "complete")
 	})
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, err
+	}
+	if !receipt.Replayed {
+		s.backend.ReconcileRoleDelivery(ctx, delivery)
 	}
 	result, err := decodeAccessRoleMutationReceipt(operationUpdateMCPAccessRole, receipt.ResultPayload)
 	if err != nil {
@@ -423,7 +435,7 @@ func accessRoleRulesToGenGrants(rules []normalizedMCPAccessRoleRule, projectID u
 		if rule.Disposition != "" {
 			selector[authz.SelectorKeyDisposition] = rule.Disposition
 		}
-		generated := &accessgen.Selector{ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID], Disposition: nil, Tool: nil, ProjectID: nil, ServerURL: nil}
+		generated := &accessgen.Selector{ResourceKind: selector[authz.SelectorKeyResourceKind], ResourceID: selector[authz.SelectorKeyResourceID], Disposition: nil, Tool: nil, ProjectID: nil, ServerURL: nil, ClientType: nil, ConnectionOwner: nil, UpstreamClient: nil}
 		if value := selector[authz.SelectorKeyProjectID]; value != "" {
 			generated.ProjectID = &value
 		}

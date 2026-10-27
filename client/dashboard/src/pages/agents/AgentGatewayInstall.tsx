@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { getServerURL } from "@/lib/utils";
-import { isCredentialSafe } from "./provision/gateway";
+import { isCredentialSafe } from "./credentials/gateway";
 import { useState, type JSX } from "react";
 
 /**
@@ -25,7 +25,7 @@ function agentGatewayURL(agentID: string): string {
 }
 
 /** Stands in for the key on the runtimes that read it from the environment. */
-const KEY_ENV = "GRAM_AGENT_KEY";
+const KEY_ENV = "SPEAKEASY_AGENT_KEY";
 
 type Recipe = { id: string; label: string; body: string };
 

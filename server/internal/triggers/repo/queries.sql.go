@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const advanceTriggerThreadRouteCursor = `-- name: AdvanceTriggerThreadRouteCursor :exec
@@ -409,6 +410,35 @@ func (q *Queries) GetTriggerThreadRoute(ctx context.Context, arg GetTriggerThrea
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getWakeWorkloadSession = `-- name: GetWakeWorkloadSession :one
+SELECT id
+FROM user_sessions
+WHERE jti = $1 AND subject_urn = $2
+  AND organization_id = $3
+  AND (project_id = $4 OR project_id IS NULL)
+  AND deleted IS FALSE AND expires_at > clock_timestamp()
+`
+
+type GetWakeWorkloadSessionParams struct {
+	Jti            string
+	SubjectUrn     urn.SessionSubject
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+}
+
+// Recheck the authenticated session inside the wake transaction.
+func (q *Queries) GetWakeWorkloadSession(ctx context.Context, arg GetWakeWorkloadSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getWakeWorkloadSession,
+		arg.Jti,
+		arg.SubjectUrn,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listActiveTriggerInstancesByTarget = `-- name: ListActiveTriggerInstancesByTarget :many

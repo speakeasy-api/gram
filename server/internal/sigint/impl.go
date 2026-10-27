@@ -563,6 +563,7 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil,
 		SensorURN: urn.NewSigintSensor(created.ID), SensorName: created.Name,
+		SensorSnapshotAfter: mv.BuildSigintSensorView(viewRow),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sensor create").LogError(ctx, s.logger)
 	}
@@ -824,6 +825,7 @@ func (s *Service) DeleteSensor(ctx context.Context, payload *gen.DeleteSensorPay
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil,
 		SensorURN: urn.NewSigintSensor(deleted.ID), SensorName: deleted.Name,
+		SensorSnapshotBefore: mv.BuildSigintSensorView(before),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sensor delete").LogError(ctx, s.logger)
 	}

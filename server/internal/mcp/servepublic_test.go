@@ -7,11 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -351,7 +352,7 @@ func TestServePublic_DisabledPublicLegacyToolset_Returns404(t *testing.T) {
 	// Disable via the same flag the dashboard/API writes, deliberately
 	// leaving mcp_is_public true — the state that kept serving anonymously
 	// before the fix.
-	err = toolsetsRepo.SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
+	err = testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
 		McpEnabled: false,
 		ID:         toolset.ID,
 		ProjectID:  *authCtx.ProjectID,
@@ -497,7 +498,7 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = metadataRepo.UpsertMetadataByMcpServerID(ctx, metadata_repo.UpsertMetadataByMcpServerIDParams{
-		McpServerID:              uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		McpServerID:              toolset.ID,
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
 		LogoID:                   uuid.NullUUID{Valid: false},

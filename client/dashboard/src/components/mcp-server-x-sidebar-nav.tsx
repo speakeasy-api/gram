@@ -30,9 +30,21 @@ import {
 } from "@/pages/mcp/x/MCPServerDetails";
 import {
   activeTabFromPath,
+  isCanonicalHostedWrapper,
   mcpServerTabHref,
+  standsInForToolset,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { useToolset } from "@/hooks/toolTypes";
+import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
+import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
+import { hostedToolCountLabel } from "@/components/mcp/mcp-server-kind";
+import { MCP_AGENT_SETUP_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/AgentSetupSection";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import {
+  tunnelAgentReadiness,
+  useTunneledMcpConnections,
+} from "@/pages/mcp/x/tabs/tunnelStatus";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import {
   deriveIdentityMode,
@@ -45,6 +57,7 @@ import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { isNotNotFound } from "@/lib/query-errors";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { McpServerNetworkAccessMode } from "@gram/client/models/components/mcpserver.js";
@@ -53,6 +66,7 @@ import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpSer
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
+  AlertTriangle,
   ArrowRight,
   ExternalLink,
   Info,
@@ -63,6 +77,8 @@ import {
   Terminal,
   Users,
   Wrench,
+  Database,
+  MessageSquareText,
 } from "lucide-react";
 import {
   HoverCard,
@@ -270,9 +286,14 @@ export function McpServerCardStatus({
   server,
 }: {
   server: McpServer;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   if (server.remoteMcpServerId) {
     return <MCPServerAvailabilityToggle server={server} />;
+  }
+
+  // Clients connect straight to the vendor, so visibility has nothing to gate.
+  if (server.unproxiedMcpServerId) {
+    return null;
   }
 
   return (
@@ -302,7 +323,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const { data: mcpServer } = useGetMcpServer(
     getMcpServerArgs(idOrSlug),
     undefined,
-    { enabled: idOrSlug !== "" },
+    { enabled: idOrSlug !== "", throwOnError: isNotNotFound },
   );
   const mcpServerId = mcpServer?.id ?? "";
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
@@ -351,6 +372,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     { enabled: unproxiedMcpServerId !== "" },
   );
   const upstreamUrl = remoteMcpServer?.url ?? unproxiedMcpServer?.url;
+  // Reads the snapshot the Overview's tunnel status polls, so the readiness
+  // card and the status beside it agree without a second poller.
+  const tunnelConnections = useTunneledMcpConnections(
+    mcpServer?.tunneledMcpServerId ?? "",
+  );
 
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
   // A remote identity provider is attached when this server's issuer has at
@@ -409,6 +435,30 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   );
   const isTrulyIncluded = isPluginMember && marketplaceReady;
 
+  const canonicalToolsetSlug =
+    mcpServer && isCanonicalHostedWrapper(mcpServer)
+      ? mcpServer.toolset?.slug
+      : undefined;
+  const { data: canonicalToolset } = useToolset(canonicalToolsetSlug, {
+    enabled: canonicalToolsetSlug !== undefined,
+    throwOnError: false,
+  });
+  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
+    enabled: canonicalToolsetSlug !== undefined,
+  });
+  const { data: canonicalMetadata } = useGetMcpMetadata(
+    { toolsetSlug: canonicalToolsetSlug ?? "" },
+    undefined,
+    { enabled: canonicalToolsetSlug !== undefined, throwOnError: false },
+  );
+  // Settings carries the warning the toolset page put on Authentication.
+  const missingRequiredEnvVars = useMissingRequiredEnvVars(
+    canonicalToolset,
+    environmentsData?.environments ?? [],
+    canonicalToolset?.defaultEnvironmentSlug || "default",
+    canonicalMetadata?.metadata,
+  );
+
   if (!idOrSlug) return null;
 
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
@@ -416,16 +466,18 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
   const isUnproxied = !!mcpServer?.unproxiedMcpServerId;
   const isSourceBacked = isRemoteBacked || isTunneledBacked || isUnproxied;
+  const hosted = !!mcpServer && standsInForToolset(mcpServer);
+  // A hosted server is granted under its toolset id, like the API checks it.
+  const grantResourceId = mcpServer?.toolsetId ?? mcpServer?.id ?? "";
   const canViewTeamAccess =
     !!mcpServer &&
     hasScope("org:read", organization.id) &&
-    hasScope("mcp:read", mcpServer.id);
-
-  // Same check as the Skills tab route: skill read on this project. Only
-  // remote-backed servers have the tab.
+    hasScope("mcp:read", grantResourceId);
+  // Same check as the Skills tab routes: skill read on this project. Only
+  // hosted and remote-backed servers have the tab.
   const canViewSkills =
     skillsOverMcp &&
-    isRemoteBacked &&
+    (hosted || isRemoteBacked) &&
     hasScope("skill:read", project.id, project.id);
 
   // Guardrails police traffic that passes through Speakeasy, so unproxied servers
@@ -518,6 +570,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           description: sourceDescription,
           ready: isSourceBacked,
         },
+        ...(isTunneledBacked
+          ? [
+              tunnelAgentReadiness({
+                connections: tunnelConnections.data,
+                loading: tunnelConnections.isLoading,
+                error: tunnelConnections.isError,
+                agentSetupHref: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`,
+                overviewHref: mcpServerTabHref(routes, idOrSlug, "overview"),
+              }),
+            ]
+          : []),
         ...(canReadPlugins
           ? [
               {
@@ -548,17 +611,41 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     // their tools yet (the vendor's own auth blocks an anonymous probe, and
     // there's no fallback source wired up), so the tab had nothing useful to
     // show.
-    ...(isUnproxied
-      ? []
-      : [
+    ...(hosted
+      ? [
           {
-            key: "inspect",
-            title: "Inspect",
+            key: "tools",
+            title: "Tools",
             Icon: Wrench,
-            href: mcpServerTabHref(routes, idOrSlug, "inspect"),
-            active: activeTab === "inspect",
+            href: mcpServerTabHref(routes, idOrSlug, "tools"),
+            active: activeTab === "tools",
           },
-        ]),
+          {
+            key: "resources",
+            title: "Resources",
+            Icon: Database,
+            href: mcpServerTabHref(routes, idOrSlug, "resources"),
+            active: activeTab === "resources",
+          },
+          {
+            key: "prompts",
+            title: "Prompts",
+            Icon: MessageSquareText,
+            href: mcpServerTabHref(routes, idOrSlug, "prompts"),
+            active: activeTab === "prompts",
+          },
+        ]
+      : isUnproxied
+        ? []
+        : [
+            {
+              key: "inspect",
+              title: "Inspect",
+              Icon: Wrench,
+              href: mcpServerTabHref(routes, idOrSlug, "inspect"),
+              active: activeTab === "inspect",
+            },
+          ]),
     ...(canViewSkills
       ? [
           {
@@ -610,6 +697,16 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       key: "settings",
       title: "Settings",
       Icon: SettingsIcon,
+      titleNode:
+        missingRequiredEnvVars > 0 ? (
+          <span className="flex items-center gap-1.5">
+            Settings
+            <AlertTriangle
+              className="text-warning h-3.5 w-3.5 shrink-0"
+              aria-label="Required environment variables not configured"
+            />
+          </span>
+        ) : undefined,
       href: mcpServerTabHref(routes, idOrSlug, "settings"),
       active: activeTab === "settings",
     },
@@ -635,6 +732,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             )}
             {isUnproxied && (
               <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
+            )}
+            {hosted && (
+              <DetailSidebarInfoLabel>Hosted MCP</DetailSidebarInfoLabel>
             )}
           </div>
         </div>
@@ -689,6 +789,13 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         </div>
       )}
 
+      {hosted && mcpServer.toolset ? (
+        <div className="flex flex-col gap-1">
+          <DetailSidebarInfoLabel>Tools</DetailSidebarInfoLabel>
+          <Text variant="small">{hostedToolCountLabel(mcpServer.toolset)}</Text>
+        </div>
+      ) : null}
+
       {upstreamUrl ? (
         <SidebarUrlRow
           label="Remote URL"
@@ -734,7 +841,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             queryParams={
               isRemoteBacked || isTunneledBacked
                 ? { mcpServer: mcpServer.id }
-                : undefined
+                : hosted && mcpServer.toolset
+                  ? { toolset: mcpServer.toolset.slug }
+                  : undefined
             }
             className="flex items-center hover:no-underline"
           >

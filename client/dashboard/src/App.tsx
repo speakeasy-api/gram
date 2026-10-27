@@ -1,16 +1,6 @@
 import "./App.css";
 import NotFound from "@/pages/not-found/NotFound";
-import {
-  RedirectToAddFunction,
-  RedirectToAddOpenAPI,
-  RedirectToAddRemoteMcp,
-  RedirectToAddTunneledMcp,
-  RedirectToAddUnproxiedMcp,
-  RedirectToCatalog,
-  RedirectToCatalogDetail,
-  RedirectToSourceDetail,
-  RedirectToSources,
-} from "@/pages/mcp/add/LegacyRedirects";
+import { legacyMcpRedirects, routesWithSubroutes } from "./route-elements";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
@@ -26,7 +16,6 @@ import {
   useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
-import { AppRouteContentErrorBoundary } from "./components/app-route-content-error-boundary.tsx";
 import { ModeSwitchProvider } from "./components/mode-switch-stage.tsx";
 import { CommandPalette } from "./components/command-palette";
 import { GuideEntryRedirect } from "./components/project-guide/GuideEntryRedirect";
@@ -486,80 +475,6 @@ const routesToNavActions = (
     .map(([key, route]) =>
       routeToNavAction(route, group, `${idPrefix}-${key}`),
     );
-
-// S-853 moved Sources and the catalog under /mcp. These keep the old URLs
-// resolving. They live here rather than in the route structure so they stay
-// out of the sidebar, breadcrumbs, and the command palette.
-const legacyMcpRedirects = (
-  <>
-    <Route path="sources">
-      <Route index element={<RedirectToSources />} />
-      <Route path="add-openapi" element={<RedirectToAddOpenAPI />} />
-      <Route path="add-function" element={<RedirectToAddFunction />} />
-      <Route path="add-from-catalog" element={<RedirectToCatalog />} />
-      <Route path="add-remote-mcp" element={<RedirectToAddRemoteMcp />} />
-      <Route path="add-tunneled-mcp" element={<RedirectToAddTunneledMcp />} />
-      <Route path="add-unproxied-mcp" element={<RedirectToAddUnproxiedMcp />} />
-      <Route
-        path=":sourceKind/:sourceSlug"
-        element={<RedirectToSourceDetail />}
-      />
-    </Route>
-    <Route path="catalog">
-      <Route index element={<RedirectToCatalog />} />
-      <Route path=":serverSpecifier" element={<RedirectToCatalogDetail />} />
-    </Route>
-    {/* The catalog briefly lived inside the add flow before becoming a tab of
-        the MCP index. */}
-    <Route path="mcp/add/catalog">
-      <Route index element={<RedirectToCatalog />} />
-      <Route path=":serverSpecifier" element={<RedirectToCatalogDetail />} />
-    </Route>
-  </>
-);
-
-const routesWithSubroutes = (routes: AppRoute[]) => {
-  return routes
-    .filter((item) => !item.external)
-    .map((item) => (
-      <Route
-        key={item.title}
-        path={item.url}
-        element={
-          item.component ? (
-            <AppRouteContentErrorBoundary
-              fallback={<div className="p-8 text-sm">Loading…</div>}
-            >
-              <item.component />
-            </AppRouteContentErrorBoundary>
-          ) : null
-        }
-      >
-        {item.indexComponent && (
-          <Route
-            index
-            element={
-              <AppRouteContentErrorBoundary
-                fallback={<div className="p-8 text-sm">Loading…</div>}
-              >
-                <item.indexComponent />
-              </AppRouteContentErrorBoundary>
-            }
-          />
-        )}
-        {/* Check for any children routes stored on this item */}
-        {routesWithSubroutes(
-          Object.values(item).filter(
-            (value) =>
-              value &&
-              typeof value === "object" &&
-              "title" in value &&
-              "url" in value,
-          ) as unknown as AppRoute[],
-        )}
-      </Route>
-    ));
-};
 
 type LocalAuthFlow = {
   cliCallbackUrl: string;

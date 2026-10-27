@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -97,4 +98,21 @@ func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 // SetPosthog replaces the product analytics client only in the test binary.
 func (s *Service) SetPosthog(p *posthog.Posthog) {
 	s.posthog = p
+}
+
+// SetPrepareMandatory replaces the shadow's caller admission, so a test can
+// count or delay admissions.
+func (s *Service) SetPrepareMandatory(prepare func(context.Context) (authz.MandatoryAuthorization, error)) {
+	s.prepareMandatory = prepare
+}
+
+// SetAuthClientPermission installs a mutable permit decision in the test binary.
+func (s *Service) SetAuthClientPermission(allowed func() bool) {
+	s.authClientPermitter = testAuthClientPermission(allowed)
+}
+
+type testAuthClientPermission func() bool
+
+func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return f(), nil
 }

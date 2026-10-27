@@ -16,7 +16,7 @@ import {
 } from "@gram/client/react-query/agentsListPolicyGrants.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ProvisionWizard } from "./provision/ProvisionWizard";
+import { CredentialsWizard } from "./credentials/CredentialsWizard";
 
 /**
  * Changing what an agent already is: its name and the servers it reaches.
@@ -105,7 +105,7 @@ export default function EditAgentIdentity(): JSX.Element {
       ) : agent === undefined || grants === undefined ? (
         <Text muted>Loading agent…</Text>
       ) : (
-        <ProvisionWizard
+        <CredentialsWizard
           agent={agent}
           editing
           grants={grants}

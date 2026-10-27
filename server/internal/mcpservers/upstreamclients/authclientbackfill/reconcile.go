@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // linkKey is one server offering one auth client.
@@ -51,7 +52,7 @@ func kindOfType(clientType string) (Kind, bool) {
 // failed this run are left alone. It runs after every phase, so a dry run and
 // an apply see the same set. A retired client the configuration still yields
 // is revived by its phase, so its links count as kept.
-func reconcileDerived(ctx context.Context, q *Queries, opts Options, report *Report, want *expected, failed map[Kind]bool) error {
+func reconcileDerived(ctx context.Context, q *Queries, opts Options, report *Report, want *expected, failed map[Kind]bool, startedAt pgtype.Timestamptz) error {
 	var types []string
 	for _, clientType := range []string{TypeStaticCredential, TypePassThrough, TypeEMA} {
 		if kind, _ := kindOfType(clientType); !failed[kind] {
@@ -77,9 +78,15 @@ func reconcileDerived(ctx context.Context, q *Queries, opts Options, report *Rep
 		if !opts.Apply {
 			continue
 		}
-		n, err := q.RetireBackfillClient(ctx, RetireBackfillClientParams{ID: client.ID, OrganizationID: opts.OrganizationID, ClientTypes: types})
+		n, err := q.RetireBackfillClient(ctx, RetireBackfillClientParams{ID: client.ID, OrganizationID: opts.OrganizationID, ClientTypes: types, EvidenceSince: startedAt})
 		if err != nil {
 			return fmt.Errorf("retire auth client %s: %w", client.ID, err)
+		}
+		if n == 0 {
+			// Its configuration changed during the run: keep it and its links
+			// for the next run to decide.
+			delete(retiring, client.ID)
+			want.race(client.ID)
 		}
 		report.ClientsRetired += int(n)
 		report.kind(kind).Retired += int(n)
