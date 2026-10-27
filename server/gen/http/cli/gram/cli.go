@@ -46,6 +46,8 @@ import (
 	externalkeysc "github.com/speakeasy-api/gram/server/gen/http/external_keys/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
+	gatewaysessionsc "github.com/speakeasy-api/gram/server/gen/http/gateway_sessions/client"
+	hiddenmcpserversc "github.com/speakeasy-api/gram/server/gen/http/hidden_mcp_servers/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
@@ -147,6 +149,7 @@ func UsageCommands() []string {
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|verify-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
 		"functions get-signed-asset-url",
+		"hidden-mcp-servers (list|hide|unhide)",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
@@ -211,6 +214,7 @@ func UsageCommands() []string {
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
+		"gateway-sessions (list-gateway-sessions|list-gateway-session-facets)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|register-device)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
@@ -912,7 +916,8 @@ func ParseEndpoint(
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
 		authCallbackFlags     = flag.NewFlagSet("callback", flag.ExitOnError)
-		authCallbackCodeFlag  = authCallbackFlags.String("code", "REQUIRED", "")
+		authCallbackCodeFlag  = authCallbackFlags.String("code", "", "")
+		authCallbackErrorFlag = authCallbackFlags.String("error", "", "")
 		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
 		authLoginFlags              = flag.NewFlagSet("login", flag.ExitOnError)
@@ -1606,6 +1611,19 @@ func ParseEndpoint(
 		functionsGetSignedAssetURLFlags             = flag.NewFlagSet("get-signed-asset-url", flag.ExitOnError)
 		functionsGetSignedAssetURLBodyFlag          = functionsGetSignedAssetURLFlags.String("body", "REQUIRED", "")
 		functionsGetSignedAssetURLFunctionTokenFlag = functionsGetSignedAssetURLFlags.String("function-token", "", "")
+
+		hiddenMcpServersFlags = flag.NewFlagSet("hidden-mcp-servers", flag.ContinueOnError)
+
+		hiddenMcpServersListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		hiddenMcpServersListSessionTokenFlag = hiddenMcpServersListFlags.String("session-token", "", "")
+
+		hiddenMcpServersHideFlags            = flag.NewFlagSet("hide", flag.ExitOnError)
+		hiddenMcpServersHideBodyFlag         = hiddenMcpServersHideFlags.String("body", "REQUIRED", "")
+		hiddenMcpServersHideSessionTokenFlag = hiddenMcpServersHideFlags.String("session-token", "", "")
+
+		hiddenMcpServersUnhideFlags            = flag.NewFlagSet("unhide", flag.ExitOnError)
+		hiddenMcpServersUnhideBodyFlag         = hiddenMcpServersUnhideFlags.String("body", "REQUIRED", "")
+		hiddenMcpServersUnhideSessionTokenFlag = hiddenMcpServersUnhideFlags.String("session-token", "", "")
 
 		hooksServerNamesFlags = flag.NewFlagSet("hooks-server-names", flag.ContinueOnError)
 
@@ -3133,12 +3151,17 @@ func ParseEndpoint(
 
 		organizationRemoteSessionsFlags = flag.NewFlagSet("organization-remote-sessions", flag.ContinueOnError)
 
-		organizationRemoteSessionsListClientSessionsFlags            = flag.NewFlagSet("list-client-sessions", flag.ExitOnError)
-		organizationRemoteSessionsListClientSessionsClientIDFlag     = organizationRemoteSessionsListClientSessionsFlags.String("client-id", "REQUIRED", "")
-		organizationRemoteSessionsListClientSessionsCursorFlag       = organizationRemoteSessionsListClientSessionsFlags.String("cursor", "", "")
-		organizationRemoteSessionsListClientSessionsLimitFlag        = organizationRemoteSessionsListClientSessionsFlags.String("limit", "", "")
-		organizationRemoteSessionsListClientSessionsSessionTokenFlag = organizationRemoteSessionsListClientSessionsFlags.String("session-token", "", "")
-		organizationRemoteSessionsListClientSessionsApikeyTokenFlag  = organizationRemoteSessionsListClientSessionsFlags.String("apikey-token", "", "")
+		organizationRemoteSessionsListClientSessionsFlags             = flag.NewFlagSet("list-client-sessions", flag.ExitOnError)
+		organizationRemoteSessionsListClientSessionsClientIDFlag      = organizationRemoteSessionsListClientSessionsFlags.String("client-id", "REQUIRED", "")
+		organizationRemoteSessionsListClientSessionsSearchFlag        = organizationRemoteSessionsListClientSessionsFlags.String("search", "", "")
+		organizationRemoteSessionsListClientSessionsStatusFlag        = organizationRemoteSessionsListClientSessionsFlags.String("status", "", "")
+		organizationRemoteSessionsListClientSessionsCreatedAfterFlag  = organizationRemoteSessionsListClientSessionsFlags.String("created-after", "", "")
+		organizationRemoteSessionsListClientSessionsCreatedBeforeFlag = organizationRemoteSessionsListClientSessionsFlags.String("created-before", "", "")
+		organizationRemoteSessionsListClientSessionsSortFlag          = organizationRemoteSessionsListClientSessionsFlags.String("sort", "", "")
+		organizationRemoteSessionsListClientSessionsCursorFlag        = organizationRemoteSessionsListClientSessionsFlags.String("cursor", "", "")
+		organizationRemoteSessionsListClientSessionsLimitFlag         = organizationRemoteSessionsListClientSessionsFlags.String("limit", "", "")
+		organizationRemoteSessionsListClientSessionsSessionTokenFlag  = organizationRemoteSessionsListClientSessionsFlags.String("session-token", "", "")
+		organizationRemoteSessionsListClientSessionsApikeyTokenFlag   = organizationRemoteSessionsListClientSessionsFlags.String("apikey-token", "", "")
 
 		organizationRemoteSessionsRevokeSessionFlags            = flag.NewFlagSet("revoke-session", flag.ExitOnError)
 		organizationRemoteSessionsRevokeSessionIDFlag           = organizationRemoteSessionsRevokeSessionFlags.String("id", "REQUIRED", "")
@@ -5193,6 +5216,27 @@ func ParseEndpoint(
 		userSessionsRevokeUserSessionApikeyTokenFlag      = userSessionsRevokeUserSessionFlags.String("apikey-token", "", "")
 		userSessionsRevokeUserSessionProjectSlugInputFlag = userSessionsRevokeUserSessionFlags.String("project-slug-input", "", "")
 
+		gatewaySessionsFlags = flag.NewFlagSet("gateway-sessions", flag.ContinueOnError)
+
+		gatewaySessionsListGatewaySessionsFlags             = flag.NewFlagSet("list-gateway-sessions", flag.ExitOnError)
+		gatewaySessionsListGatewaySessionsGatewayIDFlag     = gatewaySessionsListGatewaySessionsFlags.String("gateway-id", "", "")
+		gatewaySessionsListGatewaySessionsSearchFlag        = gatewaySessionsListGatewaySessionsFlags.String("search", "", "")
+		gatewaySessionsListGatewaySessionsServerIDFlag      = gatewaySessionsListGatewaySessionsFlags.String("server-id", "", "")
+		gatewaySessionsListGatewaySessionsProviderIDFlag    = gatewaySessionsListGatewaySessionsFlags.String("provider-id", "", "")
+		gatewaySessionsListGatewaySessionsStatusFlag        = gatewaySessionsListGatewaySessionsFlags.String("status", "active", "")
+		gatewaySessionsListGatewaySessionsCreatedAfterFlag  = gatewaySessionsListGatewaySessionsFlags.String("created-after", "", "")
+		gatewaySessionsListGatewaySessionsCreatedBeforeFlag = gatewaySessionsListGatewaySessionsFlags.String("created-before", "", "")
+		gatewaySessionsListGatewaySessionsSortFlag          = gatewaySessionsListGatewaySessionsFlags.String("sort", "newest", "")
+		gatewaySessionsListGatewaySessionsCursorFlag        = gatewaySessionsListGatewaySessionsFlags.String("cursor", "", "")
+		gatewaySessionsListGatewaySessionsLimitFlag         = gatewaySessionsListGatewaySessionsFlags.String("limit", "50", "")
+		gatewaySessionsListGatewaySessionsSessionTokenFlag  = gatewaySessionsListGatewaySessionsFlags.String("session-token", "", "")
+		gatewaySessionsListGatewaySessionsApikeyTokenFlag   = gatewaySessionsListGatewaySessionsFlags.String("apikey-token", "", "")
+
+		gatewaySessionsListGatewaySessionFacetsFlags            = flag.NewFlagSet("list-gateway-session-facets", flag.ExitOnError)
+		gatewaySessionsListGatewaySessionFacetsGatewayIDFlag    = gatewaySessionsListGatewaySessionFacetsFlags.String("gateway-id", "", "")
+		gatewaySessionsListGatewaySessionFacetsSessionTokenFlag = gatewaySessionsListGatewaySessionFacetsFlags.String("session-token", "", "")
+		gatewaySessionsListGatewaySessionFacetsApikeyTokenFlag  = gatewaySessionsListGatewaySessionFacetsFlags.String("apikey-token", "", "")
+
 		widgetsFlags = flag.NewFlagSet("widgets", flag.ContinueOnError)
 
 		widgetsListWidgetsFlags                = flag.NewFlagSet("list-widgets", flag.ExitOnError)
@@ -5634,6 +5678,11 @@ func ParseEndpoint(
 
 	functionsFlags.Usage = functionsUsage
 	functionsGetSignedAssetURLFlags.Usage = functionsGetSignedAssetURLUsage
+
+	hiddenMcpServersFlags.Usage = hiddenMcpServersUsage
+	hiddenMcpServersListFlags.Usage = hiddenMcpServersListUsage
+	hiddenMcpServersHideFlags.Usage = hiddenMcpServersHideUsage
+	hiddenMcpServersUnhideFlags.Usage = hiddenMcpServersUnhideUsage
 
 	hooksServerNamesFlags.Usage = hooksServerNamesUsage
 	hooksServerNamesListFlags.Usage = hooksServerNamesListUsage
@@ -6417,6 +6466,10 @@ func ParseEndpoint(
 	userSessionsMintUserSessionFlags.Usage = userSessionsMintUserSessionUsage
 	userSessionsRevokeUserSessionFlags.Usage = userSessionsRevokeUserSessionUsage
 
+	gatewaySessionsFlags.Usage = gatewaySessionsUsage
+	gatewaySessionsListGatewaySessionsFlags.Usage = gatewaySessionsListGatewaySessionsUsage
+	gatewaySessionsListGatewaySessionFacetsFlags.Usage = gatewaySessionsListGatewaySessionFacetsUsage
+
 	widgetsFlags.Usage = widgetsUsage
 	widgetsListWidgetsFlags.Usage = widgetsListWidgetsUsage
 	widgetsGetWidgetFlags.Usage = widgetsGetWidgetUsage
@@ -6519,6 +6572,8 @@ func ParseEndpoint(
 			svcf = mcpRegistriesFlags
 		case "functions":
 			svcf = functionsFlags
+		case "hidden-mcp-servers":
+			svcf = hiddenMcpServersFlags
 		case "hooks-server-names":
 			svcf = hooksServerNamesFlags
 		case "hooks":
@@ -6647,6 +6702,8 @@ func ParseEndpoint(
 			svcf = organizationUserSessionIssuersFlags
 		case "user-sessions":
 			svcf = userSessionsFlags
+		case "gateway-sessions":
+			svcf = gatewaySessionsFlags
 		case "widgets":
 			svcf = widgetsFlags
 		case "workload-identities":
@@ -7552,6 +7609,19 @@ func ParseEndpoint(
 			switch epn {
 			case "get-signed-asset-url":
 				epf = functionsGetSignedAssetURLFlags
+
+			}
+
+		case "hidden-mcp-servers":
+			switch epn {
+			case "list":
+				epf = hiddenMcpServersListFlags
+
+			case "hide":
+				epf = hiddenMcpServersHideFlags
+
+			case "unhide":
+				epf = hiddenMcpServersUnhideFlags
 
 			}
 
@@ -9773,6 +9843,16 @@ func ParseEndpoint(
 
 			}
 
+		case "gateway-sessions":
+			switch epn {
+			case "list-gateway-sessions":
+				epf = gatewaySessionsListGatewaySessionsFlags
+
+			case "list-gateway-session-facets":
+				epf = gatewaySessionsListGatewaySessionFacetsFlags
+
+			}
+
 		case "widgets":
 			switch epn {
 			case "list-widgets":
@@ -10329,7 +10409,7 @@ func ParseEndpoint(
 			switch epn {
 			case "callback":
 				endpoint = c.Callback()
-				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackStateFlag)
+				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackErrorFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
 				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginPartnerCodeFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag)
@@ -10777,6 +10857,19 @@ func ParseEndpoint(
 			case "get-signed-asset-url":
 				endpoint = c.GetSignedAssetURL()
 				data, err = functionsc.BuildGetSignedAssetURLPayload(*functionsGetSignedAssetURLBodyFlag, *functionsGetSignedAssetURLFunctionTokenFlag)
+			}
+		case "hidden-mcp-servers":
+			c := hiddenmcpserversc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = hiddenmcpserversc.BuildListPayload(*hiddenMcpServersListSessionTokenFlag)
+			case "hide":
+				endpoint = c.Hide()
+				data, err = hiddenmcpserversc.BuildHidePayload(*hiddenMcpServersHideBodyFlag, *hiddenMcpServersHideSessionTokenFlag)
+			case "unhide":
+				endpoint = c.Unhide()
+				data, err = hiddenmcpserversc.BuildUnhidePayload(*hiddenMcpServersUnhideBodyFlag, *hiddenMcpServersUnhideSessionTokenFlag)
 			}
 		case "hooks-server-names":
 			c := hooksservernamesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11812,7 +11905,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-client-sessions":
 				endpoint = c.ListClientSessions()
-				data, err = organizationremotesessionsc.BuildListClientSessionsPayload(*organizationRemoteSessionsListClientSessionsClientIDFlag, *organizationRemoteSessionsListClientSessionsCursorFlag, *organizationRemoteSessionsListClientSessionsLimitFlag, *organizationRemoteSessionsListClientSessionsSessionTokenFlag, *organizationRemoteSessionsListClientSessionsApikeyTokenFlag)
+				data, err = organizationremotesessionsc.BuildListClientSessionsPayload(*organizationRemoteSessionsListClientSessionsClientIDFlag, *organizationRemoteSessionsListClientSessionsSearchFlag, *organizationRemoteSessionsListClientSessionsStatusFlag, *organizationRemoteSessionsListClientSessionsCreatedAfterFlag, *organizationRemoteSessionsListClientSessionsCreatedBeforeFlag, *organizationRemoteSessionsListClientSessionsSortFlag, *organizationRemoteSessionsListClientSessionsCursorFlag, *organizationRemoteSessionsListClientSessionsLimitFlag, *organizationRemoteSessionsListClientSessionsSessionTokenFlag, *organizationRemoteSessionsListClientSessionsApikeyTokenFlag)
 			case "revoke-session":
 				endpoint = c.RevokeSession()
 				data, err = organizationremotesessionsc.BuildRevokeSessionPayload(*organizationRemoteSessionsRevokeSessionIDFlag, *organizationRemoteSessionsRevokeSessionSessionTokenFlag, *organizationRemoteSessionsRevokeSessionApikeyTokenFlag)
@@ -13009,6 +13102,16 @@ func ParseEndpoint(
 			case "revoke-user-session":
 				endpoint = c.RevokeUserSession()
 				data, err = usersessionsc.BuildRevokeUserSessionPayload(*userSessionsRevokeUserSessionIDFlag, *userSessionsRevokeUserSessionSessionTokenFlag, *userSessionsRevokeUserSessionApikeyTokenFlag, *userSessionsRevokeUserSessionProjectSlugInputFlag)
+			}
+		case "gateway-sessions":
+			c := gatewaysessionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-gateway-sessions":
+				endpoint = c.ListGatewaySessions()
+				data, err = gatewaysessionsc.BuildListGatewaySessionsPayload(*gatewaySessionsListGatewaySessionsGatewayIDFlag, *gatewaySessionsListGatewaySessionsSearchFlag, *gatewaySessionsListGatewaySessionsServerIDFlag, *gatewaySessionsListGatewaySessionsProviderIDFlag, *gatewaySessionsListGatewaySessionsStatusFlag, *gatewaySessionsListGatewaySessionsCreatedAfterFlag, *gatewaySessionsListGatewaySessionsCreatedBeforeFlag, *gatewaySessionsListGatewaySessionsSortFlag, *gatewaySessionsListGatewaySessionsCursorFlag, *gatewaySessionsListGatewaySessionsLimitFlag, *gatewaySessionsListGatewaySessionsSessionTokenFlag, *gatewaySessionsListGatewaySessionsApikeyTokenFlag)
+			case "list-gateway-session-facets":
+				endpoint = c.ListGatewaySessionFacets()
+				data, err = gatewaysessionsc.BuildListGatewaySessionFacetsPayload(*gatewaySessionsListGatewaySessionFacetsGatewayIDFlag, *gatewaySessionsListGatewaySessionFacetsSessionTokenFlag, *gatewaySessionsListGatewaySessionFacetsApikeyTokenFlag)
 			}
 		case "widgets":
 			c := widgetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16190,6 +16293,7 @@ func authCallbackUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth callback", os.Args[0])
 	fmt.Fprint(os.Stderr, " -code STRING")
+	fmt.Fprint(os.Stderr, " -error STRING")
 	fmt.Fprint(os.Stderr, " -state STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -16199,11 +16303,12 @@ func authCallbackUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -code STRING: `)
+	fmt.Fprintln(os.Stderr, `    -error STRING: `)
 	fmt.Fprintln(os.Stderr, `    -state STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"abc123\" --state \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth callback --code \"abc123\" --error \"abc123\" --state \"abc123\"")
 }
 
 func authLoginUsage() {
@@ -19343,6 +19448,77 @@ func functionsGetSignedAssetURLUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "functions get-signed-asset-url --body '{\n      \"asset_id\": \"abc123\"\n   }' --function-token \"abc123\"")
+}
+
+// hiddenMcpServersUsage displays the usage of the hidden-mcp-servers command
+// and its subcommands.
+func hiddenMcpServersUsage() {
+	fmt.Fprintln(os.Stderr, `MCP servers the signed-in user hid. Gateways leave hidden servers out of the user's tools and list them last on the consent page. Each user manages only their own list.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] hidden-mcp-servers COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list: List the MCP servers the signed-in user hid in the active organization.`)
+	fmt.Fprintln(os.Stderr, `    hide: Hide an MCP server for the signed-in user. Hiding a hidden server changes nothing.`)
+	fmt.Fprintln(os.Stderr, `    unhide: Show a hidden MCP server again for the signed-in user. Unhiding a server that is not hidden changes nothing.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s hidden-mcp-servers COMMAND --help\n", os.Args[0])
+}
+func hiddenMcpServersListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hidden-mcp-servers list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the MCP servers the signed-in user hid in the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hidden-mcp-servers list --session-token \"abc123\"")
+}
+
+func hiddenMcpServersHideUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hidden-mcp-servers hide", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Hide an MCP server for the signed-in user. Hiding a hidden server changes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hidden-mcp-servers hide --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func hiddenMcpServersUnhideUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hidden-mcp-servers unhide", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Show a hidden MCP server again for the signed-in user. Unhiding a server that is not hidden changes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hidden-mcp-servers unhide --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // hooksServerNamesUsage displays the usage of the hooks-server-names command
@@ -26401,6 +26577,11 @@ func organizationRemoteSessionsListClientSessionsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-sessions list-client-sessions", os.Args[0])
 	fmt.Fprint(os.Stderr, " -client-id STRING")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -created-after STRING")
+	fmt.Fprint(os.Stderr, " -created-before STRING")
+	fmt.Fprint(os.Stderr, " -sort STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -26413,6 +26594,11 @@ func organizationRemoteSessionsListClientSessionsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -client-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -created-after STRING: `)
+	fmt.Fprintln(os.Stderr, `    -created-before STRING: `)
+	fmt.Fprintln(os.Stderr, `    -sort STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -26420,7 +26606,7 @@ func organizationRemoteSessionsListClientSessionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-sessions list-client-sessions --client-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-sessions list-client-sessions --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --status \"expired\" --created-after \"1970-01-01T00:00:01Z\" --created-before \"1970-01-01T00:00:01Z\" --sort \"oldest\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionsRevokeSessionUsage() {
@@ -35430,6 +35616,80 @@ func userSessionsRevokeUserSessionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-user-session --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// gatewaySessionsUsage displays the usage of the gateway-sessions command and
+// its subcommands.
+func gatewaySessionsUsage() {
+	fmt.Fprintln(os.Stderr, `Sessions authorized for a project gateway or the Organization Gateway. Issuer-scoped sessions may authorize several endpoints; resource-bound sessions are restricted to the selected endpoint. Server filters describe configured upstream associations, not historical usage.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] gateway-sessions COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-gateway-sessions: ListGatewaySessions implements listGatewaySessions.`)
+	fmt.Fprintln(os.Stderr, `    list-gateway-session-facets: Complete configured member server and provider choices, independent of pagination and active filters.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s gateway-sessions COMMAND --help\n", os.Args[0])
+}
+func gatewaySessionsListGatewaySessionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] gateway-sessions list-gateway-sessions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -gateway-id STRING")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -server-id STRING")
+	fmt.Fprint(os.Stderr, " -provider-id STRING")
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -created-after STRING")
+	fmt.Fprint(os.Stderr, " -created-before STRING")
+	fmt.Fprint(os.Stderr, " -sort STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListGatewaySessions implements listGatewaySessions.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -gateway-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -provider-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -created-after STRING: `)
+	fmt.Fprintln(os.Stderr, `    -created-before STRING: `)
+	fmt.Fprintln(os.Stderr, `    -sort STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "gateway-sessions list-gateway-sessions --gateway-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --server-id \"550e8400-e29b-41d4-a716-446655440000\" --provider-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --created-after \"1970-01-01T00:00:01Z\" --created-before \"1970-01-01T00:00:01Z\" --sort \"oldest\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func gatewaySessionsListGatewaySessionFacetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] gateway-sessions list-gateway-session-facets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -gateway-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Complete configured member server and provider choices, independent of pagination and active filters.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -gateway-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "gateway-sessions list-gateway-session-facets --gateway-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // widgetsUsage displays the usage of the widgets command and its subcommands.
