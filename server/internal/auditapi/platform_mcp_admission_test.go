@@ -63,7 +63,7 @@ func TestPlatformMCPAuditAdmissionPrecedesProtectedQueries(t *testing.T) { //nol
 	service := auditapi.NewService(logger, testenv.NewTracerProvider(t), pool, ti.sessionManager, engine)
 	otherActor := contextvalues.WithAuthenticatedActor(read, &auth, urn.NewPrincipal(urn.PrincipalTypeUser, "other-user"))
 	for name, deniedContext := range map[string]context.Context{ //nolint:paralleltest // Sequential cases share the query counter with the positive control below.
-		"missing grants":        base,
+		"missing grants":        authztest.WithExactGrants(t, base),
 		"required denial":       authztest.WithExactGrants(t, base),
 		"foreign read":          authztest.WithExactGrants(t, base, authz.NewGrant(authz.ScopeOrgRead, "other-org")),
 		"identity mismatch":     otherActor,
