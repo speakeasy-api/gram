@@ -29,6 +29,17 @@ func (q *Queries) BindClientIssuerFixture(ctx context.Context, arg BindClientIss
 	return err
 }
 
+const countServerSelectionsFixture = `-- name: CountServerSelectionsFixture :one
+SELECT count(*) FROM upstream_client_selections WHERE mcp_server_id = $1
+`
+
+func (q *Queries) CountServerSelectionsFixture(ctx context.Context, mcpServerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countServerSelectionsFixture, mcpServerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAuthClient = `-- name: CreateAuthClient :one
 INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
 SELECT $1::uuid, $2::text, $3::uuid, $4::text, 'backfill', $5::text, c.id, c.attachment_scope
@@ -732,7 +743,21 @@ WHERE s.id = $3::uuid
     SELECT 1 FROM remote_session_ema_bindings AS b
     WHERE b.organization_id = p.organization_id
       AND b.project_id = s.project_id
-      AND b.user_session_issuer_id = s.user_session_issuer_id
+      AND (b.user_session_issuer_id = s.user_session_issuer_id
+           OR b.user_session_issuer_id = (
+             -- The gateways' issuer, as ListEMABindingServers reads it.
+             SELECT (array_agg(gi.id))[1]
+             FROM user_session_issuers AS gi
+             WHERE gi.organization_id = b.organization_id
+               AND gi.project_id IS NULL
+               AND gi.deleted IS FALSE
+               AND EXISTS (
+                 SELECT 1 FROM organization_features AS gf
+                 WHERE gf.organization_id = b.organization_id
+                   AND gf.feature_name = 'organization_gateway_disabled'
+               )
+             HAVING count(*) = 1
+           ))
       AND b.remote_session_issuer_id = e.remote_session_issuer_id
       AND b.remote_session_client_id = e.remote_session_client_id
       AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
@@ -1648,7 +1673,28 @@ JOIN remote_session_clients AS rc
       OR (rc.project_id IS NULL AND rc.organization_id IS NULL))
 JOIN mcp_servers AS s
   ON s.project_id = b.project_id
- AND s.user_session_issuer_id = b.user_session_issuer_id
+ AND (s.user_session_issuer_id = b.user_session_issuer_id
+      OR b.user_session_issuer_id = (
+        -- The organization and project gateways' issuer, as orggateway.Resolve
+        -- chooses it: the organization's sole live organization-level user
+        -- session issuer. They chain a member in its own project through it.
+        -- Configured reach, not current availability: an organization that has
+        -- never made a gateway decision is not reached, while turning the
+        -- gateway off, disabling the organization or restricting its custom
+        -- domain leaves it reached, so no toggle retires a client. Every
+        -- request is still matched to its own inbound issuer at runtime.
+        SELECT (array_agg(gi.id))[1]
+        FROM user_session_issuers AS gi
+        WHERE gi.organization_id = b.organization_id
+          AND gi.project_id IS NULL
+          AND gi.deleted IS FALSE
+          AND EXISTS (
+            SELECT 1 FROM organization_features AS gf
+            WHERE gf.organization_id = b.organization_id
+              AND gf.feature_name = 'organization_gateway_disabled'
+          )
+        HAVING count(*) = 1
+      ))
  AND s.deleted IS FALSE
 LEFT JOIN remote_mcp_servers AS r ON r.id = s.remote_mcp_server_id AND r.deleted IS FALSE
 LEFT JOIN tunneled_mcp_servers AS t ON t.id = s.tunneled_mcp_server_id AND t.deleted IS FALSE
@@ -1694,7 +1740,11 @@ type ListEMABindingServersRow struct {
 }
 
 // The live servers a ready binding reaches, as the runtime matches them: in
-// the binding's project and signed in through its user session issuer, a
+// the binding's project and signed in through its user session issuer, either
+// directly or as the issuer of the organization and project gateways, which
+// serve the server as a member and chain it in its own project. A link offers
+// the client on the server whichever way it is reached; the runtime still
+// chains only a request whose own inbound issuer the binding names. It is a
 // remote server whose valid persisted protected resource names the binding's
 // resource, or, with no valid persisted record, whose URL names it; or a
 // tunneled server whose resource identifier names it under its own derived
@@ -1767,7 +1817,21 @@ SELECT s.id AS mcp_server_id, s.project_id
 FROM remote_session_ema_bindings AS b
 JOIN mcp_servers AS s
   ON s.project_id = b.project_id
- AND s.user_session_issuer_id = b.user_session_issuer_id
+ AND (s.user_session_issuer_id = b.user_session_issuer_id
+      OR b.user_session_issuer_id = (
+        -- The gateways' issuer, as ListEMABindingServers reads it.
+        SELECT (array_agg(gi.id))[1]
+        FROM user_session_issuers AS gi
+        WHERE gi.organization_id = b.organization_id
+          AND gi.project_id IS NULL
+          AND gi.deleted IS FALSE
+          AND EXISTS (
+            SELECT 1 FROM organization_features AS gf
+            WHERE gf.organization_id = b.organization_id
+              AND gf.feature_name = 'organization_gateway_disabled'
+          )
+        HAVING count(*) = 1
+      ))
  AND s.deleted IS FALSE
 JOIN remote_mcp_servers AS r ON r.id = s.remote_mcp_server_id AND r.deleted IS FALSE
 LEFT JOIN LATERAL (
@@ -1804,7 +1868,8 @@ type ListEMASameOriginServersRow struct {
 }
 
 // The live remote servers a ready binding could plausibly cover without a
-// match: in the binding's project, signed in through its user session issuer,
+// match: in the binding's project, signed in through its user session issuer
+// directly or through the gateways as ListEMABindingServers reads them,
 // at the same origin as its resource, and with no valid persisted protected
 // resource naming another resource. Whether their metadata names the
 // binding's resource only live discovery can confirm, so these are reported
@@ -2929,7 +2994,21 @@ WHERE s.id = ANY($2::uuid[])
     ) AS rp ON TRUE
     WHERE b.organization_id = $1::text
       AND b.project_id = s.project_id
-      AND b.user_session_issuer_id = s.user_session_issuer_id
+      AND (b.user_session_issuer_id = s.user_session_issuer_id
+           OR b.user_session_issuer_id = (
+             -- The gateways' issuer, as ListEMABindingServers reads it.
+             SELECT (array_agg(gi.id))[1]
+             FROM user_session_issuers AS gi
+             WHERE gi.organization_id = b.organization_id
+               AND gi.project_id IS NULL
+               AND gi.deleted IS FALSE
+               AND EXISTS (
+                 SELECT 1 FROM organization_features AS gf
+                 WHERE gf.organization_id = b.organization_id
+                   AND gf.feature_name = 'organization_gateway_disabled'
+               )
+             HAVING count(*) = 1
+           ))
       AND b.state = 'ready'
       AND b.remote_session_client_id IS NOT NULL
       AND (rp.id IS NULL OR rp.authorization_servers IS NULL OR EXISTS (
@@ -3409,7 +3488,21 @@ WHERE p.id = s.project_id
         ) AS rp ON TRUE
         WHERE b.organization_id = $1::text
           AND b.project_id = s.project_id
-          AND b.user_session_issuer_id = s.user_session_issuer_id
+          AND (b.user_session_issuer_id = s.user_session_issuer_id
+               OR b.user_session_issuer_id = (
+                 -- The gateways' issuer, as ListEMABindingServers reads it.
+                 SELECT (array_agg(gi.id))[1]
+                 FROM user_session_issuers AS gi
+                 WHERE gi.organization_id = b.organization_id
+                   AND gi.project_id IS NULL
+                   AND gi.deleted IS FALSE
+                   AND EXISTS (
+                     SELECT 1 FROM organization_features AS gf
+                     WHERE gf.organization_id = b.organization_id
+                       AND gf.feature_name = 'organization_gateway_disabled'
+                   )
+                 HAVING count(*) = 1
+               ))
           AND b.state = 'ready'
           AND b.remote_session_client_id IS NOT NULL
           AND EXISTS (
@@ -4185,12 +4278,44 @@ func (q *Queries) SeedOAuthSelectionFixture(ctx context.Context, arg SeedOAuthSe
 	return err
 }
 
+const seedOrganizationFeatureFixture = `-- name: SeedOrganizationFeatureFixture :exec
+INSERT INTO organization_features (organization_id, feature_name, deleted_at)
+VALUES ($1, $2, $3)
+`
+
+type SeedOrganizationFeatureFixtureParams struct {
+	OrganizationID string
+	FeatureName    string
+	DeletedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) SeedOrganizationFeatureFixture(ctx context.Context, arg SeedOrganizationFeatureFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOrganizationFeatureFixture, arg.OrganizationID, arg.FeatureName, arg.DeletedAt)
+	return err
+}
+
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
 INSERT INTO organization_metadata (id, name, slug) VALUES ($1, $1, $1)
 `
 
 func (q *Queries) SeedOrganizationFixture(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, seedOrganizationFixture, id)
+	return err
+}
+
+const seedOrganizationUserSessionIssuerFixture = `-- name: SeedOrganizationUserSessionIssuerFixture :exec
+INSERT INTO user_session_issuers (id, organization_id, slug, authn_challenge_mode, session_duration)
+VALUES ($1, $2, $3, 'interactive', '1 day')
+`
+
+type SeedOrganizationUserSessionIssuerFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	Slug           string
+}
+
+func (q *Queries) SeedOrganizationUserSessionIssuerFixture(ctx context.Context, arg SeedOrganizationUserSessionIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOrganizationUserSessionIssuerFixture, arg.ID, arg.OrganizationID, arg.Slug)
 	return err
 }
 

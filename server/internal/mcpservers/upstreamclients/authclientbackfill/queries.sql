@@ -994,7 +994,11 @@ ORDER BY b.id;
 
 -- name: ListEMABindingServers :many
 -- The live servers a ready binding reaches, as the runtime matches them: in
--- the binding's project and signed in through its user session issuer, a
+-- the binding's project and signed in through its user session issuer, either
+-- directly or as the issuer of the organization and project gateways, which
+-- serve the server as a member and chain it in its own project. A link offers
+-- the client on the server whichever way it is reached; the runtime still
+-- chains only a request whose own inbound issuer the binding names. It is a
 -- remote server whose valid persisted protected resource names the binding's
 -- resource, or, with no valid persisted record, whose URL names it; or a
 -- tunneled server whose resource identifier names it under its own derived
@@ -1024,7 +1028,28 @@ JOIN remote_session_clients AS rc
       OR (rc.project_id IS NULL AND rc.organization_id IS NULL))
 JOIN mcp_servers AS s
   ON s.project_id = b.project_id
- AND s.user_session_issuer_id = b.user_session_issuer_id
+ AND (s.user_session_issuer_id = b.user_session_issuer_id
+      OR b.user_session_issuer_id = (
+        -- The organization and project gateways' issuer, as orggateway.Resolve
+        -- chooses it: the organization's sole live organization-level user
+        -- session issuer. They chain a member in its own project through it.
+        -- Configured reach, not current availability: an organization that has
+        -- never made a gateway decision is not reached, while turning the
+        -- gateway off, disabling the organization or restricting its custom
+        -- domain leaves it reached, so no toggle retires a client. Every
+        -- request is still matched to its own inbound issuer at runtime.
+        SELECT (array_agg(gi.id))[1]
+        FROM user_session_issuers AS gi
+        WHERE gi.organization_id = b.organization_id
+          AND gi.project_id IS NULL
+          AND gi.deleted IS FALSE
+          AND EXISTS (
+            SELECT 1 FROM organization_features AS gf
+            WHERE gf.organization_id = b.organization_id
+              AND gf.feature_name = 'organization_gateway_disabled'
+          )
+        HAVING count(*) = 1
+      ))
  AND s.deleted IS FALSE
 LEFT JOIN remote_mcp_servers AS r ON r.id = s.remote_mcp_server_id AND r.deleted IS FALSE
 LEFT JOIN tunneled_mcp_servers AS t ON t.id = s.tunneled_mcp_server_id AND t.deleted IS FALSE
@@ -1059,7 +1084,8 @@ ORDER BY s.id;
 
 -- name: ListEMASameOriginServers :many
 -- The live remote servers a ready binding could plausibly cover without a
--- match: in the binding's project, signed in through its user session issuer,
+-- match: in the binding's project, signed in through its user session issuer
+-- directly or through the gateways as ListEMABindingServers reads them,
 -- at the same origin as its resource, and with no valid persisted protected
 -- resource naming another resource. Whether their metadata names the
 -- binding's resource only live discovery can confirm, so these are reported
@@ -1068,7 +1094,21 @@ SELECT s.id AS mcp_server_id, s.project_id
 FROM remote_session_ema_bindings AS b
 JOIN mcp_servers AS s
   ON s.project_id = b.project_id
- AND s.user_session_issuer_id = b.user_session_issuer_id
+ AND (s.user_session_issuer_id = b.user_session_issuer_id
+      OR b.user_session_issuer_id = (
+        -- The gateways' issuer, as ListEMABindingServers reads it.
+        SELECT (array_agg(gi.id))[1]
+        FROM user_session_issuers AS gi
+        WHERE gi.organization_id = b.organization_id
+          AND gi.project_id IS NULL
+          AND gi.deleted IS FALSE
+          AND EXISTS (
+            SELECT 1 FROM organization_features AS gf
+            WHERE gf.organization_id = b.organization_id
+              AND gf.feature_name = 'organization_gateway_disabled'
+          )
+        HAVING count(*) = 1
+      ))
  AND s.deleted IS FALSE
 JOIN remote_mcp_servers AS r ON r.id = s.remote_mcp_server_id AND r.deleted IS FALSE
 LEFT JOIN LATERAL (
@@ -1244,7 +1284,21 @@ WHERE s.id = @mcp_server_id::uuid
     SELECT 1 FROM remote_session_ema_bindings AS b
     WHERE b.organization_id = p.organization_id
       AND b.project_id = s.project_id
-      AND b.user_session_issuer_id = s.user_session_issuer_id
+      AND (b.user_session_issuer_id = s.user_session_issuer_id
+           OR b.user_session_issuer_id = (
+             -- The gateways' issuer, as ListEMABindingServers reads it.
+             SELECT (array_agg(gi.id))[1]
+             FROM user_session_issuers AS gi
+             WHERE gi.organization_id = b.organization_id
+               AND gi.project_id IS NULL
+               AND gi.deleted IS FALSE
+               AND EXISTS (
+                 SELECT 1 FROM organization_features AS gf
+                 WHERE gf.organization_id = b.organization_id
+                   AND gf.feature_name = 'organization_gateway_disabled'
+               )
+             HAVING count(*) = 1
+           ))
       AND b.remote_session_issuer_id = e.remote_session_issuer_id
       AND b.remote_session_client_id = e.remote_session_client_id
       AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
@@ -1453,7 +1507,21 @@ WHERE s.id = ANY(@mcp_server_ids::uuid[])
     ) AS rp ON TRUE
     WHERE b.organization_id = @organization_id::text
       AND b.project_id = s.project_id
-      AND b.user_session_issuer_id = s.user_session_issuer_id
+      AND (b.user_session_issuer_id = s.user_session_issuer_id
+           OR b.user_session_issuer_id = (
+             -- The gateways' issuer, as ListEMABindingServers reads it.
+             SELECT (array_agg(gi.id))[1]
+             FROM user_session_issuers AS gi
+             WHERE gi.organization_id = b.organization_id
+               AND gi.project_id IS NULL
+               AND gi.deleted IS FALSE
+               AND EXISTS (
+                 SELECT 1 FROM organization_features AS gf
+                 WHERE gf.organization_id = b.organization_id
+                   AND gf.feature_name = 'organization_gateway_disabled'
+               )
+             HAVING count(*) = 1
+           ))
       AND b.state = 'ready'
       AND b.remote_session_client_id IS NOT NULL
       AND (rp.id IS NULL OR rp.authorization_servers IS NULL OR EXISTS (
@@ -1552,7 +1620,21 @@ WHERE p.id = s.project_id
         ) AS rp ON TRUE
         WHERE b.organization_id = @organization_id::text
           AND b.project_id = s.project_id
-          AND b.user_session_issuer_id = s.user_session_issuer_id
+          AND (b.user_session_issuer_id = s.user_session_issuer_id
+               OR b.user_session_issuer_id = (
+                 -- The gateways' issuer, as ListEMABindingServers reads it.
+                 SELECT (array_agg(gi.id))[1]
+                 FROM user_session_issuers AS gi
+                 WHERE gi.organization_id = b.organization_id
+                   AND gi.project_id IS NULL
+                   AND gi.deleted IS FALSE
+                   AND EXISTS (
+                     SELECT 1 FROM organization_features AS gf
+                     WHERE gf.organization_id = b.organization_id
+                       AND gf.feature_name = 'organization_gateway_disabled'
+                   )
+                 HAVING count(*) = 1
+               ))
           AND b.state = 'ready'
           AND b.remote_session_client_id IS NOT NULL
           AND EXISTS (
@@ -2377,3 +2459,14 @@ WHERE remote_session_client_id = @remote_session_client_id AND user_session_issu
 -- name: ProbeServerLockFixture :one
 -- Fails with lock_not_available while anyone holds a lock on the server row.
 SELECT id FROM mcp_servers WHERE id = @id FOR UPDATE NOWAIT;
+
+-- name: SeedOrganizationUserSessionIssuerFixture :exec
+INSERT INTO user_session_issuers (id, organization_id, slug, authn_challenge_mode, session_duration)
+VALUES (@id, @organization_id, @slug, 'interactive', '1 day');
+
+-- name: SeedOrganizationFeatureFixture :exec
+INSERT INTO organization_features (organization_id, feature_name, deleted_at)
+VALUES (@organization_id, @feature_name, sqlc.narg('deleted_at'));
+
+-- name: CountServerSelectionsFixture :one
+SELECT count(*) FROM upstream_client_selections WHERE mcp_server_id = @mcp_server_id;
