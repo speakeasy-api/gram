@@ -116,7 +116,8 @@ type TakenCheck struct {
 	ExcludeMcpServerID uuid.NullUUID
 }
 
-// Taken reports whether a live toolset alias holds the address. Callers hold the slug scope lock.
+// Taken reports whether a live toolset alias holds the address; on the platform that includes a live-project
+// custom-domain alias the loose lookup serves there. Callers hold the slug scope lock.
 func Taken(ctx context.Context, db repo.DBTX, check TakenCheck) (bool, error) {
 	taken, err := repo.New(db).AliasTaken(ctx, repo.AliasTakenParams{
 		Slug: pgtype.Text{String: check.Slug, Valid: true}, CustomDomainID: check.CustomDomainID,
@@ -128,7 +129,8 @@ func Taken(ctx context.Context, db repo.DBTX, check TakenCheck) (bool, error) {
 	return taken, nil
 }
 
-// TakenAddresses reports which of the given addresses a live toolset alias holds.
+// TakenAddresses reports which of the given addresses a live toolset alias holds, counting a live-project
+// custom-domain alias as holding its platform address too.
 func TakenAddresses(ctx context.Context, db repo.DBTX, addresses []Alias) (map[Alias]bool, error) {
 	taken := make(map[Alias]bool)
 	if len(addresses) == 0 {
@@ -152,9 +154,9 @@ func TakenAddresses(ctx context.Context, db repo.DBTX, addresses []Alias) (map[A
 	return taken, nil
 }
 
-// PlatformServed returns, keyed by canonical server id, the custom-domain alias slug the platform host still serves
+// PlatformServedSlugs returns, keyed by canonical server id, the custom-domain alias slug the platform host still serves
 // for each of the given servers: the only alias with its slug, with no live platform endpoint holding it.
-func PlatformServed(ctx context.Context, db repo.DBTX, organizationID string, projectIDs, serverIDs []uuid.UUID) (map[uuid.UUID]string, error) {
+func PlatformServedSlugs(ctx context.Context, db repo.DBTX, organizationID string, projectIDs, serverIDs []uuid.UUID) (map[uuid.UUID]string, error) {
 	served := make(map[uuid.UUID]string)
 	if len(serverIDs) == 0 {
 		return served, nil
@@ -226,6 +228,19 @@ func FollowAlias(ctx context.Context, tx repo.DBTX, organizationID string, proje
 	slug, domainID := aliasAddress(alias, live)
 	if slug == alias.Slug && domainID == alias.CustomDomainID {
 		return nil
+	}
+	if domainID.Valid && slug.Valid {
+		// The platform host also serves custom-domain aliases, so the move must not contend with another one there.
+		if err := mcpendpointsrepo.New(tx).LockSlugScope(ctx, mcpendpointsrepo.LockSlugScopeParams{CustomDomainID: domainID, Slug: slug.String}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock hosted MCP alias address")
+		}
+		served, err := repo.New(tx).OtherCustomDomainAliasServedOnPlatform(ctx, repo.OtherCustomDomainAliasServedOnPlatformParams{Slug: slug, ToolsetID: toolsetID})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check hosted MCP alias address")
+		}
+		if served {
+			return oops.E(oops.CodeConflict, nil, "this address is already taken by another toolset")
+		}
 	}
 	if err := repo.New(tx).MoveAlias(ctx, repo.MoveAliasParams{McpSlug: slug, CustomDomainID: domainID, ID: toolsetID, ProjectID: projectID}); err != nil {
 		var pgErr *pgconn.PgError

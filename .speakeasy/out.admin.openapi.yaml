@@ -10355,9 +10355,39 @@ components:
           type: string
       required:
         - entries
+    AdminRegistryPromotionAuthDiscovery:
+      type: object
+      properties:
+        auth_setup:
+          type: string
+          enum:
+            - none
+            - dcr
+            - cimd
+            - manual
+            - unknown
+        status:
+          type: string
+          enum:
+            - complete
+            - partial
+            - unavailable
+            - not_required
+        supports_cimd:
+          type: boolean
+        supports_dcr:
+          type: boolean
+      description: Publicly advertised authentication capabilities, not a verified OAuth connection.
+      required:
+        - supports_dcr
+        - supports_cimd
+        - auth_setup
+        - status
     AdminRegistryPromotionCandidate:
       type: object
       properties:
+        auth_discovery:
+          $ref: '#/components/schemas/AdminRegistryPromotionAuthDiscovery'
         can_override_eligibility:
           type: boolean
           description: Whether staff may explicitly accept this candidate's health evidence.

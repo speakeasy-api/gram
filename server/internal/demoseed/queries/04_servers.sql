@@ -569,7 +569,7 @@ INSERT INTO remote_sessions
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes');
 

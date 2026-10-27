@@ -17,10 +17,10 @@ import (
 )
 
 // EnrichViews fills each view's toolset summary, primary endpoint, platform
-// endpoint slug, legacy platform slug and has_endpoint in up to five queries, whatever the number of
-// servers. views[i] must be servers[i]'s view. A failed query is logged and
-// leaves its fields empty; endpointsResolved reports whether the primary and
-// platform endpoint fields could be read.
+// endpoint slug, legacy platform slug and has_endpoint in up to five queries,
+// whatever the number of servers. views[i] must be servers[i]'s view. A failed
+// query is logged and leaves its fields empty; endpointsResolved reports whether
+// the primary and platform endpoint fields could be read.
 func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, organizationID string, servers []repo.McpServer, views []*types.McpServer) (endpointsResolved bool) {
 	if len(servers) == 0 {
 		return true
@@ -99,7 +99,7 @@ func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ser
 	if endpointsErr != nil {
 		logger.WarnContext(ctx, "list mcp servers with endpoints", attr.SlogError(endpointsErr))
 	}
-	legacySlug, legacyErr := legacyalias.PlatformServed(ctx, db, organizationID, projectIDs, serverIDs)
+	legacySlug, legacyErr := legacyalias.PlatformServedSlugs(ctx, db, organizationID, projectIDs, serverIDs)
 	if legacyErr != nil {
 		logger.WarnContext(ctx, "list legacy platform alias slugs", attr.SlogError(legacyErr))
 	}
