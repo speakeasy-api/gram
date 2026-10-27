@@ -292,7 +292,7 @@ func (k *KitGKERuntimeBackend) RuntimeReadyForAdmission(ctx context.Context) err
 	if err := k.preflightPermissions(ctx); err != nil {
 		return err
 	}
-	if _, err := k.config.GKE.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+	if _, err := k.config.GKE.Dynamic.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
 		return fmt.Errorf("%w: inspect Kit GKE admission API: %w", errRuntimeSwitchUnavailable, err)
 	}
 	return nil

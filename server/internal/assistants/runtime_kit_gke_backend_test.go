@@ -47,7 +47,7 @@ func (p *kitGKEBackendProtocol) PrepareRuntimeSwitch(context.Context, assistantR
 
 func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.FakeDynamicClient, assistantRuntimeRecord, *int) {
 	t.Helper()
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gkePodGVR: "PodList", gkeSandboxClaimGVR: "SandboxClaimList"})
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gkePodGVR: "PodList", kitClaimGVR: "SandboxClaimList"})
 	input := kitGKEInput()
 	input.Command, input.Args = KitGatewayCommand(int(input.GuestPort))
 	fences := new(int)
@@ -70,7 +70,7 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 		require.True(t, ok)
 		obj.SetUID(types.UID("uid-" + obj.GetName()))
 		obj.SetResourceVersion("1")
-		if action.GetResource() == gkeSandboxClaimGVR {
+		if action.GetResource() == kitClaimGVR {
 			pod := kitObject("Pod", "v1", "pod-"+r.ID.String(), k.identity(r))
 			pod.SetUID("pod-uid")
 			labels := obj.GetLabels()
@@ -248,12 +248,19 @@ func TestKitGKEBackendCheckpointRestorePersistsAuthority(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "verified-snapshot", selected)
 	require.Equal(t, template.GetName(), state.Metadata.TemplateName)
-	claim, err := client.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
+	claim, err := client.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
 	require.NoError(t, err)
-	ref, found, err := unstructured.NestedString(claim.Object, "spec", "sandboxTemplateRef", "name")
+	ref, found, err := unstructured.NestedString(claim.Object, "spec", "warmPoolRef", "name")
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, template.GetName(), ref)
+	require.Equal(t, state.Metadata.WarmPoolName, ref)
+	pool, err := client.Resource(kitWarmPoolGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), ref, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, pool.GetUID(), state.Metadata.WarmPoolUID)
+	poolTemplate, found, err := unstructured.NestedString(pool.Object, "spec", "sandboxTemplateRef", "name")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, state.Metadata.TemplateName, poolTemplate)
 }
 func TestKitGKEBackendCheckpointRejectsColdFallback(t *testing.T) {
 	t.Parallel()
@@ -669,6 +676,11 @@ func TestKitGKEReapOriginalTemplateName(t *testing.T) {
 	require.True(t, ok)
 	legacyTemplate.SetName(kitGKEName(r))
 	require.NoError(t, client.Tracker().Create(kitTemplateGVR, template, k.config.GKE.Namespace))
+	pool, err := client.Resource(kitWarmPoolGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), state.Metadata.WarmPoolName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NoError(t, unstructured.SetNestedField(pool.Object, kitGKEName(r), "spec", "sandboxTemplateRef", "name"))
+	_, err = client.Resource(kitWarmPoolGVR).Namespace(k.config.GKE.Namespace).Update(t.Context(), pool, metav1.UpdateOptions{})
+	require.NoError(t, err)
 	state.Metadata.TemplateName = ""
 	_, err = k.saveAuthority(t.Context(), obj, state)
 	require.NoError(t, err)

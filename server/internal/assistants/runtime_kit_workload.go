@@ -155,7 +155,13 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	admissionName := "kit-runtime-" + r.ID.String() + "-" + generation
 	project := uuid.NullUUID{UUID: r.ProjectID, Valid: true}
 	q := workloadrepo.New(db)
-	if c.Environment == "local" {
+	if c.Environment != "local" && c.WorkloadIssuerURL == "https://accounts.google.com" {
+		subject, err = kitGKEWorkloadSubject(ctx, sa)
+		if err != nil {
+			return nil, fmt.Errorf("provision Google workload identity: %w", err)
+		}
+	}
+	if c.Environment == "local" || c.WorkloadIssuerURL == "https://accounts.google.com" {
 		// Serialize the external subject across projects before taking a project
 		// lock. A project-only lock cannot protect the organization-wide history.
 		key, err := json.Marshal([]string{"kit-local-subject", identity.OrganizationID, c.WorkloadIssuerURL, subject})
@@ -198,7 +204,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	if _, err := q.LockWorkloadIssuerForWrite(ctx, workloadrepo.LockWorkloadIssuerForWriteParams{OrganizationID: identity.OrganizationID, ID: issuer.ID}); err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	if c.Environment == "local" {
+	if c.Environment == "local" || c.WorkloadIssuerURL == "https://accounts.google.com" {
 		// Never rebind an externally verified subject, even after withdrawal or
 		// issuer recreation. Old assertions and sessions can still be valid;
 		// changing only metadata.Generation cannot distinguish them. Query all
@@ -208,7 +214,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
 		if used {
-			return nil, errors.New("local Kit workload subjects cannot be reused; configure a fresh generation subject")
+			return nil, errors.New("Kit workload subjects cannot be reused; configure a fresh generation subject")
 		}
 	}
 	assignments, err := q.GetWorkloadAgentAssignmentForSubject(ctx, workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: issuer.ID, Subject: subject, MatchKind: "exact"})

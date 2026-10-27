@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"maps"
 	"net"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,7 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-var kitTemplateGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxtemplates"}
+var kitTemplateGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxtemplates"}
+
+var kitWarmPoolGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxwarmpools"}
+var kitClaimGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxclaims"}
 
 func validKitGKEImage(image string) bool { return kitGKEExplicitImage(image) }
 
@@ -55,14 +59,14 @@ func (i KitGKEIdentity) validate() error {
 // KitGKEProvisionInput requires the Kit owner to supply actual configuration
 // bytes and executable arguments. This layer does not define Kit's wire format.
 // Snapshot-enabled provisioning is reserved for a caller holding the admission
-// lock with settled work and fenced prior authority. No warm pool is used.
+// lock with settled work and fenced prior authority. The explicit pool has zero speculative replicas.
 type KitGKEProvisionInput struct {
 	Workload                                 *KitWorkloadBinding
 	InferenceEndpoint                        string
 	WorkloadServiceAccount, WorkloadAudience string
 	Identity                                 KitGKEIdentity
 	Model                                    string
-	Name, Image, IngressCIDR                 string
+	Name, Image, MetadataImage, IngressCIDR  string
 	GuestPort                                int32
 	Command, Args                            []string
 	AgentsMD, MCPJSON, GatewayToken          []byte
@@ -82,7 +86,7 @@ type KitGKEProvisionInput struct {
 	CheckpointMarker, ExpectedCheckpointMarker []byte
 }
 
-type KitGKEObjects struct{ Secret, Template, Claim *unstructured.Unstructured }
+type KitGKEObjects struct{ Secret, Template, WarmPool, Claim *unstructured.Unstructured }
 
 func kitObject(kind, version, name string, i KitGKEIdentity) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{Object: map[string]any{"apiVersion": version, "kind": kind}}
@@ -93,7 +97,7 @@ func kitObject(kind, version, name string, i KitGKEIdentity) *unstructured.Unstr
 }
 
 // RenderKitGKEProvision is pure. Returned objects contain credentials and must
-// never be logged. KitGKERuntimeBackend.Ensure creates them in Secret -> Template -> Claim order.
+// never be logged. KitGKERuntimeBackend.Ensure creates them in Secret -> Template -> WarmPool -> Claim order.
 //
 //nolint:exhaustruct,exhaustive // Only renderer-defined Kubernetes fields and CPU/memory budgets are set; optional fields retain API defaults.
 func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
@@ -112,6 +116,9 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	}
 	if !kitGKEExplicitImage(in.Image) {
 		return out, fmt.Errorf("kit image requires an explicit non-latest version tag or digest")
+	}
+	if !regexp.MustCompile(`^[^@\s]+@sha256:[a-f0-9]{64}$`).MatchString(in.MetadataImage) {
+		return out, fmt.Errorf("kit metadata image requires an immutable sha256 digest")
 	}
 	if err := validateKitResources(in.Resources); err != nil {
 		return out, err
@@ -133,7 +140,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		return out, err
 	}
 	if in.Workload.ServiceAccount != in.WorkloadServiceAccount || in.Workload.Audience != in.WorkloadAudience {
-		return out, fmt.Errorf("kit workload projection binding mismatch")
+		return out, fmt.Errorf("kit workload metadata binding mismatch")
 	}
 	if _, err := tls.X509KeyPair(in.TLSCertificate, in.TLSPrivateKey); err != nil {
 		return out, fmt.Errorf("kit GKE requires fresh TLS key pair")
@@ -236,16 +243,27 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	}
 	pod.Spec.Volumes = append(pod.Spec.Volumes, proxyTmp, corev1.Volume{Name: "tls", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretName, DefaultMode: &mode, Items: []corev1.KeyToPath{{Key: "tls.crt", Path: "tls.crt"}, {Key: "tls.key", Path: "tls.key"}, {Key: "nginx.conf", Path: "nginx.conf"}}}}})
 	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{Name: "acp-tls", Image: kitGKETLSProxyImage, Command: []string{"nginx"}, Args: []string{"-c", "/tls/nginx.conf", "-g", "daemon off;"}, Ports: []corev1.ContainerPort{{ContainerPort: in.GuestPort}}, SecurityContext: security, Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("64Mi")}}, VolumeMounts: []corev1.VolumeMount{{Name: "tls", MountPath: "/tls", ReadOnly: true}, {Name: "tls-tmp", MountPath: "/tmp"}}})
-	// Projected credentials rotate independently and never enter the bootstrap or rootfs.
-	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
-		Name: "workload",
-		VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{
-			DefaultMode: &mode,
-			Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
-				Audience: in.WorkloadAudience, ExpirationSeconds: new(int64(600)), Path: "assertion",
-			}}},
-		}},
-	})
+	// Metadata credentials rotate in memory, outside the snapshotted rootfs.
+	workload, err := kitMemoryVolume("workload", "1Mi")
+	if err != nil {
+		return out, err
+	}
+	pod.Spec.Volumes = append(pod.Spec.Volumes, workload)
+	metadataEnv := []corev1.EnvVar{
+		{Name: "WORKLOAD_TOKEN_AUDIENCE", Value: in.WorkloadAudience},
+		{Name: "WORKLOAD_TOKEN_PATH", Value: KitWorkloadAssertionPath},
+		{Name: "WORKLOAD_TOKEN_SUBJECT", Value: in.Workload.Subject},
+	}
+	// A native sidecar's startup probe gates the Kit process on fresh authority.
+	pod.Spec.InitContainers = []corev1.Container{{
+		Name: "workload-token", Image: in.MetadataImage,
+		Command: []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs"},
+		Env:     metadataEnv, RestartPolicy: new(corev1.ContainerRestartPolicyAlways),
+		StartupProbe:    &corev1.Probe{ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs", "--ready"}}}, PeriodSeconds: 2, TimeoutSeconds: 5, FailureThreshold: 60},
+		SecurityContext: security,
+		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("32Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("128Mi")}},
+		VolumeMounts:    []corev1.VolumeMount{{Name: "workload", MountPath: "/var/run/secrets/speakeasy/workload"}},
+	}}
 	if in.SnapshotsEnabled {
 		pod.Labels["gram.ai/snapshots"] = "enabled"
 	}
@@ -253,13 +271,20 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	if err != nil {
 		return out, fmt.Errorf("convert Kit pod template: %w", err)
 	}
-	out.Template = kitObject("SandboxTemplate", "extensions.agents.x-k8s.io/v1alpha1", kitGKETemplateName(in.Name), in.Identity)
+	out.Template = kitObject("SandboxTemplate", "extensions.agents.x-k8s.io/v1beta1", kitGKETemplateName(in.Name), in.Identity)
 	out.Template.Object["spec"] = map[string]any{"networkPolicyManagement": "Managed", "networkPolicy": map[string]any{
 		"ingress": []any{map[string]any{"from": []any{map[string]any{"ipBlock": map[string]any{"cidr": in.IngressCIDR}}}, "ports": []any{map[string]any{"protocol": "TCP", "port": int64(in.GuestPort)}}}},
 		"egress":  []any{map[string]any{"to": []any{map[string]any{"ipBlock": map[string]any{"cidr": "0.0.0.0/0", "except": []any{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"}}}, map[string]any{"ipBlock": map[string]any{"cidr": "::/0", "except": []any{"fc00::/7", "fe80::/10"}}}}}},
 	}, "podTemplate": podMap}
-	out.Claim = kitObject("SandboxClaim", "extensions.agents.x-k8s.io/v1alpha1", in.Name, in.Identity)
-	out.Claim.Object["spec"] = map[string]any{"sandboxTemplateRef": map[string]any{"name": out.Template.GetName()}, "lifecycle": map[string]any{"shutdownPolicy": "Delete"}}
+	// GKE metadata identity is the only link-local egress exception.
+	policy := out.Template.Object["spec"].(map[string]any)["networkPolicy"].(map[string]any)
+	policy["egress"] = append(policy["egress"].([]any), map[string]any{"to": []any{map[string]any{"ipBlock": map[string]any{"cidr": "169.254.169.254/32"}}}, "ports": []any{map[string]any{"protocol": "TCP", "port": int64(80)}}})
+	// Zero replicas prohibit speculative pods carrying this runtime's credentials.
+	// Claims cold-create from the pool's template when no warm sandbox exists.
+	out.WarmPool = kitObject("SandboxWarmPool", "extensions.agents.x-k8s.io/v1beta1", kitGKEWarmPoolName(in.Name), in.Identity)
+	out.WarmPool.Object["spec"] = map[string]any{"replicas": int64(0), "sandboxTemplateRef": map[string]any{"name": out.Template.GetName()}}
+	out.Claim = kitObject("SandboxClaim", "extensions.agents.x-k8s.io/v1beta1", in.Name, in.Identity)
+	out.Claim.Object["spec"] = map[string]any{"warmPoolRef": map[string]any{"name": out.WarmPool.GetName()}, "lifecycle": map[string]any{"shutdownPolicy": "Delete"}}
 	return out, nil
 }
 
@@ -303,3 +328,5 @@ func validateKitResources(resources corev1.ResourceRequirements) error {
 // Templates and claims each create a managed network policy named after themselves.
 // Distinct names prevent their controllers from competing for the same policy.
 func kitGKETemplateName(runtimeName string) string { return runtimeName + "-template" }
+
+func kitGKEWarmPoolName(runtimeName string) string { return runtimeName + "-pool" }

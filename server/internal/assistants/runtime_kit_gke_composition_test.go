@@ -30,6 +30,7 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 	issuer, err := url.Parse("https://mcp.example/oauth/issuer")
 	require.NoError(t, err)
 	valid := KitGKECompositionConfig{
+		IAMProject: "example-project", WorkloadPoolProject: "example-project",
 		KitLocalCompositionConfig: KitLocalCompositionConfig{
 			Environment: "production", Image: "registry.example/kit:0.2.17", Origin: origin,
 			MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(),

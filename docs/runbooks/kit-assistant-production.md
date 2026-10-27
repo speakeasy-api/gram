@@ -14,14 +14,15 @@ bootstrap's certificate, verifies its DNS identity, and retains the guarded
 Pod-CIDR dial policy. Redirects and transport retries are disabled. No insecure
 TLS verification or plaintext production fallback is available.
 
-Kit's released v0.2.17 `gateway` contract has an HTTP listener, not native TLS
+Kit's `gateway` contract has an HTTP listener, not native TLS
 flags (`src/gateway.rs`). The renderer therefore uses the repository's
 unprivileged nginx pattern: `nginxinc/nginx-unprivileged:1.28-alpine` terminates
 TLS on the guest port, then forwards to Kit on `127.0.0.1:17766` inside the same
 Pod. Kit uses its supported `--listen`, `--credential-file`, and `--project`
 arguments, without wildcard binding. SSE buffering, proxy retries, and access
 logs are disabled; request headers and bearer credentials must never be logged.
-This does not require another Kit release or a service mesh.
+The metadata-file rotation path requires Kit v0.2.19 or later; no service mesh
+is required.
 
 TLS private keys exist only in the runtime's immutable bootstrap Secret and its
 read-only `tls` projection, not the Kit root filesystem. The Kit container does
@@ -34,8 +35,9 @@ short-lived workload token rotation.
 
 Infrastructure contract (review/apply separately):
 
-- Permit pulling both the configured released Kit image and the nginx image
-  above. The sandbox has two ordinary containers (`kit`, `acp-tls`), UID/GID
+- Permit pulling the configured released Kit image, the nginx image above,
+  and the digest-pinned metadata sidecar image. The sandbox has two ordinary containers (`kit`, `acp-tls`) and a native
+  restartable init sidecar (`workload-token`), UID/GID
   1000, no capabilities, and automatic service-account token mounting disabled.
 - Keep server/worker ingress limited to the configured guest TCP port and
   source CIDR. The guest port now speaks TLS, not HTTP. Do not expose port
@@ -44,8 +46,10 @@ Infrastructure contract (review/apply separately):
   projection and 32 MiB memory-backed `tls-tmp` volume. No extra RBAC, external
   CA, DNS record, shared private key, or load balancer is needed.
 - Budget the proxy's 10m CPU/16 MiB requests and 100m CPU/64 MiB limits in
-  addition to Kit resources. Rootfs-only snapshot policy must cover this
-  two-container Pod; Secret and memory volumes are projected fresh on restore.
+  addition to Kit resources. The metadata sidecar adds 10m CPU/32 MiB requests
+  and 100m CPU/128 MiB limits. Rootfs-only snapshot policy must cover this
+  Pod, including its native sidecar; Secret and memory volumes are supplied
+  fresh on restore.
 - The TLS transport/image participate in the runtime compatibility fingerprint.
   Do not reuse plaintext-era authority or snapshots across this rollout.
 
@@ -82,7 +86,14 @@ Use Kit v0.2.19 or a workload-capable build with an explicit version tag
 Configure the server and worker consistently:
 
 - `GRAM_ASSISTANT_RUNTIME_PROVIDER=gke`.
-- `GRAM_ASSISTANT_KIT_IMAGE=<REGISTRY>/<IMAGE>:<VERSION>`.
+- `GRAM_ASSISTANT_KIT_IMAGE=<REGISTRY>/<IMAGE>:<VERSION>` (Kit v0.2.19 or later;
+  each workload exchange must reopen the assertion file after atomic rotation).
+- `GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT=<IAM_PROJECT_ID>`.
+- `GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE=<REGISTRY>/gram-assistant-runtime@sha256:<DIGEST>`.
+  Use the image built from this change, not an older runtime image. The existing
+  `assistant-runtime-image` CI job builds and publishes it; local builds use
+  `mise run build:assistants-runtime-image`. The script and its tests are part
+  of that Dockerfile. No separate, unpublished sidecar image is assumed.
 - Existing assistant GKE cluster endpoint, CA, namespace and runner CIDR settings.
 - `GRAM_ASSISTANT_KIT_GKE_INGRESS_CIDR=<SERVER_SOURCE_CIDR>`. This is the
   server source network permitted to reach gateway pods, not an unrestricted
@@ -92,24 +103,107 @@ Configure the server and worker consistently:
 - `GRAM_ASSISTANT_KIT_MCP_RESOURCE=https://<RESOURCE_HOST>/mcp/<SLUG>`.
 - `GRAM_ASSISTANT_KIT_MCP_ISSUER=https://<EXPECTED_ISSUER>` and
   `GRAM_ASSISTANT_KIT_MCP_ISSUER_ID=<PERSISTED_ISSUER_UUID>`.
-- `GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER=<CLUSTER_OIDC_ISSUER_URL>` and
-  `GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL=<DISCOVERED_JWKS_URL>`. Use the
-  cluster discovery document's actual `jwks_uri`, not an assumed URL suffix.
+- Retain `GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER` as the assistant cluster issuer,
+  `https://container.googleapis.com/v1/projects/<CLUSTER_PROJECT_ID>/locations/<LOCATION>/clusters/<CLUSTER>`,
+  and retain its legacy `GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL`. Old application
+  deployments still consume these values. New metadata mode derives the cluster
+  workload-pool project from this issuer, independently of the IAM project.
+  When `GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT` is set, the new application selects
+  `https://accounts.google.com` and `https://www.googleapis.com/oauth2/v3/certs`
+  for token verification. It does not verify metadata tokens against the cluster
+  issuer/JWKS. The external issuer flags still apply directly to local mode.
 
 The MCP resource must be an enabled attachment of the assistant. Bootstrap
-registers one project-scoped cluster issuer and a generation-specific subject
-assigned to the assistant's agent. Project-scoped inference authority must already
-be available to the owner; existing agent policies are not silently expanded.
-The issuer explicitly permits projected assertion reuse, requiring the issuer
-replay-policy migration and implementation before this runtime is deployed.
+registers a project-scoped Google issuer and a generation-specific numeric IAM
+service-account `uniqueId` subject assigned to the assistant's existing agent.
+Project-scoped inference authority must already be available to the owner;
+existing agent policies are not silently expanded. The issuer permits cached
+assertion reuse for Google's one-hour ID tokens. An email is not the subject.
 
-The runtime Kubernetes principal needs namespace-scoped ServiceAccount
-get/create/delete permission.
-The pod uses an explicit 600-second audience-bound token projection mounted
-read-only at `/var/run/secrets/speakeasy/workload`, without `subPath`.
-`automountServiceAccountToken` remains false. Only the Kit container mounts it;
-tokens are not put in bootstrap Secrets, rootfs, or snapshots. Cold restore
-creates a new service account and admission; cleanup is UID-fenced.
+Each bootstrap uses a separate IAM service account with the `kit-wl-` prefix
+and a separate Kubernetes service account (KSA). The IAM account grants only
+`roles/iam.workloadIdentityUser` to that exact namespace/KSA principal; the KSA
+annotation links to its email. It receives no generic Google API roles. A
+retired numeric subject must never be admitted again: rotate identity on cold
+boot/restore and retain failed cleanup evidence for retry.
+
+Use a dedicated identity project (for example `<APPLICATION_PROJECT>-kit-wl`),
+not the application or cluster project. The runtime principal requires `iam.serviceAccounts.create`,
+`iam.serviceAccounts.get`, `iam.serviceAccounts.delete`,
+`iam.serviceAccounts.getIamPolicy`, and `iam.serviceAccounts.setIamPolicy` in
+the dedicated IAM project. Do not assume `setIamPolicy` can be safely restricted
+by service-account name prefix: the project boundary limits this privilege.
+Enable Workload Identity Federation for the assistant cluster. The exact member
+is `serviceAccount:<CLUSTER_PROJECT_ID>.svc.id.goog[<NAMESPACE>/<KSA>]`, **not**
+the identity-project pool. Ensure organization policy permits the required
+cross-project service-account use. Generated workload accounts receive no
+project roles; the server's custom provisioning role is separate.
+
+The metadata refresh sidecar requests the exact exchange audience from the
+link-local metadata server with `Metadata-Flavor: Google`, a bounded response,
+no redirects, and a timeout. It writes a mode-0600 temporary file and atomically
+renames it in a memory-backed `emptyDir`. Kit mounts the whole directory
+read-only at `/var/run/secrets/speakeasy/workload`, without `subPath`; bootstrap
+Secrets, rootfs and snapshots never contain assertions. A native sidecar
+startup probe checks valid token expiry before Kit starts. Refresh retries
+before expiry, and removes expired assertions on failure without logging tokens.
+`automountServiceAccountToken` stays false, with no explicit service-account
+token or trust-bundle projections (managed sandbox core policy rejects those).
+
+The Kit path uses `extensions.agents.x-k8s.io/v1beta1` SandboxTemplate,
+SandboxWarmPool, and SandboxClaim objects with explicit `warmPoolRef`. The
+per-generation pool is not a shared workload identity pool. Keep the legacy
+runtime's API path unchanged. Permit namespace-scoped get/create/delete for
+these resources (`list` also for SandboxClaims), plus existing Secret and KSA
+permissions. Network policies are managed by the sandbox controller. The
+server also needs create on `authorization.k8s.io/selfsubjectaccessreviews`
+for fail-closed preflight authorization checks.
+Pods tolerate `workload-type=sandbox:NoSchedule` and retain gVisor isolation.
+
+Pools request zero spare replicas so the controller cannot replenish another
+pod with the same generation's credentials after adoption. This relies on the
+upstream v1beta1 cold-start path, not an assumption that every managed release
+is identical. At upstream commit
+[`c4ed9ba962270bf2c34d868e8c92048e85038899`](https://github.com/kubernetes-sigs/agent-sandbox/commit/c4ed9ba962270bf2c34d868e8c92048e85038899):
+[`SandboxWarmPoolSpec` permits zero](https://github.com/kubernetes-sigs/agent-sandbox/blob/c4ed9ba962270bf2c34d868e8c92048e85038899/extensions/api/v1beta1/sandboxwarmpool_types.go#L40-L46),
+[an empty pool falls through to cold start](https://github.com/kubernetes-sigs/agent-sandbox/blob/c4ed9ba962270bf2c34d868e8c92048e85038899/extensions/controllers/sandboxclaim_controller.go#L1232-L1249),
+and [`reconcileActive` creates from the pool template](https://github.com/kubernetes-sigs/agent-sandbox/blob/c4ed9ba962270bf2c34d868e8c92048e85038899/extensions/controllers/sandboxclaim_controller.go#L668-L698).
+Confirm the managed GKE controller implements this contract before rollout.
+Do not change replicas to one as a workaround: replenishment can duplicate
+credential-bearing pods even in a per-generation pool.
+
+IAM recovery uses namespace-scoped ConfigMaps as a non-secret pending-operation
+journal, written before account creation. Grant `get`, `create`, `update`, and
+`delete` on ConfigMaps. Keep these records until UID-fenced cleanup completes;
+do not delete them merely because an IAM request timed out. A definitive create
+rejection can be cleared, but an uncertain result stays fenced until reconciled.
+
+### Artifact-first rollout order
+
+1. Open the application PR without promoting the server. The existing
+   `.github/workflows/pr.yaml` `assistant-runtime-image` job runs for server
+   changes on non-Dependabot PRs and uses `docker/build-push-action` with
+   `push: true`. It publishes `pr-<NUMBER>`, content-hash and SHA tags.
+2. Wait for that image build (including metadata-script tests) to succeed;
+   resolve its registry digest. No image digest is invented in this change.
+3. Pin that published digest in `GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE` in
+   infrastructure **before** promoting the new application. The old application
+   ignores this new setting. Provision the dedicated IAM project, role and
+   ConfigMap/WarmPool RBAC first, retaining legacy issuer/JWKS configuration.
+4. Promote the new application only after the metadata image setting and
+   permissions are deployed consistently to server and worker. Missing/invalid
+   metadata image is a deliberate startup validation error; do not promote a
+   server with only the IAM-project setting staged. Main's release-dispatch job
+   already waits for the assistant runtime image build, but that alone does not
+   populate the new infrastructure digest setting.
+5. Validate authorized managed-sandbox startup/rotation/cleanup before enabling
+   new Kit sessions. No fallback to a shared IAM identity or mutable image tag
+   is permitted.
+
+Quota is a rollout gate: every simultaneously live generation consumes an IAM
+service account; failed deletions also consume quota until reconciled. Size
+project service-account quota for concurrency and recycle overlap before
+opting in. Do not work around quota exhaustion with a shared identity.
 
 MCP and inference use Kit's generic workload exchange configuration, not native
 API keys or confidential OAuth clients. Gateway authentication remains separate
@@ -151,7 +245,7 @@ management:
 
 | API group            | Resource                    | Required verbs            | Purpose                                                                |
 | -------------------- | --------------------------- | ------------------------- | ---------------------------------------------------------------------- |
-| Core (`""`)          | `serviceaccounts`           | `get`, `create`, `delete` | Provision and retire generation-specific projected identities          |
+| Core (`""`)          | `serviceaccounts`           | `get`, `create`, `delete` | Provision and retire generation-specific linked identities             |
 | Core (`""`)          | `pods`                      | `get`, `list`, `delete`   | Discover claim Pods, verify source/restore identity, and reap runtimes |
 | `podsnapshot.gke.io` | `podsnapshotpolicies`       | `get`, `list`             | Select and validate the manual rootfs-only policy                      |
 | `podsnapshot.gke.io` | `podsnapshotmanualtriggers` | `create`, `get`, `delete` | Request, observe, and clean up checkpoints                             |
@@ -176,3 +270,23 @@ References:
 - [Trigger a Pod snapshot](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/pod-snapshots-trigger)
 - [Restore a Pod snapshot](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/pod-snapshots)
 - [Snapshot matching](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/pod-snapshots#snapshot-matching)
+
+## Scope and local verification
+
+Platform MCP parity: no new tool or schema is needed. These are internal
+provisioning, credential refresh, and lifecycle-fencing changes; existing
+assistant operations and caller authorization remain unchanged. Demo seed:
+no dashboard data model, new visible resource, or telemetry dimension changes;
+no new seed rows are needed, and live IAM accounts must not be seeded.
+
+```sh
+mise exec -- bun test agents/runtime-image/kit-workload-token.test.mjs
+mise run test:server ./internal/assistants -run '^TestKitGKE' -count=1
+mise run test:server ./cmd/gram -run '^TestKit' -count=1
+mise run test:server ./internal/usersessions/assertion/workload -count=1
+```
+
+Fake Kubernetes/IAM and local refresh tests do not establish managed-controller
+compatibility. Validate pool creation, metadata startup, rotation, exact-subject
+rejection, checkpoint/restore and eventual cleanup in an authorized deployment
+before production opt-in; this change does not itself perform a live rollout.

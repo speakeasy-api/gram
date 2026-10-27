@@ -40,8 +40,9 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		name string
 		uid  types.UID
 	}{
-		{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID},
+		{kitClaimGVR, kitGKEName(r), m.ClaimUID},
 		{gkePodGVR, m.PodName, m.PodUID},
+		{kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID},
 		{kitTemplateGVR, m.templateName(r), m.TemplateUID},
 		{kitSecretGVR, m.SecretName, m.SecretUID},
 		{kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID},
@@ -168,7 +169,7 @@ func (k *KitGKERuntimeBackend) RuntimeExists(ctx context.Context, r assistantRun
 	if err != nil {
 		return false, err
 	}
-	_, err = k.get(ctx, r, gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID)
+	_, err = k.get(ctx, r, kitClaimGVR, kitGKEName(r), m.ClaimUID)
 	if apierrors.IsNotFound(err) {
 		return false, nil
 	}
@@ -193,7 +194,7 @@ func (k *KitGKERuntimeBackend) verifyStoppedSwitchSource(ctx context.Context, r 
 		gvr  schema.GroupVersionResource
 		name string
 	}{
-		{gkeSandboxClaimGVR, kitGKEName(r)},
+		{kitClaimGVR, kitGKEName(r)},
 		{gkePodGVR, state.Metadata.PodName},
 	} {
 		if resource.name == "" {

@@ -17,7 +17,7 @@ func TestKitGKEAdmissionPermissions(t *testing.T) {
 	for _, snapshots := range []bool{false, true} {
 		t.Run(fmt.Sprintf("snapshots=%t", snapshots), func(t *testing.T) {
 			t.Parallel()
-			client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gkeSandboxClaimGVR: "SandboxClaimList"})
+			client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{kitClaimGVR: "SandboxClaimList"})
 			k := &KitGKERuntimeBackend{config: KitGKERuntimeConfig{GKE: GKERuntimeConfig{Dynamic: client, Namespace: "assistants"}, Provision: KitGKEProvisionInput{SnapshotsEnabled: snapshots}}}
 			seen := map[schema.GroupVersionResource][]string{}
 			client.PrependReactor("create", "selfsubjectaccessreviews", func(action ktesting.Action) (bool, runtime.Object, error) {
@@ -38,10 +38,12 @@ func TestKitGKEAdmissionPermissions(t *testing.T) {
 			})
 			require.NoError(t, k.RuntimeReadyForAdmission(t.Context()))
 			expected := map[schema.GroupVersionResource][]string{
+				kitGKEIAMPendingGVR:  {"get", "create", "update", "delete"},
 				kitServiceAccountGVR: {"create", "get", "delete"},
 				kitSecretGVR:         {"create", "get", "delete"},
 				kitTemplateGVR:       {"create", "get", "delete"},
-				gkeSandboxClaimGVR:   {"create", "get", "delete", "list"},
+				kitClaimGVR:          {"create", "get", "delete", "list"},
+				kitWarmPoolGVR:       {"create", "get", "delete"},
 				gkePodGVR:            {"get", "list", "delete"},
 			}
 			if snapshots {

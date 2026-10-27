@@ -50,14 +50,14 @@ func TestKitGKEStoppedReapPreservesReusableLineage(t *testing.T) {
 	result, err := k.Ensure(t.Context(), r)
 	require.NoError(t, err)
 	r.BackendMetadataJSON = result.BackendMetadataJSON
-	claim, err := client.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
+	claim, err := client.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
 	require.NoError(t, err)
 	require.NoError(t, k.Stop(t.Context(), r))
 	// A leftover claim must be removed without retiring reusable authority.
-	err = client.Tracker().Create(gkeSandboxClaimGVR, claim, k.config.GKE.Namespace)
+	err = client.Tracker().Create(kitClaimGVR, claim, k.config.GKE.Namespace)
 	require.NoError(t, err)
 	require.NoError(t, k.ReapStoppedMachine(t.Context(), r))
-	_, err = client.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
+	_, err = client.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
 	require.True(t, apierrors.IsNotFound(err))
 	state, _, err := k.loadAuthority(t.Context(), r)
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestKitGKEBackendRejectsUnsafeTransportOptions(t *testing.T) {
 
 func TestKitGKEColdCreationFailureCleansOwnedResources(t *testing.T) {
 	t.Parallel()
-	for _, failed := range []string{kitTemplateGVR.Resource, gkeSandboxClaimGVR.Resource} {
+	for _, failed := range []string{kitTemplateGVR.Resource, kitWarmPoolGVR.Resource, kitClaimGVR.Resource} {
 		t.Run(failed, func(t *testing.T) {
 			t.Parallel()
 			k, client, r, fences := kitGKEBackendFixture(t)
@@ -157,8 +157,11 @@ func TestKitGKEColdCreationFailureCleansOwnedResources(t *testing.T) {
 				name string
 			}
 			expected := []objectIdentity{{gvr: kitServiceAccountGVR, name: serviceAccountName}, {gvr: kitSecretGVR, name: secretName}}
-			if failed == gkeSandboxClaimGVR.Resource {
+			if failed == kitClaimGVR.Resource || failed == kitWarmPoolGVR.Resource {
 				expected = append(expected, objectIdentity{gvr: kitTemplateGVR, name: kitGKETemplateName(kitGKEName(r))})
+			}
+			if failed == kitClaimGVR.Resource {
+				expected = append(expected, objectIdentity{gvr: kitWarmPoolGVR, name: kitGKEWarmPoolName(kitGKEName(r))})
 			}
 			deleted := []objectIdentity{}
 			for _, action := range client.Actions() {
