@@ -76,8 +76,8 @@ type readinessProbeMode int
 const (
 	// readStored reports the stored result and never probes.
 	readStored readinessProbeMode = iota
-	// readOrFirstProbe reports the stored result, or runs a one-off first
-	// check when the server has never been checked.
+	// readOrFirstProbe reports the stored result, or runs one check when no
+	// current result is stored.
 	readOrFirstProbe
 	// readForced always runs a fresh check under the probe limit.
 	readForced
@@ -119,8 +119,8 @@ func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal
 		if err != nil || found || mode != readOrFirstProbe || !s.canProbe() {
 			return project, readiness, found, err
 		}
-		// No check has been stored yet, typically right after the server was
-		// added. Run the first check now rather than report the server as
+		// No current check is stored: typically right after the server was
+		// added, or once the last check has expired. Run the first check now rather than report the server as
 		// degraded. A refused or failed check keeps the unchecked result.
 		probed, err := s.probe(ctx, principal, project.ID, parsedRegistrationID, "first_probe")
 		if err != nil {
