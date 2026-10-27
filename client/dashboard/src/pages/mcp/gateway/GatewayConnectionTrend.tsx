@@ -1,3 +1,6 @@
+import { ChartLegend } from "@/components/chart/ChartLegend";
+import { overviewLabels } from "@/components/chart/overviewLabels";
+import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
@@ -118,18 +121,14 @@ export function GatewayConnectionTrend({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-heading-sm">Connections over time</h2>
-        <Text small muted>
-          Connections to this gateway created and revoked {phrase}, and how many
-          were active. A refresh continues a connection, so it is neither.
-          Active means a connection was unexpired with no revocation recorded;
-          it does not mean it worked, could reach its tools, or was used.
-        </Text>
-      </div>
+    <Card.Dashboard
+      title="Connections over time"
+      headerClassName="px-4 py-3"
+      bodyClassName="space-y-3 p-0"
+      tooltip={`Connections created and revoked ${phrase}. A refresh continues a connection, so it is neither. Active means unexpired with no recorded revocation, not that tools worked or were used.`}
+    >
       {body}
-    </div>
+    </Card.Dashboard>
   );
 }
 
@@ -160,8 +159,9 @@ function TrendBody({
 
   return (
     <>
-      <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
+      <StatTileGroup compact className="border-x-0 border-t-0">
         <StatTile
+          compact
           title="Active at start"
           value={trend.activeAtStart}
           format="number"
@@ -169,6 +169,7 @@ function TrendBody({
           tooltip="Connections unexpired, with no recorded revocation, just before the window starts."
         />
         <StatTile
+          compact
           title="Created"
           value={trend.created}
           format="number"
@@ -176,6 +177,7 @@ function TrendBody({
           tooltip="First issued in the window. Refreshes are not counted."
         />
         <StatTile
+          compact
           title="Revoked"
           value={trend.revoked}
           format="number"
@@ -183,6 +185,7 @@ function TrendBody({
           tooltip="Ended by a revocation before their deadline. Connections that reach their deadline are not counted."
         />
         <StatTile
+          compact
           title="Active at end"
           value={trend.activeAtEnd}
           format="number"
@@ -200,7 +203,11 @@ function TrendBody({
           className="h-[120px]"
         />
       ) : (
-        <>
+        <div
+          className={
+            expandedChart ? "p-3" : "grid grid-cols-1 gap-3 p-3 lg:grid-cols-2"
+          }
+        >
           <ChartCard
             title="Created and revoked"
             chartId={EVENTS_CHART}
@@ -210,30 +217,18 @@ function TrendBody({
           >
             <StackedTimeBarChart
               {...charts.events}
-              height={expandedChart === EVENTS_CHART ? 420 : 200}
+              compact={expandedChart !== EVENTS_CHART}
+              labels={
+                expandedChart === EVENTS_CHART
+                  ? charts.events.labels
+                  : overviewLabels(charts.events.labels)
+              }
+              height={expandedChart === EVENTS_CHART ? 420 : 120}
               expanded={expandedChart === EVENTS_CHART}
             />
             {/* The shared chart shows its legend only when expanded. */}
             {expandedChart !== EVENTS_CHART && (
-              <ul className="mt-2 flex gap-4" aria-label="Series">
-                {charts.events.datasets.map((dataset) => (
-                  <li key={dataset.label} className="flex items-center gap-1.5">
-                    <span
-                      aria-hidden="true"
-                      className="size-2.5 rounded-sm"
-                      style={{
-                        backgroundColor:
-                          typeof dataset.backgroundColor === "string"
-                            ? dataset.backgroundColor
-                            : undefined,
-                      }}
-                    />
-                    <Text small muted>
-                      {dataset.label}
-                    </Text>
-                  </li>
-                ))}
-              </ul>
+              <ChartLegend datasets={charts.events.datasets} />
             )}
           </ChartCard>
           <ChartCard
@@ -245,18 +240,25 @@ function TrendBody({
           >
             <StackedTimeBarChart
               {...charts.active}
-              height={expandedChart === ACTIVE_CHART ? 420 : 200}
+              compact={expandedChart !== ACTIVE_CHART}
+              labels={
+                expandedChart === ACTIVE_CHART
+                  ? charts.active.labels
+                  : overviewLabels(charts.active.labels)
+              }
+              height={expandedChart === ACTIVE_CHART ? 420 : 120}
               expanded={expandedChart === ACTIVE_CHART}
             />
           </ChartCard>
-          <Text muted small>
-            UTC intervals of one {trend.bucket}. Created and revoked happen
-            during an interval; active is the count just before it ends.
+          <Text muted small className="lg:col-span-2">
+            UTC intervals of one {trend.bucket}. Active means unexpired with no
+            recorded revocation; it does not mean it worked, could reach its
+            tools, or was used.
           </Text>
-        </>
+        </div>
       )}
       {incomplete && (
-        <Text muted small className="block">
+        <Text muted small className="block px-4 pb-3">
           Some older connection records can&apos;t be counted, so this history
           may be incomplete.
         </Text>

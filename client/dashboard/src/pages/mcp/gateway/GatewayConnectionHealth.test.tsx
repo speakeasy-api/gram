@@ -212,6 +212,7 @@ it("defaults to listings over 7 days, sharing one window", async () => {
   });
   expect(screen.getAllByText("of 4")).toHaveLength(2);
   expect(screen.getByText("25% of 4")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /What isn.t counted/ }));
   expect(screen.getByText(/not whether a redirect arrived/)).toBeTruthy();
 });
 
@@ -409,9 +410,11 @@ it("names provider stages as recorded and lists what is not counted apart", asyn
     ],
   });
   renderSection();
+  await screen.findByText("Listings over time");
+  expect(screen.queryByText(/connecting providers/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /What isn.t counted/ }));
   expect(await screen.findByText(/connecting providers/)).toBeTruthy();
   expect(screen.queryByText(/provider sign-ins, and/)).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: /What isn.t counted/ }));
   expect(
     await screen.findByText(
       "Scheduled and manual provider refreshes are not attributed to a gateway.",
@@ -586,7 +589,10 @@ it("counts token requests by grant, apart from policy blocks", async () => {
     }),
   );
   const tile = (title: string) =>
-    screen.getByText(title).closest("[data-tone]")?.textContent ?? "";
+    screen
+      .getAllByText(title)
+      .map((node) => node.closest("[data-tone]"))
+      .find(Boolean)?.textContent ?? "";
   expect(screen.getByText("Sign-in tokens written")).toBeTruthy();
   expect(tile("Sign-in tokens written")).toContain("2");
   expect(tile("Refreshes answered")).toContain("2");

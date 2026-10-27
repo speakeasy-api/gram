@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -133,13 +134,15 @@ export function GatewayClientAdmission({
   }
 
   return (
-    <section className="space-y-2">
-      <div className="flex items-center gap-2">
-        <h3 className="text-eyebrow">Client admission</h3>
-        {mode?.restricted && <Badge variant="warning">Restricted</Badge>}
-      </div>
+    <Card.Dashboard
+      title="Client admission"
+      headerClassName="px-4 py-3"
+      bodyClassName="space-y-3 p-4"
+      className="h-auto"
+      action={mode?.restricted && <Badge variant="warning">Restricted</Badge>}
+    >
       {body}
-    </section>
+    </Card.Dashboard>
   );
 }
 

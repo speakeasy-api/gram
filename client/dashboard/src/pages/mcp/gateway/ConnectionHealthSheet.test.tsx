@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -385,7 +386,11 @@ it("drops the attempt at the window end and refills from the next page", async (
     operator: "eq",
     values: [""],
   });
-  expect(screen.getAllByText("Complete")).toHaveLength(1);
+  expect(
+    within(
+      screen.getByRole("region", { name: /Latest.*attempts in this window/ }),
+    ).getAllByText("Complete"),
+  ).toHaveLength(1);
   // Once under "Why it fails" and once on the failed attempt.
   expect(
     screen.getAllByText(
@@ -579,7 +584,9 @@ it("shows the same person and client's member checks by provider, with blocked, 
   ).toBeTruthy();
   expect(screen.getByText(/not on a later reconnect/)).toBeTruthy();
   // A listing sheet counts partial listings beside failed ones.
-  expect(screen.getByText("Partial")).toBeTruthy();
+  expect(
+    screen.getAllByText("Partial").find((node) => node.closest("[data-tone]")),
+  ).toBeTruthy();
 });
 
 it("says when the caller's retried member checks never ended listed", async () => {

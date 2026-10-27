@@ -1,13 +1,32 @@
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
 import { MetricCard as UiMetricCard } from "@/components/ui/MetricCard";
+import { cn } from "@/lib/utils";
+import type { ComponentProps } from "react";
 
 /**
  * Lays StatTiles flush in one bordered strip with hairline dividers — the
  * prototype's stat-row idiom. Wrap every row of StatTiles in this (a single
  * card still gets its border from the group).
  */
-export const StatTileGroup = UiMetricCard.Group;
+export function StatTileGroup({
+  compact = false,
+  className,
+  ...props
+}: ComponentProps<typeof UiMetricCard.Group> & {
+  compact?: boolean;
+}): JSX.Element {
+  return (
+    <UiMetricCard.Group
+      {...props}
+      className={cn(
+        compact &&
+          "grid grid-cols-2 divide-x-0 [&>*]:border-b [&>*]:border-r sm:flex sm:divide-x sm:[&>*]:border-0",
+        className,
+      )}
+    />
+  );
+}
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatCompact } from "@/lib/format";
 import { ThresholdConfig } from "./chartUtils";
@@ -16,6 +35,8 @@ import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 
 export type StatTileProps = {
+  /** Smaller figures and spacing for a diagnostic summary strip. */
+  compact?: boolean;
   title: string;
   value: number;
   /** Renders in place of the formatted value (e.g. "-" when not applicable). */
@@ -61,6 +82,7 @@ function getValueTone(value: number, thresholds?: ThresholdConfig): Tone {
 export function StatTile(props: StatTileProps): JSX.Element {
   const {
     title,
+    compact = false,
     value,
     displayValue,
     previousValue = 0,
@@ -165,7 +187,8 @@ export function StatTile(props: StatTileProps): JSX.Element {
 
   return (
     <UiMetricCard
-      size="sm"
+      size={compact ? "xs" : "sm"}
+      className={compact ? "gap-2 p-4" : undefined}
       label={label}
       value={displayValue ?? formatValue(value)}
       tone={tone ?? getValueTone(value, thresholds)}
