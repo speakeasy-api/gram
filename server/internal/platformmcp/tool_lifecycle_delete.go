@@ -28,8 +28,14 @@ func registerLifecycleDeleteTool(reg *Registrar, service *LifecycleDeleteService
 	addTool(reg, &mcp.Tool{
 		Name: deleteMCPToolName, Title: "Delete an MCP Server",
 		Description: deleteMCPToolDescription,
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true},
+		Annotations: deleteMCPAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, handler)
+}
+
+// The dashboard delete republishes the project's plugins to GitHub and revokes
+// orphaned upstream OAuth grants, so it reaches hosts outside Speakeasy.
+func deleteMCPAnnotations() *mcp.ToolAnnotations {
+	return writeAnnotations(true, true, true)
 }
 
 func unavailableLifecycleDeleteTool(_ context.Context, _ *mcp.CallToolRequest, _ DeleteMCPInput) (*mcp.CallToolResult, DeleteMCPOutput, error) {
