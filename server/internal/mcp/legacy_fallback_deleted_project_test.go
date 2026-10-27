@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -33,7 +32,7 @@ func TestLegacyFallback_DeletedProjectAnswersAsUnknownSlug(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	public := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "deleted-proj-public-"+uuid.NewString()[:8])
+	public := createPublicMCPToolset(t, ctx, ti, authCtx, "deleted-proj-public-"+uuid.NewString()[:8])
 	gated, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	unknown := "deleted-proj-unknown-" + uuid.NewString()[:8]
 
@@ -108,7 +107,7 @@ func TestLegacyFallback_DeletedProjectSlugNotTakenOverByCustomDomainToolset(t *t
 	otherAuth.ProjectID = &other.ID
 	slug := "deleted-proj-shared-" + uuid.NewString()[:8]
 	live, domain := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, &otherAuth, slug, slug+".example.com")
-	createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
+	createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
