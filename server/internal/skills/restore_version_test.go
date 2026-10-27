@@ -198,22 +198,22 @@ func TestRestoreSkillVersionPromotesValidVersionAfterNewerInvalidVersion(t *test
 	require.True(t, version.PromotedAt.Valid)
 }
 
-func TestRestoreSkillVersionPromotesCurrentCapturedTargetToManual(t *testing.T) {
+func TestRestoreSkillVersionPromotesNewerCapturedTargetToManual(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	manual := createSkill(t, ctx, ti, "restore-current-captured", "Manual.")
-	captured, err := skillservice.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("restore-current-captured", "Captured.", "captured"))
+	manual := createSkill(t, ctx, ti, "restore-newer-captured", "Manual.")
+	captured, err := skillservice.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("restore-newer-captured", "Captured.", "captured"))
 	require.NoError(t, err)
 	require.NotEqual(t, manual.Version.ID, captured.SkillVersionID.String())
 	state, err := ti.repo.GetSkillState(ctx, repo.GetSkillStateParams{ProjectID: ti.projectID, SkillID: captured.SkillID})
 	require.NoError(t, err)
-	require.Equal(t, captured.SkillVersionID, state.LatestVersionID)
+	require.Equal(t, uuid.MustParse(manual.Version.ID), state.LatestVersionID)
 	runtimeVersionID, err := ti.repo.GetLatestValidSkillVersion(ctx, repo.GetLatestValidSkillVersionParams{ProjectID: ti.projectID, SkillID: captured.SkillID})
 	require.NoError(t, err)
 	require.Equal(t, uuid.MustParse(manual.Version.ID), runtimeVersionID)
 
-	plugin := createPlugin(t, ctx, ti, ti.projectID, "restore-current-captured-plugin")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "restore-newer-captured-plugin")
 	distribution, err := ti.service.Distribute(ctx, &gen.DistributePayload{
 		ID: manual.Skill.ID, PluginID: new(plugin.ID.String()), PinnedVersionID: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
@@ -221,7 +221,7 @@ func TestRestoreSkillVersionPromotesCurrentCapturedTargetToManual(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, manual.Version.ID, distribution.ResolvedVersionID)
 	open, err := seedSuggestion(t, ctx, ti, seedSuggestionParams{
-		ProposedDiff: diffTo(t, manual.Version.Content, skillManifest("restore-current-captured", "Manual.", "# restore-current-captured, expanded")),
+		ProposedDiff: diffTo(t, manual.Version.Content, skillManifest("restore-newer-captured", "Manual.", "# restore-newer-captured, expanded")),
 		Rationale:    "stale", ScoredSessionCount: 0,
 		BaseVersionID: uuid.MustParse(manual.Version.ID), ProjectID: ti.projectID, SkillID: captured.SkillID,
 	})
@@ -249,7 +249,7 @@ func TestRestoreSkillVersionPromotesCurrentCapturedTargetToManual(t *testing.T) 
 	pluginSkills, err := pluginsrepo.New(ti.conn).ListPluginSkillsForProject(ctx, pluginsrepo.ListPluginSkillsForProjectParams{ProjectID: ti.projectID, PluginIds: nil})
 	require.NoError(t, err)
 	require.Len(t, pluginSkills, 1)
-	require.Equal(t, capturedManifest("restore-current-captured", "Captured.", "captured"), pluginSkills[0].SkillContent)
+	require.Equal(t, capturedManifest("restore-newer-captured", "Captured.", "captured"), pluginSkills[0].SkillContent)
 	suggestion, err := ti.repo.GetLatestSkillEditSuggestion(ctx, repo.GetLatestSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: captured.SkillID})
 	require.NoError(t, err)
 	require.Equal(t, open.ID, suggestion.ID)

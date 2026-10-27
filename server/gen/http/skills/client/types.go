@@ -291,6 +291,9 @@ type DismissSuggestionResponseBody struct {
 	SkillDisplayName *string `form:"skill_display_name,omitempty" json:"skill_display_name,omitempty" xml:"skill_display_name,omitempty"`
 	// The version the suggestion was generated from.
 	BaseVersionID *string `form:"base_version_id,omitempty" json:"base_version_id,omitempty" xml:"base_version_id,omitempty"`
+	// The SKILL.md content of the base version, which the proposed changes apply
+	// to.
+	BaseContent *string `form:"base_content,omitempty" json:"base_content,omitempty" xml:"base_content,omitempty"`
 	// The separate changes proposed, each reviewable on its own.
 	Changes []*SkillEditSuggestionChangeResponseBody `form:"changes,omitempty" json:"changes,omitempty" xml:"changes,omitempty"`
 	// The complete SKILL.md content produced by taking every proposed change.
@@ -4700,6 +4703,10 @@ type SkillVersionResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of activations attributed to this exact version.
 	SeenCount *int64 `form:"seen_count,omitempty" json:"seen_count,omitempty" xml:"seen_count,omitempty"`
+	// Whether this version was captured from an agent's machine rather than
+	// uploaded. Captured versions rank below uploaded ones, so plugins only ship
+	// one after it is promoted or no uploaded version exists.
+	Captured *bool `form:"captured,omitempty" json:"captured,omitempty" xml:"captured,omitempty"`
 }
 
 // SkillValidationErrorResponseBody is used to define fields on response body
@@ -4726,6 +4733,9 @@ type SkillEditSuggestionResponseBody struct {
 	SkillDisplayName *string `form:"skill_display_name,omitempty" json:"skill_display_name,omitempty" xml:"skill_display_name,omitempty"`
 	// The version the suggestion was generated from.
 	BaseVersionID *string `form:"base_version_id,omitempty" json:"base_version_id,omitempty" xml:"base_version_id,omitempty"`
+	// The SKILL.md content of the base version, which the proposed changes apply
+	// to.
+	BaseContent *string `form:"base_content,omitempty" json:"base_content,omitempty" xml:"base_content,omitempty"`
 	// The separate changes proposed, each reviewable on its own.
 	Changes []*SkillEditSuggestionChangeResponseBody `form:"changes,omitempty" json:"changes,omitempty" xml:"changes,omitempty"`
 	// The complete SKILL.md content produced by taking every proposed change.
@@ -6755,6 +6765,7 @@ func NewDismissSuggestionSkillEditSuggestionOK(body *DismissSuggestionResponseBo
 		SkillName:            *body.SkillName,
 		SkillDisplayName:     *body.SkillDisplayName,
 		BaseVersionID:        *body.BaseVersionID,
+		BaseContent:          *body.BaseContent,
 		ProposedContent:      *body.ProposedContent,
 		AppliesCleanly:       *body.AppliesCleanly,
 		Rationale:            *body.Rationale,
@@ -9155,6 +9166,9 @@ func ValidateDismissSuggestionResponseBody(body *DismissSuggestionResponseBody) 
 	}
 	if body.BaseVersionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("base_version_id", "body"))
+	}
+	if body.BaseContent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_content", "body"))
 	}
 	if body.Changes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("changes", "body"))
@@ -15083,6 +15097,9 @@ func ValidateSkillVersionResponseBody(body *SkillVersionResponseBody) (err error
 	if body.SeenCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("seen_count", "body"))
 	}
+	if body.Captured == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("captured", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -15143,6 +15160,9 @@ func ValidateSkillEditSuggestionResponseBody(body *SkillEditSuggestionResponseBo
 	}
 	if body.BaseVersionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("base_version_id", "body"))
+	}
+	if body.BaseContent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_content", "body"))
 	}
 	if body.Changes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("changes", "body"))

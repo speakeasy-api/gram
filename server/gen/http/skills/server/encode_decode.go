@@ -5592,6 +5592,7 @@ func marshalTypesSkillVersionToSkillVersionResponseBody(v *types.SkillVersion) *
 		FirstSeenAt:          v.FirstSeenAt,
 		LastSeenAt:           v.LastSeenAt,
 		SeenCount:            v.SeenCount,
+		Captured:             v.Captured,
 	}
 	if v.Metadata != nil {
 		res.Metadata = make(map[string]any, len(v.Metadata))
@@ -5648,6 +5649,7 @@ func marshalTypesSkillEditSuggestionToSkillEditSuggestionResponseBody(v *types.S
 		SkillName:            v.SkillName,
 		SkillDisplayName:     v.SkillDisplayName,
 		BaseVersionID:        v.BaseVersionID,
+		BaseContent:          v.BaseContent,
 		ProposedContent:      v.ProposedContent,
 		AppliesCleanly:       v.AppliesCleanly,
 		Rationale:            v.Rationale,

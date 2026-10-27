@@ -5621,6 +5621,7 @@ func unmarshalSkillVersionResponseBodyToTypesSkillVersion(v *SkillVersionRespons
 		FirstSeenAt:          v.FirstSeenAt,
 		LastSeenAt:           v.LastSeenAt,
 		SeenCount:            *v.SeenCount,
+		Captured:             *v.Captured,
 	}
 	res.Metadata = make(map[string]any, len(v.Metadata))
 	for key, val := range v.Metadata {
@@ -5669,6 +5670,7 @@ func unmarshalSkillEditSuggestionResponseBodyToTypesSkillEditSuggestion(v *Skill
 		SkillName:            *v.SkillName,
 		SkillDisplayName:     *v.SkillDisplayName,
 		BaseVersionID:        *v.BaseVersionID,
+		BaseContent:          *v.BaseContent,
 		ProposedContent:      *v.ProposedContent,
 		AppliesCleanly:       *v.AppliesCleanly,
 		Rationale:            *v.Rationale,

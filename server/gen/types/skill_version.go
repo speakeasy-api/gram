@@ -41,4 +41,8 @@ type SkillVersion struct {
 	LastSeenAt *string
 	// The number of activations attributed to this exact version.
 	SeenCount int64
+	// Whether this version was captured from an agent's machine rather than
+	// uploaded. Captured versions rank below uploaded ones, so plugins only ship
+	// one after it is promoted or no uploaded version exists.
+	Captured bool
 }

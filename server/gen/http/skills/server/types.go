@@ -293,6 +293,9 @@ type DismissSuggestionResponseBody struct {
 	SkillDisplayName string `form:"skill_display_name" json:"skill_display_name" xml:"skill_display_name"`
 	// The version the suggestion was generated from.
 	BaseVersionID string `form:"base_version_id" json:"base_version_id" xml:"base_version_id"`
+	// The SKILL.md content of the base version, which the proposed changes apply
+	// to.
+	BaseContent string `form:"base_content" json:"base_content" xml:"base_content"`
 	// The separate changes proposed, each reviewable on its own.
 	Changes []*SkillEditSuggestionChangeResponseBody `form:"changes" json:"changes" xml:"changes"`
 	// The complete SKILL.md content produced by taking every proposed change.
@@ -4702,6 +4705,10 @@ type SkillVersionResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of activations attributed to this exact version.
 	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
+	// Whether this version was captured from an agent's machine rather than
+	// uploaded. Captured versions rank below uploaded ones, so plugins only ship
+	// one after it is promoted or no uploaded version exists.
+	Captured bool `form:"captured" json:"captured" xml:"captured"`
 }
 
 // SkillValidationErrorResponseBody is used to define fields on response body
@@ -4728,6 +4735,9 @@ type SkillEditSuggestionResponseBody struct {
 	SkillDisplayName string `form:"skill_display_name" json:"skill_display_name" xml:"skill_display_name"`
 	// The version the suggestion was generated from.
 	BaseVersionID string `form:"base_version_id" json:"base_version_id" xml:"base_version_id"`
+	// The SKILL.md content of the base version, which the proposed changes apply
+	// to.
+	BaseContent string `form:"base_content" json:"base_content" xml:"base_content"`
 	// The separate changes proposed, each reviewable on its own.
 	Changes []*SkillEditSuggestionChangeResponseBody `form:"changes" json:"changes" xml:"changes"`
 	// The complete SKILL.md content produced by taking every proposed change.
@@ -5160,6 +5170,7 @@ func NewDismissSuggestionResponseBody(res *types.SkillEditSuggestion) *DismissSu
 		SkillName:            res.SkillName,
 		SkillDisplayName:     res.SkillDisplayName,
 		BaseVersionID:        res.BaseVersionID,
+		BaseContent:          res.BaseContent,
 		ProposedContent:      res.ProposedContent,
 		AppliesCleanly:       res.AppliesCleanly,
 		Rationale:            res.Rationale,

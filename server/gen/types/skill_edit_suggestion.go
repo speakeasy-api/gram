@@ -20,6 +20,9 @@ type SkillEditSuggestion struct {
 	SkillDisplayName string
 	// The version the suggestion was generated from.
 	BaseVersionID string
+	// The SKILL.md content of the base version, which the proposed changes apply
+	// to.
+	BaseContent string
 	// The separate changes proposed, each reviewable on its own.
 	Changes []*SkillEditSuggestionChange
 	// The complete SKILL.md content produced by taking every proposed change.

@@ -1955,8 +1955,12 @@ JOIN skills s
 JOIN LATERAL (
   SELECT sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = l.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = l.skill_id
-  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) latest ON TRUE
 WHERE l.token = $1
@@ -1972,8 +1976,9 @@ type GetSharedSkillByTokenRow struct {
 }
 
 // Public read for the unauthenticated share-link endpoint. The join pins the
-// share link to its owning project's skill and the lateral picks the latest
-// version by effective promotion time.
+// share link to its owning project's skill and the lateral picks the current
+// version: captured versions rank below uploaded ones, then effective
+// promotion time decides.
 func (q *Queries) GetSharedSkillByToken(ctx context.Context, token string) (GetSharedSkillByTokenRow, error) {
 	row := q.db.QueryRow(ctx, getSharedSkillByToken, token)
 	var i GetSharedSkillByTokenRow
@@ -2006,8 +2011,12 @@ JOIN skills s
 JOIN LATERAL (
   SELECT sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = l.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = l.skill_id
-  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) latest ON TRUE
 WHERE l.token = $2
@@ -2181,8 +2190,12 @@ LEFT JOIN LATERAL (
     sv.id AS latest_version_id,
     COUNT(*) OVER()::bigint AS version_count
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = s.id
-  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
 LEFT JOIN skill_share_links l
@@ -2778,8 +2791,12 @@ LEFT JOIN LATERAL (
     sv.id AS latest_version_id,
     COUNT(*) OVER()::bigint AS version_count
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = s.id
-  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
 WHERE s.project_id = $1
@@ -2798,6 +2815,10 @@ type GetSkillStateRow struct {
 	HasValidVersion bool
 }
 
+// The current version ranks captured versions below uploaded ones, the same
+// order distributions resolve with, so the dashboard shows what plugins ship.
+// Unlike distribution resolution it keeps invalid versions, so a failed
+// upload stays visible as current until a valid version is restored.
 func (q *Queries) GetSkillState(ctx context.Context, arg GetSkillStateParams) (GetSkillStateRow, error) {
 	row := q.db.QueryRow(ctx, getSkillState, arg.ProjectID, arg.SkillID)
 	var i GetSkillStateRow
@@ -2847,12 +2868,17 @@ SELECT
   svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
-  COALESCE(sightings.seen_count, 0)::bigint AS seen_count
+  COALESCE(sightings.seen_count, 0)::bigint AS seen_count,
+  (svo.origin IS NOT DISTINCT FROM 'captured')::boolean AS captured
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 LEFT JOIN skill_version_lineages svl
   ON svl.skill_id = sv.skill_id
   AND svl.skill_version_id = sv.id
+LEFT JOIN skill_version_origins svo
+  ON svo.project_id = s.project_id
+  AND svo.skill_id = sv.skill_id
+  AND svo.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,
@@ -2883,6 +2909,7 @@ type GetSkillVersionDetailsRow struct {
 	FirstSeenAt          pgtype.Timestamptz
 	LastSeenAt           pgtype.Timestamptz
 	SeenCount            int64
+	Captured             bool
 }
 
 func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersionDetailsParams) (GetSkillVersionDetailsRow, error) {
@@ -2905,6 +2932,7 @@ func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersio
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
+		&i.Captured,
 	)
 	return i, err
 }
@@ -4828,12 +4856,17 @@ SELECT
   svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
-  COALESCE(sightings.seen_count, 0)::bigint AS seen_count
+  COALESCE(sightings.seen_count, 0)::bigint AS seen_count,
+  (svo.origin IS NOT DISTINCT FROM 'captured')::boolean AS captured
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 LEFT JOIN skill_version_lineages svl
   ON svl.skill_id = sv.skill_id
   AND svl.skill_version_id = sv.id
+LEFT JOIN skill_version_origins svo
+  ON svo.project_id = s.project_id
+  AND svo.skill_id = sv.skill_id
+  AND svo.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,
@@ -4874,6 +4907,7 @@ type ListSkillVersionsRow struct {
 	FirstSeenAt          pgtype.Timestamptz
 	LastSeenAt           pgtype.Timestamptz
 	SeenCount            int64
+	Captured             bool
 }
 
 func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsParams) ([]ListSkillVersionsRow, error) {
@@ -4908,6 +4942,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 			&i.FirstSeenAt,
 			&i.LastSeenAt,
 			&i.SeenCount,
+			&i.Captured,
 		); err != nil {
 			return nil, err
 		}
@@ -4967,8 +5002,12 @@ LEFT JOIN LATERAL (
     sv.id,
     COUNT(*) OVER()::bigint AS version_count
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = s.id
-  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) latest ON TRUE
 LEFT JOIN skill_share_links l
