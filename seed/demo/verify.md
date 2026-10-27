@@ -613,7 +613,7 @@ open their effective assignments; the dropdown always offers compact member sear
     - Command K: search "Python Code Gateway". It is listed under Gateways and
       opens the gateway's overview.
 
-32. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
+34. **Skills served over MCP** (needs the `skills-over-mcp` flag on for the
     organization)
     - Open **MCP → Acme Support Tools → Skills**. It lists Support Refunds and
       Triage Incident, each with a Latest badge and a "Last loaded over MCP"
