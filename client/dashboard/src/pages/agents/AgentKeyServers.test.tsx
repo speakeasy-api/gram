@@ -3,6 +3,7 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 }));
 import { useState } from "react";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -539,7 +540,7 @@ describe("Agent key MCP servers", () => {
     },
   );
   it.each(["access", "authorization"])(
-    "prompts the signed-in person to refresh an expired assigned connection (%s)",
+    "preserves reauthentication through focus while OAuth is open and binds after it closes (%s)",
     async (expiry) => {
       const expired = {
         id: "expired",
@@ -581,6 +582,13 @@ describe("Agent key MCP servers", () => {
       );
       expect(screen.getByText(/^Expired ·/)).toBeTruthy();
       expect(mocks.detach).not.toHaveBeenCalled();
+      const callsBeforeFocus = mocks.candidates.mock.calls.length;
+      await act(async () => {
+        fireEvent(window, new Event("focus"));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(mocks.candidates.mock.calls.length).toBe(callsBeforeFocus);
+      expect(mocks.attach).not.toHaveBeenCalled();
       const renewed = {
         ...expired,
         id: "renewed",
@@ -598,6 +606,10 @@ describe("Agent key MCP servers", () => {
           },
         ]);
       });
+      const popup = vi.mocked(window.open).mock.results[0]?.value as {
+        closed: boolean;
+      };
+      popup.closed = true;
       fireEvent(window, new Event("focus"));
       await waitFor(() =>
         expect(mocks.attach).toHaveBeenCalledWith(agent.id, renewed.id),
@@ -637,6 +649,10 @@ describe("Agent key MCP servers", () => {
     );
     expect(mocks.attach).not.toHaveBeenCalled();
     const calls = mocks.candidates.mock.calls.length;
+    const popup = vi.mocked(window.open).mock.results[0]?.value as {
+      closed: boolean;
+    };
+    popup.closed = true;
     fireEvent(window, new Event("focus"));
     await waitFor(() =>
       expect(mocks.candidates.mock.calls.length).toBeGreaterThan(calls),

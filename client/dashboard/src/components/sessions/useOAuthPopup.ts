@@ -11,6 +11,7 @@ export function useOAuthPopup(onComplete: () => void | Promise<void>): {
   const [blocked, setBlocked] = useState(false);
   useEffect(() => {
     const refresh = () => {
+      if (popup.current && !popup.current.closed) return;
       if (document.visibilityState === "visible") void callback.current();
     };
     const closed = window.setInterval(() => {
