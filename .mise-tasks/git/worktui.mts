@@ -49,11 +49,12 @@ const strip = (s: string) => s.replace(ANSI_RE, "");
 const link = (text: string, url: string) =>
   `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`;
 
-// Open PR per branch, fetched from `gh pr list` — one call maps the whole
-// repo, refreshed on a slow cadence (PRs churn far less than boot state).
+// PR per branch: a bulk lookup covers recent PRs, with targeted lookups for
+// worktree branches outside that window. Refreshed less often than boot state.
 type PrInfo = { number: number; url: string; state: string };
 const prByBranch = new Map<string, PrInfo>();
 let prLoaded = false;
+let prFetching = false;
 // open > merged > closed when a branch has several PRs (gh lists newest
 // first, so within the same state the newest wins).
 const PR_RANK: Record<string, number> = {
@@ -62,8 +63,11 @@ const PR_RANK: Record<string, number> = {
   merged: 1,
   closed: 2,
 };
-async function fetchPRs(): Promise<void> {
-  try {
+async function fetchPRs(rows: Row[]): Promise<void> {
+  if (prFetching) return;
+  prFetching = true;
+  const next = new Map<string, PrInfo>();
+  const query = async (limit: string, branch?: string) => {
     const { stdout } = await execFile(
       "gh",
       [
@@ -74,11 +78,11 @@ async function fetchPRs(): Promise<void> {
         "--json",
         "number,url,headRefName,state,isDraft",
         "--limit",
-        "200",
+        limit,
+        ...(branch ? ["--head", branch] : []),
       ],
       { maxBuffer: 8 * 1024 * 1024 },
     );
-    prByBranch.clear();
     for (const pr of JSON.parse(stdout)) {
       const state =
         pr.state === "OPEN"
@@ -86,14 +90,37 @@ async function fetchPRs(): Promise<void> {
             ? "draft"
             : "open"
           : pr.state.toLowerCase();
-      const existing = prByBranch.get(pr.headRefName);
+      const existing = next.get(pr.headRefName);
       if (existing && PR_RANK[existing.state] <= PR_RANK[state]) continue;
-      prByBranch.set(pr.headRefName, { number: pr.number, url: pr.url, state });
+      next.set(pr.headRefName, { number: pr.number, url: pr.url, state });
     }
+  };
+  try {
+    await query("200");
+    const missing = [...new Set(rows.map((row) => row.branch))].filter(
+      (branch) => branch && !next.has(branch),
+    );
+    // Bound concurrent gh processes; a failed branch lookup must not hide
+    // successful results for the other worktrees.
+    for (let i = 0; i < missing.length; i += 4) {
+      await Promise.allSettled(
+        missing.slice(i, i + 4).map(async (branch) => {
+          try {
+            await query("10", branch);
+          } catch {
+            const previous = prByBranch.get(branch);
+            if (previous) next.set(branch, previous);
+          }
+        }),
+      );
+    }
+    prByBranch.clear();
+    for (const [branch, pr] of next) prByBranch.set(branch, pr);
   } catch {
-    /* gh missing or offline — column stays empty */
+    /* gh missing or offline — retain the last successful lookup */
   } finally {
     prLoaded = true; // stop the loader either way
+    prFetching = false;
   }
 }
 
@@ -395,8 +422,9 @@ function paneFrame(
 // --- main --------------------------------------------------------------------
 
 async function run() {
+  let rows: Row[] = await collect();
   if (process.env["usage_once"] === "true" || !process.stdout.isTTY) {
-    const [rows] = await Promise.all([collect(), fetchPRs()]);
+    await fetchPRs(rows);
     for (const r of rows) {
       const pr = prByBranch.get(r.branch);
       console.log(
@@ -408,11 +436,10 @@ async function run() {
 
   // PRs load in the background — first frame renders without the column
   // filled, then it appears on the next draw.
-  void fetchPRs();
-  const prPoll = setInterval(() => void fetchPRs(), 60_000);
+  void fetchPRs(rows);
+  const prPoll = setInterval(() => void fetchPRs(rows), 60_000);
   prPoll.unref?.();
 
-  let rows: Row[] = await collect();
   let cursor = 0;
   const selected = new Set<string>();
   let view: "list" | "logs" | "remove" = "list";
