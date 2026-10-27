@@ -607,6 +607,9 @@ var OrganizationGateway = Type("OrganizationGateway", func() {
 	Description("The active organization's gateway, or why it is not served.")
 	Attribute("available", Boolean, "Whether the organization is served a gateway.")
 	Attribute("url", String, "The gateway's MCP URL. Set only when available.")
+	Attribute("user_session_issuer_id", String, "The organization-level user session issuer the gateway signs people in through. A server that signs in upstream is offered on the gateway only when its sign-in client is attached to this issuer. Set only when available.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("unavailable_reason", String, "Why the gateway is not served. Set only when not available.", func() {
 		Enum("no_organization_issuer", "multiple_organization_issuers", "custom_domain_only", "organization_disabled", "turned_off")
 	})

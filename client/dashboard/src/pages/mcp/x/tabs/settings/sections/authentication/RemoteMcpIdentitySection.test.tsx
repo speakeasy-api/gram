@@ -216,6 +216,14 @@ vi.mock("@gram/client/react-query/detachUserSessionIssuer.js", () => ({
   }),
 }));
 
+// The organization gateway panel has its own tests; unavailable here so it
+// stays out of the identity panel's.
+vi.mock("@gram/client/react-query/organizationGateway.js", () => ({
+  useOrganizationGateway: () => ({ data: { available: false } }),
+}));
+vi.mock("@gram/client/react-query/attachUserSessionIssuer.js", () => ({
+  useAttachUserSessionIssuerMutation: () => ({ mutateAsync: vi.fn() }),
+}));
 vi.mock("@gram/client/react-query/remoteSessionsCount.js", () => ({
   useRemoteSessionsCount: () => mocks.sessions(),
   invalidateAllRemoteSessionsCount: vi.fn(),

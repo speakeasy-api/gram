@@ -115,6 +115,10 @@ type GetGatewayResponseBody struct {
 	Available *bool `form:"available,omitempty" json:"available,omitempty" xml:"available,omitempty"`
 	// The gateway's MCP URL. Set only when available.
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The organization-level user session issuer the gateway signs people in
+	// through. A server that signs in upstream is offered on the gateway only when
+	// its sign-in client is attached to this issuer. Set only when available.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// Why the gateway is not served. Set only when not available.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
@@ -4251,9 +4255,10 @@ func NewGetGatewayError(body *GetGatewayErrorResponseBody) *goa.ServiceError {
 // "getGateway" endpoint result from a HTTP "OK" response.
 func NewGetGatewayOrganizationGatewayOK(body *GetGatewayResponseBody) *organizations.OrganizationGateway {
 	v := &organizations.OrganizationGateway{
-		Available:         *body.Available,
-		URL:               body.URL,
-		UnavailableReason: body.UnavailableReason,
+		Available:           *body.Available,
+		URL:                 body.URL,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		UnavailableReason:   body.UnavailableReason,
 	}
 
 	return v
@@ -7213,6 +7218,9 @@ func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 func ValidateGetGatewayResponseBody(body *GetGatewayResponseBody) (err error) {
 	if body.Available == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("available", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	if body.UnavailableReason != nil {
 		if !(*body.UnavailableReason == "no_organization_issuer" || *body.UnavailableReason == "multiple_organization_issuers" || *body.UnavailableReason == "custom_domain_only" || *body.UnavailableReason == "organization_disabled" || *body.UnavailableReason == "turned_off") {
