@@ -5894,11 +5894,13 @@ func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, 
 
 // Only the authenticated managed-agent actor is an agent identity; owners and
 // approving humans are credential provenance, never the caller. Keep in sync
-// with trace_summaries_mv.agent_id. Client-supplied hook attributes are untrusted.
-const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
+// with trace_summaries_mv.agent_id. Hook rows count because the hooks service
+// drops any client-supplied actor and stamps the authenticated agent's.
+const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery', 'hook') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
 
-// The person an agent call acted on behalf of, read under the same trust rule
-// as the agent itself. Keep in sync with trace_summaries_mv.authorizer_user_id.
+// The person an agent call acted on behalf of. Gateway rows only: the hooks
+// service does not strip a client-supplied authorizer, so on a hook row it is
+// self-reported. Keep in sync with trace_summaries_mv.authorizer_user_id.
 const toolUsageAuthorizerUserIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.authorizer_user_id), '')"
 
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.

@@ -14,6 +14,7 @@ func TestLifecycleTelemetryAcceptsOnlyBoundedDimensions(t *testing.T) {
 		{Operation: "registration", Phase: "complete", Outcome: "succeeded"},
 		{Operation: "provider_setup", Phase: "handoff", Outcome: "invalid"},
 		{Operation: "readiness", Phase: "forced_probe", Outcome: "succeeded", State: ReadinessReady},
+		{Operation: "readiness", Phase: "first_probe", Outcome: "succeeded", State: ReadinessNeedsConfiguration},
 	} {
 		require.True(t, validLifecycleEvent(event))
 	}
