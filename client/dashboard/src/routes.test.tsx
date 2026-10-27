@@ -2,9 +2,11 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+const routeSlugs = vi.hoisted(() => ({
+  orgSlug: "org",
+  projectSlug: "project" as string | undefined,
 }));
+vi.mock("@/contexts/Sdk", () => ({ useSlugs: () => routeSlugs }));
 
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import {
@@ -264,4 +266,28 @@ it("removes platform issuer management while preserving tenant and other admin r
   expect(orgRoutePaths).toContain("remote-identity-providers/*");
   expect(orgRoutePaths).toContain("platform-admin");
   expect(orgRoutePaths).toContain("platform-admin/openrouter-keys");
+});
+
+function OrganizationConnectionsHref(): JSX.Element {
+  const routes = useRoutes({ projectSlug: "default" });
+  return (
+    <output data-testid="org-connections">
+      {routes.mcp.organizationGateway.href()}?tab=connections
+    </output>
+  );
+}
+it("builds organization connections from an org-only route using an explicit project", () => {
+  routeSlugs.projectSlug = undefined;
+  try {
+    render(
+      <MemoryRouter initialEntries={["/org/settings"]}>
+        <OrganizationConnectionsHref />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("org-connections").textContent).toBe(
+      "/org/projects/default/mcp/organization-gateway?tab=connections",
+    );
+  } finally {
+    routeSlugs.projectSlug = "project";
+  }
 });

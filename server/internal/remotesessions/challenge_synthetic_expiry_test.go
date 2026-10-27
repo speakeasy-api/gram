@@ -164,6 +164,10 @@ func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
 // against a mock upstream token endpoint.
 type syntheticExpiryEnv struct {
 	mgr *remotesessions.ChallengeManager
+
+	// service exposes the management API over the same database as the callback.
+	service *remotesessions.Service
+
 	// refresher shares the manager's database, encryption key, and Redis lock
 	// cache, standing in for the scheduled sweep's caller in concurrency tests.
 	refresher *remotesessions.RefreshService
@@ -661,6 +665,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	}
 	env := syntheticExpiryEnv{
 		mgr:       mgr,
+		service:   ti.service,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
 			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, options.tunnels, locks, refreshOptions...)

@@ -68,6 +68,8 @@ func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 	require.Equal(t, directoryApproval, byName["prepare_registry_promotion_curation"].Access)
 	require.Equal(t, directoryApproval, byName["execute_admin_proposal"].Access)
 	require.Equal(t, directoryRead, byName["get_admin_proposal_status"].Access)
+	require.Equal(t, directoryRead, byName["list_audit_log_entries"].Access)
+	require.Contains(t, byName["list_audit_log_entries"].Description, "confidential")
 	require.Equal(t, directoryWrite, byName["create_image_upload_url"].Access)
 }
 

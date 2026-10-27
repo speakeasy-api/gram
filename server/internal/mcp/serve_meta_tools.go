@@ -596,15 +596,15 @@ func (s *Service) loadMemberToolset(
 func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset) (bool, error) {
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
 	if toolset.McpIsPublic {
-		shadow.record(ctx, shadowSurface, true, connect)
+		shadow.recordServer(ctx, shadowSurface, true, authz.MandatoryServerPublic, connect)
 		return true, nil
 	}
 	if !authenticated {
-		shadow.record(ctx, shadowSurface, false, connect)
+		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
 		return false, nil
 	}
 	err := s.authz.Require(ctx, connect)
-	shadow.shadowRequire(ctx, shadowSurface, err, connect)
+	shadow.shadowRequireServer(ctx, shadowSurface, err, authz.MandatoryServerPrivate, connect)
 	if err != nil {
 		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
 			return false, nil

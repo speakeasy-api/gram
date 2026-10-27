@@ -187,10 +187,14 @@ type Registrar struct {
 	// may be nil — a registrar composed without one still fails safe, it just
 	// cannot say why.
 	logger *slog.Logger
+	// instructions are the server instructions of the full catalogue. The
+	// progressive surface hands out the paragraphs that name a tool when that
+	// tool is described.
+	instructions string
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: ""}
 }
 
 func (r *Registrar) withLogger(logger *slog.Logger) {
