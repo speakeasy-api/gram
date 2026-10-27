@@ -409,9 +409,9 @@ func TestSetMCPAddressRefusesCustomDomainAliasOfOtherProject(t *testing.T) {
 
 	before := f.settings(t, ctx, MCPConnectionSettingsMCPServer, f.hostedID)
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", slug, "", true)
-	require.Error(t, err, "the Speakeasy domain still serves that custom-domain alias")
+	requireConnectionRefusal(t, err, "conflict", "already")
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, f.hostedEndpoint.String(), slug, "", true)
-	require.Error(t, err)
+	requireConnectionRefusal(t, err, "conflict", "already")
 	require.Len(t, f.settings(t, ctx, MCPConnectionSettingsMCPServer, f.hostedID).Endpoints, 1)
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", f.orgSlug+"-free-"+suffix, "", true)
 	require.NoError(t, err, "a free slug is accepted with the same inputs")
