@@ -24,7 +24,10 @@ import { useAgentsResumeMutation } from "@gram/client/react-query/agentsResume.j
 import { useAgentsRevokeMutation } from "@gram/client/react-query/agentsRevoke.js";
 import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
-import { useState } from "react";
+import { useState, type JSX } from "react";
+import { Link } from "react-router";
+import { useRoutes } from "@/routes";
+import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
@@ -91,6 +94,7 @@ export function AgentIdentityFacts({
 }: {
   agent: ManagedAgent;
 }): JSX.Element {
+  const routes = useRoutes();
   return (
     <div className="bg-card border-border space-y-3 border px-4 py-3">
       <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
@@ -109,7 +113,7 @@ export function AgentIdentityFacts({
         <div className="flex items-center gap-2">
           <dt className="text-muted-foreground">Status</dt>
           <dd>
-            <LifecycleBadge lifecycle={agent.lifecycle} />
+            <AgentStatus agent={agent} />
           </dd>
         </div>
         <div className="flex items-center gap-2">
@@ -125,6 +129,21 @@ export function AgentIdentityFacts({
           </dd>
         </div>
       </dl>
+      {agent.connectionNeedsRefresh && agent.lifecycle === "active" && (
+        <Text role="alert" small>
+          An assigned connection has expired or is no longer available. The
+          connection needs to be reauthenticated or replaced before the agent
+          can use that server.{" "}
+          {agent.permissions.write && (
+            <Link
+              className="underline underline-offset-4"
+              to={`${routes.identities.agents.edit.href(agent.id)}?step=2`}
+            >
+              Review connections
+            </Link>
+          )}
+        </Text>
+      )}
       {/* An agent waiting on a new owner cannot be issued keys. That is a
           fact about the identity, so it belongs here rather than only on the
           credentials section where the blocked button explains itself. */}
@@ -458,4 +477,16 @@ function LifecycleBadge({
       {lifecycle}
     </Badge>
   );
+}
+
+export function AgentStatus({ agent }: { agent: ManagedAgent }): JSX.Element {
+  if (agent.lifecycle === "active" && agent.connectionNeedsRefresh) {
+    return (
+      <Badge variant="warning" size="sm">
+        <AlertTriangle className="mr-1 size-3" aria-hidden="true" />
+        Needs refresh
+      </Badge>
+    );
+  }
+  return <LifecycleBadge lifecycle={agent.lifecycle} />;
 }

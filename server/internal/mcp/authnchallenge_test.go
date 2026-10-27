@@ -1111,7 +1111,7 @@ func TestHandleIDPCallback_UsesBaseURLFromCachedState(t *testing.T) {
 	require.Contains(t, loc, "/"+mcpSlug+"/connect", "should include the slug under /mcp")
 }
 
-func TestHandleIDPCallback_UserNotInOrg_ReturnsForbidden(t *testing.T) {
+func TestHandleIDPCallback_UserNotInOrg_RedirectsAccessDenied(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockIdentityResolver{
@@ -1158,8 +1158,15 @@ func TestHandleIDPCallback_UserNotInOrg_ReturnsForbidden(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	err = ti.service.HandleIDPCallback(w, req)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not a member")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusFound, w.Code)
+	redirect, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "localhost:3000", redirect.Host)
+	require.Equal(t, "access_denied", redirect.Query().Get("error"))
+	require.Equal(t, "client-state", redirect.Query().Get("state"))
+	require.NotEmpty(t, redirect.Query().Get("iss"))
+	require.Empty(t, redirect.Query().Get("code"))
 }
 
 func TestHandleIDPCallback_MissingState_ReturnsError(t *testing.T) {

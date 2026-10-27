@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"net/url"
 	"sort"
 	"strings"
@@ -43,6 +44,12 @@ type CatalogCandidate struct {
 	Version     string `json:"version"`
 	ToolCount   int    `json:"tool_count"`
 	SetupIntent string `json:"setup_intent"`
+	// SupportsDCR is advertised dynamic client registration support.
+	SupportsDCR bool `json:"supports_dcr"`
+	// SupportsCIMD is advertised compatible client metadata document support.
+	SupportsCIMD bool `json:"supports_cimd"`
+	// AuthSetup distinguishes unknown capability evidence from required manual setup.
+	AuthSetup string `json:"auth_setup"`
 }
 
 type CatalogConfigurationField struct {
@@ -293,6 +300,7 @@ func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, deta
 			Description: details.Description,
 			Version:     details.Version,
 			ToolCount:   len(toolNames),
+			SupportsDCR: details.SupportsDCR, SupportsCIMD: details.SupportsCIMD, AuthSetup: details.AuthSetup,
 			SetupIntent: descriptor.SetupIntent,
 		},
 		Transport:              string(details.TransportType),
@@ -422,6 +430,7 @@ func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.Extern
 		Description: entry.Description,
 		Version:     entry.Version,
 		ToolCount:   entry.ToolCount,
+		SupportsDCR: entry.SupportsDcr, SupportsCIMD: conv.PtrValOr(entry.SupportsCimd, false), AuthSetup: conv.PtrValOr(entry.AuthSetup, "unknown"),
 		SetupIntent: descriptor.SetupIntent,
 	}
 }

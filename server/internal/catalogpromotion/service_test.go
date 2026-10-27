@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dns"
@@ -671,4 +672,50 @@ func TestPromotionPublicTextMatchesCatalogueSchema(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestPromotionPersistsAuthEvidenceAndReplaysWithoutRediscovery(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	evidence := catalogauth.Discovery{SupportsCIMD: true, AuthSetup: "cimd", Status: "complete"}
+	f.request.Public.AuthMode = "oauth"
+	f.request.AuthDiscovery = evidence
+	delivered := &recordingDelivery{}
+	f.service.delivery = delivered
+	result, err := f.promote(t)
+	require.NoError(t, err)
+	require.Equal(t, &evidence, result.AuthDiscovery)
+	entry, err := f.service.registry.GetByName(t.Context(), f.request.Public.Name)
+	require.NoError(t, err)
+	require.Empty(t, f.service.registry.Validate(entry.Data))
+	var record struct {
+		Meta map[string]struct {
+			SupportsDCR  bool   `json:"supportsDcr"`
+			SupportsCIMD bool   `json:"supportsCimd"`
+			AuthSetup    string `json:"authSetup"`
+		} `json:"_meta"`
+	}
+	require.NoError(t, json.Unmarshal(entry.Data, &record))
+	require.True(t, record.Meta["com.speakeasy.ai/catalog"].SupportsCIMD)
+	require.Equal(t, "cimd", record.Meta["com.speakeasy.ai/catalog"].AuthSetup)
+	require.NotContains(t, string(entry.Data), f.target.OrganizationID)
+	f.request.AuthDiscovery = catalogauth.Unknown()
+	// An unavailable discovery policy cannot erase or delay a completed receipt's evidence.
+	f.service.policy = nil
+	prepared, err := f.service.PreparePublication(t.Context(), f.request)
+	require.NoError(t, err)
+	require.Equal(t, evidence, prepared.AuthDiscovery)
+	f.request = prepared
+	replay, err := f.promote(t)
+	require.NoError(t, err)
+	require.Equal(t, result.RegistryEntryID, replay.RegistryEntryID)
+	require.Equal(t, &evidence, replay.AuthDiscovery)
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	require.Len(t, delivered.guides, 1)
+	require.Equal(t, evidence, delivered.guides[0].AuthDiscovery)
+	f.request.Public.Description = "Different reviewed metadata"
+	f.request, err = f.service.PreparePublication(t.Context(), f.request)
+	require.NoError(t, err)
+	_, err = f.promote(t)
+	require.ErrorIs(t, err, ErrConflict)
 }
