@@ -201,7 +201,7 @@ func TestCheckSlugAvailabilityLetsServerClaimItsOwnAlias(t *testing.T) {
 	slug := authCtx.OrganizationSlug + "-own-alias-" + suffix
 	domainID := seedCustomDomain(t, ctx, ti.conn, "own-alias-"+suffix)
 	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, domainID)
+	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, slug, domainID)
 	seedCanonicalToolsetWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
 
 	check := func(serverID *string) bool {
