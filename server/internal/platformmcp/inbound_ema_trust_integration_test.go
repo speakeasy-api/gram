@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -28,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -37,13 +40,28 @@ import (
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// The tools act through the real organization issuer management services, so
-// their validation and audit apply to every trust change.
-func TestInboundEMATrustThroughManagementServices(t *testing.T) {
-	t.Parallel()
+type inboundEMAServicesFixture struct {
+	conn      *pgxpool.Pool
+	principal Principal
+	service   *InboundEMATrustService
+	issuerID  uuid.UUID
+	idpURL    string
+}
+
+// newInboundEMAServicesFixture wires the tools to the real organization issuer
+// management services. maxConns limits the pool when positive.
+func newInboundEMAServicesFixture(t *testing.T, maxConns int32) (context.Context, inboundEMAServicesFixture) {
+	t.Helper()
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_inbound_ema_services")
 	require.NoError(t, err)
+	if maxConns > 0 {
+		config := conn.Config()
+		config.MaxConns = maxConns
+		conn, err = pgxpool.NewWithConfig(ctx, config)
+		require.NoError(t, err)
+		t.Cleanup(conn.Close)
+	}
 	redisClient, err := platformMCPInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
@@ -100,40 +118,49 @@ func TestInboundEMATrustThroughManagementServices(t *testing.T) {
 	ctx = contextWithPrincipal(ctx, principal)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID), authz.NewGrant(authz.ScopeOrgRead, principal.OrganizationID)})
 	service := NewPostgresReader(logger, conn).WithInboundEMATrust(users, remote).inboundEMATrust
+	return ctx, inboundEMAServicesFixture{conn: conn, principal: principal, service: service, issuerID: issuer.ID, idpURL: idp.URL}
+}
 
-	preview, err := service.Trust(ctx, principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: issuer.ID.String(), IssuerURL: idp.URL})
+// The tools act through the real organization issuer management services, so
+// their validation and audit apply to every trust change.
+func TestInboundEMATrustThroughManagementServices(t *testing.T) {
+	t.Parallel()
+	ctx, f := newInboundEMAServicesFixture(t, 0)
+	conn, principal, service := f.conn, f.principal, f.service
+
+	preview, err := service.Trust(ctx, principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL})
 	require.NoError(t, err)
 	require.False(t, preview.Applied)
 	require.Empty(t, preview.Warnings)
 
-	trusted, err := service.Trust(ctx, principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: issuer.ID.String(), IssuerURL: idp.URL, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	trusted, err := service.Trust(ctx, principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
 	require.NoError(t, err)
 	require.True(t, trusted.Applied)
 	require.False(t, trusted.IdentityProviderReused)
-	require.Equal(t, idp.URL+"/keys", trusted.IdentityProvider.KeySetURL)
+	require.Equal(t, f.idpURL+"/keys", trusted.IdentityProvider.KeySetURL)
 	require.NotNil(t, trusted.Issuer.TrustedIdentityProvider)
 	require.Equal(t, trusted.IdentityProvider.RemoteSessionIssuerID, trusted.Issuer.TrustedIdentityProvider.RemoteSessionIssuerID)
-	require.Equal(t, "https://app.example.test/oauth/usi/"+issuer.ID.String(), trusted.Issuer.Audience)
+	require.Equal(t, "https://app.example.test/oauth/usi/"+f.issuerID.String(), trusted.Issuer.Audience)
 
 	created, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionRemoteSessionIssuerCreate)
 	require.NoError(t, err)
 	require.Equal(t, trusted.IdentityProvider.RemoteSessionIssuerID, created.SubjectID)
-	updated, err := audittest.LatestAuditLogByActionAndSubject(ctx, conn, audit.ActionUserSessionIssuerUpdate, issuer.ID.String())
+	updated, err := audittest.LatestAuditLogByActionAndSubject(ctx, conn, audit.ActionUserSessionIssuerUpdate, f.issuerID.String())
 	require.NoError(t, err)
 	require.Equal(t, principal.UserID, updated.ActorID)
 	after, err := audittest.DecodeAuditData(updated.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, trusted.IdentityProvider.RemoteSessionIssuerID, after["TrustedRemoteSessionIssuerID"])
 
-	untrustPreview, err := service.Untrust(ctx, principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: issuer.ID.String()})
+	untrustPreview, err := service.Untrust(ctx, principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String()})
 	require.NoError(t, err)
 	require.Equal(t, trusted.IdentityProvider.RemoteSessionIssuerID, untrustPreview.ExpectedTrustedRemoteSessionIssuerID)
-	untrusted, err := service.Untrust(ctx, principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: issuer.ID.String(), ExpectedTrustedRemoteSessionIssuerID: untrustPreview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	untrusted, err := service.Untrust(ctx, principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), ExpectedTrustedRemoteSessionIssuerID: untrustPreview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
 	require.NoError(t, err)
 	require.True(t, untrusted.Applied)
 	require.Nil(t, untrusted.Issuer.TrustedIdentityProvider)
 
-	cleared, err := audittest.LatestAuditLogByActionAndSubject(ctx, conn, audit.ActionUserSessionIssuerUpdate, issuer.ID.String())
+	cleared, err := audittest.LatestAuditLogByActionAndSubject(ctx, conn, audit.ActionUserSessionIssuerUpdate, f.issuerID.String())
 	require.NoError(t, err)
 	before, err := audittest.DecodeAuditData(cleared.BeforeSnapshot)
 	require.NoError(t, err)
@@ -145,3 +172,45 @@ func TestInboundEMATrustThroughManagementServices(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, updates)
 }
+
+// Concurrent confirmations on a small pool all finish: a caller that cannot
+// take the provider lock is refused at once instead of holding a connection
+// the lock holder's management calls need.
+func TestInboundEMATrustConcurrentConfirmationsOnSmallPool(t *testing.T) {
+	t.Parallel()
+	ctx, f := newInboundEMAServicesFixture(t, 3)
+	ctx, cancel := context.WithTimeout(ctx, inboundEMASmallPoolDeadline)
+	defer cancel()
+	input := TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL, Confirmed: true}
+
+	var wg sync.WaitGroup
+	errs := make([]error, 6)
+	for i := range errs {
+		wg.Go(func() {
+			_, errs[i] = f.service.Trust(ctx, f.principal, input)
+		})
+	}
+	wg.Wait()
+	require.NoError(t, ctx.Err(), "every confirmation finishes before the deadline")
+	succeeded := 0
+	for _, err := range errs {
+		if err == nil {
+			succeeded++
+			continue
+		}
+		var refusal *InboundEMATrustRefusalError
+		require.ErrorAs(t, err, &refusal)
+		require.Equal(t, inboundEMARefusalConflict, refusal.Code)
+	}
+	require.Positive(t, succeeded)
+
+	records, err := remotesessionsrepo.New(f.conn).ListOrganizationRemoteSessionIssuersByIssuerURL(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersByIssuerURLParams{
+		Issuers: []string{f.idpURL}, OrganizationID: conv.ToPGText(f.principal.OrganizationID), IncludeGlobal: false, PerTierLimit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, records, 1, "exactly one identity provider record is created")
+}
+
+// inboundEMASmallPoolDeadline bounds the small-pool test; a starved pool
+// would hang until it.
+const inboundEMASmallPoolDeadline = 30 * time.Second

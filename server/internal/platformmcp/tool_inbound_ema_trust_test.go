@@ -78,6 +78,11 @@ type fakeInboundEMARemote struct {
 	records  map[string]*types.RemoteSessionIssuer
 	matches  []*types.RemoteSessionIssuerDuplicateMatch
 	created  []*orgremotegen.CreateIssuerPayload
+
+	// createStarted and createGate, when set, hold CreateIssuer open so a
+	// test can overlap other calls with it.
+	createStarted chan struct{}
+	createGate    chan struct{}
 }
 
 func (f *fakeInboundEMARemote) FetchIssuerMetadata(context.Context, *orgremotegen.FetchIssuerMetadataPayload) (*types.RemoteSessionIssuerDraft, error) {
@@ -110,6 +115,10 @@ func (f *fakeInboundEMARemote) GetIssuer(_ context.Context, payload *orgremotege
 }
 
 func (f *fakeInboundEMARemote) CreateIssuer(_ context.Context, payload *orgremotegen.CreateIssuerPayload) (*types.RemoteSessionIssuer, error) {
+	if f.createStarted != nil {
+		close(f.createStarted)
+		<-f.createGate
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.created = append(f.created, payload)
@@ -401,21 +410,33 @@ func TestInboundEMATrustReusesOnlyAnExactIssuerMatch(t *testing.T) {
 func TestInboundEMATrustConcurrentConfirmationsCreateOneProvider(t *testing.T) {
 	t.Parallel()
 	f := newInboundEMAFixture(t, 1)
+	f.remote.createStarted, f.remote.createGate = make(chan struct{}), make(chan struct{})
+	input := TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: true}
+
+	holder := make(chan error, 1)
+	go func() {
+		_, err := f.service.Trust(t.Context(), f.principal, input)
+		holder <- err
+	}()
+	<-f.remote.createStarted
+
+	// The holder is creating the provider: everyone else is turned away at
+	// once instead of waiting on a pooled connection.
 	var wg sync.WaitGroup
-	errs := make([]error, 4)
+	errs := make([]error, 3)
 	for i := range errs {
 		wg.Go(func() {
-			_, errs[i] = f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: true})
+			_, errs[i] = f.service.Trust(t.Context(), f.principal, input)
 		})
 	}
 	wg.Wait()
+	close(f.remote.createGate)
+	require.NoError(t, <-holder)
 	for _, err := range errs {
 		var refusal *InboundEMATrustRefusalError
-		if errors.As(err, &refusal) {
-			require.Equal(t, inboundEMARefusalConflict, refusal.Code, "a later caller may only lose the expected-trust check")
-			continue
-		}
-		require.NoError(t, err)
+		require.ErrorAs(t, err, &refusal)
+		require.Equal(t, inboundEMARefusalConflict, refusal.Code)
+		require.Contains(t, refusal.Message, "in progress")
 	}
 	f.remote.mu.Lock()
 	defer f.remote.mu.Unlock()

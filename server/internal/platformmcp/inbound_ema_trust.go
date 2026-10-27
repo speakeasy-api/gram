@@ -425,17 +425,23 @@ func inboundEMATrustOutput(previous string, provider InboundEMAIdentityProvider,
 
 // findOrCreateProvider reuses the record for the discovered issuer or creates
 // one. A per-organization, per-issuer advisory lock held across the lookup
-// and the create keeps concurrent trusts from creating two records.
+// and the create keeps concurrent trusts from creating two records; a caller
+// that cannot take it is refused rather than left waiting on a connection.
 func (s *InboundEMATrustService) findOrCreateProvider(ctx context.Context, principal Principal, draft *types.RemoteSessionIssuerDraft) (InboundEMAIdentityProvider, bool, error) {
 	conn, err := s.db.Acquire(ctx)
 	if err != nil {
 		return InboundEMAIdentityProvider{}, false, fmt.Errorf("acquire identity provider lock connection: %w", err)
 	}
 	queries := platformrepo.New(conn)
-	lock := platformrepo.AcquireInboundEMAProviderLockParams{OrganizationID: principal.OrganizationID, Issuer: draft.Issuer}
-	if err := queries.AcquireInboundEMAProviderLock(ctx, lock); err != nil {
+	lock := platformrepo.TryAcquireInboundEMAProviderLockParams{OrganizationID: principal.OrganizationID, Issuer: draft.Issuer}
+	acquired, err := queries.TryAcquireInboundEMAProviderLock(ctx, lock)
+	if err != nil {
 		conn.Release()
 		return InboundEMAIdentityProvider{}, false, fmt.Errorf("lock identity provider creation: %w", err)
+	}
+	if !acquired {
+		conn.Release()
+		return InboundEMAIdentityProvider{}, false, inboundEMARefuse(inboundEMARefusalConflict, "Another trust for this identity provider is in progress; try again.")
 	}
 	defer func() {
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboundEMAUnlockTimeout)
