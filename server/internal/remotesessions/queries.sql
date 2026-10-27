@@ -4366,7 +4366,7 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND c.deleted IS FALSE AND i.deleted IS FALSE AND usi.deleted IS FALSE AND source.deleted IS FALSE
   AND s.deleted IS FALSE AND s.subject_urn = @subject_urn
   AND s.id = @remote_session_id
-  AND EXISTS (SELECT 1 FROM agents AS a WHERE a.id = @principal_id AND a.organization_id = p.organization_id AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL)
+  AND EXISTS (SELECT 1 FROM agents AS a WHERE a.id = @principal_id AND a.organization_id = p.organization_id AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL AND s.subject_urn = 'user:' || a.owner_user_id)
 ON CONFLICT (project_id, principal_id, user_session_issuer_id, remote_session_client_id) WHERE revoked_at IS NULL
 DO UPDATE SET updated_at = principal_remote_session_bindings.updated_at
 WHERE principal_remote_session_bindings.grant_generation = EXCLUDED.grant_generation
@@ -4380,15 +4380,16 @@ RETURNING id, principal_id, user_session_issuer_id, remote_session_client_id, re
 -- Keep unavailable bindings discoverable for explicit detach, but return no
 -- source identity. The handler adds a canonical view only for an eligible
 -- candidate whose grant generation still matches this exact attachment.
-SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation
+SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, u.display_name AS subject_display_name, u.email AS subject_email
 FROM principal_remote_session_bindings AS b
 JOIN remote_sessions AS s ON s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
+LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
 JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
   AND 'user:' || a.owner_user_id = b.attached_by_subject_id
 WHERE b.project_id = @project_id AND b.organization_id = @organization_id
   AND b.principal_id = @principal_id AND b.user_session_issuer_id = @user_session_issuer_id
-  AND b.attached_by_subject_id = @subject_urn AND s.subject_urn = @subject_urn
+  AND b.attached_by_subject_id = s.subject_urn
   AND b.revoked_at IS NULL
 ORDER BY b.id;
 

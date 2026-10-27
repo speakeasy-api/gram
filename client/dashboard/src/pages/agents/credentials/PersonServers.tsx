@@ -1,3 +1,5 @@
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import { ServerAccounts } from "../AgentKeyServers";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -12,9 +14,10 @@ import {
 } from "@/components/sessions/connection-lifetime";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
-import { ChevronRight, ExternalLink } from "lucide-react";
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useSession } from "@/contexts/Auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { ExternalLink } from "lucide-react";
+import { useEffect, useRef, type JSX } from "react";
 import { Link } from "react-router";
 import {
   connectionSelectable,
@@ -24,18 +27,11 @@ import type { ServerSelection } from "./StepServers";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
 
-/**
- * The servers that authorize each person separately, listed apart from the
- * ones a key reaches on its own.
- *
- * With `connections`, a row can be chosen once its owner-to-be holds a
- * working connection to it: the agent is set up with that connection now,
- * so nobody signs in when it calls. Without them (editing an agent's reach)
- * the rows are only listed, as the agent's own page connects accounts.
- */
+/** Personal-connection rows in the shared server list, with assignment controls for the owner. */
 export function PersonServers({
   servers,
   connections,
+  agent,
   refusedServers,
   allServers,
   selected,
@@ -43,6 +39,7 @@ export function PersonServers({
 }: {
   servers: InventoryServer[];
   connections?: OwnerConnections;
+  agent?: ManagedAgent;
   /** Policy grants the caller or owner cannot delegate. */
   refusedServers?: ReadonlyMap<string, string>;
   /**
@@ -53,8 +50,7 @@ export function PersonServers({
   selected: ServerSelection[];
   onChange: (next: ServerSelection[]) => void;
 }): JSX.Element | null {
-  const routes = useRoutes();
-  const [open, setOpen] = useState(connections !== undefined);
+  const { user } = useSession();
   // Signing in happens in another tab, so coming back is the moment the
   // connection may have appeared. The latest refetch is read through a ref so
   // the listener is registered once rather than on every render.
@@ -79,107 +75,75 @@ export function PersonServers({
         : [...selected, { server }],
     );
   return (
-    <div className="border-border border-t">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="hover:bg-muted/40 flex w-full items-center gap-2 px-4 py-3 text-left"
-      >
-        <ChevronRight
-          aria-hidden="true"
-          className={cn(
-            "size-4 shrink-0 transition-transform",
-            open && "rotate-90",
+    <>
+      {servers.map((server) => (
+        <li
+          key={server.id}
+          className="flex flex-wrap items-center gap-4 px-4 py-3"
+        >
+          {(connections || agent) && (
+            <Checkbox
+              aria-label={server.name}
+              checked={!allServers && chosen(server.id)}
+              disabled={
+                allServers ||
+                (!chosen(server.id) &&
+                  (refusedServers?.has(server.id) ||
+                    (!agent &&
+                      !connectionSelectable(
+                        connections?.byServer.get(server.id),
+                      ))))
+              }
+              onCheckedChange={() => toggle(server)}
+            />
           )}
-        />
-        <span className="flex-1 text-sm">Servers that sign in as a person</span>
-        <Badge variant="neutral" size="sm">
-          {servers.length}
-        </Badge>
-      </button>
-      {open && (
-        <div className="border-border border-t">
-          {/* Said once for the group: whose connection is used, why only
-              theirs, and what happens when it ends. */}
-          <Text muted small className="block px-4 pt-3">
-            {connections ? (
-              <>
-                Each of these signs in as a person. Choose one and the agent
-                uses your own connection to it, set up now, so nobody signs in
-                when it calls. An agent uses only its owner&apos;s connections,
-                never anyone else&apos;s. When a connection ends, the
-                agent&apos;s calls to that server fail until you sign in again
-                and choose the new connection for the agent on the server&apos;s
-                Sessions tab.
-                {allServers &&
-                  " All servers covers none of these: turn it off to choose them one by one."}
-              </>
-            ) : (
-              "These authorize each person separately, so an agent cannot use them until an account is connected from the agent's credentials section. A server that should answer to one shared credential instead can be changed in its settings."
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="truncate">{server.name}</span>
+              <Badge variant="neutral" size="sm">
+                {server.projectName || server.projectSlug}
+              </Badge>
+            </span>
+            <span className="text-muted-foreground block truncate font-mono text-xs">
+              /mcp/{server.slug}
+            </span>
+            {refusedServers?.has(server.id) && (
+              <span className="mt-1 block text-xs">
+                {refusedServers.get(server.id)}
+              </span>
             )}
-          </Text>
-          <ul className="divide-border divide-y">
-            {servers.map((server) => (
-              <li key={server.id} className="flex items-center gap-4 px-4 py-3">
-                {connections && (
-                  <Checkbox
-                    aria-label={server.name}
-                    checked={!allServers && chosen(server.id)}
-                    disabled={
-                      allServers ||
-                      (!chosen(server.id) &&
-                        (refusedServers?.has(server.id) ||
-                          !connectionSelectable(
-                            connections.byServer.get(server.id),
-                          )))
-                    }
-                    onCheckedChange={() => toggle(server)}
-                  />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="truncate">{server.name}</span>
-                    <Badge variant="neutral" size="sm">
-                      {server.projectName || server.projectSlug}
-                    </Badge>
-                  </span>
-                  <span className="text-muted-foreground block truncate font-mono text-xs">
-                    /mcp/{server.slug}
-                  </span>
-                  {refusedServers?.has(server.id) && (
-                    <span className="mt-1 block text-xs">
-                      {refusedServers.get(server.id)}
-                    </span>
-                  )}
-                  {connections && (
-                    <ConnectionLine
-                      server={server}
-                      connection={connections.byServer.get(server.id)}
-                      onRetry={connections.refetch}
-                    />
-                  )}
-                </span>
-                {/* A new tab, because this is a detour: the wizard holds the
-                    name, scope and selections in memory, and navigating away
-                    then coming back loses all of it. */}
-                <Button size="sm" variant="secondary" asChild>
-                  <Link
-                    to={`${routes.mcp.details.settings.href(
-                      mcpServerRouteParam(server),
-                    )}#${MCP_AUTHENTICATION_SECTION_ID}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Change identity
-                  </Link>
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
+            {connections && (
+              <ConnectionLine
+                server={server}
+                connection={connections.byServer.get(server.id)}
+                onRetry={connections.refetch}
+              />
+            )}
+          </span>
+          {connections?.byServer.get(server.id)?.status === "ready" && (
+            <Avatar title={`Signed in as ${user.displayName || user.email}`}>
+              <AvatarImage
+                src={user.photoUrl}
+                alt={user.displayName || user.email}
+              />
+              <AvatarFallback>
+                {(user.displayName || user.email).slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          )}{" "}
+          {agent && chosen(server.id) && (
+            <div className="w-full">
+              <ServerAccounts
+                compact
+                agent={agent}
+                servers={[server]}
+                onReady={() => {}}
+              />
+            </div>
+          )}
+        </li>
+      ))}
+    </>
   );
 }
 

@@ -3,6 +3,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useServerInventory } from "./useServerInventory";
 
 const mocks = vi.hoisted(() => ({
+  activity: [] as {
+    targetType: string;
+    targetId: string;
+    recentToolCalls: number;
+  }[],
   servers: [] as {
     id: string;
     visibility: string;
@@ -11,6 +16,10 @@ const mocks = vi.hoisted(() => ({
   }[],
 }));
 
+vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
+vi.mock("@tanstack/react-query", () => ({
+  useQueries: () => [{ data: { activity: mocks.activity } }],
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     projects: [{ id: "project", name: "Example project", slug: "example" }],
@@ -46,8 +55,8 @@ it("offers known enabled servers but excludes disabled and unsupported visibilit
   );
   const { result } = renderHook(useServerInventory);
   expect(result.current.servers.map((server) => server.id)).toEqual([
-    "public",
     "private",
+    "public",
   ]);
 });
 
@@ -65,4 +74,23 @@ it("removes a server from the inventory when its visibility becomes unsupported"
   mocks.servers = [{ ...mocks.servers[0]!, visibility: "future_visibility" }];
   rerender();
   expect(result.current.servers).toEqual([]);
+});
+
+it("orders by calls in the last day, then alphabetically", () => {
+  mocks.servers = ["zulu", "alpha", "bravo"].map((slug) => ({
+    id: slug,
+    slug,
+    visibility: "private",
+    projectId: "project",
+  }));
+  mocks.activity = [
+    { targetType: "tunneled_mcp_server", targetId: "zulu", recentToolCalls: 4 },
+  ];
+  const { result } = renderHook(useServerInventory);
+  expect(result.current.servers.map((server) => server.id)).toEqual([
+    "zulu",
+    "alpha",
+    "bravo",
+  ]);
+  mocks.activity = [];
 });

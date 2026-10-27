@@ -147,13 +147,14 @@ in the audit feed. Shared-demo agent access remains restricted as above.
 
 ### Exact remote-session attachments
 
-PG `remote_sessions` ×1 and `principal_remote_session_bindings` ×2 show one
-fictional user-owned upstream account shared by **Release assistant** and
-**Release notes assistant** (both active, same human owner). Linear MCP session
+PG `remote_sessions` ×2 and `principal_remote_session_bindings` ×2 show a working
+connection on **Release assistant** and an expired owner connection on **Release notes assistant**. Other members see
+read-only assignments; only the owner can assign or refresh a connection. Linear MCP session
 6 is the requesting human session; its issuer is explicitly linked to the
-upstream client. Both bindings retain the same exact session ID, not a copy of
-its credential. The original three agent lifecycle fixtures remain unchanged.
-The account has invalid ciphertext, no refresh token and auto-refresh disabled.
+upstream client. Each binding retains its source session’s exact ID, not a copy of
+its credential. Release notes assistant belongs to the second demo member; the original three
+agent lifecycle fixtures remain unchanged.
+Both accounts have invalid ciphertext, no refresh token and auto-refresh disabled.
 Its client sits under Linear's remote identity provider (reserved example
 endpoints), so Linear's user session issuer binds clients of one remote issuer
 and the `mcp_servers.remote_session_issuer_id` stamp stays derivable. It is

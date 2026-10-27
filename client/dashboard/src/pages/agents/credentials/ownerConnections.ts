@@ -10,10 +10,8 @@ import type { InventoryServer } from "./useServerInventory";
  * How an agent would reach one server that authorizes each person
  * separately, using its owner's own connection to it.
  *
- * Only the owner's connections are ever used: the runtime serves an agent
- * the connections its owner attached and nobody else's, so an agent never
- * acts as a mix of people. A server is ready when the owner holds a working
- * connection through every upstream sign-in it asks for.
+ * Creation attaches the signed-in creator's connections. Authorized editors
+ * can explicitly replace these assignments with their own connections later.
  */
 export type ServerConnection =
   | { status: "checking" }

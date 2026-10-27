@@ -1,3 +1,5 @@
+import { connectionSelectable } from "./ownerConnections";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -43,6 +45,7 @@ export function StepServers({
   selected,
   onChange,
   connections,
+  agent,
 }: {
   servers: InventoryServer[];
   isLoading: boolean;
@@ -87,12 +90,11 @@ export function StepServers({
    * the creator's connection to them; without it they are only listed.
    */
   connections?: OwnerConnections;
+  agent?: ManagedAgent;
 }): JSX.Element {
   const refusalId = useId();
   const allServersLocked = !allServers && allServersRefusal !== undefined;
-  // "Change identity" opens the server's settings in another tab, so the
-  // inventory this list was built from is stale the moment it is used. Coming
-  // back to this tab is the signal that something may have changed.
+  // Refresh server configuration after returning from a sign-in tab.
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState === "visible") onRetry();
@@ -105,11 +107,12 @@ export function StepServers({
 
   const query = search.trim().toLowerCase();
   const isSelected = (id: string) =>
-    allServers || selected.some((entry) => entry.server.id === id);
+    (allServers && !servers.find((server) => server.id === id)?.issuerId) ||
+    selected.some((entry) => entry.server.id === id);
   const isRefused = (id: string) => refusedServers?.has(id) ?? false;
   // A server that authorizes each person separately needs an account attached
-  // to the agent before a key can call it. It is listed apart, and chosen
-  // there only when the creator's own connection to it can be attached.
+  // to the agent before a key can call it. It is chosen
+  // only when the creator's own connection to it can be attached.
   const needsAccount = (server: InventoryServer) => Boolean(server.issuerId);
   const matches = servers.filter((server) => {
     if (showSelectedOnly && !isSelected(server.id)) return false;
@@ -118,12 +121,12 @@ export function StepServers({
       .toLowerCase()
       .includes(query);
   });
-  // Two lists, not one: a per-user server is chosen on different terms, and
-  // when most of the organization authorizes that way they crowd out the rows
-  // a key reaches on its own. They stay reachable — a reader looking for one
-  // of them needs to find it and be told what it would sign in as.
-  const shown = matches.filter((server) => !needsAccount(server));
-  const blockedServers = matches.filter(needsAccount);
+  const shown = matches.filter(
+    (server) =>
+      !needsAccount(server) ||
+      agent ||
+      connectionSelectable(connections?.byServer.get(server.id)),
+  );
   // Counted across the whole scope rather than the filtered rows: it is told
   // beside "All servers", which is about the scope and not about the search.
   const perUserCount = servers.filter(needsAccount).length;
@@ -204,10 +207,11 @@ export function StepServers({
                 size="sm"
                 variant="secondary"
                 disabled={
-                  allServers || shown.every((server) => !isSelected(server.id))
+                  allServers ||
+                  matches.every((server) => !isSelected(server.id))
                 }
                 onClick={() => {
-                  const hidden = new Set(shown.map((server) => server.id));
+                  const hidden = new Set(matches.map((server) => server.id));
                   onChange(
                     selected.filter((entry) => !hidden.has(entry.server.id)),
                   );
@@ -259,7 +263,7 @@ export function StepServers({
               <span className="text-muted-foreground block text-xs">
                 Every server in {scopeLabel}, including ones added later.
                 {perUserCount > 0 &&
-                  ` The ${perUserCount} below that sign in as a person stay out of it.`}
+                  ` Servers that use your connection must be selected individually.`}
               </span>
               {allServersRefusal && (
                 <span
@@ -272,17 +276,28 @@ export function StepServers({
               )}
             </span>
           </label>
-          {shown.length === 0 ? (
+          {matches.length === 0 ? (
             <Text muted small className="block px-4 py-10 text-center">
               {servers.length === 0
                 ? "No MCP server in this organization can be reached with an API key yet."
-                : blockedServers.length > 0
-                  ? "Every server matching these filters authorizes each person separately."
-                  : "No servers match the current filters."}
+                : "No servers match the current filters."}
             </Text>
           ) : (
             <ul className="divide-border divide-y">
-              {shown.map((server) => {
+              {matches.map((server) => {
+                if (needsAccount(server))
+                  return (
+                    <PersonServers
+                      key={server.id}
+                      agent={agent}
+                      servers={[server]}
+                      connections={connections}
+                      refusedServers={refusedServers}
+                      allServers={allServers}
+                      selected={selected}
+                      onChange={onChange}
+                    />
+                  );
                 const checked = isSelected(server.id);
                 const refusal = refusedServers?.get(server.id);
                 const locked = allServers || (!checked && !!refusal);
@@ -313,6 +328,9 @@ export function StepServers({
                           <Badge variant="neutral" size="sm">
                             {server.projectName || server.projectSlug}
                           </Badge>
+                          <Badge variant="neutral" size="sm">
+                            Shared access
+                          </Badge>
                         </span>
                         <span className="text-muted-foreground block truncate font-mono text-xs">
                           /mcp/{server.slug}
@@ -327,14 +345,6 @@ export function StepServers({
               })}
             </ul>
           )}
-          <PersonServers
-            servers={blockedServers}
-            connections={connections}
-            refusedServers={refusedServers}
-            allServers={allServers}
-            selected={selected}
-            onChange={onChange}
-          />
         </div>
       )}
     </div>

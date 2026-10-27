@@ -839,6 +839,52 @@ func (q *Queries) ListAgentPolicyGrants(ctx context.Context, arg ListAgentPolicy
 	return items, nil
 }
 
+const listAgentsNeedingConnectionRefresh = `-- name: ListAgentsNeedingConnectionRefresh :many
+SELECT DISTINCT a.id
+FROM agents a
+JOIN principal_remote_session_bindings b ON b.principal_id = a.id AND b.organization_id = a.organization_id AND b.revoked_at IS NULL
+JOIN projects p ON p.id = b.project_id AND p.organization_id = a.organization_id AND NOT p.deleted
+LEFT JOIN remote_sessions s ON s.id = b.remote_session_id
+WHERE a.organization_id = $1
+  AND a.id = ANY($2::uuid[])
+  AND NOT a.deleted
+  AND (
+    s.id IS NULL OR s.deleted
+    OR s.subject_urn <> 'user:' || a.owner_user_id
+    OR b.attached_by_subject_id <> s.subject_urn
+    OR b.grant_generation <> s.grant_generation
+    OR (s.authorization_expires_at IS NOT NULL AND s.authorization_expires_at <= now())
+    OR (s.access_expires_at IS NOT NULL AND s.access_expires_at <= now()
+      AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= now()))
+  )
+`
+
+type ListAgentsNeedingConnectionRefreshParams struct {
+	OrganizationID string
+	AgentIds       []uuid.UUID
+}
+
+// One tenant-scoped read for the visible page, without exposing source credentials.
+func (q *Queries) ListAgentsNeedingConnectionRefresh(ctx context.Context, arg ListAgentsNeedingConnectionRefreshParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAgentsNeedingConnectionRefresh, arg.OrganizationID, arg.AgentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listConnectionBlocks = `-- name: ListConnectionBlocks :many
 SELECT id, organization_id, agent_id, owner_user_id, remote_session_client_id, taken_over_at, created_at, updated_at
 FROM agent_connection_blocks

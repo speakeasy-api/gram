@@ -385,7 +385,7 @@ VALUES
    'Support triage', now() - interval '2 days', NULL),
   (@agent3::uuid, @org_id::text, @owner3::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
-  (@agent4::uuid, @org_id::text, @owner1::text,
+  (@agent4::uuid, @org_id::text, @owner2::text,
    'Release notes assistant', NULL, NULL);
 
 -- name: OrgGlobalRoleURN :one

@@ -1,9 +1,11 @@
+import { useMembers } from "@gram/client/react-query/members.js";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { sessionAccountLabel } from "@/components/sessions/session-account-identity";
 import {
   connectionLifetime,
   connectionLifetimeLabel,
 } from "@/components/sessions/connection-lifetime";
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -12,7 +14,7 @@ import { Text } from "@/components/ui/Text";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { Server, CheckCircle2, ExternalLink } from "lucide-react";
+import { Server, CheckCircle2, ExternalLink, LockKeyhole } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   internalMcpUrl,
@@ -355,18 +357,24 @@ export function AgentKeyServers({
   );
 }
 
-function ServerAccounts({
+export function ServerAccounts({
   agent,
   servers,
   onReady,
+  compact = false,
 }: {
   agent: ManagedAgent;
+  compact?: boolean;
   servers: KeyServer[];
   onReady: (ready: boolean) => void;
 }) {
   const organization = useOrganization();
   const { user } = useSession();
   const sdk = useSdkClient();
+  const { data: members } = useMembers(undefined, undefined, {
+    retry: false,
+    throwOnError: false,
+  });
   const required = [
     ...new Map(
       servers
@@ -375,12 +383,16 @@ function ServerAccounts({
     ).values(),
   ];
   const [pending, setPending] = useState(false);
+  const refreshInFlight = useRef(false);
+  const [refreshing, setRefreshing] = useState<{
+    bindingId: string;
+    clientId: string;
+    server: KeyServer;
+  }>();
   const [error, setError] = useState(false);
   const attachBinding = useRemoteSessionsAttachBindingMutation();
   const detachBinding = useRemoteSessionsDetachBindingMutation();
   const ownerScope = { organizationId: organization.id, userId: user.id };
-  // The runtime serves an agent only its owner's connections, so nobody else
-  // is offered their own: theirs would be attached and never used.
   const isOwner = agent.ownerUserId === user.id;
   const requests = required.map((server) => ({
     gramProject: server.projectSlug,
@@ -455,21 +467,88 @@ function ServerAccounts({
     !pending &&
     query.data.every(
       (row) =>
-        row.bindings.every((binding) => binding.remoteSession !== undefined) &&
+        row.bindings.every(
+          (binding) =>
+            binding.remoteSession !== undefined &&
+            connectionLifetime(binding.remoteSession).kind !== "ended",
+        ) &&
         row.clients.every((client) =>
           row.bindings.some(
             (binding) =>
               binding.remoteSession !== undefined &&
               binding.remoteSessionClientId === client.id &&
-              row.candidates.some(
-                (candidate) => candidate.id === binding.remoteSessionId,
-              ),
+              connectionLifetime(binding.remoteSession).kind !== "ended",
           ),
         ),
     );
   useEffect(() => {
     onReady(ready);
   }, [ready, onReady]);
+  useEffect(() => {
+    if (
+      !refreshing ||
+      !isOwner ||
+      refreshInFlight.current ||
+      pending ||
+      error ||
+      !query.isSuccess ||
+      query.isFetching
+    )
+      return;
+    const row = query.data.find(
+      (row) => row.server.id === refreshing.server.id,
+    );
+    const renewed = row?.candidates.find(
+      (candidate) =>
+        candidate.remoteSessionClientId === refreshing.clientId &&
+        connectionLifetime(candidate).kind !== "ended",
+    );
+    if (!renewed) return;
+    refreshInFlight.current = true;
+    setPending(true);
+    const request = {
+      gramProject: refreshing.server.projectSlug,
+      principalId: agent.id,
+      userSessionIssuerId: refreshing.server.issuerId!,
+    };
+    void (async () => {
+      try {
+        await sdk.remoteSessions.detachBinding({
+          gramProject: request.gramProject,
+          detachBindingRequestBody: {
+            principalId: request.principalId,
+            userSessionIssuerId: request.userSessionIssuerId,
+            id: refreshing.bindingId,
+          },
+        });
+        await sdk.remoteSessions.attachBinding({
+          gramProject: request.gramProject,
+          attachBindingRequestBody: {
+            principalId: request.principalId,
+            userSessionIssuerId: request.userSessionIssuerId,
+            remoteSessionId: renewed.id,
+          },
+        });
+        setRefreshing(undefined);
+        await query.refetch();
+      } catch {
+        setError(true);
+      } finally {
+        refreshInFlight.current = false;
+        setPending(false);
+      }
+    })();
+  }, [
+    refreshing,
+    isOwner,
+    pending,
+    error,
+    query.isSuccess,
+    query.isFetching,
+    query.data,
+    sdk,
+    agent.id,
+  ]);
   async function attach(server: KeyServer, sessionId: string) {
     setPending(true);
     setError(false);
@@ -514,18 +593,20 @@ function ServerAccounts({
   }
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Connect accounts</h2>
-        {/* Only the case in front of the user is described: the step says
+      {!compact && (
+        <div>
+          <h2 className="text-lg font-semibold">Connect accounts</h2>
+          {/* Only the case in front of the user is described: the step says
             either what to connect, or that there is nothing to connect. */}
-        <Text small muted>
-          {/* An issuer-backed server still needs no account until it asks for
+          <Text small muted>
+            {/* An issuer-backed server still needs no account until it asks for
               one, so the sentence follows what the rows actually show. */}
-          {query.data.every((row) => row.clients.length === 0)
-            ? "None of the servers you chose need one. Continue."
-            : "Choose a connected account, or connect a new one in a separate tab and refresh this list. Accounts belong to the agent, so they stay connected for its other keys."}
-        </Text>
-      </div>
+            {query.data.every((row) => row.clients.length === 0)
+              ? "None of the servers you chose need one. Continue."
+              : "Choose a connected account, or connect a new one in a separate tab and refresh this list. Accounts belong to the agent, so they stay connected for its other keys."}
+          </Text>
+        </div>
+      )}
       {query.isLoading && <Text>Checking required accounts…</Text>}
       {query.isError && (
         <Text role="alert">
@@ -537,33 +618,123 @@ function ServerAccounts({
       {query.data?.filter(shows).map((row) => (
         <section
           key={`${row.server.projectId}:${row.server.issuerId}`}
-          className="border-border space-y-4 border p-5"
+          className={
+            compact ? "space-y-3" : "border-border space-y-4 border p-5"
+          }
         >
-          <div className="flex items-center gap-2">
-            <Server
-              aria-hidden="true"
-              className="text-muted-foreground size-4"
-            />
-            <h3 className="text-sm font-medium">{row.server.name}</h3>
-          </div>
+          {!compact && (
+            <div className="flex items-center gap-2">
+              <Server
+                aria-hidden="true"
+                className="text-muted-foreground size-4"
+              />
+              <h3 className="text-sm font-medium">{row.server.name}</h3>
+            </div>
+          )}
           {!isOwner && row.clients.length > 0 && (
             <Text small muted>
-              Only {agent.ownerProfile?.displayName ?? "the agent's owner"} can
-              let this agent use a connection to this server. An agent uses its
-              owner&apos;s connections and nobody else&apos;s.
+              Only the agent’s owner can assign or refresh a connection.
             </Text>
           )}
-          {isOwner && row.server.connectUrl && (
-            <a
-              href={row.server.connectUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4"
-            >
-              Connect an account
-              <ExternalLink aria-hidden="true" className="size-3.5" />
-            </a>
-          )}
+          {isOwner &&
+            row.server.connectUrl &&
+            (!compact ||
+              row.bindings.length === 0 ||
+              row.bindings.some(
+                (b) =>
+                  b.remoteSession &&
+                  connectionLifetime(b.remoteSession).kind === "ended",
+              )) && (
+              <a
+                href={row.server.connectUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  const expired = row.bindings.find(
+                    (binding) =>
+                      binding.remoteSession?.subjectUrn === `user:${user.id}` &&
+                      connectionLifetime(binding.remoteSession).kind ===
+                        "ended",
+                  );
+                  if (expired)
+                    setRefreshing({
+                      bindingId: expired.id,
+                      clientId: expired.remoteSessionClientId,
+                      server: row.server,
+                    });
+                }}
+                className="text-primary inline-flex items-center gap-1.5 text-sm underline underline-offset-4"
+              >
+                {row.bindings.some(
+                  (binding) =>
+                    binding.remoteSession?.subjectUrn === `user:${user.id}` &&
+                    connectionLifetime(binding.remoteSession).kind === "ended",
+                )
+                  ? "Refresh connection"
+                  : "Connect an account"}
+                <ExternalLink aria-hidden="true" className="size-3.5" />
+              </a>
+            )}
+          {row.bindings
+            .filter((binding) => binding.remoteSession)
+            .map((binding) => {
+              const session = binding.remoteSession!;
+              const mine = session.subjectUrn === `user:${user.id}`;
+              const locked = !isOwner;
+              const label =
+                session.subjectDisplayName ||
+                session.subjectEmail ||
+                "Another member";
+              return (
+                <div
+                  key={binding.id}
+                  className={cn(
+                    "flex items-center gap-3 border p-3",
+                    locked && "bg-muted/40 text-muted-foreground",
+                  )}
+                >
+                  <Avatar title={label}>
+                    <AvatarImage
+                      src={
+                        mine
+                          ? user.photoUrl
+                          : members?.members.find(
+                              (member) =>
+                                `user:${member.id}` === session.subjectUrn,
+                            )?.photoUrl
+                      }
+                      alt={label}
+                    />
+                    <AvatarFallback>
+                      {label.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <Text small>
+                      {mine ? "Your connection" : `${label}'s connection`}
+                    </Text>
+                    <Text small muted>
+                      {connectionLifetimeLabel(connectionLifetime(session))}
+                    </Text>
+                  </div>
+                  {locked ? (
+                    <LockKeyhole
+                      className="size-4"
+                      aria-label="Owner-managed connection"
+                    />
+                  ) : (
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      disabled={pending || query.isFetching}
+                      onClick={() => void detach(row.server, binding.id)}
+                    >
+                      Remove assignment
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
           {row.bindings
             .filter((binding) => !binding.remoteSession)
             .map((binding) => (
@@ -578,7 +749,11 @@ function ServerAccounts({
                 <Button
                   variant="secondary"
                   disabled={
-                    pending || error || query.isFetching || query.isError
+                    !isOwner ||
+                    pending ||
+                    error ||
+                    query.isFetching ||
+                    query.isError
                   }
                   onClick={() => void detach(row.server, binding.id)}
                 >
@@ -594,7 +769,14 @@ function ServerAccounts({
                 </Text>
               )}
               {row.candidates
-                .filter((c) => c.remoteSessionClientId === client.id)
+                .filter(
+                  (c) =>
+                    c.remoteSessionClientId === client.id &&
+                    (!compact ||
+                      !row.bindings.some(
+                        (b) => b.remoteSessionId === c.id && b.remoteSession,
+                      )),
+                )
                 .map((candidate) => {
                   const attached = row.bindings.some(
                     (b) =>
@@ -628,6 +810,7 @@ function ServerAccounts({
                         disabled={
                           attached ||
                           occupied ||
+                          connectionLifetime(candidate).kind === "ended" ||
                           pending ||
                           error ||
                           query.isFetching ||
@@ -665,7 +848,7 @@ function ServerAccounts({
       {/* Nothing to connect means nothing to refresh, confirm or switch: the
           step keeps only the sentence that says so. A failed read reports no
           clients at all, so it keeps the refresh the alert above asks for. */}
-      {(query.isError || query.data.some(shows)) && (
+      {(query.isError || (query.data.some(shows) && (!compact || !ready))) && (
         <>
           <Button
             variant="secondary"
@@ -684,9 +867,7 @@ function ServerAccounts({
             </div>
           )}
           <Text small muted>
-            To switch accounts, disconnect the current account from the server’s
-            Sessions page first. You’ll choose this key’s access in the next
-            step.
+            Only the agent’s owner can assign their own connection.
           </Text>
         </>
       )}

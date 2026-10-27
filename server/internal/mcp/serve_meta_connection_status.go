@@ -101,7 +101,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		if !member.remoteSessionIssuerID.Valid {
 			return metamcp.SignInNotRequired, ""
 		}
-		gateTokens, err := gate.memberTokens(ctx, member)
+		gateTokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
 			return metamcp.SignInError, memberErrorMessage(err)
 		}

@@ -352,6 +352,14 @@ func TestAttachBindingRequiresAgentOwner(t *testing.T) {
 	attached, err := ti.service.AttachBinding(ownerCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: owners.ID.String()})
 	require.NoError(t, err, "a refused attachment leaves the client's slot free for the owner")
 	require.Equal(t, owners.ID.String(), attached.RemoteSessionID)
+
+	listed, err := ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 1, "authorized managers can identify the owner's assignment")
+	require.Equal(t, urn.NewUserSubject(owner).String(), listed.Items[0].RemoteSession.SubjectUrn)
+	_, err = ti.service.AttachBinding(ownerCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: managers.ID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
 }
 
 func TestListRemoteSessionsRequiresPairedEligibilityFilters(t *testing.T) {

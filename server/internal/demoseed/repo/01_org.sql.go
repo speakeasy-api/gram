@@ -763,7 +763,7 @@ VALUES
    'Support triage', now() - interval '2 days', NULL),
   ($6::uuid, $2::text, $7::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
-  ($8::uuid, $2::text, $3::text,
+  ($8::uuid, $2::text, $5::text,
    'Release notes assistant', NULL, NULL)
 `
 

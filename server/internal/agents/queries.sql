@@ -447,3 +447,23 @@ SELECT EXISTS (
       'connection_owner', r.owner_user_id
     )
 );
+
+-- name: ListAgentsNeedingConnectionRefresh :many
+-- One tenant-scoped read for the visible page, without exposing source credentials.
+SELECT DISTINCT a.id
+FROM agents a
+JOIN principal_remote_session_bindings b ON b.principal_id = a.id AND b.organization_id = a.organization_id AND b.revoked_at IS NULL
+JOIN projects p ON p.id = b.project_id AND p.organization_id = a.organization_id AND NOT p.deleted
+LEFT JOIN remote_sessions s ON s.id = b.remote_session_id
+WHERE a.organization_id = @organization_id
+  AND a.id = ANY(@agent_ids::uuid[])
+  AND NOT a.deleted
+  AND (
+    s.id IS NULL OR s.deleted
+    OR s.subject_urn <> 'user:' || a.owner_user_id
+    OR b.attached_by_subject_id <> s.subject_urn
+    OR b.grant_generation <> s.grant_generation
+    OR (s.authorization_expires_at IS NOT NULL AND s.authorization_expires_at <= now())
+    OR (s.access_expires_at IS NOT NULL AND s.access_expires_at <= now()
+      AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= now()))
+  );

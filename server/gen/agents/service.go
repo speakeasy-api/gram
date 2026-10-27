@@ -387,11 +387,14 @@ type ManagedAgent struct {
 	Name                    string
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string
-	Lifecycle   AgentLifecycle
-	Permissions *AgentPermissions
-	CreatedAt   string
-	UpdatedAt   string
+	ProjectID *string
+	Lifecycle AgentLifecycle
+	// An assigned owner connection has expired or is no longer available; the
+	// owner must reconnect and assign it again
+	ConnectionNeedsRefresh *bool
+	Permissions            *AgentPermissions
+	CreatedAt              string
+	UpdatedAt              string
 }
 
 // ReassignPayload is the payload type of the agents service reassign method.

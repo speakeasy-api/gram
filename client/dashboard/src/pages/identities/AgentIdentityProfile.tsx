@@ -35,12 +35,12 @@ export function AgentHeaderActions({
 }): JSX.Element {
   const routes = useRoutes();
   return (
-    <div className="-ml-2 flex items-center gap-1">
+    <div className="flex items-center gap-2">
       {/* Changing what the agent reaches is the same set of questions it
           was registered with, so it is the same flow. */}
       {/* Same gate as rename: saving the edit flow needs write access. */}
       {agent.permissions.write && (
-        <Button asChild variant="tertiary" size="xs">
+        <Button asChild variant="primary" size="sm">
           <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
         </Button>
       )}

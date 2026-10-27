@@ -99643,6 +99643,9 @@ components:
     ManagedAgent:
       type: object
       properties:
+        connection_needs_refresh:
+          type: boolean
+          description: An assigned owner connection has expired or is no longer available; the owner must reconnect and assign it again
         created_at:
           type: string
           format: date-time

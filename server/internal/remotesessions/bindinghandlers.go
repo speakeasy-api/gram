@@ -115,27 +115,23 @@ func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPay
 	}
 	defer func() { _ = op.tx.Rollback(ctx) }()
 	rows, err := op.queries.ListPrincipalRemoteSessionBindings(ctx, repo.ListPrincipalRemoteSessionBindingsParams{
-		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(),
+		ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session attachments")
 	}
-	// Eligibility is shared with attachment candidates. Unavailable bindings
-	// retain only their identifiers so the owner can detach without exposing
-	// identity from a revoked, inaccessible, or replaced upstream grant.
-	candidates, err := op.candidates(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve available attachment views")
-	}
-	available := make(map[uuid.UUID]repo.ListPrincipalRemoteSessionCandidatesRow, len(candidates))
-	for _, candidate := range candidates {
-		available[candidate.RemoteSession.ID] = candidate
-	}
 	items := make([]*gen.PrincipalRemoteSessionBinding, 0, len(rows))
 	for _, row := range rows {
 		view := bindingView(row.ID, row.PrincipalID, row.UserSessionIssuerID, row.RemoteSessionClientID, row.RemoteSessionID)
-		if candidate, ok := available[row.RemoteSessionID]; ok && candidate.RemoteSession.GrantGeneration == row.GrantGeneration {
-			view.RemoteSession = mv.BuildRemoteSessionView(candidate.RemoteSession, conv.FromPGText[string](candidate.SubjectDisplayName), conv.FromPGText[string](candidate.SubjectEmail))
+		source, err := op.queries.GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{
+			ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID,
+			UserSessionIssuerID: op.issuerID, RemoteSessionClientID: row.RemoteSessionClientID,
+		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve attached connection")
+		}
+		if err == nil {
+			view.RemoteSession = mv.BuildRemoteSessionView(source, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail))
 		}
 		items = append(items, view)
 	}

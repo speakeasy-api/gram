@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -418,13 +420,20 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			return fmt.Errorf("insert demo upstream client choice for session %d on %s: %w", c.session, c.server, err)
 		}
 	}
-	if err := s.q.ServersInsertAttachmentSession(ctx, repo.ServersInsertAttachmentSessionParams{
-		ID:                    s.det("attachment-session"),
-		UserID:                user(1),
-		UserSessionIssuerID:   s.det("issuer-linear"),
-		RemoteSessionClientID: s.det("attachment-client"),
-	}); err != nil {
-		return fmt.Errorf("insert demo attachment session: %w", err)
+	for _, account := range []struct {
+		key     string
+		person  int
+		expires time.Duration
+	}{
+		{key: "attachment-session", person: 1, expires: 7 * 24 * time.Hour},
+		{key: "attachment-session-expired", person: 2, expires: -time.Hour},
+	} {
+		if err := s.q.ServersInsertAttachmentSession(ctx, repo.ServersInsertAttachmentSessionParams{
+			ID: s.det(account.key), UserID: user(account.person), UserSessionIssuerID: s.det("issuer-linear"),
+			RemoteSessionClientID: s.det("attachment-client"), ExpiresIn: pgtype.Interval{Microseconds: account.expires.Microseconds(), Days: 0, Months: 0, Valid: true},
+		}); err != nil {
+			return fmt.Errorf("insert demo attachment session: %w", err)
+		}
 	}
 
 	validated := []serversValidatedSession{
@@ -450,10 +459,13 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
-	// The two managed release agents (1 and 4) both reference the attachment
-	// session, and each gets an exact Linear connect grant.
+	// Show both a working connection and an expired owner connection.
 	for _, agent := range []int{1, 4} {
 		num := strconv.Itoa(agent)
+		person, session := 1, "attachment-session"
+		if agent == 4 {
+			person, session = 2, "attachment-session-expired"
+		}
 		if err := s.q.ServersInsertAttachmentBinding(ctx, repo.ServersInsertAttachmentBindingParams{
 			ID:                    s.det("attachment-binding-" + num),
 			ProjectID:             proj,
@@ -461,8 +473,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			PrincipalID:           s.det("managed-agent-" + num),
 			UserSessionIssuerID:   s.det("issuer-linear"),
 			RemoteSessionClientID: s.det("attachment-client"),
-			AttachedByUserID:      user(1),
-			RemoteSessionID:       s.det("attachment-session"),
+			AttachedByUserID:      user(person),
+			RemoteSessionID:       s.det(session),
 		}); err != nil {
 			return fmt.Errorf("insert demo attachment binding %d: %w", agent, err)
 		}

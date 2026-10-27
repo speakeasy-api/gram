@@ -25,7 +25,7 @@ import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useSdkClient, useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { AgentOwner } from "@/pages/agents/agent-admin";
+import { AgentOwner, AgentStatus } from "@/pages/agents/agent-admin";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -1090,24 +1090,11 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       {
         key: "status",
         header: "Status",
-        width: "140px",
+        width: "220px",
         render: (identity) => {
           const agent = agentsById.get(identity.registeredAgentId ?? "");
           if (!agent) return null;
-          return (
-            <Badge
-              size="sm"
-              variant={
-                agent.lifecycle === "active"
-                  ? "success"
-                  : agent.lifecycle === "revoked"
-                    ? "destructive"
-                    : "warning"
-              }
-            >
-              {agent.lifecycle}
-            </Badge>
-          );
+          return <AgentStatus agent={agent} />;
         },
       },
       {

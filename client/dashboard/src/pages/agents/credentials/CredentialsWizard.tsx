@@ -575,10 +575,7 @@ export function CredentialsWizard({
       ? reachCoversProject(allServersProjectIDs, server.projectId)
       : scopedProjectID === undefined || server.projectId === scopedProjectID,
   );
-  // The creator becomes the new agent's owner, and an agent uses only its
-  // owner's connections, so these are the creator's own. Only a new agent is
-  // set up this way: an existing one may belong to someone else, and its own
-  // page attaches accounts for the keys it issues.
+  // New agents attach the creator's connections as part of provisioning.
   const offersConnections = !editing && !existing;
   const connections = useOwnerConnections(listedServers, offersConnections);
 
@@ -1077,7 +1074,13 @@ export function CredentialsWizard({
       stepCount={stepNames.length}
       name={name}
       rows={[
-        { label: "Owner", value: user.displayName || user.email },
+        {
+          label: "Owner",
+          value:
+            agent && agent.ownerUserId !== user.id
+              ? agent.ownerProfile?.displayName || "Agent owner"
+              : user.displayName || user.email,
+        },
         {
           label: "Project",
           value: scopeName,
@@ -1178,7 +1181,9 @@ export function CredentialsWizard({
           : selected.map((entry) => ({
               id: entry.server.id,
               name: entry.server.name,
-              detail: entry.server.issuerId ? "all tools, as you" : "all tools",
+              detail: entry.server.issuerId
+                ? "all tools, using the owner’s connection"
+                : "all tools",
             }))
       }
     />
@@ -1235,6 +1240,7 @@ export function CredentialsWizard({
         return (
           <div className="space-y-5">
             <StepServers
+              agent={agent}
               servers={listedServers}
               isLoading={inventory.isLoading}
               isError={inventory.isError}
