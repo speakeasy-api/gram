@@ -1957,6 +1957,66 @@ func (q *Queries) ListEMAClientLiveServers(ctx context.Context, arg ListEMAClien
 	return items, nil
 }
 
+const listEMAClientsOfServers = `-- name: ListEMAClientsOfServers :many
+SELECT ac.id AS auth_client_id,
+       COALESCE(array_agg(DISTINCT ls.id) FILTER (WHERE ls.id IS NOT NULL), ARRAY[]::uuid[])::uuid[] AS mcp_server_ids
+FROM mcp_auth_clients AS ac
+JOIN mcp_server_auth_clients AS named
+  ON named.auth_client_id = ac.id
+ AND named.organization_id = ac.organization_id
+ AND named.mcp_server_id = ANY($1::uuid[])
+LEFT JOIN mcp_server_auth_clients AS live
+  ON live.auth_client_id = ac.id
+ AND live.organization_id = ac.organization_id
+ AND live.deleted IS FALSE
+LEFT JOIN mcp_servers AS ls
+  ON ls.id = live.mcp_server_id
+ AND ls.project_id = live.project_id
+ AND ls.deleted IS FALSE
+WHERE ac.organization_id = $2::text
+  AND ac.client_type = 'ema'
+  AND ac.source = 'backfill'
+  AND ac.deleted IS FALSE
+GROUP BY ac.id
+ORDER BY ac.id
+`
+
+type ListEMAClientsOfServersParams struct {
+	McpServerIds   []uuid.UUID
+	OrganizationID string
+}
+
+type ListEMAClientsOfServersRow struct {
+	AuthClientID uuid.UUID
+	McpServerIds []uuid.UUID
+}
+
+// Every live backfilled EMA client the given servers are linked to, with the
+// live servers that offer it, so the rule that refuses a client shared across
+// sources sees the same evidence as the backfill. The naming link is read
+// deleted ones included, so a server that has just left a source or been
+// deleted still names its clients; an empty server list then means the client
+// serves nothing and carries no source's credentials.
+func (q *Queries) ListEMAClientsOfServers(ctx context.Context, arg ListEMAClientsOfServersParams) ([]ListEMAClientsOfServersRow, error) {
+	rows, err := q.db.Query(ctx, listEMAClientsOfServers, arg.McpServerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAClientsOfServersRow
+	for rows.Next() {
+		var i ListEMAClientsOfServersRow
+		if err := rows.Scan(&i.AuthClientID, &i.McpServerIds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEMASameOriginServers = `-- name: ListEMASameOriginServers :many
 SELECT s.id AS mcp_server_id, s.project_id
 FROM remote_session_ema_bindings AS b
@@ -2354,6 +2414,11 @@ WITH used AS (
         OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
   WHERE a.organization_id = $1::text
     AND a.deleted IS FALSE
+    -- Set to re-decide named clients as a source or its servers are written.
+    -- Every source of a named client is still returned, so the rule that
+    -- refuses a client shared across sources sees the same evidence.
+    AND ($2::uuid[] IS NULL
+         OR a.remote_session_client_id = ANY($2::uuid[]))
 ), grouped AS (
   SELECT remote_session_client_id, credential_owner, source_kind, source_id,
          array_agg(DISTINCT server_id ORDER BY server_id) AS server_ids
@@ -2390,6 +2455,11 @@ LEFT JOIN LATERAL (
 ORDER BY g.remote_session_client_id, g.source_id
 `
 
+type ListOAuthClientSourcesParams struct {
+	OrganizationID string
+	OnlyClientIds  []uuid.UUID
+}
+
 type ListOAuthClientSourcesRow struct {
 	RemoteSessionClientID uuid.UUID
 	CredentialOwner       string
@@ -2407,8 +2477,8 @@ type ListOAuthClientSourcesRow struct {
 // in letter case. A server with no remote or tunneled source (hosted,
 // unproxied) is a source of its own with no headers, so a client it shares
 // with another source's servers is never copied onto.
-func (q *Queries) ListOAuthClientSources(ctx context.Context, organizationID string) ([]ListOAuthClientSourcesRow, error) {
-	rows, err := q.db.Query(ctx, listOAuthClientSources, organizationID)
+func (q *Queries) ListOAuthClientSources(ctx context.Context, arg ListOAuthClientSourcesParams) ([]ListOAuthClientSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listOAuthClientSources, arg.OrganizationID, arg.OnlyClientIds)
 	if err != nil {
 		return nil, err
 	}
@@ -2429,6 +2499,43 @@ func (q *Queries) ListOAuthClientSources(ctx context.Context, organizationID str
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOAuthClientsOfServers = `-- name: ListOAuthClientsOfServers :many
+SELECT DISTINCT a.remote_session_client_id
+FROM mcp_server_remote_session_clients AS a
+WHERE a.organization_id = $1::text
+  AND a.mcp_server_id = ANY($2::uuid[])
+ORDER BY a.remote_session_client_id
+`
+
+type ListOAuthClientsOfServersParams struct {
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+// Every upstream OAuth client the given servers are associated with, deleted
+// associations and tombstoned servers included, so a server that has just
+// left a source or been deleted still names the clients whose copies have to
+// be re-decided.
+func (q *Queries) ListOAuthClientsOfServers(ctx context.Context, arg ListOAuthClientsOfServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOAuthClientsOfServers, arg.OrganizationID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var remote_session_client_id uuid.UUID
+		if err := rows.Scan(&remote_session_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, remote_session_client_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2482,6 +2589,41 @@ type ListRemoteSourceHeaderIDsParams struct {
 // found by their stable ids.
 func (q *Queries) ListRemoteSourceHeaderIDs(ctx context.Context, arg ListRemoteSourceHeaderIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listRemoteSourceHeaderIDs, arg.OrganizationID, arg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSourceServerIDs = `-- name: ListRemoteSourceServerIDs :many
+SELECT s.id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
+WHERE s.remote_mcp_server_id = $2::uuid
+ORDER BY s.id
+`
+
+type ListRemoteSourceServerIDsParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// The servers backed by one remote source, tombstoned ones included, so a
+// source whose last server was deleted still names it for the copy pass.
+func (q *Queries) ListRemoteSourceServerIDs(ctx context.Context, arg ListRemoteSourceServerIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRemoteSourceServerIDs, arg.OrganizationID, arg.SourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -3222,6 +3364,76 @@ func (q *Queries) ListStaleBackfillLinks(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const listTunneledSourceHeaderIDs = `-- name: ListTunneledSourceHeaderIDs :many
+SELECT h.id
+FROM tunneled_mcp_server_headers AS h
+JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = $1::text
+WHERE h.tunneled_mcp_server_id = $2::uuid
+ORDER BY h.id
+`
+
+type ListTunneledSourceHeaderIDsParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// ListRemoteSourceHeaderIDs for a tunneled source.
+func (q *Queries) ListTunneledSourceHeaderIDs(ctx context.Context, arg ListTunneledSourceHeaderIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listTunneledSourceHeaderIDs, arg.OrganizationID, arg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTunneledSourceServerIDs = `-- name: ListTunneledSourceServerIDs :many
+SELECT s.id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
+WHERE s.tunneled_mcp_server_id = $2::uuid
+ORDER BY s.id
+`
+
+type ListTunneledSourceServerIDsParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// The servers backed by one tunneled source, as ListTunneledSourceServers
+// reads them but without the upstream OAuth state, for the copy pass.
+func (q *Queries) ListTunneledSourceServerIDs(ctx context.Context, arg ListTunneledSourceServerIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listTunneledSourceServerIDs, arg.OrganizationID, arg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTunneledSourceServers = `-- name: ListTunneledSourceServers :many
 SELECT s.id AS mcp_server_id,
        s.project_id,
@@ -3728,6 +3940,27 @@ FOR SHARE OF t
 func (q *Queries) LockSelectionTunneledSource(ctx context.Context, mcpServerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockSelectionTunneledSource, mcpServerID)
 	return err
+}
+
+const lockTunneledCredentialSource = `-- name: LockTunneledCredentialSource :one
+SELECT t.id
+FROM tunneled_mcp_servers AS t
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = $1::text
+WHERE t.id = $2::uuid
+FOR UPDATE OF t
+`
+
+type LockTunneledCredentialSourceParams struct {
+	OrganizationID string
+	SourceID       uuid.UUID
+}
+
+// LockRemoteCredentialSource for a tunneled source.
+func (q *Queries) LockTunneledCredentialSource(ctx context.Context, arg LockTunneledCredentialSourceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTunneledCredentialSource, arg.OrganizationID, arg.SourceID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const mapSelectionToAuthClient = `-- name: MapSelectionToAuthClient :execrows
@@ -5187,6 +5420,15 @@ UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp() WHERE mcp_serv
 
 func (q *Queries) SoftDeleteServerAuthClientLinksFixture(ctx context.Context, mcpServerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeleteServerAuthClientLinksFixture, mcpServerID)
+	return err
+}
+
+const softDeleteTunneledSourceFixture = `-- name: SoftDeleteTunneledSourceFixture :exec
+UPDATE tunneled_mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteTunneledSourceFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteTunneledSourceFixture, id)
 	return err
 }
 

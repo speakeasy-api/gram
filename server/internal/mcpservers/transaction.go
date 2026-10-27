@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
@@ -85,13 +84,17 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 
 	// Before the server row exists, so every caller takes the source lock the
 	// auth client sync below needs ahead of any server lock, as every other
-	// writer of a remote source does. The lock also settles the source's
-	// liveness: a caller that checked it unlocked would otherwise commit a
-	// server onto a source a concurrent deletion had just tombstoned.
+	// writer of a credential source does. For a remote source the lock also
+	// settles its liveness: a caller that checked it unlocked would otherwise
+	// commit a server onto a source a concurrent deletion had just tombstoned.
+	sources := credentialSourcesOf([]uuid.NullUUID{input.RemoteMCPServerID}, []uuid.NullUUID{input.TunneledMCPServerID})
 	if input.RemoteMCPServerID.Valid {
 		if err := VerifyLiveRemoteMCPSourceInTransaction(ctx, tx, input.ProjectID, input.RemoteMCPServerID.UUID); err != nil {
 			return repo.McpServer{}, err
 		}
+	}
+	if err := lockCredentialSources(ctx, tx, input.OrganizationID, sources); err != nil {
+		return repo.McpServer{}, err
 	}
 
 	serverID, err := uuid.NewV7()
@@ -156,10 +159,8 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 
 	// A source's credential headers are usually set up before any server
 	// fronts them, so offer their auth clients from this server as it appears.
-	if server.RemoteMcpServerID.Valid {
-		if err := authclientbackfill.SyncRemoteSource(ctx, tx, input.OrganizationID, server.RemoteMcpServerID.UUID); err != nil {
-			return repo.McpServer{}, fmt.Errorf("sync remote source auth clients: %w", err)
-		}
+	if err := syncCredentialSources(ctx, tx, input.OrganizationID, sources); err != nil {
+		return repo.McpServer{}, err
 	}
 
 	return server, nil

@@ -756,21 +756,20 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server visibility dependencies").LogError(ctx, logger)
 		}
 	}
-	// Both remote sources a backend switch moves this server between, before
-	// the server lock, so the auth client sync below never waits on a source
-	// lock in the opposite order to the source's own writers. The ids come
-	// from the payload and from a read taken before the lock, so the locked
-	// row is checked against them below.
-	for _, sourceID := range []uuid.NullUUID{unlocked.RemoteMcpServerID, ids.RemoteMcpServerID} {
-		if !sourceID.Valid {
-			continue
+	// Both credential sources a backend switch moves this server between,
+	// before the server lock, so the auth client sync below never waits on a
+	// source lock in the opposite order to the source's own writers. The ids
+	// come from the payload and from a read taken before the lock, so the
+	// locked row is checked against them below.
+	writtenSources := credentialSourcesOf(
+		[]uuid.NullUUID{unlocked.RemoteMcpServerID, ids.RemoteMcpServerID},
+		[]uuid.NullUUID{unlocked.TunneledMcpServerID, ids.TunneledMcpServerID},
+	)
+	if err := lockCredentialSources(ctx, dbtx, authCtx.ActiveOrganizationID, writtenSources); err != nil {
+		if errors.Is(err, authclientbackfill.ErrSourceNotFound) {
+			return nil, oops.E(oops.CodeNotFound, err, "mcp server backend not found").LogWarn(ctx, logger)
 		}
-		if err := authclientbackfill.LockRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, sourceID.UUID); err != nil {
-			if errors.Is(err, authclientbackfill.ErrSourceNotFound) {
-				return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogWarn(ctx, logger)
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "lock remote source for auth clients").LogError(ctx, logger)
-		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock source for auth clients").LogError(ctx, logger)
 	}
 	existing, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
@@ -786,7 +785,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if isCanonicalHostedWrapper(existing) {
 		return nil, oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the update").LogWarn(ctx, logger)
 	}
-	if existing.RemoteMcpServerID != unlocked.RemoteMcpServerID {
+	if existing.RemoteMcpServerID != unlocked.RemoteMcpServerID || existing.TunneledMcpServerID != unlocked.TunneledMcpServerID {
 		return nil, oops.E(oops.CodeConflict, nil, "mcp server backend changed concurrently; retry the update").LogWarn(ctx, logger)
 	}
 	// Authorization keys on the row as it exists, not the backing the payload
@@ -929,14 +928,15 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update mcp server").LogError(ctx, logger)
 	}
-	if updated.RemoteMcpServerID != existing.RemoteMcpServerID {
-		for _, sourceID := range []uuid.NullUUID{existing.RemoteMcpServerID, updated.RemoteMcpServerID} {
-			if !sourceID.Valid {
-				continue
-			}
-			if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, sourceID.UUID); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "sync remote source auth clients").LogError(ctx, logger)
-			}
+	if updated.RemoteMcpServerID != existing.RemoteMcpServerID || updated.TunneledMcpServerID != existing.TunneledMcpServerID {
+		if err := syncCredentialSources(ctx, dbtx, authCtx.ActiveOrganizationID, writtenSources); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "sync source auth clients").LogError(ctx, logger)
+		}
+		// The sources only name their own servers, so a server that has just
+		// left one is reached through itself: its upstream OAuth and EMA
+		// clients must stop carrying the headers of the source it left.
+		if err := authclientbackfill.SyncServerDerivedCopies(ctx, dbtx, authCtx.ActiveOrganizationID, updated.ID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "sync mcp server auth client headers").LogError(ctx, logger)
 		}
 	}
 	// Check against the post-update row (not the payload): the update query
@@ -1143,15 +1143,17 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	// The auth client sync after the tombstone locks the server's remote
+	// The auth client sync after the tombstone locks the server's credential
 	// source, and a source's own writers lock it before touching its servers.
 	// Taking it here, before the server lock, keeps every path's lock order
-	// source-then-server. The id comes from a read taken before the lock, so
-	// the tombstoned row is checked against it below.
-	if preexisting.RemoteMcpServerID.Valid {
-		if err := authclientbackfill.LockRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, preexisting.RemoteMcpServerID.UUID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "lock remote source for auth clients").LogError(ctx, logger)
-		}
+	// source-then-server. The ids come from a read taken before the lock, so
+	// the tombstoned row is checked against them below.
+	deletedSources := credentialSourcesOf(
+		[]uuid.NullUUID{preexisting.RemoteMcpServerID},
+		[]uuid.NullUUID{preexisting.TunneledMcpServerID},
+	)
+	if err := lockCredentialSources(ctx, dbtx, authCtx.ActiveOrganizationID, deletedSources); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock source for auth clients").LogError(ctx, logger)
 	}
 
 	lockedServer, err := tombstone.Lock(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID)
@@ -1161,7 +1163,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
-	if lockedServer.Server.RemoteMcpServerID != preexisting.RemoteMcpServerID {
+	if lockedServer.Server.RemoteMcpServerID != preexisting.RemoteMcpServerID || lockedServer.Server.TunneledMcpServerID != preexisting.TunneledMcpServerID {
 		return oops.E(oops.CodeConflict, nil, "mcp server backend changed concurrently; retry the deletion").LogWarn(ctx, logger)
 	}
 	if isCanonicalHostedWrapper(lockedServer.Server) {
@@ -1183,10 +1185,14 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "delete mcp server").LogError(ctx, logger)
 	}
 	deleted := tombstoned.Server
-	if deleted.RemoteMcpServerID.Valid {
-		if err := authclientbackfill.SyncRemoteSource(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.RemoteMcpServerID.UUID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "sync remote source auth clients").LogError(ctx, logger)
-		}
+	if err := syncCredentialSources(ctx, dbtx, authCtx.ActiveOrganizationID, deletedSources); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync source auth clients").LogError(ctx, logger)
+	}
+	// The deleted server's own upstream OAuth and EMA clients may have been
+	// the only ones on its source, or may now serve another source's servers
+	// alone: either way their header copies are re-decided from itself.
+	if err := authclientbackfill.SyncServerDerivedCopies(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync mcp server auth client headers").LogError(ctx, logger)
 	}
 
 	// Remote- and tunneled-backed servers own the issuer minted with them.

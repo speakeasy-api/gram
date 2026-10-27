@@ -951,6 +951,11 @@ WITH used AS (
         OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
   WHERE a.organization_id = @organization_id::text
     AND a.deleted IS FALSE
+    -- Set to re-decide named clients as a source or its servers are written.
+    -- Every source of a named client is still returned, so the rule that
+    -- refuses a client shared across sources sees the same evidence.
+    AND (sqlc.narg('only_client_ids')::uuid[] IS NULL
+         OR a.remote_session_client_id = ANY(sqlc.narg('only_client_ids')::uuid[]))
 ), grouped AS (
   SELECT remote_session_client_id, credential_owner, source_kind, source_id,
          array_agg(DISTINCT server_id ORDER BY server_id) AS server_ids
@@ -1509,6 +1514,81 @@ JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id
 JOIN projects AS p ON p.id = r.project_id AND p.organization_id = @organization_id::text
 WHERE h.remote_mcp_server_id = @source_id::uuid
 ORDER BY h.id;
+
+-- name: ListOAuthClientsOfServers :many
+-- Every upstream OAuth client the given servers are associated with, deleted
+-- associations and tombstoned servers included, so a server that has just
+-- left a source or been deleted still names the clients whose copies have to
+-- be re-decided.
+SELECT DISTINCT a.remote_session_client_id
+FROM mcp_server_remote_session_clients AS a
+WHERE a.organization_id = @organization_id::text
+  AND a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+ORDER BY a.remote_session_client_id;
+
+-- name: ListEMAClientsOfServers :many
+-- Every live backfilled EMA client the given servers are linked to, with the
+-- live servers that offer it, so the rule that refuses a client shared across
+-- sources sees the same evidence as the backfill. The naming link is read
+-- deleted ones included, so a server that has just left a source or been
+-- deleted still names its clients; an empty server list then means the client
+-- serves nothing and carries no source's credentials.
+SELECT ac.id AS auth_client_id,
+       COALESCE(array_agg(DISTINCT ls.id) FILTER (WHERE ls.id IS NOT NULL), ARRAY[]::uuid[])::uuid[] AS mcp_server_ids
+FROM mcp_auth_clients AS ac
+JOIN mcp_server_auth_clients AS named
+  ON named.auth_client_id = ac.id
+ AND named.organization_id = ac.organization_id
+ AND named.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+LEFT JOIN mcp_server_auth_clients AS live
+  ON live.auth_client_id = ac.id
+ AND live.organization_id = ac.organization_id
+ AND live.deleted IS FALSE
+LEFT JOIN mcp_servers AS ls
+  ON ls.id = live.mcp_server_id
+ AND ls.project_id = live.project_id
+ AND ls.deleted IS FALSE
+WHERE ac.organization_id = @organization_id::text
+  AND ac.client_type = 'ema'
+  AND ac.source = 'backfill'
+  AND ac.deleted IS FALSE
+GROUP BY ac.id
+ORDER BY ac.id;
+
+-- name: LockTunneledCredentialSource :one
+-- LockRemoteCredentialSource for a tunneled source.
+SELECT t.id
+FROM tunneled_mcp_servers AS t
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = @organization_id::text
+WHERE t.id = @source_id::uuid
+FOR UPDATE OF t;
+
+-- name: ListTunneledSourceHeaderIDs :many
+-- ListRemoteSourceHeaderIDs for a tunneled source.
+SELECT h.id
+FROM tunneled_mcp_server_headers AS h
+JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = @organization_id::text
+WHERE h.tunneled_mcp_server_id = @source_id::uuid
+ORDER BY h.id;
+
+-- name: ListTunneledSourceServerIDs :many
+-- The servers backed by one tunneled source, as ListTunneledSourceServers
+-- reads them but without the upstream OAuth state, for the copy pass.
+SELECT s.id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+WHERE s.tunneled_mcp_server_id = @source_id::uuid
+ORDER BY s.id;
+
+-- name: ListRemoteSourceServerIDs :many
+-- The servers backed by one remote source, tombstoned ones included, so a
+-- source whose last server was deleted still names it for the copy pass.
+SELECT s.id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+WHERE s.remote_mcp_server_id = @source_id::uuid
+ORDER BY s.id;
 
 -- name: ListLiveBackfillClients :many
 -- The clients among those given, in the organization, that are live
@@ -2266,6 +2346,9 @@ UPDATE mcp_auth_clients SET deleted_at = clock_timestamp() WHERE id = @id;
 
 -- name: SoftDeleteRemoteHeaderFixture :exec
 UPDATE remote_mcp_server_headers SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: SoftDeleteTunneledSourceFixture :exec
+UPDATE tunneled_mcp_servers SET deleted_at = clock_timestamp() WHERE id = @id;
 
 -- name: RestoreRemoteHeaderFixture :exec
 UPDATE remote_mcp_server_headers SET deleted_at = NULL, updated_at = clock_timestamp() WHERE id = @id;

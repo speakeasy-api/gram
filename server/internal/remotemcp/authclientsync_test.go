@@ -381,3 +381,232 @@ func TestSyncRemoteSource_PreservesExplicitAuthClients(t *testing.T) {
 	_, live, _ = authClientState(t, ctx, ti, derivedClientID(t, ctx, created.RemoteMcpServer.ID, headerID, "static_credential"))
 	require.False(t, live, "the derived client was not retired with its header")
 }
+
+// A source's credential headers other than Authorization are copied onto the
+// auth clients of the upstream OAuth client its servers offer, and the serving
+// path sends those copies with the upstream request. Writing a header therefore
+// has to keep them in line: until it does, a deleted header keeps going out and
+// a rotated one goes out with its old value.
+
+// oauthFixture is an upstream OAuth client with the backfilled auth client the
+// serving path loads header copies from.
+type oauthFixture struct {
+	remoteSessionClientID uuid.UUID
+	authClientID          uuid.UUID
+}
+
+func seedOAuthClient(t *testing.T, ctx context.Context, ti *testInstance) oauthFixture {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	fixtures := authclientbackfill.New(ti.conn)
+	issuerID := uuid.New()
+	require.NoError(t, fixtures.SeedRemoteSessionIssuerFixture(ctx, authclientbackfill.SeedRemoteSessionIssuerFixtureParams{
+		ID:        issuerID,
+		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Slug:      "rsi-" + issuerID.String()[:8],
+		Issuer:    "https://issuer.example.com/" + issuerID.String()[:8],
+		Name:      pgtype.Text{String: "", Valid: false},
+	}))
+
+	clientID := uuid.New()
+	require.NoError(t, fixtures.SeedRemoteSessionClientFixture(ctx, authclientbackfill.SeedRemoteSessionClientFixtureParams{
+		ID:                      clientID,
+		ProjectID:               uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:          pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		RemoteSessionIssuerID:   issuerID,
+		ClientID:                "client-" + clientID.String()[:8],
+		CredentialOwner:         "subject",
+		TokenEndpointAuthMethod: pgtype.Text{String: "", Valid: false},
+	}))
+
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ClientType:            "remote_session",
+		Source:                "backfill",
+		RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	return oauthFixture{remoteSessionClientID: clientID, authClientID: authClientID}
+}
+
+// associate attaches an upstream OAuth client to a server, as the identity
+// flows do.
+func associate(t *testing.T, ctx context.Context, ti *testInstance, serverID string, oauth oauthFixture) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := authclientbackfill.New(ti.conn).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		McpServerID:           uuid.MustParse(serverID),
+		RemoteSessionClientID: oauth.remoteSessionClientID,
+	})
+	require.NoError(t, err)
+}
+
+// addAuxiliaryHeader sets a secret credential header other than Authorization
+// through the real management API.
+func addAuxiliaryHeader(t *testing.T, ctx context.Context, ti *testInstance, sourceID, name, value string) string {
+	t.Helper()
+
+	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(sourceID, name, func(p *gen.CreateServerHeaderPayload) {
+		p.Value = new(value)
+		p.IsSecret = new(true)
+	}))
+	require.NoError(t, err)
+
+	return header.ID
+}
+
+// copiedHeaders lists the live header copies on an auth client, which are
+// exactly what the serving path sends with the upstream request.
+func copiedHeaders(t *testing.T, ctx context.Context, ti *testInstance, authClientID uuid.UUID) []authclientbackfill.ListAuthClientHeadersFixtureRow {
+	t.Helper()
+
+	copies, err := authclientbackfill.New(ti.conn).ListAuthClientHeadersFixture(ctx, authClientID)
+	require.NoError(t, err)
+
+	return copies
+}
+
+func copiedHeaderNames(t *testing.T, ctx context.Context, ti *testInstance, authClientID uuid.UUID) []string {
+	t.Helper()
+
+	names := []string{}
+	for _, copied := range copiedHeaders(t, ctx, ti, authClientID) {
+		names = append(names, copied.Name)
+	}
+
+	return names
+}
+
+func TestCreateServerHeader_CopiesAuxiliaryHeaderOntoOAuthClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSourceAndServer(t, ctx, ti)
+	oauth := seedOAuthClient(t, ctx, ti)
+	associate(t, ctx, ti, created.McpServer.ID, oauth)
+
+	headerID := addAuxiliaryHeader(t, ctx, ti, created.RemoteMcpServer.ID, "X-Tenant-Key", "tenant-secret")
+
+	copies := copiedHeaders(t, ctx, ti, oauth.authClientID)
+	require.Len(t, copies, 1, "the new credential header was not copied onto the upstream client")
+	require.Equal(t, "X-Tenant-Key", copies[0].Name)
+	require.True(t, copies[0].IsSecret)
+	require.Equal(t, storedHeaderValue(t, ctx, ti, headerID), copies[0].Value)
+}
+
+// The Authorization header belongs to the source's own typed client, never to
+// the upstream OAuth client's, which already holds that credential.
+func TestCreateServerHeader_DoesNotCopyAuthorizationOntoOAuthClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSourceAndServer(t, ctx, ti)
+	oauth := seedOAuthClient(t, ctx, ti)
+	associate(t, ctx, ti, created.McpServer.ID, oauth)
+
+	addAuthorizationHeader(t, ctx, ti, created.RemoteMcpServer.ID, "Bearer upstream-token")
+	addAuxiliaryHeader(t, ctx, ti, created.RemoteMcpServer.ID, "X-Tenant-Key", "tenant-secret")
+
+	require.Equal(t, []string{"X-Tenant-Key"}, copiedHeaderNames(t, ctx, ti, oauth.authClientID))
+}
+
+func TestUpdateServerHeader_UpdatesOAuthClientCopy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSourceAndServer(t, ctx, ti)
+	oauth := seedOAuthClient(t, ctx, ti)
+	associate(t, ctx, ti, created.McpServer.ID, oauth)
+
+	headerID := addAuxiliaryHeader(t, ctx, ti, created.RemoteMcpServer.ID, "X-Tenant-Key", "first-secret")
+	before := copiedHeaders(t, ctx, ti, oauth.authClientID)
+	require.Len(t, before, 1)
+
+	_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(headerID, "X-Tenant-Key", func(p *gen.UpdateServerHeaderPayload) {
+		p.Value = new("rotated-secret")
+		p.IsSecret = new(true)
+	}))
+	require.NoError(t, err)
+
+	after := copiedHeaders(t, ctx, ti, oauth.authClientID)
+	require.Len(t, after, 1, "the copy was retired instead of updated")
+	require.NotEqual(t, before[0].Value, after[0].Value, "the upstream client still sends the header's old value")
+	require.Equal(t, storedHeaderValue(t, ctx, ti, headerID), after[0].Value)
+}
+
+func TestDeleteServerHeader_RetiresOAuthClientCopy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSourceAndServer(t, ctx, ti)
+	oauth := seedOAuthClient(t, ctx, ti)
+	associate(t, ctx, ti, created.McpServer.ID, oauth)
+
+	headerID := addAuxiliaryHeader(t, ctx, ti, created.RemoteMcpServer.ID, "X-Tenant-Key", "tenant-secret")
+	require.Len(t, copiedHeaders(t, ctx, ti, oauth.authClientID), 1)
+
+	require.NoError(t, ti.service.DeleteServerHeader(ctx, &gen.DeleteServerHeaderPayload{
+		ID:               headerID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	}))
+
+	require.Empty(t, copiedHeaderNames(t, ctx, ti, oauth.authClientID),
+		"the deleted header is still sent by the upstream client")
+}
+
+func TestDeleteServer_RetiresOAuthClientCopies(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSourceAndServer(t, ctx, ti)
+	oauth := seedOAuthClient(t, ctx, ti)
+	associate(t, ctx, ti, created.McpServer.ID, oauth)
+
+	addAuxiliaryHeader(t, ctx, ti, created.RemoteMcpServer.ID, "X-Tenant-Key", "tenant-secret")
+	require.Len(t, copiedHeaders(t, ctx, ti, oauth.authClientID), 1)
+
+	require.NoError(t, ti.service.DeleteServer(ctx, &gen.DeleteServerPayload{
+		ID:               created.RemoteMcpServer.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	}))
+
+	require.Empty(t, copiedHeaderNames(t, ctx, ti, oauth.authClientID),
+		"the deleted source's headers are still sent by the upstream client")
+}
+
+// One upstream OAuth client shared by servers on two sources carries neither
+// source's headers: copying them would send one source's credentials from the
+// other's servers.
+func TestCreateServerHeader_RefusesCopyOntoOAuthClientSharedAcrossSources(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	first := createSourceAndServer(t, ctx, ti)
+	second := createSourceAndServer(t, ctx, ti)
+	oauth := seedOAuthClient(t, ctx, ti)
+	associate(t, ctx, ti, first.McpServer.ID, oauth)
+
+	addAuxiliaryHeader(t, ctx, ti, first.RemoteMcpServer.ID, "X-Tenant-Key", "tenant-secret")
+	require.Len(t, copiedHeaders(t, ctx, ti, oauth.authClientID), 1, "the sole source's header is carried")
+
+	// A second server on another source now offers the same upstream client.
+	associate(t, ctx, ti, second.McpServer.ID, oauth)
+	addAuxiliaryHeader(t, ctx, ti, second.RemoteMcpServer.ID, "X-Other-Key", "other-secret")
+
+	require.Empty(t, copiedHeaderNames(t, ctx, ti, oauth.authClientID),
+		"a client shared across sources carries one source's credentials")
+}
