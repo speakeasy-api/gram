@@ -1930,6 +1930,10 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 		return nil, oops.E(oops.CodeInvalid, err, "invalid window").LogError(ctx, s.logger)
 	}
 
+	if s.findingsCH == nil {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "risk user breakdown requires the ClickHouse findings store").LogError(ctx, s.logger)
+	}
+
 	policyIDs, err := s.enabledPolicyIDs(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve enabled risk policies").LogError(ctx, s.logger)
@@ -1943,9 +1947,6 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 			Categories:     []*gen.RiskOverviewCategory{},
 			Rules:          []*gen.RiskRuleBreakdownEntry{},
 		}, nil
-	}
-	if s.findingsCH == nil {
-		return nil, oops.E(oops.CodeNotImplemented, nil, "risk user breakdown requires the ClickHouse findings store").LogError(ctx, s.logger)
 	}
 
 	chWindow := chrepo.RiskOverviewWindowParams{

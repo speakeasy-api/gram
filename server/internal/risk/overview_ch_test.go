@@ -380,9 +380,13 @@ func TestGetRiskUserBreakdownCountsOnlyLiveUserFindings(t *testing.T) {
 	shadow := finding(active.ID, "gitleaks", "secret.shadow", targetUserID)
 	shadow.Shadow = true
 
-	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+	dismissedLater := finding(active.ID, "gitleaks", "secret.dismissed_later", targetUserID)
+
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+		dismissedLater,
 		secret,
-		secret,
+		secret, // a redelivered copy counts once
 		financial,
 		dismissed,
 		excluded,
@@ -391,6 +395,11 @@ func TestGetRiskUserBreakdownCountsOnlyLiveUserFindings(t *testing.T) {
 		finding(disabled.ID, "gitleaks", "secret.disabled", targetUserID),
 		finding(deleted.ID, "gitleaks", "secret.deleted", targetUserID),
 	}))
+
+	// Fresh timestamp: the dismissal copy must sort after the finding copy.
+	dismissAt := time.Now().UTC()
+	require.NoError(t, chQueries.AppendFalsePositiveSuppression(ctx, orgID, projectID.String(),
+		chrepo.FormatCHTime(dismissAt), chrepo.FormatCHTime(dismissAt.Add(time.Microsecond)), "", []uuid.UUID{dismissedLater.ID}))
 
 	deletedPolicyID, err := uuid.Parse(deleted.ID)
 	require.NoError(t, err)

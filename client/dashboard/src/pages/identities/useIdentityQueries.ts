@@ -314,9 +314,8 @@ export type IdentityRisk = {
 };
 
 /**
- * Findings by category and rule across every agent id. The endpoint takes one
- * id and matches it case-insensitively, so ids differing only in case are
- * asked once; a finding then belongs to one id and summing counts it once.
+ * Findings by category and rule across every agent id. The endpoint matches
+ * one id case-insensitively, so each case-folded id is asked once.
  */
 export function useIdentityRisk(
   identity: IdentityModel,

@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/Masterminds/squirrel"
+
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // RiskOverviewWindowParams scopes every overview read to one tenant and a
@@ -43,9 +45,12 @@ func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.Se
 }
 
 // overviewFindingsWhere is overviewFindings with extra conditions applied
-// before the dedup. They must only test columns that every copy of an id
-// shares (suppression copies project them from the copy they supersede), or
-// a dismissal copy could be filtered out while its finding copy survives.
+// before the dedup. They must only test columns every copy of an id shares,
+// or a dismissal copy could be filtered out while its finding copy survives.
+// Suppression copies project these from the copy they supersede, and the
+// attribution columns hold as long as the writer stamps the same attribution
+// on a redelivered finding, the same assumption the findings list's user
+// filter makes.
 func overviewFindingsWhere(p RiskOverviewWindowParams, preDedup squirrel.And, columns ...string) squirrel.SelectBuilder {
 	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn").
 		From("risk_findings").
@@ -131,29 +136,29 @@ func (q *Queries) ListRiskOverviewTopRules(ctx context.Context, p RiskOverviewWi
 }
 
 // queryRuleCounts runs a (rule_id, source, findings) aggregate and scans its
-// rows. what names the read in error messages.
-func (q *Queries) queryRuleCounts(ctx context.Context, what string, sb squirrel.SelectBuilder) ([]RiskOverviewRuleCount, error) {
+// rows. readName labels the read in error messages.
+func (q *Queries) queryRuleCounts(ctx context.Context, readName string, sb squirrel.SelectBuilder) ([]RiskOverviewRuleCount, error) {
 	query, args, err := sb.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("build %s query: %w", what, err)
+		return nil, fmt.Errorf("build %s query: %w", readName, err)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query %s: %w", what, err)
+		return nil, fmt.Errorf("query %s: %w", readName, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
 
 	var out []RiskOverviewRuleCount
 	for rows.Next() {
 		var row RiskOverviewRuleCount
 		if err := rows.Scan(&row.RuleID, &row.Source, &row.Findings); err != nil {
-			return nil, fmt.Errorf("scan %s row: %w", what, err)
+			return nil, fmt.Errorf("scan %s row: %w", readName, err)
 		}
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read %s: %w", what, err)
+		return nil, fmt.Errorf("read %s: %w", readName, err)
 	}
 
 	return out, nil
