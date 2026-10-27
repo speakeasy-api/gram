@@ -263,6 +263,7 @@ type Service struct {
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
+	bindingRefresh     *remotesessions.BindingRefreshAttempts
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
 	// validationLimiter paces verifies per consent challenge; nil without Redis.
@@ -557,6 +558,7 @@ func NewService(
 		authClientPermitter:       nil,
 		authEnforcement:           authenforcement.NewGate(db),
 		consentBindings:           nil,
+		bindingRefresh:            nil,
 		logger:                    logger,
 		tracer:                    tracer,
 		metrics:                   metrics,
@@ -883,6 +885,10 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 		return err //nolint:wrapcheck // the manager's errors already carry the response
 	}
 	if result.Grant != nil {
+		if err := s.recordConnectionPopupGrant(r.Context(), *result.Grant); err != nil {
+			return err
+		}
+
 		if deadline := s.verifyRemoteGrant(r.Context(), *result.Grant); !deadline.IsZero() {
 			redirect, parseErr := url.Parse(result.RedirectURL)
 			if parseErr != nil {

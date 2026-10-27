@@ -90,6 +90,7 @@ type Service struct {
 	// which is what ties this one link to customer_managed_encryption_keys.
 	productFeatures   *productfeatures.Client
 	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID, bool) error
+	bindingRefresh    *BindingRefreshAttempts
 
 	// featureFlags gates rollouts; nil reads every flag as off.
 	featureFlags feature.Provider
@@ -125,6 +126,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 
 	return &Service{
 		bindingAuthorizer: nil,
+		bindingRefresh:    nil,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		logger:            logger,
 		db:                db,

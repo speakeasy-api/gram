@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // HandleFirstPartyConnect is the chi handler at
@@ -73,6 +75,23 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	baseURL := s.BaseURLForRequest(r)
 	flowID := uuid.NewString()
 	challengeID := uuid.NewString()
+	attemptID := r.URL.Query().Get("binding_refresh_attempt")
+	if attemptID != "" {
+		if s.bindingRefresh == nil {
+			return oops.C(oops.CodeUnavailable)
+		}
+		if err := s.bindingRefresh.Start(ctx, attemptID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID); err != nil {
+			return fmt.Errorf("start attachment refresh: %w", err)
+		}
+	}
+	reauthenticateClientID := uuid.Nil
+	if requested := r.URL.Query().Get("reauthenticate_client_id"); requested != "" {
+		parsed, err := uuid.Parse(requested)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "invalid reconnect client")
+		}
+		reauthenticateClientID = parsed
+	}
 	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
@@ -98,9 +117,11 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		CSRFToken:                csrfToken,
 
 		// Subject is stamped by HandleIDPCallback from authoritative IDP claims.
-		Subject:    nil,
-		CreatedAt:  time.Now(),
-		FirstParty: true,
+		Subject:                 nil,
+		CreatedAt:               time.Now(),
+		FirstParty:              true,
+		BindingRefreshAttemptID: attemptID,
+		ReauthenticateClientID:  reauthenticateClientID,
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
 		FocusServer:     focusServer,
@@ -145,4 +166,8 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	logger.InfoContext(ctx, "started first-party connect flow", attr.SlogOAuthFlowID(flowID))
 	http.Redirect(w, r, idpURL.String(), http.StatusFound)
 	return nil
+}
+
+func (s *Service) SetBindingRefreshAttempts(attempts *remotesessions.BindingRefreshAttempts) {
+	s.bindingRefresh = attempts
 }

@@ -391,14 +391,13 @@ export function ServerAccounts({
     ).values(),
   ];
   const [pending, setPending] = useState(false);
-  const refreshInFlight = useRef(false);
-  const [refreshing, setRefreshing] = useState<{
-    bindingId: string;
-    clientId: string;
-    server: KeyServer;
-    priorSessions: Map<string, string>;
-    returned: boolean;
-  }>();
+  const refreshAttempt = useRef<
+    | {
+        attemptId: string;
+        server: KeyServer;
+      }
+    | undefined
+  >(undefined);
   const [error, setError] = useState(false);
   const attachBinding = useRemoteSessionsAttachBindingMutation();
   const detachBinding = useRemoteSessionsDetachBindingMutation();
@@ -467,11 +466,27 @@ export function ServerAccounts({
   const refetchAccounts = useRef(query.refetch);
   refetchAccounts.current = query.refetch;
   const connectionPopup = useOAuthPopup(async (reason) => {
+    const attempt =
+      reason === "popup-closed" ? refreshAttempt.current : undefined;
+    if (attempt) {
+      refreshAttempt.current = undefined;
+      setPending(true);
+      try {
+        await sdk.remoteSessions.completeBindingRefresh({
+          gramProject: attempt.server.projectSlug,
+          completeBindingRefreshRequestBody: {
+            principalId: agent.id,
+            userSessionIssuerId: attempt.server.issuerId!,
+            attemptId: attempt.attemptId,
+          },
+        });
+      } catch {
+        setError(true);
+      } finally {
+        setPending(false);
+      }
+    }
     await refetchAccounts.current();
-    if (reason === "popup-closed")
-      setRefreshing((current) =>
-        current ? { ...current, returned: true } : current,
-      );
     await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
   });
   // A row earns a card when it asks for an account, or when it still holds a
@@ -504,88 +519,30 @@ export function ServerAccounts({
   useEffect(() => {
     onReady(ready);
   }, [ready, onReady]);
-  useEffect(() => {
-    if (
-      !refreshing ||
-      !refreshing.returned ||
-      !canManage ||
-      refreshInFlight.current ||
-      pending ||
-      error ||
-      !query.isSuccess ||
-      query.isFetching
-    )
-      return;
-    const row = query.data.find(
-      (row) => row.server.id === refreshing.server.id,
-    );
-    const renewed = row?.candidates.find(
-      (candidate) =>
-        candidate.remoteSessionClientId === refreshing.clientId &&
-        connectionLifetime(candidate).kind !== "ended" &&
-        refreshing.priorSessions.get(candidate.id) !==
-          JSON.stringify([
-            candidate.updatedAt,
-            candidate.accessExpiresAt,
-            candidate.refreshExpiresAt,
-            candidate.authorizationExpiresAt,
-          ]),
-    );
-    if (!renewed) {
-      // Returning without a changed grant is a cancellation, not consent to
-      // attach a connection acquired later by an unrelated sign-in.
-      setRefreshing(undefined);
-      return;
-    }
-    refreshInFlight.current = true;
-    setPending(true);
-    const request = {
-      gramProject: refreshing.server.projectSlug,
-      principalId: agent.id,
-      userSessionIssuerId: refreshing.server.issuerId!,
-    };
-    void (async () => {
+  function reauthenticate(server: KeyServer, bindingId: string): void {
+    setError(false);
+    connectionPopup.open(async () => {
+      setPending(true);
       try {
-        await sdk.remoteSessions.detachBinding({
-          gramProject: request.gramProject,
-          detachBindingRequestBody: {
-            principalId: request.principalId,
-            userSessionIssuerId: request.userSessionIssuerId,
-            id: refreshing.bindingId,
+        const { attemptId } = await sdk.remoteSessions.beginBindingRefresh({
+          gramProject: server.projectSlug,
+          beginBindingRefreshRequestBody: {
+            principalId: agent.id,
+            userSessionIssuerId: server.issuerId!,
+            bindingId,
           },
         });
-        await sdk.remoteSessions.attachBinding({
-          gramProject: request.gramProject,
-          attachBindingRequestBody: {
-            principalId: request.principalId,
-            userSessionIssuerId: request.userSessionIssuerId,
-            remoteSessionId: renewed.id,
-          },
-        });
-        setRefreshing(undefined);
-        await refetchAccounts.current();
-        await queryClient.invalidateQueries({
-          queryKey: ["owner-connections"],
-        });
-      } catch {
+        const url = new URL(server.connectUrl!);
+        url.searchParams.set("binding_refresh_attempt", attemptId);
+        refreshAttempt.current = { attemptId, server };
+        return url.toString();
+      } catch (cause) {
         setError(true);
-      } finally {
-        refreshInFlight.current = false;
         setPending(false);
+        throw cause;
       }
-    })();
-  }, [
-    refreshing,
-    canManage,
-    pending,
-    error,
-    query.isSuccess,
-    query.isFetching,
-    query.data,
-    sdk,
-    agent.id,
-    queryClient,
-  ]);
+    });
+  }
   async function attach(server: KeyServer, sessionId: string) {
     setPending(true);
     setError(false);
@@ -707,12 +664,19 @@ export function ServerAccounts({
                 <div
                   key={binding.id}
                   className={cn(
-                    "flex items-center gap-3 border p-3",
-                    locked && "bg-muted/40 text-muted-foreground",
-                    expired && "border-warning-softest bg-warning-softest/30",
+                    "flex flex-wrap items-center gap-3",
+                    compact ? "py-1" : "border p-3",
+                    locked && "text-muted-foreground",
+                    !compact && locked && "bg-muted/40",
+                    !compact &&
+                      expired &&
+                      "border-warning-softest bg-warning-softest/30",
                   )}
                 >
-                  <Avatar title={label}>
+                  <Avatar
+                    title={label}
+                    className={compact ? "hidden" : undefined}
+                  >
                     <AvatarImage
                       src={
                         mine
@@ -729,7 +693,14 @@ export function ServerAccounts({
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <Text small>
+                    <Text
+                      small
+                      muted={locked}
+                      className="flex items-center gap-1.5 text-sm"
+                    >
+                      {locked && (
+                        <LockKeyhole className="size-3.5" aria-hidden="true" />
+                      )}
                       {mine ? "Your connection" : `${label}'s connection`}
                     </Text>
                     <Text
@@ -737,8 +708,8 @@ export function ServerAccounts({
                       muted={!expired}
                       className={
                         expired
-                          ? "text-default-warning flex items-center gap-1.5"
-                          : undefined
+                          ? "text-default-warning mt-1 flex items-center gap-1.5 text-xs"
+                          : "mt-1 text-xs"
                       }
                     >
                       {expired && (
@@ -756,24 +727,7 @@ export function ServerAccounts({
                       size="sm"
                       disabled={pending || query.isFetching}
                       onClick={() => {
-                        if (connectionPopup.open(row.server.connectUrl!))
-                          setRefreshing({
-                            bindingId: binding.id,
-                            clientId: binding.remoteSessionClientId,
-                            server: row.server,
-                            returned: false,
-                            priorSessions: new Map(
-                              row.candidates.map((candidate) => [
-                                candidate.id,
-                                JSON.stringify([
-                                  candidate.updatedAt,
-                                  candidate.accessExpiresAt,
-                                  candidate.refreshExpiresAt,
-                                  candidate.authorizationExpiresAt,
-                                ]),
-                              ]),
-                            ),
-                          });
+                        reauthenticate(row.server, binding.id);
                       }}
                     >
                       Reauthenticate

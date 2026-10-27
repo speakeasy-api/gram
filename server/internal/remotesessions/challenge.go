@@ -81,6 +81,8 @@ import (
 // RouteBase is the surface the parent challenge was minted under. Drives
 // the post-callback bounce to /<RouteBase>/{slug}/connect.
 type ParentChallenge struct {
+	// ConnectionPopup opts this leg into the dashboard’s explicit reconnect completion.
+	ConnectionPopup     bool
 	ID                  string
 	ProjectID           uuid.UUID
 	OrganizationID      string
@@ -125,6 +127,8 @@ type ParentChallenge struct {
 // `state` parameter sent to the upstream provider. ~10 minute TTL — same
 // budget as the parent AuthnChallengeState.
 type RemoteLoginState struct {
+	// ConnectionPopup preserves the server-owned opt-in through upstream redirects and retries.
+	ConnectionPopup   bool      `json:"connection_popup,omitempty"`
 	ID                string    `json:"id"`
 	ParentChallengeID string    `json:"parent_challenge_id"`
 	ProjectID         uuid.UUID `json:"project_id"`
@@ -192,6 +196,7 @@ type RemoteLoginState struct {
 // callback can mint a sibling leg for the same login.
 func (s RemoteLoginState) parent() ParentChallenge {
 	return ParentChallenge{
+		ConnectionPopup:     s.ConnectionPopup,
 		ID:                  s.ParentChallengeID,
 		ProjectID:           s.ProjectID,
 		OrganizationID:      s.OrganizationID,
@@ -293,6 +298,8 @@ type ChallengeManager struct {
 // RemoteGrant is a grant the remote login callback committed, keyed to the
 // consent challenge it belongs to.
 type RemoteGrant struct {
+	// ConnectionPopup opts the callback into exact dashboard reconnect handling.
+	ConnectionPopup bool
 	// ParentChallengeID is the consent challenge the login was started from.
 	ParentChallengeID string
 	// UserSessionIssuerID is the issuer that challenge was minted for.
@@ -304,6 +311,8 @@ type RemoteGrant struct {
 	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact stored credential committed by the callback.
 	RemoteSessionID        uuid.UUID
 	RemoteSessionUpdatedAt time.Time
+	// GrantGeneration pins the authorization decision even if the same row is reauthorized later.
+	GrantGeneration int64
 }
 
 // RemoteLoginResult is where the callback sends the browser next.
@@ -1379,6 +1388,7 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 
 	state := RemoteLoginState{
+		ConnectionPopup:       parent.ConnectionPopup,
 		ID:                    stateID,
 		ParentChallengeID:     parent.ID,
 		ProjectID:             parent.ProjectID,
@@ -1869,12 +1879,14 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	return RemoteLoginResult{
 		RedirectURL: redirect,
 		Grant: &RemoteGrant{
+			ConnectionPopup:        state.ConnectionPopup,
 			ParentChallengeID:      state.ParentChallengeID,
 			UserSessionIssuerID:    state.UserSessionIssuerID,
 			RemoteSessionClientID:  client.ID,
 			Subject:                *state.Subject,
 			RemoteSessionID:        storedSession.ID,
 			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
+			GrantGeneration:        storedSession.GrantGeneration,
 		},
 	}, nil
 }

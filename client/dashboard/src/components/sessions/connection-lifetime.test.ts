@@ -102,9 +102,7 @@ describe("connectionLifetime", () => {
       now,
     );
     expect(lifetime).toEqual({ kind: "refreshes" });
-    expect(connectionLifetimeLabel(lifetime, now)).toBe(
-      "Refreshes itself, no end date",
-    );
+    expect(connectionLifetimeLabel(lifetime, now)).toBe("Never expires");
   });
 
   it("ends a refreshing connection at its refresh token's expiry", () => {
@@ -121,9 +119,7 @@ describe("connectionLifetime", () => {
       at: hours(24 * 30),
       soon: false,
     });
-    expect(connectionLifetimeLabel(lifetime, now)).toMatch(
-      /^Refreshes itself until /,
-    );
+    expect(connectionLifetimeLabel(lifetime, now)).toMatch(/^Expires /);
   });
 
   it("ends a connection without a refresh token at its access expiry", () => {
@@ -134,7 +130,7 @@ describe("connectionLifetime", () => {
     expect(lifetime).toEqual({ kind: "expires", at: hours(5), soon: true });
     expect(lifetimeEndingSoon(lifetime)).toBe(true);
     expect(connectionLifetimeLabel(lifetime, now)).toMatch(
-      /^Expires .* \(in about 5 hours\) and does not refresh$/,
+      /^Expires .* \(in about 5 hours\)$/,
     );
   });
 

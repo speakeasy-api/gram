@@ -11725,6 +11725,52 @@ func (q *Queries) LockPreparationSubmission(ctx context.Context, bindingKey stri
 	return err
 }
 
+const lockPrincipalBindingForRefresh = `-- name: LockPrincipalBindingForRefresh :one
+SELECT id, project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, issuer_attachment_scope, client_attachment_scope, grant_generation, attached_by_subject_id, revoked_at, created_at, updated_at FROM principal_remote_session_bindings
+WHERE id = $1 AND principal_id = $2 AND project_id = $3
+  AND organization_id = $4 AND user_session_issuer_id = $5
+  AND attached_by_subject_id = $6 AND revoked_at IS NULL
+FOR UPDATE
+`
+
+type LockPrincipalBindingForRefreshParams struct {
+	ID                  uuid.UUID
+	PrincipalID         uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          string
+}
+
+func (q *Queries) LockPrincipalBindingForRefresh(ctx context.Context, arg LockPrincipalBindingForRefreshParams) (PrincipalRemoteSessionBinding, error) {
+	row := q.db.QueryRow(ctx, lockPrincipalBindingForRefresh,
+		arg.ID,
+		arg.PrincipalID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.SubjectUrn,
+	)
+	var i PrincipalRemoteSessionBinding
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.PrincipalID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.RemoteSessionID,
+		&i.IssuerAttachmentScope,
+		&i.ClientAttachmentScope,
+		&i.GrantGeneration,
+		&i.AttachedBySubjectID,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const lockPrincipalRemoteSessionBindings = `-- name: LockPrincipalRemoteSessionBindings :many
 SELECT id
 FROM principal_remote_session_bindings
@@ -11957,6 +12003,63 @@ func (q *Queries) LockRemoteSessionClientsBoundToUserSessionIssuer(ctx context.C
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockRemoteSessionGrantForBindingRefresh = `-- name: LockRemoteSessionGrantForBindingRefresh :one
+SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM remote_sessions
+WHERE id = $1 AND remote_session_client_id = $2
+  AND subject_urn = $3 AND grant_generation = $4
+  AND NOT deleted
+  AND (authorization_expires_at IS NULL OR authorization_expires_at > now())
+  AND (access_expires_at IS NULL OR access_expires_at > now() OR (refresh_token_encrypted IS NOT NULL AND (refresh_expires_at IS NULL OR refresh_expires_at > now())))
+FOR UPDATE
+`
+
+type LockRemoteSessionGrantForBindingRefreshParams struct {
+	ID                    uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	SubjectUrn            urn.SessionSubject
+	GrantGeneration       int64
+}
+
+func (q *Queries) LockRemoteSessionGrantForBindingRefresh(ctx context.Context, arg LockRemoteSessionGrantForBindingRefreshParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, lockRemoteSessionGrantForBindingRefresh,
+		arg.ID,
+		arg.RemoteSessionClientID,
+		arg.SubjectUrn,
+		arg.GrantGeneration,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.GrantGeneration,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const lockRemoteSessionIssuerForClientBinding = `-- name: LockRemoteSessionIssuerForClientBinding :exec

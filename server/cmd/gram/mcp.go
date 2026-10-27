@@ -424,6 +424,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		}
 		return nil
 	})
+	bindingRefreshAttempts := remotesessions.NewBindingRefreshAttempts(logger, cache.NewRedisCacheAdapter(redisClient))
+	remoteSessionsService.SetBindingRefreshAttempts(bindingRefreshAttempts)
+	mcpService.SetBindingRefreshAttempts(bindingRefreshAttempts)
 	mcpService.SetConsentBindingService(remoteSessionsService)
 	mcpService.StartRemoteSessionRecheck(ctx)
 

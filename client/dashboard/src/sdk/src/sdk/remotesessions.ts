@@ -3,7 +3,9 @@
  */
 
 import { remoteSessionsAttachBinding } from "../funcs/remoteSessionsAttachBinding.js";
+import { remoteSessionsBeginBindingRefresh } from "../funcs/remoteSessionsBeginBindingRefresh.js";
 import { remoteSessionsCommitServerIdentityConfiguration } from "../funcs/remoteSessionsCommitServerIdentityConfiguration.js";
+import { remoteSessionsCompleteBindingRefresh } from "../funcs/remoteSessionsCompleteBindingRefresh.js";
 import { remoteSessionsCount } from "../funcs/remoteSessionsCount.js";
 import { remoteSessionsDetachBinding } from "../funcs/remoteSessionsDetachBinding.js";
 import { remoteSessionsDetachServerClientAssociation } from "../funcs/remoteSessionsDetachServerClientAssociation.js";
@@ -13,6 +15,8 @@ import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.
 import { remoteSessionsListServerClientAssociations } from "../funcs/remoteSessionsListServerClientAssociations.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { BindingRefreshAttempt } from "../models/components/bindingrefreshattempt.js";
+import { BindingRefreshResult } from "../models/components/bindingrefreshresult.js";
 import { CommitServerIdentityConfigurationResult } from "../models/components/commitserveridentityconfigurationresult.js";
 import { CountRemoteSessionsResult } from "../models/components/countremotesessionsresult.js";
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
@@ -24,9 +28,17 @@ import {
   AttachBindingSecurity,
 } from "../models/operations/attachbinding.js";
 import {
+  BeginBindingRefreshRequest,
+  BeginBindingRefreshSecurity,
+} from "../models/operations/beginbindingrefresh.js";
+import {
   CommitServerIdentityConfigurationRequest,
   CommitServerIdentityConfigurationSecurity,
 } from "../models/operations/commitserveridentityconfiguration.js";
+import {
+  CompleteBindingRefreshRequest,
+  CompleteBindingRefreshSecurity,
+} from "../models/operations/completebindingrefresh.js";
 import {
   CountRemoteSessionsRequest,
   CountRemoteSessionsSecurity,
@@ -84,6 +96,25 @@ export class RemoteSessions extends ClientSDK {
   }
 
   /**
+   * beginBindingRefresh remoteSessions
+   *
+   * @remarks
+   * Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.
+   */
+  async beginBindingRefresh(
+    request: BeginBindingRefreshRequest,
+    security?: BeginBindingRefreshSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<BindingRefreshAttempt> {
+    return unwrapAsync(remoteSessionsBeginBindingRefresh(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * commitServerIdentityConfiguration remoteSessions
    *
    * @remarks
@@ -95,6 +126,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CommitServerIdentityConfigurationResult> {
     return unwrapAsync(remoteSessionsCommitServerIdentityConfiguration(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * completeBindingRefresh remoteSessions
+   *
+   * @remarks
+   * Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.
+   */
+  async completeBindingRefresh(
+    request: CompleteBindingRefreshRequest,
+    security?: CompleteBindingRefreshSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<BindingRefreshResult> {
+    return unwrapAsync(remoteSessionsCompleteBindingRefresh(
       this,
       request,
       security,

@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   bindings: vi.fn(),
   attach: vi.fn(),
   detach: vi.fn(),
+  beginRefresh: vi.fn(),
+  completeRefresh: vi.fn(),
   userId: "user_example",
 }));
 vi.mock("@/contexts/Auth", () => ({
@@ -45,6 +47,8 @@ vi.mock("@/contexts/Sdk", () => ({
     mcpEndpoints: { list: mocks.endpoints },
     remoteSessionClients: { list: mocks.clients },
     remoteSessions: {
+      beginBindingRefresh: mocks.beginRefresh,
+      completeBindingRefresh: mocks.completeRefresh,
       list: async (request: { principalId: string }) => [
         { result: { items: await mocks.candidates(request.principalId) } },
       ],
@@ -154,9 +158,12 @@ function setup(
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.beginRefresh.mockResolvedValue({ attemptId: "attempt_example" });
+  mocks.completeRefresh.mockResolvedValue({ completed: false });
   vi.spyOn(window, "open").mockReturnValue({
     location: { href: "about:blank" },
     focus: vi.fn(),
+    close: vi.fn(),
     closed: false,
     opener: window,
   } as unknown as Window);
@@ -493,13 +500,9 @@ describe("Agent key MCP servers", () => {
       expect(ready).not.toHaveBeenCalledWith(true);
     },
   );
-  it("says when an account stops working and that it does not refresh", async () => {
+  it("says when an account expires", async () => {
     setup(1, [server]);
-    expect(
-      await screen.findByText(
-        /^Expires .* \(in 3 days\) and does not refresh$/,
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText(/^Expires .* \(in 3 days\)$/)).toBeTruthy();
   });
   it("allows an authorized editor to assign their own connection", async () => {
     mocks.userId = "user_manager";
@@ -580,6 +583,22 @@ describe("Agent key MCP servers", () => {
         "speakeasy-connection",
         "popup=yes,width=560,height=720",
       );
+      await waitFor(() =>
+        expect(mocks.beginRefresh).toHaveBeenCalledWith({
+          gramProject: server.projectSlug,
+          beginBindingRefreshRequestBody: {
+            principalId: agent.id,
+            userSessionIssuerId: server.issuerId,
+            bindingId: "expired_binding",
+          },
+        }),
+      );
+      const opened = vi.mocked(window.open).mock.results[0]?.value as Window;
+      expect(
+        new URL(opened.location.href).searchParams.get(
+          "binding_refresh_attempt",
+        ),
+      ).toBe("attempt_example");
       expect(screen.getByText(/^Expired ·/)).toBeTruthy();
       expect(mocks.detach).not.toHaveBeenCalled();
       const callsBeforeFocus = mocks.candidates.mock.calls.length;
@@ -598,7 +617,7 @@ describe("Agent key MCP servers", () => {
         accessExpiresAt: new Date(Date.now() + 3_600_000),
       };
       mocks.candidates.mockResolvedValue([renewed]);
-      mocks.attach.mockImplementation(async () => {
+      mocks.completeRefresh.mockImplementation(async () => {
         mocks.bindings.mockResolvedValue([
           {
             id: "renewed_binding",
@@ -614,15 +633,22 @@ describe("Agent key MCP servers", () => {
       popup.closed = true;
       fireEvent(window, new Event("focus"));
       await waitFor(() =>
-        expect(mocks.attach).toHaveBeenCalledWith(agent.id, renewed.id),
+        expect(mocks.completeRefresh).toHaveBeenCalledWith({
+          gramProject: server.projectSlug,
+          completeBindingRefreshRequestBody: {
+            principalId: agent.id,
+            userSessionIssuerId: server.issuerId,
+            attemptId: "attempt_example",
+          },
+        }),
       );
-      expect(mocks.detach).toHaveBeenCalledWith(agent.id, "expired_binding");
-      expect(mocks.attach).toHaveBeenCalledTimes(1);
-      expect(mocks.detach).toHaveBeenCalledTimes(1);
+      expect(mocks.completeRefresh).toHaveBeenCalledTimes(1);
+      expect(mocks.attach).not.toHaveBeenCalled();
+      expect(mocks.detach).not.toHaveBeenCalled();
       await waitFor(() => expect(ready).toHaveBeenCalledWith(true));
     },
   );
-  it("does not replace an expired binding with a pre-existing grant before OAuth completes", async () => {
+  it("does not attach concurrent or later unrelated grants when the popup has no completion receipt", async () => {
     const old = {
       id: "old",
       subjectUrn: "user:user_example",
@@ -649,7 +675,10 @@ describe("Agent key MCP servers", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Reauthenticate" }),
     );
+    await waitFor(() => expect(mocks.beginRefresh).toHaveBeenCalledTimes(1));
     expect(mocks.attach).not.toHaveBeenCalled();
+    // An unrelated login changed the candidate while this popup was open.
+    mocks.candidates.mockResolvedValue([{ ...live, id: "concurrent_login" }]);
     const calls = mocks.candidates.mock.calls.length;
     const popup = vi.mocked(window.open).mock.results[0]?.value as {
       closed: boolean;
@@ -669,6 +698,7 @@ describe("Agent key MCP servers", () => {
       ).toBe(false),
     );
     expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.completeRefresh).toHaveBeenCalledTimes(1);
     mocks.candidates.mockResolvedValue([
       { ...live, id: "unrelated_later_login" },
     ]);

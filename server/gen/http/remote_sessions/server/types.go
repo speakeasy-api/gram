@@ -14,6 +14,22 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BeginBindingRefreshRequestBody is the type of the "remoteSessions" service
+// "beginBindingRefresh" endpoint HTTP request body.
+type BeginBindingRefreshRequestBody struct {
+	PrincipalID         *string `form:"principal_id,omitempty" json:"principal_id,omitempty" xml:"principal_id,omitempty"`
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	BindingID           *string `form:"binding_id,omitempty" json:"binding_id,omitempty" xml:"binding_id,omitempty"`
+}
+
+// CompleteBindingRefreshRequestBody is the type of the "remoteSessions"
+// service "completeBindingRefresh" endpoint HTTP request body.
+type CompleteBindingRefreshRequestBody struct {
+	PrincipalID         *string `form:"principal_id,omitempty" json:"principal_id,omitempty" xml:"principal_id,omitempty"`
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	AttemptID           *string `form:"attempt_id,omitempty" json:"attempt_id,omitempty" xml:"attempt_id,omitempty"`
+}
+
 // AttachBindingRequestBody is the type of the "remoteSessions" service
 // "attachBinding" endpoint HTTP request body.
 type AttachBindingRequestBody struct {
@@ -60,6 +76,22 @@ type DetachServerClientAssociationRequestBody struct {
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The associated remote session client.
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+}
+
+// BeginBindingRefreshResponseBody is the type of the "remoteSessions" service
+// "beginBindingRefresh" endpoint HTTP response body.
+type BeginBindingRefreshResponseBody struct {
+	AttemptID string `form:"attempt_id" json:"attempt_id" xml:"attempt_id"`
+}
+
+// CompleteBindingRefreshResponseBody is the type of the "remoteSessions"
+// service "completeBindingRefresh" endpoint HTTP response body.
+type CompleteBindingRefreshResponseBody struct {
+	// Whether this popup committed an exact grant and replaced the attachment.
+	// False means no matching callback completed; the attempt is consumed without
+	// changing the attachment.
+	Completed bool                                       `form:"completed" json:"completed" xml:"completed"`
+	Binding   *PrincipalRemoteSessionBindingResponseBody `form:"binding,omitempty" json:"binding,omitempty" xml:"binding,omitempty"`
 }
 
 // ListBindingsResponseBody is the type of the "remoteSessions" service
@@ -143,6 +175,386 @@ type ListRemoteSessionsResponseBody struct {
 type CountRemoteSessionsResponseBody struct {
 	// Distinct user subjects with a live remote_session through the client.
 	Subjects int64 `form:"subjects" json:"subjects" xml:"subjects"`
+}
+
+// BeginBindingRefreshUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "beginBindingRefresh" endpoint HTTP response body
+// for the "unauthorized" error.
+type BeginBindingRefreshUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BeginBindingRefreshForbiddenResponseBody is the type of the "remoteSessions"
+// service "beginBindingRefresh" endpoint HTTP response body for the
+// "forbidden" error.
+type BeginBindingRefreshForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BeginBindingRefreshBadRequestResponseBody is the type of the
+// "remoteSessions" service "beginBindingRefresh" endpoint HTTP response body
+// for the "bad_request" error.
+type BeginBindingRefreshBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BeginBindingRefreshNotFoundResponseBody is the type of the "remoteSessions"
+// service "beginBindingRefresh" endpoint HTTP response body for the
+// "not_found" error.
+type BeginBindingRefreshNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BeginBindingRefreshConflictResponseBody is the type of the "remoteSessions"
+// service "beginBindingRefresh" endpoint HTTP response body for the "conflict"
+// error.
+type BeginBindingRefreshConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BeginBindingRefreshUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "beginBindingRefresh" endpoint HTTP response body
+// for the "unsupported_media" error.
+type BeginBindingRefreshUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BeginBindingRefreshInvalidResponseBody is the type of the "remoteSessions"
+// service "beginBindingRefresh" endpoint HTTP response body for the "invalid"
+// error.
+type BeginBindingRefreshInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BeginBindingRefreshInvariantViolationResponseBody is the type of the
+// "remoteSessions" service "beginBindingRefresh" endpoint HTTP response body
+// for the "invariant_violation" error.
+type BeginBindingRefreshInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BeginBindingRefreshUnexpectedResponseBody is the type of the
+// "remoteSessions" service "beginBindingRefresh" endpoint HTTP response body
+// for the "unexpected" error.
+type BeginBindingRefreshUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BeginBindingRefreshGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "beginBindingRefresh" endpoint HTTP response body
+// for the "gateway_error" error.
+type BeginBindingRefreshGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "unauthorized" error.
+type CompleteBindingRefreshUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshForbiddenResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "forbidden" error.
+type CompleteBindingRefreshForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshBadRequestResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "bad_request" error.
+type CompleteBindingRefreshBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshNotFoundResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "not_found" error.
+type CompleteBindingRefreshNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshConflictResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "conflict" error.
+type CompleteBindingRefreshConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "unsupported_media" error.
+type CompleteBindingRefreshUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshInvalidResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "invalid" error.
+type CompleteBindingRefreshInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshInvariantViolationResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "invariant_violation" error.
+type CompleteBindingRefreshInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshUnexpectedResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "unexpected" error.
+type CompleteBindingRefreshUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteBindingRefreshGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "completeBindingRefresh" endpoint HTTP response
+// body for the "gateway_error" error.
+type CompleteBindingRefreshGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // ListBindingsUnauthorizedResponseBody is the type of the "remoteSessions"
@@ -2501,6 +2913,28 @@ type ServerIdentityClientConfigurationRequestBody struct {
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 }
 
+// NewBeginBindingRefreshResponseBody builds the HTTP response body from the
+// result of the "beginBindingRefresh" endpoint of the "remoteSessions" service.
+func NewBeginBindingRefreshResponseBody(res *remotesessions.BindingRefreshAttempt) *BeginBindingRefreshResponseBody {
+	body := &BeginBindingRefreshResponseBody{
+		AttemptID: res.AttemptID,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshResponseBody builds the HTTP response body from the
+// result of the "completeBindingRefresh" endpoint of the "remoteSessions"
+// service.
+func NewCompleteBindingRefreshResponseBody(res *remotesessions.BindingRefreshResult) *CompleteBindingRefreshResponseBody {
+	body := &CompleteBindingRefreshResponseBody{
+		Completed: res.Completed,
+	}
+	if res.Binding != nil {
+		body.Binding = marshalRemotesessionsPrincipalRemoteSessionBindingToPrincipalRemoteSessionBindingResponseBody(res.Binding)
+	}
+	return body
+}
+
 // NewListBindingsResponseBody builds the HTTP response body from the result of
 // the "listBindings" endpoint of the "remoteSessions" service.
 func NewListBindingsResponseBody(res *remotesessions.ListBindingsResult) *ListBindingsResponseBody {
@@ -2629,6 +3063,306 @@ func NewListRemoteSessionsResponseBody(res *remotesessions.ListRemoteSessionsRes
 func NewCountRemoteSessionsResponseBody(res *remotesessions.CountRemoteSessionsResult) *CountRemoteSessionsResponseBody {
 	body := &CountRemoteSessionsResponseBody{
 		Subjects: res.Subjects,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewBeginBindingRefreshUnauthorizedResponseBody(res *goa.ServiceError) *BeginBindingRefreshUnauthorizedResponseBody {
+	body := &BeginBindingRefreshUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshForbiddenResponseBody builds the HTTP response body
+// from the result of the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewBeginBindingRefreshForbiddenResponseBody(res *goa.ServiceError) *BeginBindingRefreshForbiddenResponseBody {
+	body := &BeginBindingRefreshForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshBadRequestResponseBody builds the HTTP response body
+// from the result of the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewBeginBindingRefreshBadRequestResponseBody(res *goa.ServiceError) *BeginBindingRefreshBadRequestResponseBody {
+	body := &BeginBindingRefreshBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshNotFoundResponseBody builds the HTTP response body
+// from the result of the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewBeginBindingRefreshNotFoundResponseBody(res *goa.ServiceError) *BeginBindingRefreshNotFoundResponseBody {
+	body := &BeginBindingRefreshNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshConflictResponseBody builds the HTTP response body
+// from the result of the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewBeginBindingRefreshConflictResponseBody(res *goa.ServiceError) *BeginBindingRefreshConflictResponseBody {
+	body := &BeginBindingRefreshConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewBeginBindingRefreshUnsupportedMediaResponseBody(res *goa.ServiceError) *BeginBindingRefreshUnsupportedMediaResponseBody {
+	body := &BeginBindingRefreshUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshInvalidResponseBody builds the HTTP response body from
+// the result of the "beginBindingRefresh" endpoint of the "remoteSessions"
+// service.
+func NewBeginBindingRefreshInvalidResponseBody(res *goa.ServiceError) *BeginBindingRefreshInvalidResponseBody {
+	body := &BeginBindingRefreshInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewBeginBindingRefreshInvariantViolationResponseBody(res *goa.ServiceError) *BeginBindingRefreshInvariantViolationResponseBody {
+	body := &BeginBindingRefreshInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshUnexpectedResponseBody builds the HTTP response body
+// from the result of the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewBeginBindingRefreshUnexpectedResponseBody(res *goa.ServiceError) *BeginBindingRefreshUnexpectedResponseBody {
+	body := &BeginBindingRefreshUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBeginBindingRefreshGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewBeginBindingRefreshGatewayErrorResponseBody(res *goa.ServiceError) *BeginBindingRefreshGatewayErrorResponseBody {
+	body := &BeginBindingRefreshGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewCompleteBindingRefreshUnauthorizedResponseBody(res *goa.ServiceError) *CompleteBindingRefreshUnauthorizedResponseBody {
+	body := &CompleteBindingRefreshUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshForbiddenResponseBody builds the HTTP response body
+// from the result of the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewCompleteBindingRefreshForbiddenResponseBody(res *goa.ServiceError) *CompleteBindingRefreshForbiddenResponseBody {
+	body := &CompleteBindingRefreshForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshBadRequestResponseBody builds the HTTP response
+// body from the result of the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewCompleteBindingRefreshBadRequestResponseBody(res *goa.ServiceError) *CompleteBindingRefreshBadRequestResponseBody {
+	body := &CompleteBindingRefreshBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshNotFoundResponseBody builds the HTTP response body
+// from the result of the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewCompleteBindingRefreshNotFoundResponseBody(res *goa.ServiceError) *CompleteBindingRefreshNotFoundResponseBody {
+	body := &CompleteBindingRefreshNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshConflictResponseBody builds the HTTP response body
+// from the result of the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewCompleteBindingRefreshConflictResponseBody(res *goa.ServiceError) *CompleteBindingRefreshConflictResponseBody {
+	body := &CompleteBindingRefreshConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "completeBindingRefresh" endpoint of
+// the "remoteSessions" service.
+func NewCompleteBindingRefreshUnsupportedMediaResponseBody(res *goa.ServiceError) *CompleteBindingRefreshUnsupportedMediaResponseBody {
+	body := &CompleteBindingRefreshUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshInvalidResponseBody builds the HTTP response body
+// from the result of the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewCompleteBindingRefreshInvalidResponseBody(res *goa.ServiceError) *CompleteBindingRefreshInvalidResponseBody {
+	body := &CompleteBindingRefreshInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "completeBindingRefresh" endpoint of
+// the "remoteSessions" service.
+func NewCompleteBindingRefreshInvariantViolationResponseBody(res *goa.ServiceError) *CompleteBindingRefreshInvariantViolationResponseBody {
+	body := &CompleteBindingRefreshInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshUnexpectedResponseBody builds the HTTP response
+// body from the result of the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewCompleteBindingRefreshUnexpectedResponseBody(res *goa.ServiceError) *CompleteBindingRefreshUnexpectedResponseBody {
+	body := &CompleteBindingRefreshUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteBindingRefreshGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+func NewCompleteBindingRefreshGatewayErrorResponseBody(res *goa.ServiceError) *CompleteBindingRefreshGatewayErrorResponseBody {
+	body := &CompleteBindingRefreshGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -4109,6 +4843,34 @@ func NewRevokeRemoteSessionGatewayErrorResponseBody(res *goa.ServiceError) *Revo
 	return body
 }
 
+// NewBeginBindingRefreshPayload builds a remoteSessions service
+// beginBindingRefresh endpoint payload.
+func NewBeginBindingRefreshPayload(body *BeginBindingRefreshRequestBody, sessionToken *string, projectSlugInput *string) *remotesessions.BeginBindingRefreshPayload {
+	v := &remotesessions.BeginBindingRefreshPayload{
+		PrincipalID:         *body.PrincipalID,
+		UserSessionIssuerID: *body.UserSessionIssuerID,
+		BindingID:           *body.BindingID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCompleteBindingRefreshPayload builds a remoteSessions service
+// completeBindingRefresh endpoint payload.
+func NewCompleteBindingRefreshPayload(body *CompleteBindingRefreshRequestBody, sessionToken *string, projectSlugInput *string) *remotesessions.CompleteBindingRefreshPayload {
+	v := &remotesessions.CompleteBindingRefreshPayload{
+		PrincipalID:         *body.PrincipalID,
+		UserSessionIssuerID: *body.UserSessionIssuerID,
+		AttemptID:           *body.AttemptID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListBindingsPayload builds a remoteSessions service listBindings endpoint
 // payload.
 func NewListBindingsPayload(principalID string, userSessionIssuerID string, sessionToken *string, projectSlugInput *string) *remotesessions.ListBindingsPayload {
@@ -4253,6 +5015,54 @@ func NewRevokeRemoteSessionPayload(id string, sessionToken *string, apikeyToken 
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateBeginBindingRefreshRequestBody runs the validations defined on
+// BeginBindingRefreshRequestBody
+func ValidateBeginBindingRefreshRequestBody(body *BeginBindingRefreshRequestBody) (err error) {
+	if body.PrincipalID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_id", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.BindingID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("binding_id", "body"))
+	}
+	if body.PrincipalID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.principal_id", *body.PrincipalID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.BindingID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.binding_id", *body.BindingID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateCompleteBindingRefreshRequestBody runs the validations defined on
+// CompleteBindingRefreshRequestBody
+func ValidateCompleteBindingRefreshRequestBody(body *CompleteBindingRefreshRequestBody) (err error) {
+	if body.PrincipalID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_id", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.AttemptID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attempt_id", "body"))
+	}
+	if body.PrincipalID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.principal_id", *body.PrincipalID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.AttemptID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.attempt_id", *body.AttemptID, goa.FormatUUID))
+	}
+	return
 }
 
 // ValidateAttachBindingRequestBody runs the validations defined on

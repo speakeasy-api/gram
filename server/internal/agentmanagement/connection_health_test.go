@@ -18,12 +18,14 @@ func TestAgentConnectionHealth(t *testing.T) {
 		refresh        bool
 		refreshExpired bool
 		missingLink    bool
+		deletedClient  bool
 		want           bool
 	}{
-		{"expired access without refresh", false, false, false, true},
-		{"expired access can refresh", true, false, false, false},
-		{"expired refresh and access", true, true, false, true},
-		{"removed issuer association", true, false, true, true},
+		{name: "expired access without refresh", want: true},
+		{name: "expired access can refresh", refresh: true},
+		{name: "expired refresh and access", refresh: true, refreshExpired: true, want: true},
+		{name: "removed issuer association removes attachment", refresh: true, missingLink: true},
+		{name: "deleted client needs refresh", refresh: true, deletedClient: true, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -49,6 +51,11 @@ func TestAgentConnectionHealth(t *testing.T) {
 			require.NoError(t, err)
 			if tc.missingLink {
 				removed, err := q.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(t.Context(), remoterepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{OrganizationID: "org-a", RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: issuer})
+				require.NoError(t, err)
+				require.EqualValues(t, 1, removed)
+			}
+			if tc.deletedClient {
+				removed, err := q.SoftDeleteRemoteSessionClientFixture(t.Context(), session.RemoteSessionClientID)
 				require.NoError(t, err)
 				require.EqualValues(t, 1, removed)
 			}

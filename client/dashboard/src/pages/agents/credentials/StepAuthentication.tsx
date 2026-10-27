@@ -16,12 +16,11 @@ import {
   connectionLifetimeLabel,
 } from "@/components/sessions/connection-lifetime";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
-import { AlertTriangle, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
 import { ServerAccounts } from "../AgentKeyServers";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
-import { cn } from "@/lib/utils";
 
 export function StepAuthentication({
   servers,
@@ -57,9 +56,7 @@ export function StepAuthentication({
       {allServers && missing.length > 0 && (
         <Text role="alert" warning small>
           No usable connection available for:{" "}
-          {missing.map((server) => server.name).join(", ")}. Existing valid
-          assignments will be kept. These servers need a connection before the
-          agent can use them.
+          {missing.map((server) => server.name).join(", ")}.
         </Text>
       )}
       {oauth.blocked && (
@@ -94,11 +91,19 @@ export function StepAuthentication({
                     : "Requires connection";
           return (
             <AccordionItem key={server.id} value={server.id} className="px-4">
-              <div className="flex items-center gap-3">
+              <div
+                className={
+                  session && !mine
+                    ? "flex items-center gap-3 bg-muted/40"
+                    : "flex items-center gap-3"
+                }
+              >
                 <div className="min-w-0 flex-1">
                   <AccordionTrigger className="items-center hover:no-underline">
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate">{server.name}</span>
+                      <span className="block truncate text-sm font-medium">
+                        {server.name}
+                      </span>
                       <span className="text-muted-foreground block truncate text-xs font-normal">
                         /mcp/{server.slug}
                       </span>
@@ -134,6 +139,15 @@ export function StepAuthentication({
                       }
                       size="sm"
                     >
+                      {session && !mine && (
+                        <LockKeyhole
+                          className="mr-1 size-3"
+                          aria-hidden="true"
+                        />
+                      )}
+                      {session && mine && !expired && (
+                        <Check className="mr-1 size-3" aria-hidden="true" />
+                      )}
                       {expired && (
                         <AlertTriangle
                           className="mr-1 size-3"
@@ -168,48 +182,33 @@ export function StepAuthentication({
                     onReady={() => {}}
                   />
                 ) : (
-                  <div
-                    className={cn(
-                      "flex flex-wrap items-center gap-3 border p-3",
-                      expired && "border-warning bg-warning/5",
-                    )}
-                  >
-                    {session && (
-                      <Avatar>
-                        <AvatarImage
-                          src={user.photoUrl}
-                          alt={user.displayName || user.email}
-                        />
-                        <AvatarFallback>
-                          {(user.displayName || user.email)
-                            .slice(0, 2)
-                            .toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                    )}
+                  <div className="flex flex-wrap items-center gap-3 py-1">
                     <div className="min-w-0 flex-1">
-                      <Text small warning={expired}>
+                      <Text small warning={expired} className="text-sm">
                         {expired ? "Your connection has expired" : label}
                       </Text>
                       {session && (
-                        <Text small muted={!expired} warning={expired}>
+                        <Text small muted className="mt-1 text-xs">
                           {connectionLifetimeLabel(connectionLifetime(session))}
                         </Text>
                       )}
                     </div>
                     {server.connectUrl && (
                       <Button
-                        size="sm"
+                        size="xs"
                         variant={expired || !session ? "primary" : "secondary"}
                         onClick={() => {
-                          oauth.open(server.connectUrl!);
+                          const url = new URL(server.connectUrl!);
+                          if (session?.remoteSessionClientId) {
+                            url.searchParams.set(
+                              "reauthenticate_client_id",
+                              session.remoteSessionClientId,
+                            );
+                          }
+                          oauth.open(url.toString());
                         }}
                       >
-                        {expired
-                          ? "Reauthenticate"
-                          : session
-                            ? "Use a different account"
-                            : "Connect account"}
+                        {session ? "Reauthenticate" : "Connect account"}
                       </Button>
                     )}
                     {!server.connectUrl && !session && (

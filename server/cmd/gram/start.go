@@ -1831,6 +1831,9 @@ func newStartCommand() *cli.Command {
 				}
 				return nil
 			})
+			bindingRefreshAttempts := remotesessions.NewBindingRefreshAttempts(logger, cache.NewRedisCacheAdapter(redisClient))
+			remoteSessionsService.SetBindingRefreshAttempts(bindingRefreshAttempts)
+			mcpService.SetBindingRefreshAttempts(bindingRefreshAttempts)
 			mcpService.SetConsentBindingService(remoteSessionsService)
 			remotesessions.Attach(mux, remoteSessionsService)
 			remoteMcpService := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService, featureFlags).WithServerURL(serverURL).

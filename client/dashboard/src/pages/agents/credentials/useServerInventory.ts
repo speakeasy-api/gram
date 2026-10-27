@@ -21,6 +21,7 @@ export interface InventoryServer {
   name: string;
   /** The path under /mcp/ the server answers on, which is what a row shows. */
   slug: string;
+  upstreamUrl?: string;
   projectId: string;
   projectName: string;
   projectSlug: string;
@@ -80,6 +81,28 @@ export function useServerInventory(): ServerInventory {
     throwOnError: false,
   });
 
+  const remoteSources = useQueries({
+    queries: (organization.projects ?? [])
+      .filter((project) => project.slug)
+      .map((project) => ({
+        queryKey: ["agent-remote-server-urls", organization.id, project.id],
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          sdk.remoteMcp.listServers({ gramProject: project.slug }, undefined, {
+            signal,
+          }),
+        retry: false,
+        throwOnError: false,
+        staleTime: 60_000,
+      })),
+  });
+  const upstreamUrls = new Map(
+    remoteSources.flatMap((query) =>
+      (query.data?.remoteMcpServers ?? []).map(
+        (server) => [server.id, server.url] as const,
+      ),
+    ),
+  );
+
   const projects = new Map(
     (organization.projects ?? []).map((project) => [project.id, project]),
   );
@@ -112,6 +135,9 @@ export function useServerInventory(): ServerInventory {
       activityTarget: server.toolsetId
         ? `hosted_mcp_server:${toolsets.data?.toolsets?.find((toolset) => toolset.id === server.toolsetId)?.slug ?? ""}`
         : `tunneled_mcp_server:${server.slug ?? ""}`,
+      upstreamUrl: server.remoteMcpServerId
+        ? upstreamUrls.get(server.remoteMcpServerId)
+        : undefined,
       name: server.name ?? server.slug ?? "Unnamed server",
       slug: server.slug ?? "",
       projectId: server.projectId,

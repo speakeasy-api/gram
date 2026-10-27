@@ -258,6 +258,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		Subject:                  subject,
 		CreatedAt:                time.Now(),
 		FirstParty:               false,
+		BindingRefreshAttemptID:  "",
+		ReauthenticateClientID:   uuid.Nil,
 
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,

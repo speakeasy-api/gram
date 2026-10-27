@@ -116,3 +116,8 @@ type testAuthClientPermission func() bool
 func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (bool, error) {
 	return f(), nil
 }
+
+// RecordConnectionPopupGrant exercises the callback's parent-state correlation.
+func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
+	return s.recordConnectionPopupGrant(ctx, grant)
+}

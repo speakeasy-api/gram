@@ -22,6 +22,16 @@ import (
 // hosts composite dashboard operations that configure a single MCP server's
 // identity in one atomic call.
 type Service interface {
+	// Refresh an agent attachment through one exact browser OAuth attempt.
+	// Requires an ordinary human with agent write permission and ownership of the
+	// attached connection. The one-time attempt is bound to the caller, agent,
+	// issuer and original attachment; completion never selects a different sign-in.
+	BeginBindingRefresh(context.Context, *BeginBindingRefreshPayload) (res *BindingRefreshAttempt, err error)
+	// Refresh an agent attachment through one exact browser OAuth attempt.
+	// Requires an ordinary human with agent write permission and ownership of the
+	// attached connection. The one-time attempt is bound to the caller, agent,
+	// issuer and original attachment; completion never selects a different sign-in.
+	CompleteBindingRefresh(context.Context, *CompleteBindingRefreshPayload) (res *BindingRefreshResult, err error)
 	// Manage exact remote session attachments for an agent. Reads require agent
 	// authorization or write permission. Changes require an ordinary human session
 	// and agent write permission. Attachment requires ownership of the upstream
@@ -112,7 +122,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [12]string{"beginBindingRefresh", "completeBindingRefresh", "listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -122,6 +132,32 @@ type AttachBindingPayload struct {
 	RemoteSessionID     string
 	SessionToken        *string
 	ProjectSlugInput    *string
+}
+
+// BeginBindingRefreshPayload is the payload type of the remoteSessions service
+// beginBindingRefresh method.
+type BeginBindingRefreshPayload struct {
+	PrincipalID         string
+	UserSessionIssuerID string
+	BindingID           string
+	SessionToken        *string
+	ProjectSlugInput    *string
+}
+
+// BindingRefreshAttempt is the result type of the remoteSessions service
+// beginBindingRefresh method.
+type BindingRefreshAttempt struct {
+	AttemptID string
+}
+
+// BindingRefreshResult is the result type of the remoteSessions service
+// completeBindingRefresh method.
+type BindingRefreshResult struct {
+	// Whether this popup committed an exact grant and replaced the attachment.
+	// False means no matching callback completed; the attempt is consumed without
+	// changing the attachment.
+	Completed bool
+	Binding   *PrincipalRemoteSessionBinding
 }
 
 // CommitServerIdentityConfigurationPayload is the payload type of the
@@ -176,6 +212,16 @@ type CommitServerIdentityConfigurationResult struct {
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
 	Failure *ServerIdentityRegistrationFailure
+}
+
+// CompleteBindingRefreshPayload is the payload type of the remoteSessions
+// service completeBindingRefresh method.
+type CompleteBindingRefreshPayload struct {
+	PrincipalID         string
+	UserSessionIssuerID string
+	AttemptID           string
+	SessionToken        *string
+	ProjectSlugInput    *string
 }
 
 // CountRemoteSessionsPayload is the payload type of the remoteSessions service

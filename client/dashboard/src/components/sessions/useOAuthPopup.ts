@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 export function useOAuthPopup(
   onComplete: (reason: "popup-closed" | "focus") => void | Promise<void>,
 ): {
-  open: (url: string) => boolean;
+  open: (url: string | (() => Promise<string>)) => boolean;
   blocked: boolean;
 } {
   const callback = useRef(onComplete);
   callback.current = onComplete;
   const popup = useRef<Window | null>(null);
   const inFlight = useRef(0);
+  const preparing = useRef(false);
   const [blocked, setBlocked] = useState(false);
   useEffect(() => {
     const notify = async (reason: "popup-closed" | "focus") => {
@@ -23,7 +24,7 @@ export function useOAuthPopup(
       }
     };
     const consumeClosedPopup = () => {
-      if (!popup.current?.closed) return false;
+      if (preparing.current || !popup.current?.closed) return false;
       popup.current = null;
       void notify("popup-closed");
       return true;
@@ -49,6 +50,10 @@ export function useOAuthPopup(
   return {
     blocked,
     open: (url) => {
+      if (popup.current) {
+        if (!popup.current.closed) popup.current.focus();
+        return false;
+      }
       const child = window.open(
         "about:blank",
         "speakeasy-connection",
@@ -57,8 +62,23 @@ export function useOAuthPopup(
       setBlocked(!child);
       if (!child) return false;
       child.opener = null;
-      child.location.href = url;
       popup.current = child;
+      if (typeof url === "string") {
+        child.location.href = url;
+      } else {
+        // Reserve the window during the click, before asynchronous setup.
+        preparing.current = true;
+        void url()
+          .then((destination) => {
+            if (!child.closed) child.location.href = destination;
+            preparing.current = false;
+          })
+          .catch(() => {
+            preparing.current = false;
+            popup.current = null;
+            child.close();
+          });
+      }
       child.focus();
       return true;
     },

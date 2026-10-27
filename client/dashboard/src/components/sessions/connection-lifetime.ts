@@ -112,11 +112,11 @@ export function connectionLifetimeLabel(
     case "unknown":
       return "Expiry not recorded";
     case "refreshes":
-      return "Refreshes itself, no end date";
+      return "Never expires";
     case "refreshes-until":
-      return `Refreshes itself until ${dateTimeFormatters.day.format(lifetime.at)}`;
+      return `Expires ${dateTimeFormatters.day.format(lifetime.at)}`;
     case "expires":
-      return `Expires ${dateTimeFormatters.day.format(lifetime.at)} (${formatDistance(lifetime.at, now, { addSuffix: true })}) and does not refresh`;
+      return `Expires ${dateTimeFormatters.day.format(lifetime.at)} (${formatDistance(lifetime.at, now, { addSuffix: true })})`;
     case "ended":
       return `Ended ${formatDistance(lifetime.at, now, { addSuffix: true })}`;
   }

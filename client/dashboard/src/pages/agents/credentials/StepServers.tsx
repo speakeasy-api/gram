@@ -289,8 +289,15 @@ export function StepServers({
                             {server.projectName || server.projectSlug}
                           </Badge>
                         </span>
-                        <span className="text-muted-foreground block truncate font-mono text-xs">
-                          /mcp/{server.slug}
+                        <span className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                          {server.upstreamUrl && (
+                            <span className="min-w-0 text-sm break-all">
+                              {server.upstreamUrl}
+                            </span>
+                          )}
+                          <span className="text-muted-foreground min-w-0 font-mono text-xs break-all">
+                            ({server.slug.replace(/^\/mcp\//, "")})
+                          </span>
                         </span>
                         {refusal && (
                           <span className="mt-1 block text-xs">{refusal}</span>

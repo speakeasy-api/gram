@@ -387,6 +387,8 @@
                   <span class="text-xs text-default-warning" data-validation-notice
                     >{{.ValidationNotice}}</span
                   >
+                  {{end}} {{if .AttachmentReconnect}}
+                  <span class="text-xs text-muted-foreground">Sign in again to choose the account for this agent</span>
                   {{end}} {{if .IdentityReconnect}}
                   <span class="text-xs text-muted-foreground"
                     >Reconnect to add account details</span
@@ -467,7 +469,7 @@
                 >
                   Verify
                 </button>
-                {{end}} {{if or (not .Connected) .IdentityReconnect .Rejected .Inactive}}
+                {{end}} {{if or (not .Connected) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
                 {{if and .Chained (ne .ChainCheck "rejected")}}
                 <button
                   type="submit"
@@ -487,7 +489,7 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if or .Expired .Unroutable .IdentityReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unroutable .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
                 </button>
                 {{end}}
                 {{end}} {{if or .Connected .Expired .Unroutable}}

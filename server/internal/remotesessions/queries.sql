@@ -6251,3 +6251,19 @@ WHERE project_id = @project_id AND organization_id = @organization_id
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL;
+
+-- name: LockPrincipalBindingForRefresh :one
+SELECT * FROM principal_remote_session_bindings
+WHERE id = @id AND principal_id = @principal_id AND project_id = @project_id
+  AND organization_id = @organization_id AND user_session_issuer_id = @user_session_issuer_id
+  AND attached_by_subject_id = @subject_urn AND revoked_at IS NULL
+FOR UPDATE;
+
+-- name: LockRemoteSessionGrantForBindingRefresh :one
+SELECT * FROM remote_sessions
+WHERE id = @id AND remote_session_client_id = @remote_session_client_id
+  AND subject_urn = @subject_urn AND grant_generation = @grant_generation
+  AND NOT deleted
+  AND (authorization_expires_at IS NULL OR authorization_expires_at > now())
+  AND (access_expires_at IS NULL OR access_expires_at > now() OR (refresh_token_encrypted IS NOT NULL AND (refresh_expires_at IS NULL OR refresh_expires_at > now())))
+FOR UPDATE;
