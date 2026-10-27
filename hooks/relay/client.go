@@ -367,11 +367,15 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 	defer cancel()
 
 	req := operations.IngestHookEventRequest{
-		GramKey:        new(c.APIKey),
+		GramKey:        nil,
 		GramProject:    nil,
 		IdempotencyKey: new(idemKey),
 		XGramReplayed:  nil,
 		Body:           body,
+	}
+	// A workload credential has no key: the egress proxy adds Authorization.
+	if c.APIKey != "" {
+		req.GramKey = new(c.APIKey)
 	}
 	if cl.replayed {
 		req.XGramReplayed = new(true)

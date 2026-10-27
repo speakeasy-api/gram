@@ -75,7 +75,7 @@ func TestLoginRoundtrip(t *testing.T) {
 		}()
 	}
 
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "org-9", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "org-9", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	require.NoError(t, NewRelay(cfg).Login(ctx, true))
@@ -120,7 +120,7 @@ func TestLoginLegacyGETRoundtrip(t *testing.T) {
 		}()
 	}
 
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 	require.NoError(t, NewRelay(cfg).Login(t.Context(), true))
 
 	values, err := readAuthFile(authFile)
@@ -133,7 +133,7 @@ func TestLoginDisabledPointsToManualKey(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 	err := NewRelay(cfg).Login(t.Context(), true)
 	require.ErrorContains(t, err, "SPEAKEASY_AI_HOOKS_API_KEY")
 }
@@ -179,7 +179,7 @@ func TestLoginRejectsMismatchedState(t *testing.T) {
 		require.Equal(t, http.StatusOK, callback(cb, cb.Query().Get("state"), "genuine-key"))
 	}
 
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 	require.NoError(t, NewRelay(cfg).Login(t.Context(), true))
 
 	values, err := readAuthFile(authFile)
@@ -195,7 +195,7 @@ func TestLoginRefusesBrokenConfig(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
+	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory", WorkloadAuth: false}
 	err := NewRelay(cfg).Login(t.Context(), true)
 	require.ErrorContains(t, err, "reinstall")
 }
@@ -207,7 +207,7 @@ func TestMarkAttemptCreatesAuthDir(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "config", "gram", "hooks-auth.env")
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 
-	l := newLoginFlow(Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	l := newLoginFlow(Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false})
 	l.markAttempt()
 	require.FileExists(t, authFile+".login-attempt")
 	require.False(t, l.cooldownElapsed(false), "a fresh attempt marker must hold the cooldown")

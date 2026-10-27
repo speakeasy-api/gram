@@ -19,6 +19,9 @@ const (
 	credEnv
 	credCache
 	credOrg
+	// credWorkload carries no key: the sandbox's egress proxy attaches the
+	// workload's token to each request (Config.WorkloadAuth).
+	credWorkload
 )
 
 // creds is the resolved credential used to authenticate an ingest request.
@@ -136,8 +139,10 @@ func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
 // resolveAuth returns the effective credential: an explicit env key wins over
 // the cache. Only SPEAKEASY_AI_HOOKS_API_KEY (or its deprecated alias GRAM_HOOKS_API_KEY) is honored — the generic SPEAKEASY_AI_API_KEY and GRAM_API_KEY are
 // a different product surface (MCP access) and must not silently authenticate
-// hook telemetry. The second return is false when the machine holds no
-// credential.
+// hook telemetry. A workload-authenticated environment with no key resolves
+// to the keyless workload credential, which ranks last so any key present
+// still authenticates when the proxy attaches nothing. The second return is
+// false when the machine holds no credential.
 func resolveAuth(cfg Config) (creds, bool) {
 	apiKey := Env("HOOKS_API_KEY")
 	if apiKey != "" {
@@ -165,6 +170,16 @@ func resolveAuth(cfg Config) (creds, bool) {
 			Email:     "",
 			Org:       cfg.OrgID,
 			Source:    credOrg,
+		}, true
+	}
+	if cfg.WorkloadAuth {
+		return creds{
+			ServerURL: cfg.ServerURL,
+			APIKey:    "",
+			Project:   cfg.ProjectSlug,
+			Email:     "",
+			Org:       cfg.OrgID,
+			Source:    credWorkload,
 		}, true
 	}
 	return creds{}, false

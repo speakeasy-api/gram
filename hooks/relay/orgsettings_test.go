@@ -215,7 +215,7 @@ func TestCachedKeyRejectionRatchetUnchangedByFailOpen(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 	writeOrgSettings(cfg, true)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -299,7 +299,7 @@ func TestFutureTimestampedOrgSettingsIgnored(t *testing.T) {
 // enforcement posture.
 func TestForgetAuthLeavesOrgSettings(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	cfg := Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", WorkloadAuth: false}
 	writeOrgSettings(cfg, true)
 
 	forgetAuth()
