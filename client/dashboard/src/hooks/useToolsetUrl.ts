@@ -38,12 +38,16 @@ export function useCustomDomains(enabled = true): {
   isError: boolean;
   refetch: ReturnType<typeof useListDomains>["refetch"];
 } {
-  const { data, isLoading, isError, refetch } = useListDomains(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-    throwOnError: false,
-    enabled,
-  });
+  const { data, isLoading, isError, refetch } = useListDomains(
+    undefined,
+    undefined,
+    {
+      refetchOnWindowFocus: false,
+      retry: false,
+      throwOnError: false,
+      enabled,
+    },
+  );
 
   return { domains: data?.domains ?? [], isLoading, isError, refetch };
 }
