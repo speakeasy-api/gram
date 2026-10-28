@@ -6,6 +6,7 @@ import {
   parseTargetFilter,
   selectedHookSources,
   selectedTargetValues,
+  selectedUserAgentIds,
   selectedUserEmails,
   splitHostedTargets,
   toTargetTypes,
@@ -92,7 +93,13 @@ export function useToolUsagePayload({
     const emails = [
       ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
     ];
-    return emails.map((email) => ({ kind: "email", key: email }));
+    return [
+      ...emails.map((email) => ({ kind: "email" as const, key: email })),
+      ...selectedUserAgentIds(activeFilters).map((agentId) => ({
+        kind: "agent_id" as const,
+        key: agentId,
+      })),
+    ];
   }, [activeFilters, roleEmails]);
   const hookSourceFilters = useMemo(
     () => selectedHookSources(activeFilters),

@@ -1,5 +1,8 @@
 import { traceLogsQueryOptions } from "@/pages/logs/traceLogsQuery";
+import { AgentIcon } from "@/components/agent-link";
 import { IdentityLink } from "@/components/identity-link";
+import { ToolUsageIdentity } from "@/components/tool-usage-identity";
+import { useReadableAgentsById } from "@/hooks/useReadableAgents";
 import { identityRefForKind } from "@/lib/identity-urn";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
@@ -15,6 +18,7 @@ import {
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import {
+  encodeAgentUserFilter,
   encodeGatewayServerFilter,
   hostedServerFilterValue,
   encodeShadowServerFilter,
@@ -22,7 +26,7 @@ import {
   isDefaultToolUsageTypeSelection,
   selectedHookSources,
   selectedTargetValues,
-  selectedUserEmails,
+  selectedUserFilterValues,
   TOOL_USAGE_DEFAULT_TYPES,
   TOOL_USAGE_STATUS_OPTIONS,
   TOOL_USAGE_TYPE_OPTIONS,
@@ -47,8 +51,6 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
-import { useReadableAgents } from "@/hooks/useReadableAgents";
-import { ToolUsageIdentity } from "@/components/tool-usage-identity";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { hasAgentProviderIcon } from "@/components/agent-providers/agent-provider-icon-kind";
@@ -315,8 +317,8 @@ export function LogsTools(): JSX.Element {
     () => selectedTargetValues(activeFilters),
     [activeFilters],
   );
-  const selectedEmails = useMemo(
-    () => selectedUserEmails(activeFilters),
+  const selectedUsers = useMemo(
+    () => selectedUserFilterValues(activeFilters),
     [activeFilters],
   );
   const selectedSources = useMemo(
@@ -331,17 +333,8 @@ export function LogsTools(): JSX.Element {
     [filterOptionsData],
   );
   // Same query the table's rows read, so the names resolve once for both.
-  const readableAgents = useReadableAgents(
+  const agentsById = useReadableAgentsById(
     agentOptions.length > 0 || selectedAgentIds.length > 0,
-  );
-  const agentNamesById = useMemo(
-    () =>
-      new Map(
-        (readableAgents.isError ? [] : (readableAgents.data ?? [])).map(
-          (agent) => [agent.id, agent.name],
-        ),
-      ),
-    [readableAgents.data, readableAgents.isError],
   );
 
   const facetGroups = useMemo<FacetGroup[]>(() => {
@@ -491,22 +484,38 @@ export function LogsTools(): JSX.Element {
       {
         id: "user",
         label: "User",
-        // The URL and the payload carry emails; an agent or an external id
-        // sent as an email filter matches nothing, so those identities are not
-        // offered here rather than offered and broken.
+        // People filter by email and agents by id. External and internal
+        // user ids have no filter value the payload carries, so they are not
+        // offered rather than offered and broken. An agent the viewer cannot
+        // read keeps its id label, never its name.
         values: withSelected(
           (filterOptionsData?.users ?? [])
-            .filter((user) => user.userKind === "email")
-            .map((user) => ({
-              value: user.userKey,
-              label: user.userLabel,
-              count: Number(user.eventCount),
-              icon: (
-                <IdentityAvatar label={user.userLabel} className="size-5" />
-              ),
-              selected: selectedEmails.includes(user.userKey),
-            })),
-          selectedEmails,
+            .filter(
+              (user) =>
+                user.userKind === "email" || user.userKind === "agent_id",
+            )
+            .map((user) => {
+              if (user.userKind === "agent_id") {
+                const value = encodeAgentUserFilter(user.userKey);
+                return {
+                  value,
+                  label: agentsById.get(user.userKey)?.name ?? user.userLabel,
+                  count: Number(user.eventCount),
+                  icon: <AgentIcon className="size-5" />,
+                  selected: selectedUsers.includes(value),
+                };
+              }
+              return {
+                value: user.userKey,
+                label: user.userLabel,
+                count: Number(user.eventCount),
+                icon: (
+                  <IdentityAvatar label={user.userLabel} className="size-5" />
+                ),
+                selected: selectedUsers.includes(user.userKey),
+              };
+            }),
+          selectedUsers,
         ),
       },
       {
@@ -517,19 +526,19 @@ export function LogsTools(): JSX.Element {
         values: withSelected(
           agentOptions.map((user) => ({
             value: user.userKey,
-            label: agentNamesById.get(user.userKey) ?? user.userLabel,
+            label: agentsById.get(user.userKey)?.name ?? user.userLabel,
             count: Number(user.eventCount),
             icon: <Bot className="text-muted-foreground size-4" />,
             selected: selectedAgentIds.includes(user.userKey),
           })),
           selectedAgentIds,
-          (id) => agentNamesById.get(id) ?? id,
+          (id) => agentsById.get(id)?.name ?? id,
         ),
       },
     ];
   }, [
     accountType,
-    agentNamesById,
+    agentsById,
     agentOptions,
     filterOptionsData,
     hookSourceOptions,
@@ -537,7 +546,7 @@ export function LogsTools(): JSX.Element {
     selectedAgentIds,
     selectedClientKeys,
     selectedRoleIds,
-    selectedEmails,
+    selectedUsers,
     selectedHookTypes,
     selectedServerValues,
     selectedSources,
@@ -579,7 +588,7 @@ export function LogsTools(): JSX.Element {
           handleAccountTypeChange(nextSelected ? value : "");
           break;
         case "user":
-          handleUserEmailSelectionChange(next(selectedEmails));
+          handleUserEmailSelectionChange(next(selectedUsers));
           break;
         case "agent":
           setAgentIds(next(selectedAgentIds));
@@ -596,7 +605,7 @@ export function LogsTools(): JSX.Element {
       handleStatusesChange,
       handleUserEmailSelectionChange,
       selectedClientKeys,
-      selectedEmails,
+      selectedUsers,
       selectedHookTypes,
       selectedServerValues,
       selectedSources,
@@ -1570,27 +1579,9 @@ function LogsToolsTableContent({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
-  /** Resolved when this row's caller is an agent; its name is not on the row. */
-  agent?: { id: string; name: string };
 }) {
-  // Agent names are not on a trace — the row carries "agent:<uuid>" and
-  // nothing else — so they are read once here rather than per row. Asked for
-  // only when a trace on screen actually names an agent.
-  //
-  // Above the error and empty returns below, because a hook that runs only on
-  // the rendering path changes the hook order between renders.
-  const agents = useReadableAgents(
+  const agentsById = useReadableAgentsById(
     traces.some((trace) => trace.userKind === "agent_id"),
-  );
-  const agentsById = useMemo(
-    () =>
-      new Map(
-        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
-          agent.id,
-          agent,
-        ]),
-      ),
-    [agents.data, agents.isError],
   );
 
   if (error) {
@@ -1694,13 +1685,13 @@ function LogsToolsTableContent({
               onToggle={() => void onToggleExpand(trace)}
               onLogClick={onLogClick}
               serverNameMappings={serverNameMappings}
-              from={from}
-              to={to}
               agent={
                 trace.userKind === "agent_id"
                   ? agentsById.get(trace.userKey)
                   : undefined
               }
+              from={from}
+              to={to}
             />
           ))}
         </div>
@@ -1730,9 +1721,9 @@ function LogsToolsTraceRow({
   onToggle,
   onLogClick,
   serverNameMappings,
+  agent,
   from,
   to,
-  agent,
 }: {
   trace: ToolUsageTraceSummary;
   isExpanded: boolean;
@@ -1740,10 +1731,10 @@ function LogsToolsTraceRow({
   onToggle: () => void;
   onLogClick: (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
+  /** The calling agent, when the viewer may read it. */
+  agent?: { id: string; name: string };
   from: Date;
   to: Date;
-  /** Resolved when this row's caller is an agent; a trace carries no name. */
-  agent?: { id: string; name: string };
 }) {
   const routes = useRoutes();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
