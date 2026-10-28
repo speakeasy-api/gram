@@ -66,7 +66,7 @@ type Candidate struct {
 
 const (
 	blockerNoOrganization     = "its organization has no metadata record, so it is handled separately"
-	deleteNotLive             = "MCP is off and it has no server row, so nothing serves it"
+	deleteNotLive             = "it has no enabled hosted MCP server or server row, so nothing serves it"
 	deleteMigrated            = "already migrated; its server now proxies a remote MCP server and keeps working"
 	deleteNotOnDeployment     = "its external MCP attachment is no longer on the project's active deployment"
 	deleteManyUpstreams       = "proxies more than one external MCP attachment, URL or transport"

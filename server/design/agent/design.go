@@ -143,6 +143,68 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentMyConnections"}`)
 	})
 
+	Method("hideMcpServer", func() {
+		Description("Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Meta("openapi:typename", "HideAgentMcpServerRequestBody")
+			Attribute("mcp_server_id", String, "The MCP server, as getMyConnections reports it.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+			Required("mcp_server_id")
+		})
+
+		HTTP(func() {
+			POST("/rpc/agent.hideMcpServer")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "hideAgentMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "hideMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "HideAgentMcpServer"}`)
+	})
+
+	Method("unhideMcpServer", func() {
+		Description("Show a hidden MCP server again for the enrolled user. Unhiding a server that is not hidden changes nothing. Authenticates like hideMcpServer.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Meta("openapi:typename", "UnhideAgentMcpServerRequestBody")
+			Attribute("mcp_server_id", String, "The MCP server, as getMyConnections reports it.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+			Required("mcp_server_id")
+		})
+
+		HTTP(func() {
+			POST("/rpc/agent.unhideMcpServer")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "unhideAgentMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "unhideMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UnhideAgentMcpServer"}`)
+	})
+
 	Method("listSyncedUsers", func() {
 		Description("List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.")
 
@@ -722,4 +784,5 @@ var AgentServerConnectionModel = Type("AgentServerConnection", func() {
 	Attribute("request_access_url", String, "Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.", func() {
 		Format(FormatURI)
 	})
+	Attribute("hidden", Boolean, "True when the user hid this server, from the gateway consent page or the device agent. Absent when not hidden.")
 })

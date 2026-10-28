@@ -70,7 +70,7 @@ type ResolvedMcpEndpoint struct {
 	// CustomDomainID, when valid, scopes the endpoint to a custom domain.
 	CustomDomainID uuid.NullUUID
 
-	// IsPublic mirrors toolsets.mcp_is_public — controls
+	// IsPublic is the server's hosting publicness — controls
 	// HandleAuthorize's anonymous-vs-IDP path selection.
 	IsPublic bool
 

@@ -852,7 +852,6 @@ WHERE a.organization_id = $1
     s.id IS NULL OR s.deleted
     OR NOT EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
     OR b.attached_by_subject_id <> s.subject_urn
-    OR b.grant_generation <> s.grant_generation
     OR NOT EXISTS (
       SELECT 1
       FROM remote_session_clients c

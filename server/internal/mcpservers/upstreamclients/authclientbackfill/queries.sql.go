@@ -2118,7 +2118,7 @@ SELECT
     )
   )::boolean AS agent_active,
   (
-    rs.id IS NOT NULL AND rs.deleted IS FALSE AND rs.grant_generation = b.grant_generation
+    rs.id IS NOT NULL AND rs.deleted IS FALSE
     AND rs.remote_session_client_id = b.remote_session_client_id
   )::boolean AS connection_live,
   EXISTS (
@@ -2173,7 +2173,7 @@ type ListLiveAgentAttachmentsRow struct {
 
 // Unrevoked attachments of live agents to a user's connection, with what the
 // attachment runtime (GetPrincipalRemoteSessionBinding) checks before serving
-// one: the connection is still live at the attached grant generation, it
+// one: the exact attached connection row is still live with its current credentials, it
 // belongs to the user who attached it, that user still owns the agent, the
 // agent and its owner are active, and the sign-in, project, upstream client
 // and issuer are live and reach the attachment's project. binding_id, when

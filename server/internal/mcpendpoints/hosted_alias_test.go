@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -76,12 +77,7 @@ func requireAliasFollowed(t *testing.T, before, after aliasState, wantSlug strin
 func TestHostedLegacyAliasFollowsItsEndpoint(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")
-	_, err := toolsetsrepo.New(f.ti.conn).UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
-		Name: f.toolset.Name, Description: f.toolset.Description, DefaultEnvironmentSlug: f.toolset.DefaultEnvironmentSlug,
-		McpSlug: pgtype.Text{String: f.endpoint.Slug, Valid: true}, McpIsPublic: false, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpEnabled: true, ToolSelectionMode: f.toolset.ToolSelectionMode, Slug: f.toolset.Slug, ProjectID: f.projectID,
-	})
-	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, f.ti.conn, f.projectID, f.toolset.ID, f.endpoint.Slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	org := f.authCtx.OrganizationSlug
 
 	// Adding an address keeps the alias on the endpoint that still holds it.
