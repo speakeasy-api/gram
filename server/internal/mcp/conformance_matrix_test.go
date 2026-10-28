@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // The conformance matrix runs one fixed request set against every surface on
@@ -470,7 +469,7 @@ func TestConformanceMatrix_MissingTargets(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	disabledToolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "conformance-disabled-"+uuid.NewString()[:8])
+	disabledToolset := createPublicMCPToolset(t, ctx, ti, authCtx, "conformance-disabled-"+uuid.NewString()[:8])
 	disabledSlug := "conformance-disabled-endpoint-" + uuid.NewString()[:8]
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, disabledToolset.ID, disabledSlug, "disabled", uuid.NullUUID{}, uuid.Nil)
 
@@ -587,7 +586,7 @@ func TestConformanceMatrix_HostedToolset(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "conformance-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "conformance-"+uuid.NewString()[:8])
 
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
@@ -608,7 +607,7 @@ func TestConformanceMatrix_HostedToolsetEndpoint(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "conformance-toolset-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "conformance-toolset-"+uuid.NewString()[:8])
 	endpointSlug := "conformance-endpoint-" + uuid.NewString()[:8]
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, uuid.Nil)
 

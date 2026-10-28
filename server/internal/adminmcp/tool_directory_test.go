@@ -24,7 +24,7 @@ import (
 
 func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 	t.Parallel()
-	operations := map[WriteOperation]bool{}
+	operations := make(map[WriteOperation]bool)
 	for _, op := range AllWriteOperations {
 		if op.implemented() {
 			operations[op] = true
@@ -137,7 +137,7 @@ func TestToolDirectoryListsOnlyEnabledWriteOperations(t *testing.T) {
 	t.Parallel()
 	runtime := NewRuntime(nil, "https://admin.example.test/admin-mcp")
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{}}
+	writes := WriteConfig{Enabled: true, Operations: make(map[WriteOperation]bool)}
 	writes.Operations[OperationSetOrganizationFeature] = true
 	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Approval: &StaffProposalApproval{}}, deps, writes))
 	directory, err := runtime.toolDirectory(t.Context())

@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -30,7 +29,7 @@ func TestHostedMalformedToolsCall_RecordsCoverageAtMethodBoundary(t *testing.T) 
 	require.NotNil(t, authCtx.ProjectID)
 
 	ctx = stampHostedCoverageUser(t, ctx, authCtx.UserID)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "hosted-coverage-toolset-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "hosted-coverage-toolset-"+uuid.NewString()[:8])
 	endpointSlug := "hosted-coverage-endpoint-" + uuid.NewString()[:8]
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, uuid.Nil)
 
