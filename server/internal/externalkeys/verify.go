@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
@@ -93,7 +93,7 @@ func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKms
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading gcp kms key").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(row.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(row.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
 		return nil, err
 	}
 
