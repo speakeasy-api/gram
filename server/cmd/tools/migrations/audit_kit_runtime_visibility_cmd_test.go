@@ -8,7 +8,13 @@ import (
 
 func TestParseAuditKitRuntimeVisibilityFlags(t *testing.T) {
 	t.Parallel()
-	getenv := func(string) string { return "postgres://user@db.internal:5432/gram" }
+	databaseURL := "postgres://user@db.internal:5432/gram?sslmode=require"
+	getenv := func(key string) string {
+		if key == "GRAM_DATABASE_URL" {
+			return databaseURL
+		}
+		return ""
+	}
 
 	cfg, err := parseAuditKitRuntimeVisibilityFlags([]string{"-environment=staging"}, getenv)
 	require.NoError(t, err)
@@ -34,4 +40,21 @@ func TestParseAuditKitRuntimeVisibilityFlags(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, cfg.apply)
 	require.EqualValues(t, 50, cfg.batchSize)
+
+	_, err = parseAuditKitRuntimeVisibilityFlags([]string{"-environment=staging"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "GRAM_DATABASE_URL")
+}
+
+func TestParseAuditKitRuntimeVisibilityFlagsRequiresTLSForWrites(t *testing.T) {
+	t.Parallel()
+	apply := []string{"-apply", "-environment=staging", "-confirm-environment=staging", "-confirm-target=db.internal:5432/gram", "-confirm-apply=audit-kit-runtime-visibility"}
+
+	for _, mode := range []string{"", "?sslmode=disable", "?sslmode=allow", "?sslmode=prefer"} {
+		getenv := func(string) string { return "postgres://user@db.internal:5432/gram" + mode }
+		_, err := parseAuditKitRuntimeVisibilityFlags(apply, getenv)
+		require.ErrorContains(t, err, "TLS", "sslmode %q", mode)
+
+		_, err = parseAuditKitRuntimeVisibilityFlags([]string{"-environment=staging"}, getenv)
+		require.NoError(t, err, "a dry run writes nothing, so sslmode %q is allowed", mode)
+	}
 }

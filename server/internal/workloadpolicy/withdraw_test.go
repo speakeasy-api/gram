@@ -110,6 +110,49 @@ func TestWithdrawIssuer_CascadesToItsAdmittedSubjects(t *testing.T) {
 	require.Empty(t, assignments, "withdrawing the issuer should already have tombstoned every assignment under it")
 }
 
+// Withdrawing the issuer is the customer-visible change. The cascaded entry
+// for an admission a Kit runtime created for itself is internal, like the
+// runtime's own admit and withdraw entries; other admissions stay customer
+// entries so the log still answers when each subject stopped being admitted.
+func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreInternal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy := registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	_, err := admit(t, ctx, ti, fleetRule, string(workloadidentity.MatchKindWildcard), agentID)
+	require.NoError(t, err)
+	admitted, err := admitWithTags(t, ctx, ti, agentID, []string{"kit-runtime"})
+	require.NoError(t, err)
+
+	ids := make(map[string]string, len(admitted.Admissions))
+	for _, admission := range admitted.Admissions {
+		ids[admission.Subject] = admission.ID
+	}
+	require.Len(t, ids, 2)
+
+	_, err = ti.service.WithdrawIssuer(ctx, &gen.WithdrawIssuerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               policy.Issuers[0].ID,
+	})
+	require.NoError(t, err)
+
+	runtime, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[channelOne])
+	require.NoError(t, err)
+	require.Equal(t, audit.VisibilityInternal, runtime.Visibility)
+
+	fleet, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[fleetRule])
+	require.NoError(t, err)
+	require.Equal(t, audit.VisibilityCustomer, fleet.Visibility)
+
+	issuer, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadIssuerDelete)
+	require.NoError(t, err)
+	require.Equal(t, audit.VisibilityCustomer, issuer.Visibility)
+}
+
 func TestWithdrawIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

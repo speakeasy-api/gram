@@ -26,7 +26,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations audit-kit-runtime-visibility
   -confirm-apply=audit-kit-runtime-visibility
 ```
 
-`-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL`. Rows are updated in batches of `-batch-size` (default 1000), each committing on its own, until none remain. The run is idempotent: an interrupted run can be restarted and continues with the rows still marked `customer`.
+`-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL`, and the URL must require TLS (`sslmode=require`, `verify-ca` or `verify-full`). Rows are updated in batches of `-batch-size` (default 1000), each committing on its own, until none remain. The run is idempotent: an interrupted run can be restarted and continues with the rows still marked `customer`.
 
 ## Output
 
@@ -36,4 +36,16 @@ In a dry run `rows` is the number of entries that would change; in an apply it i
 
 ## Recovery
 
-To undo, set `visibility = 'customer'` on the same rows. Nothing else reads the column's previous value.
+The run records no list of changed rows, and Kit runtime entries written since the application started recording them as internal match the same filter. To undo only this run, restore `visibility = 'customer'` on matching rows created before that deploy:
+
+```sql
+UPDATE audit_logs
+SET visibility = 'customer'
+WHERE actor_type = 'system'
+  AND actor_id = 'kit-runtime'
+  AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
+  AND visibility = 'internal'
+  AND created_at < '<deploy time of the application change, UTC>';
+```
+
+Nothing else reads the column's previous value, and no webhook events are published either way.

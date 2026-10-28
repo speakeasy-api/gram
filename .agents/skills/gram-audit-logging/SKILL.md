@@ -119,8 +119,8 @@ When a handler mutates a resource whose subject already has `Action*`/`Log*` def
 Use this when a system component audits something it does on its own and repeatedly — see **Visibility** for how to tell.
 
 1. Add a `Visibility Visibility` field to the subject's `Log<Verb>Event` struct, documented with when callers set it.
-2. In the `Log<Verb>` function, set `Visibility: string(event.Visibility)` on the `repo.InsertAuditLogParams` literal. Every other writer leaves it out; `(*Logger).log` and the insert query default a blank value to `customer`, and `log` rejects any value other than `customer` or `internal`.
-3. Set `Visibility: audit.VisibilityInternal` at the system call site and `audit.VisibilityCustomer` at the human ones, so each caller states its choice.
+2. In the `Log<Verb>` function, set `Visibility: string(event.Visibility)` on the `repo.InsertAuditLogParams` literal. `Log*` functions for events without the field leave it out of the literal; `(*Logger).log` and the insert query default a blank value to `customer`, and `log` rejects any value other than `customer` or `internal`.
+3. Once an event struct has the field, every caller of that event sets it: `audit.VisibilityInternal` at the system call site and `audit.VisibilityCustomer` at the human ones (`exhaustruct` enforces this).
 4. Test it with `audittest.LatestAuditLogByAction(...).Visibility` and, for webhook routing, `outbox.IsInternalEvent(audittest.LatestOutboxAttributes(...))`.
 5. Rows written before the change keep `customer`. Reclassify them with an application-data backfill under `server/cmd/tools/migrations/` (see `AUDIT_KIT_RUNTIME_VISIBILITY_BACKFILL.md`), never in a migration file.
 

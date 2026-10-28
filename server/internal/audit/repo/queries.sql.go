@@ -439,8 +439,8 @@ type ListAuditLogsRow struct {
 // When no subject_type filter is given, assistant activity events (one per
 // assistant tool call) are excluded so they don't drown out the platform
 // audit feed. Internal entries (operational activity Speakeasy performs on its
-// own) are excluded the same way. The private admin caller can explicitly
-// include both.
+// own) are excluded whatever the filters, unless include_internal_events is
+// set. The private admin caller sets both include flags.
 // The actor name is resolved at read time rather than trusted from the row.
 // Every writer stores the acting user's EMAIL in actor_display_name, so the
 // stored value renders the feed as a column of addresses; joining the

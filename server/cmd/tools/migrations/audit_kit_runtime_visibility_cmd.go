@@ -59,6 +59,9 @@ func parseAuditKitRuntimeVisibilityFlags(args []string, getenv func(string) stri
 	if err != nil {
 		return auditKitRuntimeVisibilityConfig{}, errors.New("invalid $GRAM_DATABASE_URL")
 	}
+	if *apply && !requiresTLS(dbConfig) {
+		return auditKitRuntimeVisibilityConfig{}, errors.New("writes require a TLS connection: set sslmode=require, verify-ca or verify-full in $GRAM_DATABASE_URL")
+	}
 	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
 	if *apply && *confirmTarget != target {
 		return auditKitRuntimeVisibilityConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
@@ -67,6 +70,21 @@ func parseAuditKitRuntimeVisibilityFlags(args []string, getenv func(string) stri
 		return auditKitRuntimeVisibilityConfig{}, errors.New("writes require -confirm-apply=" + auditKitRuntimeVisibilityName)
 	}
 	return auditKitRuntimeVisibilityConfig{dbURL: dbURL, environment: *environment, apply: *apply, batchSize: int32(*batchSize)}, nil
+}
+
+// requiresTLS reports whether every connection attempt pgx would make uses
+// TLS. sslmode=prefer and allow add a plaintext fallback, and disable has no
+// TLS at all.
+func requiresTLS(config *pgx.ConnConfig) bool {
+	if config.TLSConfig == nil {
+		return false
+	}
+	for _, fallback := range config.Fallbacks {
+		if fallback.TLSConfig == nil {
+			return false
+		}
+	}
+	return true
 }
 
 // backfillAuditKitRuntimeVisibility marks the Kit runtime's own workload
