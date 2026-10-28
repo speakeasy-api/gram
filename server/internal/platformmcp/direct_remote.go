@@ -470,12 +470,19 @@ type directRemoteHTTPClient interface {
 // the automatic registration path the category names.
 func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, resourceURL string) (string, bool, error) {
 	available := false
+	// A dynamic registration endpoint only the dashboard can use is kept as a
+	// fallback while later servers are checked, because attachment skips such
+	// a server and connects the first one it can use.
+	fallback := ""
 	for _, metadataURL := range directRemoteProtectedResourceMetadataURLs(resourceURL) {
 		metadata, status, err := directRemoteGetJSON(ctx, policy, client, metadataURL)
 		if transientDirectRemoteMetadataStatus(status) {
 			err = setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 		}
 		if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
+			if fallback != "" {
+				return fallback, false, nil
+			}
 			if available {
 				return oauthDiscoveryAvailable, false, nil
 			}
@@ -502,6 +509,9 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 					err = setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 				}
 				if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
+					if fallback != "" {
+						return fallback, false, nil
+					}
 					if available {
 						return oauthDiscoveryAvailable, false, nil
 					}
@@ -510,12 +520,20 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 				if err != nil || status != http.StatusOK {
 					continue
 				}
-				if discovery, attachmentSupported := directRemoteAutomaticRegistration(authorizationMetadata); discovery != "" {
-					return discovery, attachmentSupported, nil
+				discovery, attachmentSupported := directRemoteAutomaticRegistration(authorizationMetadata)
+				if attachmentSupported {
+					return discovery, true, nil
+				}
+				if discovery != "" {
+					fallback = discovery
+					continue
 				}
 				available = true
 			}
 		}
+	}
+	if fallback != "" {
+		return fallback, false, nil
 	}
 	if available {
 		return oauthDiscoveryAvailable, false, nil

@@ -71,10 +71,11 @@ func TestDirectRemoteOAuthDiscoveryScansForDCR(t *testing.T) {
 			return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
 		}
 	})
-	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+	result, attachable, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
 
 	require.NoError(t, err)
 	require.Equal(t, "available_dcr", result)
+	require.True(t, attachable)
 	require.Equal(t, []string{
 		"https://remote.example.test/.well-known/oauth-protected-resource/mcp",
 		"https://first.example.test/.well-known/oauth-authorization-server",
@@ -123,6 +124,45 @@ func TestDirectRemoteOAuthDiscoveryReportsCIMDWithoutDCR(t *testing.T) {
 	result, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
 	require.NoError(t, err)
 	require.Equal(t, "available_cimd", result)
+}
+
+// Attachment skips a server whose dynamic registration endpoint it cannot use
+// and connects a later one, so discovery keeps checking past that server and
+// reports it only when no later server can be attached.
+func TestDirectRemoteOAuthDiscoveryPrefersAnAttachableLaterServer(t *testing.T) {
+	t.Parallel()
+
+	dashboardOnly := `{"registration_endpoint":"https://first.example.test/register","token_endpoint_auth_methods_supported":["none"]}`
+	for _, test := range []struct {
+		name       string
+		second     string
+		want       string
+		attachable bool
+	}{
+		{name: "later server attachable", second: `{"client_id_metadata_document_supported":true}`, want: "available_cimd", attachable: true},
+		{name: "no later server attachable", second: `{}`, want: "available_dcr", attachable: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+				switch request.URL.String() {
+				case "https://remote.example.test/.well-known/oauth-protected-resource/mcp":
+					return directRemoteTestResponse(request, http.StatusOK, `{"authorization_servers":["https://first.example.test","https://second.example.test"]}`)
+				case "https://first.example.test/.well-known/oauth-authorization-server":
+					return directRemoteTestResponse(request, http.StatusOK, dashboardOnly)
+				case "https://second.example.test/.well-known/oauth-authorization-server":
+					return directRemoteTestResponse(request, http.StatusOK, test.second)
+				default:
+					return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
+				}
+			})
+
+			result, attachable, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+			require.NoError(t, err)
+			require.Equal(t, test.want, result)
+			require.Equal(t, test.attachable, attachable)
+		})
+	}
 }
 
 func TestDirectRemoteAutomaticRegistration(t *testing.T) {
