@@ -11,6 +11,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
+// skillContentRunbookV2 is the runbook's v2 content: v1 plus a paging step.
+const skillContentRunbookV2 = skillContentRunbook + "- page the on-call before any manual failover.\n"
+
 // skillsRunbookV2 is the runbook's second version, which the drift split and
 // the recent runbook activations point at.
 func (s *seeder) skillsRunbookV2() uuid.UUID { return s.fixed("0000-4000-a000-0000000052b3") }
@@ -110,7 +113,7 @@ func (s *seeder) seedSkills(ctx context.Context) error {
 		ID:              runbookV2,
 		SkillID:         s.skillID(3),
 		CreatedByUserID: lucas,
-		BaseContent:     skillContentRunbook,
+		Content:         skillContentRunbookV2,
 	}); err != nil {
 		return fmt.Errorf("insert demo runbook v2: %w", err)
 	}
