@@ -16,16 +16,16 @@ func TestPostLoginDelegationPreselectsExistingConnections(t *testing.T) {
 	html := out.String()
 	require.Contains(t, html, "Example account")
 	require.Contains(t, html, `value="renew" data-binding-id="previous" checked`)
-	require.Contains(t, html, "Add other agents")
+	require.NotContains(t, html, "Add other agents")
 	require.Contains(t, html, "data-grant-agents")
 	require.Contains(t, html, ">Skip</button>")
-	require.Contains(t, html, `value="other" data-binding-id=""  disabled`)
+	require.NotContains(t, html, `value="other"`)
 }
 
 func TestPostLoginDelegationEscapesAccountAndAgentNames(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	err := postLoginDelegationTemplate.Execute(&out, postLoginDelegationData{AccountName: "<script>account</script>", Options: []delegationOption{{Name: "<script>agent</script>"}}})
+	err := postLoginDelegationTemplate.Execute(&out, postLoginDelegationData{AccountName: "<script>account</script>", Options: []delegationOption{{Name: "<script>agent</script>", Existing: true}}})
 	require.NoError(t, err)
 	require.NotContains(t, out.String(), "<script>account")
 	require.NotContains(t, out.String(), "<script>agent")
@@ -35,7 +35,7 @@ func TestPostLoginDelegationEscapesAccountAndAgentNames(t *testing.T) {
 func TestPostLoginDelegationShowsIncreasedScopes(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	option := delegationOption{Name: "Example agent", ComparisonKnown: true, PreviousScopes: []string{"tools:read"}}
+	option := delegationOption{Name: "Example agent", Existing: true, ComparisonKnown: true, PreviousScopes: []string{"tools:read"}}
 	describeDelegationPermissions(&option, []string{"tools:read", "tools:write"})
 	err := postLoginDelegationTemplate.Execute(&out, postLoginDelegationData{Options: []delegationOption{option}})
 	require.NoError(t, err)
@@ -82,10 +82,10 @@ func TestPostLoginDelegationOtherConnectionsStayUnselected(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	html := out.String()
-	require.Contains(t, html, "Jordan Example&#39;s connection")
-	require.Contains(t, html, "Shared credential")
-	require.NotContains(t, html, ` checked`)
-	require.Less(t, strings.Index(html, "Add other agents"), strings.Index(html, "Workspace helper"))
+	require.NotContains(t, html, "Jordan Example&#39;s connection")
+	require.NotContains(t, html, "Shared credential")
+	require.NotContains(t, html, `data-binding-id="" checked`)
+	require.NotContains(t, html, "Workspace helper")
 }
 
 func TestConnectionScopeSummary(t *testing.T) {
@@ -103,6 +103,17 @@ func TestConnectionScopeSummary(t *testing.T) {
 		t.Run(tc.want, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, (remoteSessionCard{Scopes: tc.scopes}).ScopeSummary())
+		})
+	}
+}
+
+func TestDelegationAgentSummary(t *testing.T) {
+	t.Parallel()
+	options := []delegationOption{{Name: "One", Selected: true}, {Name: "Two", Selected: true}, {Name: "Three", Selected: true}, {Name: "Four", Selected: true}, {Name: "Five", Selected: true}}
+	for n, want := range []string{"", "One", "One and Two", "One, Two, and Three", "One, Two, and 2 others", "One, Two, and 3 others"} {
+		t.Run(want, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, want, (postLoginDelegationData{Options: options[:n]}).AgentSummary())
 		})
 	}
 }

@@ -9280,7 +9280,7 @@ func (q *Queries) ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuer
 }
 
 const listPrincipalRemoteSessionBindings = `-- name: ListPrincipalRemoteSessionBindings :many
-SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, u.display_name AS subject_display_name, u.email AS subject_email
+SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, s.subject_urn AS connection_subject, u.display_name AS subject_display_name, u.email AS subject_email
 FROM principal_remote_session_bindings AS b
 JOIN remote_sessions AS s ON s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
@@ -9307,6 +9307,7 @@ type ListPrincipalRemoteSessionBindingsRow struct {
 	RemoteSessionClientID uuid.UUID
 	RemoteSessionID       uuid.UUID
 	GrantGeneration       int64
+	ConnectionSubject     urn.SessionSubject
 	SubjectDisplayName    pgtype.Text
 	SubjectEmail          pgtype.Text
 }
@@ -9335,6 +9336,7 @@ func (q *Queries) ListPrincipalRemoteSessionBindings(ctx context.Context, arg Li
 			&i.RemoteSessionClientID,
 			&i.RemoteSessionID,
 			&i.GrantGeneration,
+			&i.ConnectionSubject,
 			&i.SubjectDisplayName,
 			&i.SubjectEmail,
 		); err != nil {

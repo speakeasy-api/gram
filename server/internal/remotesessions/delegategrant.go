@@ -13,15 +13,15 @@ import (
 )
 
 // DelegateGrant attaches only the exact callback grant. An existing assignment
-// can be renewed only by its own delegator and only if the displayed binding
-// still exists. Other people's assignments require the agent editor.
+// can be renewed only by its delegator, with agent-write permission. Both
+// the displayed binding and the exact newly authorized source are rechecked.
 func (s *Service) DelegateGrant(ctx context.Context, principal uuid.UUID, grant RemoteGrant, expectedBinding uuid.UUID) error {
 	op, err := s.beginBindingOperation(ctx, principal.String(), grant.UserSessionIssuerID.String(), true)
 	if err != nil {
 		return err
 	}
 	defer o11y.NoLogDefer(func() error { return op.tx.Rollback(ctx) })
-	if grant.Subject != op.subject || grant.GrantGeneration <= 0 {
+	if grant.Subject != op.subject || grant.GrantGeneration <= 0 || expectedBinding == uuid.Nil {
 		return oops.C(oops.CodeForbidden)
 	}
 	var old *repo.PrincipalRemoteSessionBinding
@@ -33,7 +33,7 @@ func (s *Service) DelegateGrant(ctx context.Context, principal uuid.UUID, grant 
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "lock existing delegation")
 		}
-		if binding.RemoteSessionClientID != grant.RemoteSessionClientID || binding.RemoteSessionID != grant.RemoteSessionID {
+		if binding.RemoteSessionClientID != grant.RemoteSessionClientID {
 			return oops.C(oops.CodeConflict)
 		}
 		old = &binding
@@ -46,7 +46,7 @@ func (s *Service) DelegateGrant(ctx context.Context, principal uuid.UUID, grant 
 		return oops.E(oops.CodeUnexpected, err, "lock newly authorized connection")
 	}
 	if old != nil {
-		if old.GrantGeneration == grant.GrantGeneration {
+		if old.RemoteSessionID == grant.RemoteSessionID && old.GrantGeneration == grant.GrantGeneration {
 			return nil
 		}
 		if _, err := op.queries.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ID: old.ID, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID}); err != nil {

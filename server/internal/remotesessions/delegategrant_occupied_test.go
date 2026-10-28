@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDelegateGrantPreservesAnotherEditorsAssignment(t *testing.T) {
+func TestDelegateGrantRequiresExplicitReplacementOfAnotherEditorsAssignment(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -42,7 +42,7 @@ func TestDelegateGrantPreservesAnotherEditorsAssignment(t *testing.T) {
 	binding, err := ti.service.AttachBinding(otherCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: theirs.ID.String()})
 	require.NoError(t, err)
 	grant := remotesessions.RemoteGrant{Subject: mine.SubjectUrn, UserSessionIssuerID: config, RemoteSessionClientID: mine.RemoteSessionClientID, RemoteSessionID: mine.ID, GrantGeneration: mine.GrantGeneration}
-	requireOopsCode(t, ti.service.DelegateGrant(ctx, agent.ID, grant, uuid.Nil), oops.CodeConflict)
+	requireOopsCode(t, ti.service.DelegateGrant(ctx, agent.ID, grant, uuid.Nil), oops.CodeForbidden)
 	requireOopsCode(t, ti.service.DelegateGrant(ctx, agent.ID, grant, uuid.MustParse(binding.ID)), oops.CodeConflict)
 	listed, err := ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
 	require.NoError(t, err)

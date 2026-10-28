@@ -13,13 +13,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDelegateGrantExactAuthorization(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"new", "renew", "later grant", "wrong person", "wrong source", "permission revoked", "changed assignment"} {
+	for _, scenario := range []string{"new", "renew", "replacement session", "later grant", "wrong person", "wrong source", "permission revoked", "changed assignment"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestService(t)
@@ -49,10 +50,14 @@ func TestDelegateGrantExactAuthorization(t *testing.T) {
 			client := createRemoteClient(t, ctx, ti, issuer, config.String(), "delegation-client")
 			mine := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
 			expected := uuid.Nil
-			if scenario == "renew" || scenario == "changed assignment" {
+			if scenario == "renew" || scenario == "replacement session" || scenario == "changed assignment" {
 				binding, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: mine.ID.String()})
 				require.NoError(t, err)
 				expected = uuid.MustParse(binding.ID)
+				if scenario == "replacement session" {
+					_, err := repo.New(ti.conn).SoftDeleteRemoteSessionsByClientID(ctx, mine.RemoteSessionClientID)
+					require.NoError(t, err)
+				}
 				mine = insertRemoteSession(t, ctx, ti.conn, mine.SubjectUrn, config.String(), client)
 			}
 			grant := remotesessions.RemoteGrant{ConnectionPopup: true, ParentChallengeID: uuid.NewString(), UserSessionIssuerID: config, RemoteSessionClientID: mine.RemoteSessionClientID, Subject: mine.SubjectUrn, RemoteSessionID: mine.ID, RemoteSessionUpdatedAt: mine.UpdatedAt.Time, GrantGeneration: mine.GrantGeneration}
@@ -70,7 +75,7 @@ func TestDelegateGrantExactAuthorization(t *testing.T) {
 				require.NoError(t, ti.service.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: expected.String()}))
 			}
 			err = ti.service.DelegateGrant(ctx, agent.ID, grant, expected)
-			if scenario == "new" || scenario == "renew" {
+			if scenario == "renew" || scenario == "replacement session" {
 				require.NoError(t, err)
 				bindings, err := ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
 				require.NoError(t, err)

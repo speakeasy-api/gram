@@ -1,7 +1,7 @@
 {{define "delegationAgentRow"}}
 <li class="has-[:checked]:bg-accent flex items-start gap-3 border-t px-6 py-4 sm:px-8">
   <label class="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
-    <input class="mt-1 shrink-0" type="checkbox" name="agent_id" value="{{.ID}}" data-binding-id="{{.BindingID}}" {{if .Selected}}checked{{end}} {{if .Disabled}}disabled{{end}} />
+    <input class="mt-1 shrink-0" type="checkbox" name="agent_id" data-agent-name="{{.Name}}" value="{{.ID}}" data-binding-id="{{.BindingID}}" {{if .Selected}}checked{{end}} {{if .Disabled}}disabled{{end}} />
     <span class="min-w-0"><span class="block text-sm font-medium">{{.Name}}</span><span class="mt-1 block text-xs text-muted-foreground">{{.Detail}}{{if .Expiry}} · {{.Expiry}}{{end}}</span></span>
   </label>
   {{if not .Disabled}}<button type="button" class="shrink-0 text-xs underline underline-offset-4" popovertarget="permissions-{{.ID}}" data-permission-details>{{.PermissionSummary}}</button>{{end}}
@@ -15,8 +15,16 @@
 </li>
 {{end}}
 {{define "agentDelegationFields"}}
-<div class="px-6 py-4 sm:px-8"><p class="text-sm">{{if .AccountName}}{{.AccountName}}{{else}}Your upstream account{{end}}{{if .AccountEmail}} <span class="text-xs text-muted-foreground">({{.AccountEmail}})</span>{{end}}</p><p class="mt-1 text-xs text-muted-foreground">Agents already using your connection are selected. Changes apply when you approve.</p></div>
+<div data-delegation-header {{if not .AgentSummary}}hidden{{end}} class="flex items-center gap-4 px-6 py-4 sm:px-8 interact:bg-accent">
+  <input type="checkbox" data-delegation-enabled {{if .AgentSummary}}checked{{end}} class="shrink-0" aria-label="Also update access for agents using this connection"/>
+  <button type="button" data-delegation-toggle aria-expanded="false" aria-controls="delegation-agent-choices" class="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
+    <span class="min-w-0"><span class="block text-sm font-medium">Also update access for agents using this connection</span><span class="mt-1 block text-xs text-muted-foreground" data-delegation-summary>{{.AgentSummary}}</span></span>
+    <svg data-delegation-chevron class="size-3 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+  </button>
+</div>
+<div class="bg-accent border-l border-r" id="delegation-agent-choices" {{if .AgentSummary}}hidden{{end}}>
+<p class="border-t px-6 py-3 text-xs text-muted-foreground sm:px-8">Using {{if .AccountName}}{{.AccountName}}{{else}}your upstream account{{end}}{{if .AccountEmail}} ({{.AccountEmail}}){{end}}.</p>
 <input type="hidden" name="state" value="{{.State}}"/><input type="hidden" name="csrf_token" value="{{.CSRF}}"/><input type="hidden" name="remote_session_id" value="{{.SessionID}}"/><input type="hidden" name="grant_generation" value="{{.Generation}}"/>
 <ul class="m-0 list-none p-0">{{range .Options}}{{if .Existing}}{{template "delegationAgentRow" .}}{{end}}{{end}}</ul>
-<details class="border-t"><summary class="cursor-pointer px-6 py-3 text-sm sm:px-8">Add other agents</summary><ul class="m-0 max-h-64 list-none overflow-y-auto p-0">{{range .Options}}{{if not .Existing}}{{template "delegationAgentRow" .}}{{end}}{{end}}</ul></details>
+</div>
 {{end}}

@@ -4460,7 +4460,7 @@ RETURNING id, principal_id, user_session_issuer_id, remote_session_client_id, re
 -- Keep unavailable bindings discoverable for explicit detach, but return no
 -- source identity. The handler adds a canonical view only for an eligible
 -- candidate whose grant generation still matches this exact attachment.
-SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, u.display_name AS subject_display_name, u.email AS subject_email
+SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, s.subject_urn AS connection_subject, u.display_name AS subject_display_name, u.email AS subject_email
 FROM principal_remote_session_bindings AS b
 JOIN remote_sessions AS s ON s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL

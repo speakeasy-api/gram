@@ -79,16 +79,10 @@
         </p>
         {{end}}
 
-        {{if .Delegation}}
-        <div data-delegation-form data-integrated-delegation data-action-url="{{.Delegation.ActionURL}}" class="border-b">
-          <h2 class="px-6 pt-6 text-sm font-semibold sm:px-8">Grant access to agents</h2>
-          {{template "agentDelegationFields" .Delegation}}
-          <p role="alert" data-delegation-error class="px-6 pb-4 text-sm sm:px-8" hidden></p>
-        </div>
-        {{else if not .FirstParty}}
+        {{if and (not .Delegation) (not .FirstParty)}}
         <p class="text-muted-foreground border-b px-6 py-4 text-sm sm:px-8">
           Connecting as <span class="text-foreground font-medium">{{.SubjectDisplay}}</span>.
-          After signing in to a service, you can also give agents access to that connection.
+          After signing in to a service, you can also update agents already using your connection.
         </p>
         {{end}}
 
@@ -544,6 +538,13 @@
             </p>
             <noscript>To choose tools, enable JavaScript and reload this page.</noscript>
           </div>
+        </div>
+        {{end}}
+
+        {{if .Delegation}}
+        <div data-delegation-form data-integrated-delegation data-action-url="{{.Delegation.ActionURL}}" class="border-b">
+          {{template "agentDelegationFields" .Delegation}}
+          <p role="alert" data-delegation-error class="px-6 pb-4 text-sm sm:px-8" hidden></p>
         </div>
         {{end}}
 

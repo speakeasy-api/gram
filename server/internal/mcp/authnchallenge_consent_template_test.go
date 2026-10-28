@@ -733,7 +733,7 @@ func TestConsentTemplateAgentSelectionShowsFixedPolicyAndSetupOnly(t *testing.T)
 	html := page.String()
 	require.Contains(t, html, "Connecting as")
 	require.Contains(t, html, "user@example.com")
-	require.Contains(t, html, "give agents access")
+	require.Contains(t, html, "update agents already using your connection")
 	require.NotContains(t, html, `name="consent_actor"`)
 	require.NotContains(t, html, `name="agent_id"`)
 	require.NotContains(t, html, "Myself")
@@ -927,7 +927,7 @@ func TestConsentTemplateAgentConnectionsRemainVisibleAndUseResolvedRoute(t *test
 			html := normalizeWhitespace(page.String())
 			require.Contains(t, html, `data-action-url="/`+routeBase.String()+`/example/connect/remote-session"`)
 			require.Contains(t, html, `data-remote-client="provider"`)
-			require.Contains(t, html, "give agents access")
+			require.Contains(t, html, "update agents already using your connection")
 			require.Contains(t, html, "data-agent-access")
 			require.NotContains(t, html, "Agent service connections")
 			require.NotContains(t, html, `name="consent_actor"`)
@@ -1011,10 +1011,10 @@ func TestConsentTemplateDelegationReplacesActorChoice(t *testing.T) {
 	var page bytes.Buffer
 	require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
 		ClientName: "Example client", SubjectDisplay: "Example person", ConsentEnabled: true,
-		Delegation: &postLoginDelegationData{HasPreviousScopes: true, PreviousScopes: []string{"tools:read"}, Scopes: []delegationScope{{Name: "tools:read"}, {Name: "tools:write", Added: true}}, Options: []delegationOption{{ID: "example-agent", Name: "Example agent", Scopes: []delegationScope{{Name: "tools:write", Added: true}}}}},
+		Delegation: &postLoginDelegationData{HasPreviousScopes: true, PreviousScopes: []string{"tools:read"}, Scopes: []delegationScope{{Name: "tools:read"}, {Name: "tools:write", Added: true}}, Options: []delegationOption{{ID: "example-agent", Name: "Example agent", Existing: true, Scopes: []delegationScope{{Name: "tools:write", Added: true}}}}},
 	}))
 	html := page.String()
-	require.Contains(t, html, "Grant access to agents")
+	require.Contains(t, html, "Also update access for")
 	require.Contains(t, html, "tools:write")
 	require.Contains(t, html, "· Added")
 	require.Contains(t, html, `data-approve-form`)

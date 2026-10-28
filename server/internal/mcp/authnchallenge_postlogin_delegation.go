@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,6 +60,28 @@ type postLoginDelegationData struct {
 	Styles                                                                template.CSS
 	ScriptURL, ActionURL, ContinueURL, State, CSRF, SessionID, Generation string
 	Options                                                               []delegationOption
+}
+
+// AgentSummary names the default selections without expanding the agent list.
+func (d postLoginDelegationData) AgentSummary() string {
+	var names []string
+	for _, option := range d.Options {
+		if option.Selected && !option.Disabled {
+			names = append(names, option.Name)
+		}
+	}
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	case 2:
+		return strings.Join(names, " and ")
+	case 3:
+		return strings.Join(names[:2], ", ") + ", and " + names[2]
+	default:
+		return fmt.Sprintf("%s, %s, and %d others", names[0], names[1], len(names)-2)
+	}
 }
 
 func (s *Service) delegationHuman(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (consentHumanAuthorization, error) {
@@ -114,13 +137,20 @@ func (s *Service) loadPostLoginDelegation(r *http.Request, endpoint *ResolvedMcp
 			}
 			option.BindingID = binding.ID.String()
 			if binding.RemoteSessionID != state.PendingDelegation.RemoteSessionID {
-				option.Disabled = true
 				option.Detail = "Another user's connection"
 				if binding.SubjectDisplayName.Valid && binding.SubjectDisplayName.String != "" {
 					option.Detail = binding.SubjectDisplayName.String + "'s connection"
 				} else if binding.SubjectEmail.Valid && binding.SubjectEmail.String != "" {
 					option.Detail = "Connection granted by " + binding.SubjectEmail.String
 				}
+
+				if binding.ConnectionSubject == state.PendingDelegation.Subject {
+					option.Existing = true
+					option.Selected = true
+					option.Detail = "Your connection"
+				}
+				option.ComparisonKnown = false
+				option.Expiry = "Previous expiry unavailable"
 			} else if binding.GrantGeneration == state.PendingDelegation.GrantGeneration {
 				option.Existing = true
 				option.Selected = true
@@ -146,6 +176,9 @@ func (s *Service) loadPostLoginDelegation(r *http.Request, endpoint *ResolvedMcp
 			option.Existing = false
 			option.Selected = false
 			option.Disabled = true
+		}
+		if !option.Existing || option.Disabled {
+			continue
 		}
 		describeDelegationPermissions(&option, state.PendingDelegation.Scopes)
 		options = append(options, option)

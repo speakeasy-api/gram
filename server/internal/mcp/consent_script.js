@@ -51,10 +51,70 @@
       "[data-delegation-error]",
     );
     var delegationBusy = false;
+    var delegationEnabled = delegationForm.querySelector(
+      "[data-delegation-enabled]",
+    );
+    var delegationToggle = delegationForm.querySelector(
+      "[data-delegation-toggle]",
+    );
+    if (delegationToggle)
+      delegationToggle.addEventListener("click", function () {
+        var expanded =
+          delegationToggle.getAttribute("aria-expanded") === "true";
+        delegationToggle.setAttribute("aria-expanded", String(!expanded));
+        delegationForm
+          .querySelector("[data-delegation-header]")
+          .classList.toggle("bg-accent", !expanded);
+        delegationForm.querySelector("#delegation-agent-choices").hidden =
+          expanded;
+        delegationToggle.querySelector(
+          "[data-delegation-chevron]",
+        ).style.transform = expanded ? "" : "rotate(180deg)";
+      });
     function updateDelegationSelection() {
+      var names = Array.from(
+        delegationForm.querySelectorAll(
+          'input[name="agent_id"]:checked:not(:disabled)',
+        ),
+      ).map(function (input) {
+        return input.dataset.agentName;
+      });
+      var header = delegationForm.querySelector("[data-delegation-header]");
+      if (header && delegationEnabled) {
+        if (!names.length) {
+          header.hidden = true;
+          delegationEnabled.checked = false;
+          delegationForm.querySelector("#delegation-agent-choices").hidden =
+            false;
+        } else if (header.hidden) {
+          header.hidden = false;
+          delegationEnabled.checked = true;
+          delegationToggle.setAttribute("aria-expanded", "true");
+          header.classList.add("bg-accent");
+          delegationToggle.querySelector(
+            "[data-delegation-chevron]",
+          ).style.transform = "rotate(180deg)";
+        }
+      }
+      var summary = delegationForm.querySelector("[data-delegation-summary]");
+      if (summary)
+        summary.textContent =
+          names.length === 0
+            ? ""
+            : names.length === 1
+              ? names[0]
+              : names.length === 2
+                ? names.join(" and ")
+                : names.length === 3
+                  ? names.slice(0, 2).join(", ") + ", and " + names[2]
+                  : names.slice(0, 2).join(", ") +
+                    ", and " +
+                    (names.length - 2) +
+                    " others";
       if (integratedDelegation) return;
       grantButton.disabled =
         delegationBusy ||
+        (delegationEnabled && !delegationEnabled.checked) ||
         !delegationForm.querySelector(
           'input[name="agent_id"]:checked:not(:disabled)',
         );
@@ -92,7 +152,7 @@
       updateDelegationSelection();
       delegationError.hidden = true;
       try {
-        if (grant) {
+        if (grant && (!delegationEnabled || delegationEnabled.checked)) {
           var selected = Array.from(
             delegationForm.querySelectorAll(
               'input[name="agent_id"]:checked:not(:disabled)',
