@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -906,7 +907,8 @@ func TestConnectionCatalogProgressiveListsOnlySelectedServers(t *testing.T) {
 
 func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	logs := &syncBuffer{}
+	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)))
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "catalog-config-" + uuid.NewString()
@@ -915,9 +917,9 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
 	// Code Mode helpers name the changed member as needing a new consent
 	// instead of silently dropping it.
+	enableCodeMode(t, ctx, ti)
 	var codeChecked atomic.Bool
 	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(ctx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
-		enableCodeMode(t, ctx, ti)
 		servers, err := host.Servers(ctx, codemode.PageArgs{})
 		require.NoError(t, err)
 		require.Equal(t, []codemode.Server{{Slug: "source", Name: "Source"}}, servers.Items)
@@ -953,7 +955,11 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	status, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}}), progressive.token, nil)
 	require.NoError(t, err)
 	require.Contains(t, status.Body.String(), "configuration changed")
+	beforeCode := strings.Count(logs.String(), "gateway consent validation failed")
 	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
+	require.Equal(t, beforeCode+1, strings.Count(logs.String(), "gateway consent validation failed"), "all helpers share one diagnostic per stale member")
+	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
+	require.Equal(t, beforeCode+2, strings.Count(logs.String(), "gateway consent validation failed"), "a new execution has its own diagnostic scope")
 	require.True(t, codeChecked.Load())
 	require.Zero(t, replacement.calls.Load())
 }

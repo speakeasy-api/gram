@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -310,7 +313,8 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 	}
 	approved, found := gate.catalog.Members[member.slug]
 	if !found || approved.ServerID != member.serverID || approved.ProjectID != member.projectID {
-		return catalogConsentError{&metaMemberError{message: catalogMemberNotApproved}}
+		return s.rejectCatalogMember(ctx, gate, member, "member_not_approved", catalogMemberNotApproved,
+			map[string]bool{"member_recorded": found, "server_id_matches": found && approved.ServerID == member.serverID, "project_id_matches": found && approved.ProjectID == member.projectID})
 	}
 
 	if member.backend == metaMemberBackendProxied && (gate.execute || gate.catalogRef.Mode == toolfilter.CatalogModeLive) {
@@ -322,13 +326,53 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 			return member.upstreamUnavailable
 		}
 		if approved.Auth == nil || approved.Auth.RegistrationID != member.chosenClientID || approved.Auth.ClientID != clientID {
-			return catalogConsentError{&metaMemberError{message: "This server's authentication changed. Give consent again to approve it."}}
+			return s.rejectCatalogMember(ctx, gate, member, "authentication_changed", "This server's authentication changed. Give consent again to approve it.",
+				map[string]bool{"auth_recorded": approved.Auth != nil, "registration_id_matches": approved.Auth != nil && approved.Auth.RegistrationID == member.chosenClientID, "auth_client_id_matches": approved.Auth != nil && approved.Auth.ClientID == clientID})
 		}
 	}
 	if member.configurationHash == "" || member.configurationHash != approved.BackendHash {
-		return catalogConsentError{&metaMemberError{message: "This server's configuration changed. Give consent again to approve it."}}
+		return s.rejectCatalogMember(ctx, gate, member, "configuration_changed", "This server's configuration changed. Give consent again to approve it.",
+			map[string]bool{"configuration_hash_present": member.configurationHash != "", "approved_hash_recorded": approved.BackendHash != ""})
 	}
 	return nil
+}
+
+// Log before discovery collapses the refusal into consent_required. Keep the
+// record to correlation IDs and comparison results: never log the catalog,
+// credentials, configuration hashes, headers, or tool definitions.
+func (s *Service) rejectCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember, reason, message string, comparisons map[string]bool) error {
+	err := catalogConsentError{&metaMemberError{message: message}}
+	if gate.consentDiagnostics != nil {
+		key := consentDiagnosticKey{catalogID: gate.catalog.ID, memberID: member.serverID, reason: reason}
+		if _, seen := gate.consentDiagnostics.seen.LoadOrStore(key, struct{}{}); seen {
+			return err
+		}
+	}
+	mode := ""
+	if gate.catalogRef != nil {
+		mode = string(gate.catalogRef.Mode)
+	}
+	s.logger.LogAttrs(ctx, slog.LevelInfo, "gateway consent validation failed",
+		attr.SlogMetaMcpServerID(gate.metaServerID.String()),
+		attr.SlogMcpServerID(member.serverID.String()),
+		attr.SlogProjectID(gate.projectID.String()),
+		attr.SlogMcpConsentMemberProjectID(member.projectID.String()),
+		attr.SlogReason(reason),
+		attr.SlogMcpConsentCatalogID(gate.catalog.ID.String()),
+		attr.SlogMcpConsentMode(mode),
+		attr.SlogMcpConsentExecute(gate.execute),
+		attr.SlogMcpConsentComparisons(comparisons))
+	return err
+}
+
+// A Code Mode execution can validate the same member concurrently through
+// several helpers. Keep its diagnostic set shared across refreshed gate copies.
+type consentDiagnostics struct{ seen sync.Map }
+
+type consentDiagnosticKey struct {
+	catalogID uuid.UUID
+	memberID  uuid.UUID
+	reason    string
 }
 
 // catalogConsentError is a member whose approval no longer matches it. Only a
