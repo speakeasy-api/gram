@@ -31,6 +31,8 @@ const (
 	IDJAGRejectionNone IDJAGRejectionReason = ""
 	// IDJAGRejectionInvalidRequest: the token request was malformed.
 	IDJAGRejectionInvalidRequest IDJAGRejectionReason = "invalid_request"
+	// IDJAGRejectionClientNotAllowed: the client may not use the ID-JAG grant.
+	IDJAGRejectionClientNotAllowed IDJAGRejectionReason = "client_not_allowed"
 	// IDJAGRejectionResourceMismatch: a resource indicator named another server.
 	IDJAGRejectionResourceMismatch IDJAGRejectionReason = "resource_mismatch"
 	// IDJAGRejectionSubjectNotAuthorized: the resolved user lacks access.

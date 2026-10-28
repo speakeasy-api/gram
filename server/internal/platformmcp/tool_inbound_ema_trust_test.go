@@ -215,6 +215,10 @@ func TestInboundEMATrustGetReportsAudienceDirectoryAndProvider(t *testing.T) {
 	output, err := f.service.Get(t.Context(), f.principal)
 	require.NoError(t, err)
 	require.Equal(t, InboundEMADirectory{ResolvableDirectoryUsers: 2, Synced: true}, output.Directory)
+	require.Equal(t, []InboundEMAClient{
+		{Name: "Claude Code", ClientID: "https://claude.ai/oauth/claude-code-client-metadata"},
+		{Name: "Codex", ClientID: "https://chatgpt.com/oauth/codex/client.json"},
+	}, output.AcceptedClients)
 	require.Len(t, output.Issuers, 2)
 	for _, issuer := range output.Issuers {
 		switch issuer.UserSessionIssuerID {

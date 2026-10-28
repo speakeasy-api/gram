@@ -35,7 +35,7 @@ func sharedIDJAGFixture(t *testing.T) (context.Context, *testInstance, idJAGTest
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, sharedTestUpstreamIssuer, jwksURL)
 	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
 	f := sharedIssuerFixture{
-		issuer: issuer, client: createIDJAGClient(t, ctx, ti, issuer.ID),
+		issuer: issuer, client: seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID),
 		slugA:     seedPublicServerOnIssuer(t, ctx, ti, issuer.ID),
 		slugB:     seedPublicServerOnIssuer(t, ctx, ti, issuer.ID),
 		issuerURL: ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String(),
@@ -138,7 +138,7 @@ func TestSharedAuthorizationServer_AssertionResourceRefusalDoesNotConsumeIDJAG(t
 		resources []string
 		code      string
 	}{
-		{nil, "invalid_request"}, {[]string{resource, resource}, "invalid_target"},
+		{[]string{resource, resource}, "invalid_target"},
 		{[]string{resource + "/"}, "invalid_target"}, {[]string{"not-a-resource"}, "invalid_target"},
 		{[]string{foreign.resource(ti, foreign.slugA)}, "invalid_target"},
 		{[]string{ti.serverURL.String() + "/mcp/unknown"}, "invalid_target"},
@@ -351,6 +351,74 @@ func TestSharedAuthorizationServer_IDJAGWithoutResourceClaimRefusesForeignResour
 	})
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+}
+
+// Codex sends no resource: the assertion's resource claim picks the server.
+func TestSharedAuthorizationServer_IDJAGWithoutRequestResourceUsesResourceClaim(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	resource := f.resource(ti, f.slugB)
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamClientID:  {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, resource, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	resp := decodeSharedTokenResponse(t, w)
+	require.Equal(t, []any{resource}, unverifiedClaims(t, resp.AccessToken)["aud"])
+	for _, target := range []string{f.slugA, f.slugB} {
+		endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, target, "mcp")
+		require.NoError(t, err)
+		_, _, _, err = ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), resp.AccessToken, ti.serverURL.String(), endpoint)
+		if target == f.slugB {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+		}
+	}
+}
+
+func TestSharedAuthorizationServer_IDJAGResourceClaimRefusalDoesNotConsumeIDJAG(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	foreign := seedSharedIssuer(t, ctx, ti)
+	assertionID := uuid.NewString()
+	for _, tc := range []struct {
+		claim string
+		code  string
+	}{
+		{foreign.resource(ti, foreign.slugA), "invalid_target"},
+		{"not-a-resource", "invalid_target"},
+		{ti.serverURL.String() + "/mcp/unknown", "invalid_target"},
+	} {
+		w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+			oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},
+			oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, tc.claim, f.client.ClientID, mockidp.MockUserEmail, assertionID)},
+		})
+		require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+		require.Equal(t, tc.code, decodeSharedTokenResponse(t, w).Error)
+	}
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, f.resource(ti, f.slugA), f.client.ClientID, mockidp.MockUserEmail, assertionID)},
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+func TestSharedAuthorizationServer_IDJAGWithoutResourceOrClaimIsInvalidRequest(t *testing.T) {
+	t.Parallel()
+	ctx, ti, signer, f := sharedIDJAGFixture(t)
+	form := url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},
+		oauthwire.ParamAssertion: {signer.signWithoutResource(t, sharedTestUpstreamIssuer, f.issuerURL, f.client.ClientID, mockidp.MockUserEmail, uuid.NewString())},
+	}
+	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), form)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Equal(t, "invalid_request", decodeSharedTokenResponse(t, w).Error)
+
+	form[oauthwire.ParamResource] = []string{f.resource(ti, f.slugA)}
+	w = sharedToken(t, ctx, ti, f.issuer.ID.String(), form)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 
 // Shared metadata omits the ID-JAG grant for a trusted issuer without a usable jwks_uri.

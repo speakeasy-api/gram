@@ -556,6 +556,10 @@ func (s *Service) handleTokenJWTBearerGrant(
 ) error {
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
 	defer exchange.record(ctx)
+	if !clientRow.ClientIDMetadataUri.Valid || !idjag.ClientAllowed(clientRow.ClientID) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, string(mcpmetrics.IDJAGRejectionClientNotAllowed), exchange.reject(mcpmetrics.IDJAGRejectionClientNotAllowed, nil)...)
+		return writeTokenPolicyError(ctx, w, logger, oauthwire.GrantTypeJWTBearer, "this client is not allowed to use the ID-JAG grant")
+	}
 	req := usersessions.JWTBearerTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {

@@ -381,7 +381,7 @@ func newFederationLoginFixture(t *testing.T, memberAllowed bool, offline ...bool
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	toolset, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, Slug: toolset.Slug, ProjectID: *ac.ProjectID})
 	require.NoError(t, err)
-	downstream := createIDJAGClient(t, ctx, ti, issuer.ID)
+	downstream := createDCRClient(t, ctx, ti, issuer.ID)
 	seedIDJAGDirectoryUser(t, ctx, ti, ac.ActiveOrganizationID)
 	// AIM-75: NULL directory link resolves only an existing same-org human.
 	err = directoryrepo.New(ti.conn).ClearOrganizationDirectoryUserLinksFixture(ctx, ac.ActiveOrganizationID)

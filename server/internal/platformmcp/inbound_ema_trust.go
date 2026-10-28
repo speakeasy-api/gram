@@ -23,6 +23,7 @@ import (
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 )
 
@@ -166,8 +167,20 @@ type GetInboundEMATrustOutput struct {
 	// Directory reports the directory sync users resolve through.
 	Directory InboundEMADirectory `json:"directory"`
 
+	// AcceptedClients are the only MCP clients that may exchange an ID-JAG.
+	AcceptedClients []InboundEMAClient `json:"accepted_clients"`
+
 	// NextStep is the next safe action.
 	NextStep string `json:"next_step"`
+}
+
+// InboundEMAClient is an MCP client that may exchange an ID-JAG.
+type InboundEMAClient struct {
+	// Name is the client's name.
+	Name string `json:"name"`
+
+	// ClientID is the client ID metadata document URL the client presents.
+	ClientID string `json:"client_id" jsonschema:"the client ID at the resource to configure in the identity provider for this client"`
 }
 
 // TrustInboundEMAIdentityProviderInput names the issuer and identity provider.
@@ -296,7 +309,7 @@ func (s *InboundEMATrustService) Get(ctx context.Context, principal Principal) (
 	if err != nil {
 		return GetInboundEMATrustOutput{}, err
 	}
-	output := GetInboundEMATrustOutput{OrganizationID: principal.OrganizationID, Issuers: []InboundEMAIssuer{}, Truncated: listed.NextCursor != nil}
+	output := GetInboundEMATrustOutput{OrganizationID: principal.OrganizationID, Issuers: []InboundEMAIssuer{}, Truncated: listed.NextCursor != nil, AcceptedClients: inboundEMAAcceptedClients()}
 	for _, issuer := range listed.Items {
 		if issuer == nil || issuer.ProjectID != "" {
 			continue
@@ -737,4 +750,13 @@ func inboundEMATrustNextStep(issuer InboundEMAIssuer, directory InboundEMADirect
 		step += " No directory users are synced yet, so every exchange is refused until directory sync is set up."
 	}
 	return step + " The trust does not prove the identity provider issues valid ID-JAGs; test a sign-in."
+}
+
+func inboundEMAAcceptedClients() []InboundEMAClient {
+	allowed := idjag.AllowedClients()
+	clients := make([]InboundEMAClient, 0, len(allowed))
+	for _, client := range allowed {
+		clients = append(clients, InboundEMAClient{Name: client.DisplayName, ClientID: client.ClientID})
+	}
+	return clients
 }

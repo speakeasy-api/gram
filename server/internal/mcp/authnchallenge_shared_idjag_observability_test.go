@@ -38,7 +38,7 @@ func TestSharedAuthorizationServer_IDJAGWithoutRequestResourceIsRecorded(t *test
 	authCtx := requireProjectAuthContext(t, ctx)
 	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, sharedTestUpstreamIssuer, "https://identity.example.test/keys")
 	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
-	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
 
 	w := sharedToken(t, ctx, ti, issuer.ID.String(), url.Values{
 		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {client.ClientID},

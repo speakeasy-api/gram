@@ -306,7 +306,7 @@ func newAuthenticationHostIDJAGFixture(t *testing.T) authenticationHostIDJAGFixt
 		ProjectID:           *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
 	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
 	useAuthenticationHost(t, ctx, ti, authCtx.ActiveOrganizationID, issuer.ID)

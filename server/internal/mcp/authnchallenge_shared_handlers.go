@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -304,7 +305,7 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 // Assertion grants naming exactly one resource dispatch to that resource's
 // client-authenticated ID-JAG or clientless workload handler. A clientless
 // workload grant naming no resource is served for all of the issuer's MCP
-// servers; an ID-JAG exchange must still name one.
+// servers; an ID-JAG exchange naming none is routed by its resource claim.
 func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
@@ -345,9 +346,20 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
 		}
 		var rejection sharedResourceRejection
-		endpoint, rejection, err = s.resolveSharedResourceIndicators(ctx, logger, issuer.authorizationServer, resources)
-		if err != nil {
-			return err
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 {
+			// Unverified: it only picks the server whose ID-JAG checks then verify it.
+			if resource, ok, claimErr := idjag.UnverifiedResource(r.PostForm.Get(oauthwire.ParamAssertion)); ok {
+				resources = []string{resource}
+				if claimErr != nil {
+					rejection = sharedResourceMalformed
+				}
+			}
+		}
+		if rejection == sharedResourceAccepted {
+			endpoint, rejection, err = s.resolveSharedResourceIndicators(ctx, logger, issuer.authorizationServer, resources)
+			if err != nil {
+				return err
+			}
 		}
 		if rejection != sharedResourceAccepted {
 			if grantType == oauthwire.GrantTypeJWTBearer && rejection == sharedResourceMissing {

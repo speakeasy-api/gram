@@ -1,9 +1,13 @@
 package mcp_test
 
 import (
+	"bufio"
 	"crypto/x509"
+	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,7 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
@@ -75,7 +81,7 @@ func TestTokenIDJAGExchangeRecordsOutcomeAndRejectionReason(t *testing.T) {
 		ProjectID:           *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	client := createIDJAGClient(t, ctx, ti, issuer.ID)
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
 	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
 
@@ -98,4 +104,48 @@ func TestTokenIDJAGExchangeRecordsOutcomeAndRejectionReason(t *testing.T) {
 		string(mcpmetrics.IDJAGExchangeRejected) + "/" + string(idjag.ReasonAudienceMismatch): 1,
 		string(mcpmetrics.IDJAGExchangeAccepted) + "/":                                        1,
 	}, idJAGExchangeCounts(t, reader, issuer.ID))
+}
+
+func TestTokenIDJAGExchangeRecordsClientNotAllowed(t *testing.T) {
+	t.Parallel()
+
+	var logs syncBuffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: false, ReplaceAttr: nil}))
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	}, nil)
+	authCtx := requireProjectAuthContext(t, ctx)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, "https://identity.example.test", "https://identity.example.test/keys")
+	toolset, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	client := createDCRClient(t, ctx, ti, issuer.ID)
+
+	w := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, "unused.assertion.value")
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var rejected []map[string]any
+	scanner := bufio.NewScanner(strings.NewReader(logs.String()))
+	for scanner.Scan() {
+		var line map[string]any
+		require.NoError(t, json.Unmarshal(scanner.Bytes(), &line))
+		if line["msg"] == "oauth ID-JAG token request rejected" {
+			rejected = append(rejected, line)
+		}
+	}
+	require.Len(t, rejected, 1)
+	reason := string(mcpmetrics.IDJAGRejectionClientNotAllowed)
+	require.Equal(t, reason, rejected[0][string(attr.OAuthIDJAGRejectionReasonKey)])
+	require.Equal(t, issuer.ID.String(), rejected[0][string(attr.UserSessionIssuerIDKey)])
+
+	require.Equal(t, map[string]int64{string(mcpmetrics.IDJAGExchangeRejected) + "/" + reason: 1}, idJAGExchangeCounts(t, reader, issuer.ID))
 }
