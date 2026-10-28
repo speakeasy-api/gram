@@ -141,7 +141,7 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 		Phase:                 phaseWrappers,
 		Scanned:               0,
 		Toolsets:              0,
-		Outcomes:              map[Outcome]int{},
+		Outcomes:              make(map[Outcome]int),
 		Writes:                0,
 		FreshIDServersPresent: 0,
 		LastCursor:            r.options.Cursor,

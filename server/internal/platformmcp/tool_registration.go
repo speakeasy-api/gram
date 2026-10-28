@@ -26,6 +26,7 @@ type RegisterCatalogMCPToolOutput struct {
 	ReceiptID           string                      `json:"receipt_id"`
 	RegistrationID      string                      `json:"registration_id"`
 	Replayed            bool                        `json:"replayed"`
+	AlreadyRegistered   bool                        `json:"already_registered"`
 	NextAction          string                      `json:"next_action"`
 	DashboardSetupURL   string                      `json:"dashboard_setup_url,omitempty"`
 	SecretFieldsPending []CatalogConfigurationField `json:"secret_fields_pending,omitempty"`
@@ -44,6 +45,7 @@ type RegisterRemoteMCPToolOutput struct {
 	ReceiptID         string `json:"receipt_id"`
 	RegistrationID    string `json:"registration_id"`
 	Replayed          bool   `json:"replayed"`
+	AlreadyRegistered bool   `json:"already_registered"`
 	NextAction        string `json:"next_action"`
 	DashboardSetupURL string `json:"dashboard_setup_url,omitempty"`
 }
@@ -56,7 +58,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Add a Reviewed MCP Server to a Project",
-		Description: "Add one reviewed catalogue MCP server to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin.",
+		Description: "Add one reviewed catalogue MCP server to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin. When already_registered is true the server was already in that project and nothing new was added: say so instead of calling it added.",
 		Annotations: registrationAnnotations(),
 		Meta:        cardToolMeta(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
@@ -123,6 +125,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 			ReceiptID:           result.Receipt.ID.String(),
 			RegistrationID:      result.Registration,
 			Replayed:            result.Receipt.Replayed,
+			AlreadyRegistered:   result.Receipt.AlreadyRegistered,
 			NextAction:          nextAction,
 			DashboardSetupURL:   dashboardSetupURL,
 			SecretFieldsPending: append([]CatalogConfigurationField(nil), result.SecretFieldsPending...),
@@ -138,7 +141,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 	addTool(reg, &mcp.Tool{
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
-		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin, and a project Shadow MCP policy is applied at that later step, where the administrator's distribution counts as the review.",
+		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin, and a project Shadow MCP policy is applied at that later step, where the administrator's distribution counts as the review. When already_registered is true the server was already in that project and nothing new was added: say so instead of calling it added.",
 		Annotations: registrationAnnotations(),
 		Meta:        cardToolMeta(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterRemoteMCPToolInput) (*mcp.CallToolResult, RegisterRemoteMCPToolOutput, error) {
@@ -177,6 +180,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			ReceiptID:         result.Receipt.ID.String(),
 			RegistrationID:    result.Registration,
 			Replayed:          result.Receipt.Replayed,
+			AlreadyRegistered: result.Receipt.AlreadyRegistered,
 			NextAction:        result.NextAction,
 			DashboardSetupURL: result.DashboardSetupURL,
 		}, nil
