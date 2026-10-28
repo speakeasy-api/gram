@@ -69,6 +69,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -150,13 +151,16 @@ type Service struct {
 	scanEvaluator             *mcpriskscan.Evaluator
 	guardianPolicy            *guardian.Policy
 	db                        *pgxpool.Pool
-	authRepo                  *auth_repo.Queries
-	toolsetsRepo              *toolsets_repo.Queries
-	mcpMetadataRepo           *metadata_repo.Queries
-	orgsRepo                  *organizations_repo.Queries
-	auth                      *auth.Auth
-	env                       toolconfig.EnvironmentLoader
-	serverURL                 *url.URL
+	// skillResolver answers which managed skills a hosted endpoint serves to
+	// a caller over the Skills extension and records their reads.
+	skillResolver   *mcpskills.Resolver
+	authRepo        *auth_repo.Queries
+	toolsetsRepo    *toolsets_repo.Queries
+	mcpMetadataRepo *metadata_repo.Queries
+	orgsRepo        *organizations_repo.Queries
+	auth            *auth.Auth
+	env             toolconfig.EnvironmentLoader
+	serverURL       *url.URL
 	// callbackOrigins pin URLs that external systems store: the IdP callback
 	// sent to WorkOS and to federated customer IdPs, and assistants' CIMD
 	// client IDs. They stay fixed when the server URL moves. Set by
@@ -455,6 +459,10 @@ type mcpInputs struct {
 	// session row by the issuer gate. Nil means all tools; non-nil is always
 	// restrictive and intersects with the live toolset, ?tags=, and RBAC.
 	toolSelection *toolfilter.SessionSelection
+	// skillsOverMCP memoizes the Skills extension flag for this request once
+	// a method has needed it. Nil until then; the flag is never evaluated
+	// more than once per request.
+	skillsOverMCP *bool
 }
 
 // recordServingAnalytics adds the known serving ids to product event properties.
@@ -578,6 +586,7 @@ func NewService(
 		scanEvaluator:             scanEvaluator,
 		guardianPolicy:            guardianPolicy,
 		db:                        db,
+		skillResolver:             mcpskills.NewResolver(logger, db),
 		authRepo:                  auth_repo.New(db),
 		toolsetsRepo:              toolsets_repo.New(db),
 		mcpMetadataRepo:           metadata_repo.New(db),
@@ -1545,6 +1554,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		protocolVersion:          protocolVersion,
 		identityCoverageRecorded: hostedCoverageRecorded,
 		toolSelection:            callerToolSelection,
+		skillsOverMCP:            nil,
 	}
 
 	// Call handlers resolve attribution after loading their toolset. Other
@@ -2010,7 +2020,14 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		}()
 	}
 
-	if !methodAvailable(req, payload.protocolVersion, mcpversions.SupportedHostedToolset()) {
+	// The declared extensions are resolved only for an extension method: the
+	// flag behind them costs a lookup, and a core method's availability does
+	// not depend on it.
+	var extensions []string
+	if mcpversions.KnownExtensionMethod(req.Method) {
+		extensions = s.hostedExtensions(ctx, payload)
+	}
+	if !methodAvailable(req, payload.protocolVersion, mcpversions.SupportedHostedToolset(), extensions) {
 		return nil, unavailableMethod(req)
 	}
 
@@ -2018,10 +2035,10 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case mcpversions.MethodPing:
 		return handlePing(ctx, s.logger, req.ID, serverInfoHostedToolset)
 	case mcpversions.MethodServerDiscover:
-		description := describeHostedServer(ctx, s.logger, s.mcpMetadataRepo, payload)
+		description := describeHostedServer(ctx, s.logger, s.mcpMetadataRepo, payload, s.skillsOverMCPEnabled(ctx, payload))
 		return handleServerDiscover(ctx, s.logger, req.ID, description, mcpversions.SupportedHostedToolset())
 	case mcpversions.MethodInitialize:
-		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.mcpMetadataRepo, s.sessionClientInfo)
+		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.mcpMetadataRepo, s.sessionClientInfo, s.skillsOverMCPEnabled(ctx, payload))
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
 	case mcpversions.MethodToolsList:
@@ -2038,7 +2055,18 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case mcpversions.MethodResourcesTemplatesList:
 		return handleResourcesTemplatesList(ctx, s.logger, req)
 	case mcpversions.MethodResourcesRead:
+		// A served skill's SKILL.md is read before the toolset's own
+		// resources are consulted: the read is answered from the skill
+		// distribution and is neither metered nor billed. With the extension
+		// off, a skill:// URI is an ordinary resource URI and falls through.
+		if uri, ok := skillResourceURI(req.Params); ok && s.skillsOverMCPEnabled(ctx, payload) {
+			return handleSkillResourceRead(ctx, s.logger, s.db, s.skillResolver, s.metrics, payload, req, uri, time.Now())
+		}
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
+	case mcpversions.MethodSkillsList:
+		return handleSkillsList(ctx, s.logger, s.db, s.skillResolver, payload, req)
+	case mcpversions.MethodSkillsGet:
+		return handleSkillsGet(ctx, s.logger, s.db, s.skillResolver, payload, req)
 	default:
 		return nil, unavailableMethod(req)
 	}
