@@ -25,6 +25,10 @@ type fakeInboundEMAUsers struct {
 	issuers   map[string]*types.UserSessionIssuer
 	updates   []*orgusergen.UpdateIssuerPayload
 	updateErr error
+	getErr    error
+
+	// afterUpdate, when set, runs once a trust update is saved.
+	afterUpdate func()
 }
 
 func (f *fakeInboundEMAUsers) ListIssuers(_ context.Context, payload *orgusergen.ListIssuersPayload) (*orgusergen.ListOrganizationUserSessionIssuersResult, error) {
@@ -46,6 +50,9 @@ func (f *fakeInboundEMAUsers) ListIssuers(_ context.Context, payload *orgusergen
 func (f *fakeInboundEMAUsers) GetIssuer(_ context.Context, payload *orgusergen.GetIssuerPayload) (*types.UserSessionIssuer, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
 	issuer, ok := f.issuers[payload.ID]
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "user session issuer not found")
@@ -72,6 +79,9 @@ func (f *fakeInboundEMAUsers) UpdateIssuerIfTrusting(_ context.Context, payload 
 		}
 	}
 	copied := *issuer
+	if f.afterUpdate != nil {
+		f.afterUpdate()
+	}
 	return &copied, nil
 }
 
@@ -79,6 +89,7 @@ type fakeInboundEMARemote struct {
 	mu       sync.Mutex
 	draft    *types.RemoteSessionIssuerDraft
 	fetchErr error
+	getErr   error
 	records  map[string]*types.RemoteSessionIssuer
 	matches  []*types.RemoteSessionIssuerDuplicateMatch
 	created  []*orgremotegen.CreateIssuerPayload
@@ -111,6 +122,9 @@ func (f *fakeInboundEMARemote) GetIssuerDuplicatePreflight(_ context.Context, pa
 func (f *fakeInboundEMARemote) GetIssuer(_ context.Context, payload *orgremotegen.GetIssuerPayload) (*types.RemoteSessionIssuer, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
 	record, ok := f.records[payload.ID]
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "remote session issuer not found")
@@ -548,4 +562,113 @@ func TestInboundEMATrustGetNextStepExplainsEndpointModeHasNoAudience(t *testing.
 	require.NotContains(t, output.NextStep, "reported audience")
 	require.Contains(t, output.NextStep, "no single audience")
 	require.Contains(t, output.NextStep, "shared authorization server")
+}
+
+func TestInboundEMATrustReturnsAppliedResultWhenReadingItBackFails(t *testing.T) {
+	t.Parallel()
+	readErr := errors.New("read failed")
+	cases := []struct {
+		name   string
+		fail   func(f inboundEMAFixture)
+		check  func(t *testing.T, output TrustInboundEMAIdentityProviderOutput)
+		unread string
+	}{
+		{
+			name: "issuer",
+			fail: func(f inboundEMAFixture) { f.users.afterUpdate = func() { f.users.getErr = readErr } },
+			check: func(t *testing.T, output TrustInboundEMAIdentityProviderOutput) {
+				t.Helper()
+				require.True(t, output.IssuerUnavailable)
+				require.NotNil(t, output.Issuer.TrustedIdentityProvider)
+				require.Equal(t, output.IdentityProvider.RemoteSessionIssuerID, output.Issuer.TrustedIdentityProvider.RemoteSessionIssuerID)
+			},
+			unread: "but issuer could not be read",
+		},
+		{
+			name: "trusted identity provider",
+			fail: func(f inboundEMAFixture) { f.users.afterUpdate = func() { f.remote.getErr = readErr } },
+			check: func(t *testing.T, output TrustInboundEMAIdentityProviderOutput) {
+				t.Helper()
+				require.False(t, output.IssuerUnavailable)
+				require.True(t, output.Issuer.TrustedIdentityProviderUnavailable)
+				require.Nil(t, output.Issuer.TrustedIdentityProvider)
+			},
+			unread: "but trusted_identity_provider could not be read",
+		},
+		{
+			name: "organization gateway",
+			fail: func(f inboundEMAFixture) {
+				f.service.gateway = func(context.Context, string) (organizationGatewayIssuer, error) {
+					return organizationGatewayIssuer{}, readErr
+				}
+			},
+			check: func(t *testing.T, output TrustInboundEMAIdentityProviderOutput) {
+				t.Helper()
+				require.True(t, output.Issuer.OrganizationGatewayURLUnavailable)
+				require.NotNil(t, output.Issuer.TrustedIdentityProvider)
+			},
+			unread: "but organization_gateway_url could not be read",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newInboundEMAFixture(t, 1)
+			tc.fail(f)
+
+			output, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
+			require.NoError(t, err)
+			require.True(t, output.Applied)
+			require.True(t, output.Changed)
+			require.NotEmpty(t, output.IdentityProvider.RemoteSessionIssuerID)
+			require.Equal(t, output.IdentityProvider.RemoteSessionIssuerID, output.ExpectedTrustedRemoteSessionIssuerID)
+			require.Contains(t, output.NextStep, tc.unread)
+			require.Contains(t, output.NextStep, "Call get_inbound_ema_trust again")
+			tc.check(t, output)
+
+			require.Equal(t, output.IdentityProvider.RemoteSessionIssuerID, conv.PtrValOr(f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID, ""), "the trust was saved")
+		})
+	}
+}
+
+func TestInboundEMAUntrustReturnsAppliedResultWhenReadingItBackFails(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	providerID := uuid.NewString()
+	f.remote.records[providerID] = &types.RemoteSessionIssuer{ID: providerID, Issuer: inboundEMATestIDP, JwksURI: new(inboundEMATestIDP + "/keys")}
+	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
+	f.users.afterUpdate = func() { f.users.getErr = errors.New("read failed") }
+
+	output, err := f.service.Untrust(t.Context(), f.principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, ExpectedTrustedRemoteSessionIssuerID: providerID, Confirmed: true})
+	require.NoError(t, err)
+	require.True(t, output.Applied)
+	require.True(t, output.IssuerUnavailable)
+	require.Empty(t, output.ExpectedTrustedRemoteSessionIssuerID)
+	require.Nil(t, output.Issuer.TrustedIdentityProvider)
+	require.NotNil(t, output.RemovedIdentityProvider)
+	require.Contains(t, output.NextStep, "but issuer could not be read")
+	require.Contains(t, output.NextStep, "Call get_inbound_ema_trust again")
+	require.Nil(t, f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID, "the removal was saved")
+}
+
+func TestInboundEMATrustReadFailuresBeforeTheChangeStillFail(t *testing.T) {
+	t.Parallel()
+	readErr := errors.New("read failed")
+
+	f := newInboundEMAFixture(t, 1)
+	providerID := uuid.NewString()
+	f.remote.records[providerID] = &types.RemoteSessionIssuer{ID: providerID, Issuer: inboundEMATestIDP, JwksURI: new(inboundEMATestIDP + "/keys")}
+	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
+	f.remote.getErr = readErr
+	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP})
+	require.ErrorIs(t, err, readErr)
+
+	f.remote.getErr = nil
+	f.service.gateway = func(context.Context, string) (organizationGatewayIssuer, error) {
+		return organizationGatewayIssuer{}, readErr
+	}
+	_, err = f.service.Untrust(t.Context(), f.principal, UntrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, ExpectedTrustedRemoteSessionIssuerID: providerID, Confirmed: true})
+	require.ErrorIs(t, err, readErr)
+	require.Empty(t, f.users.updates)
+	require.Equal(t, providerID, conv.PtrValOr(f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID, ""))
 }
