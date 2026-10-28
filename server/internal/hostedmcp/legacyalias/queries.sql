@@ -123,15 +123,18 @@ SELECT (EXISTS (
 ))::boolean AS taken;
 
 -- name: ListTakenAliases :many
--- Which of the given addresses, keyed "<slug>|<custom domain id or empty for the platform>", a live-project toolset alias
--- holds.
+-- Which of the given addresses, keyed "<slug>|<custom domain id or empty for the platform>", a toolset alias holds. As in
+-- AliasTaken, a platform alias holds its slug even in a deleted project; a custom-domain alias only in a live one.
 -- The platform host also serves a custom-domain alias in a live project.
 SELECT DISTINCT (t.mcp_slug || '|' || COALESCE(t.custom_domain_id::text, ''))::text AS address_key
 FROM toolsets t
-JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
 WHERE t.mcp_slug = ANY(@slugs::text[])
   AND (t.mcp_slug || '|' || COALESCE(t.custom_domain_id::text, '')) = ANY(@address_keys::text[])
   AND t.deleted IS FALSE
+  AND (
+    t.custom_domain_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE)
+  )
 UNION
 SELECT (t.mcp_slug || '|')::text AS address_key
 FROM toolsets t

@@ -470,7 +470,7 @@ func TestHostedAttachmentEnablesAliasOnlyWrapper(t *testing.T) {
 	_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil,
 		[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil, allowAllMCPEnable)
 	require.NoError(t, err)
-	require.NotEqual(t, "disabled", f.wrapper(t).Visibility)
+	require.Equal(t, "private", f.wrapper(t).Visibility)
 	require.Equal(t, []string{"billing"}, runtimeIDs(f.runtime(t)))
 }
 
