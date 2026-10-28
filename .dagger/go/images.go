@@ -70,15 +70,11 @@ func (m *GoPipeline) FunctionsImage(
 	// +default="x86_64"
 	arch string,
 ) (*dagger.Directory, error) {
-	var imageArch string
-	switch arch {
-	case "x86_64":
-		imageArch = "amd64"
-	case "aarch64":
-		imageArch = "arm64"
-	default:
-		return nil, fmt.Errorf("unsupported Functions architecture %q", arch)
+	imageArch, err := functionsImageArch(arch)
+	if err != nil {
+		return nil, err
 	}
+
 	switch apkoConfig {
 	case "./images/nodejs22-alpine3.22.yaml", "./images/nodejs24-alpine3.23.yaml":
 	default:
@@ -109,9 +105,40 @@ func (m *GoPipeline) PublishFunctions(
 	password *dagger.Secret,
 	// +default="x"
 	username string,
+	// APK target architecture; must match the tarball.
+	// +default="x86_64"
+	arch string,
 ) (string, error) {
-	image := dag.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).Import(tarball)
+	if strings.TrimSpace(imagePrefix) == "" {
+		return "", fmt.Errorf("image-prefix must not be empty")
+	}
+
+	image, err := importFunctionsImage(tarball, arch)
+	if err != nil {
+		return "", err
+	}
+
 	return publish(ctx, image, metadata, imagePrefix, username, password)
+}
+
+func importFunctionsImage(tarball *dagger.File, arch string) (*dagger.Container, error) {
+	imageArch, err := functionsImageArch(arch)
+	if err != nil {
+		return nil, err
+	}
+
+	return dag.Container(dagger.ContainerOpts{Platform: dagger.Platform("linux/" + imageArch)}).Import(tarball), nil
+}
+
+func functionsImageArch(arch string) (string, error) {
+	switch arch {
+	case "x86_64":
+		return "amd64", nil
+	case "aarch64":
+		return "arm64", nil
+	default:
+		return "", fmt.Errorf("unsupported Functions architecture %q", arch)
+	}
 }
 
 // Build the tunnel agent for both production architectures without publishing.

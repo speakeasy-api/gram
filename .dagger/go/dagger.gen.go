@@ -421,7 +421,14 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg username", err))
 				}
 			}
-			return (*GoPipeline).PublishFunctions(&parent, ctx, tarball, metadata, imagePrefix, password, username)
+			var arch string
+			if inputArgs["arch"] != nil {
+				err = json.Unmarshal([]byte(inputArgs["arch"]), &arch)
+				if err != nil {
+					panic(fmt.Errorf("%s: %w", "failed to unmarshal input arg arch", err))
+				}
+			}
+			return (*GoPipeline).PublishFunctions(&parent, ctx, tarball, metadata, imagePrefix, password, username, arch)
 		case "PublishServer":
 			var parent GoPipeline
 			err = json.Unmarshal(parentJSON, &parent)
@@ -629,12 +636,13 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 						dag.Function("PublishFunctions",
 							dag.TypeDef().WithKind(dagger.TypeDefKindStringKind)).
 							WithDescription("Publish an apko tarball to one registry image, preserving metadata tags.").
-							WithSourceMap(dag.SourceMap("images.go", 104, 1)).
-							WithArg("tarball", dag.TypeDef().WithObject("File"), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 106, 2)}).
-							WithArg("metadata", dag.TypeDef().WithKind(dagger.TypeDefKindStringKind), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 107, 2)}).
-							WithArg("imagePrefix", dag.TypeDef().WithKind(dagger.TypeDefKindStringKind), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 108, 2)}).
-							WithArg("password", dag.TypeDef().WithObject("Secret"), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 109, 2)}).
-							WithArg("username", dag.TypeDef().WithKind(dagger.TypeDefKindStringKind), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 111, 2), DefaultValue: dagger.JSON("\"x\"")})).
+							WithSourceMap(dag.SourceMap("images.go", 100, 1)).
+							WithArg("tarball", dag.TypeDef().WithObject("File"), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 102, 2)}).
+							WithArg("metadata", dag.TypeDef().WithKind(dagger.TypeDefKindStringKind), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 103, 2)}).
+							WithArg("imagePrefix", dag.TypeDef().WithKind(dagger.TypeDefKindStringKind), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 104, 2)}).
+							WithArg("password", dag.TypeDef().WithObject("Secret"), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 105, 2)}).
+							WithArg("username", dag.TypeDef().WithKind(dagger.TypeDefKindStringKind), dagger.FunctionWithArgOpts{SourceMap: dag.SourceMap("images.go", 107, 2), DefaultValue: dagger.JSON("\"x\"")}).
+							WithArg("arch", dag.TypeDef().WithKind(dagger.TypeDefKindStringKind), dagger.FunctionWithArgOpts{Description: "APK target architecture; must match the tarball.", SourceMap: dag.SourceMap("images.go", 110, 2), DefaultValue: dagger.JSON("\"x86_64\"")})).
 					WithFunction(
 						dag.Function("PublishServer",
 							dag.TypeDef().WithKind(dagger.TypeDefKindStringKind)).
@@ -664,7 +672,7 @@ func invoke(ctx context.Context, parentJSON []byte, parentName string, fnName st
 						dag.Function("TunnelImages",
 							dag.TypeDef().WithKind(dagger.TypeDefKindVoidKind).WithOptional(true)).
 							WithDescription("Build the tunnel agent for both production architectures without publishing.").
-							WithSourceMap(dag.SourceMap("images.go", 118, 1))).
+							WithSourceMap(dag.SourceMap("images.go", 145, 1))).
 					WithConstructor(
 						dag.Function("New",
 							dag.TypeDef().WithObject("GoPipeline")).

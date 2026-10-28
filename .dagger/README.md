@@ -36,6 +36,9 @@ and prints captured output on failure. Setup failures fail before report export.
 The raw `dagger:go test ... export` operation returns reports even for failing tests;
 its caller must check `test-exit-code`.
 
+Custom `--packages` and `--race` are supported for server, cli, and functions.
+The other components use their mise test tasks' fixed arguments.
+
 Server tests start a disposable Docker daemon inside the test container for
 testcontainers. This needs a privileged Dagger engine. The daemon shares the test
 filesystem and network, including bind mounts and loopback-bound ports. The shard
@@ -68,8 +71,10 @@ are supported, with the existing filesystem safety checks. Use a disposable
 Publication is explicit: `publish-server` and `publish-functions` accept
 docker/metadata-action's JSON and a Dagger secret (`--password env:VARIABLE`).
 Functions publication filters tags by the exact `--image-prefix`, keeping dev and
-production registry credentials separate. Fly registry credentials can be obtained
-through `fly auth docker`, including token normalization and refresh.
+production registry credentials separate; an empty prefix is rejected. Pass
+`--arch aarch64` to `publish-functions` when publishing an ARM tarball. Obtain
+registry credentials before calling these operations and pass them as a Dagger
+secret.
 
 ## Local caching
 
@@ -94,3 +99,9 @@ uses mise's HTTP backend with published checksums. Update these together:
    configs, and `tunnel-images`. `mise exec -- go -C .dagger/go test ./...` runs the
    pipeline's report-wrapper tests; `mise exec -- go -C .dagger/go vet ./...` checks
    the implementation itself.
+
+The image import regression tests use a live Dagger session:
+
+```bash
+mise exec -- dagger api with-session -- go -C .dagger/go test -tags=dagger_integration ./...
+```

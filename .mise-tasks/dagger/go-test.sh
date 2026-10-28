@@ -5,16 +5,27 @@
 
 #USAGE flag "--component <component>" required=#true { choices "server" "cli" "plog" "functions" "hooks" "glint" "ci" }
 #USAGE flag "--shard <shard>" help="Server test shard, index/total"
-#USAGE flag "--race" help="Enable the Go race detector"
+#USAGE flag "--race" help="Enable the Go race detector (server, cli, functions)"
 #USAGE flag "--demo-seed" help="Run the separately tagged demo seed safety test"
-#USAGE flag "--packages <packages>" help="Comma-separated Go package patterns" default="./..."
+#USAGE flag "--packages <packages>" help="Comma-separated Go package patterns (server, cli, functions)" default="./..."
 
 set -euo pipefail
 
 component=${usage_component:?}
+packages=${usage_packages:-./...}
+if [ "$packages" != "./..." ] || [ "${usage_race:-false}" = true ]; then
+  case "$component" in
+    server|cli|functions) ;;
+    *)
+      echo "--packages and --race are supported only for server, cli, and functions" >&2
+      exit 2
+      ;;
+  esac
+fi
+
 out="$component"
 if [ "$component" = ci ]; then out=.; fi
-args=(test --component "$component" --packages "${usage_packages:-./...}")
+args=(test --component "$component" --packages "$packages")
 if [ -n "${usage_shard:-}" ]; then args+=(--shard "$usage_shard"); fi
 if [ "${usage_race:-false}" = true ]; then args+=(--race); fi
 if [ "${usage_demo_seed:-false}" = true ]; then args+=(--demo-seed); fi

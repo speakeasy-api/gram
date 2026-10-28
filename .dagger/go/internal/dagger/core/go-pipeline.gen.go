@@ -198,6 +198,10 @@ type GoPipelinePublishFunctionsOpts struct {
 
 	// Default: "x"
 	Username string
+	// APK target architecture; must match the tarball.
+	//
+	// Default: "x86_64"
+	Arch string
 }
 
 // Publish an apko tarball to one registry image, preserving metadata tags.
@@ -212,6 +216,10 @@ func (r *GoPipeline) PublishFunctions(ctx context.Context, tarball *File, metada
 		// `username` optional argument
 		if !querybuilder.IsZeroValue(opts[i].Username) {
 			q = q.Arg("username", opts[i].Username)
+		}
+		// `arch` optional argument
+		if !querybuilder.IsZeroValue(opts[i].Arch) {
+			q = q.Arg("arch", opts[i].Arch)
 		}
 	}
 	q = q.Arg("tarball", tarball)

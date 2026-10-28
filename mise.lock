@@ -807,6 +807,10 @@ url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_
 checksum = "sha256:fdbe191c965d240ee9cc90719fa9dca1586805cbb89b0a0087314a84a0937354"
 url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_darwin_amd64.tar.gz"
 
+[tools."http:dagger"."platforms.windows-arm64"]
+checksum = "sha256:996f5f21dbadb8d1e596326e9b2faa1059cb7ca190842ed9b014b543f7975863"
+url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_windows_arm64.zip"
+
 [tools."http:dagger"."platforms.windows-x64"]
 checksum = "sha256:2e8f7ae2b86ae71cd135f8ed6a42e0bf0fd931e1c893dc6e48373b2c5e1a3ad7"
 url = "https://dl.dagger.io/dagger/releases/1.0.0-beta.21/dagger_v1.0.0-beta.21_windows_amd64.zip"
