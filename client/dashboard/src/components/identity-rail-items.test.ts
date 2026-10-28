@@ -24,7 +24,6 @@ function routes(): ReturnType<typeof useRoutes> {
         connections: page("connections"),
         devices: page("devices"),
         activity: page("activity"),
-        toolLogs: page("tool-logs"),
       },
     },
   } as unknown as ReturnType<typeof useRoutes>;
@@ -46,7 +45,6 @@ describe("identityRailItems", () => {
       "connections",
       "devices",
       "activity",
-      "tool-logs",
     ]);
   });
 
@@ -58,7 +56,6 @@ describe("identityRailItems", () => {
       "permissions",
       "sessions",
       "activity",
-      "tool-logs",
       "credentials",
       "controls",
     ]);

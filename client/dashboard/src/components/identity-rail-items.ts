@@ -55,12 +55,6 @@ export function identityRailItems(
         active: detail.activity.active,
       },
       {
-        key: "tool-logs",
-        title: "Tool logs",
-        href: `${detail.toolLogs.href(encodedUrn)}${search}`,
-        active: detail.toolLogs.active,
-      },
-      {
         // The agent's way in: its endpoint, the keys it holds, and the
         // platforms that sign in as it. Named for what it carries rather
         // than for the wizard step that first hands them over — setting an
@@ -131,12 +125,6 @@ export function identityRailItems(
       title: "Activity",
       href: `${detail.activity.href(encodedUrn)}${search}`,
       active: detail.activity.active,
-    },
-    {
-      key: "tool-logs",
-      title: "Tool logs",
-      href: `${detail.toolLogs.href(encodedUrn)}${search}`,
-      active: detail.toolLogs.active,
     },
   ];
 }

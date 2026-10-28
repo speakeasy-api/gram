@@ -72,14 +72,8 @@ export type {
   ServiceAccountFormat,
 } from "./model/serviceAccount";
 export { ServiceAccountPanel } from "./components/ServiceAccountPanel";
-export {
-  bindServiceAccountClient,
-  useServiceAccountClientDraft,
-} from "./drafts/useServiceAccountClientDraft";
-export type {
-  ServiceAccountClientDraft,
-  ServiceAccountClientSpec,
-} from "./drafts/useServiceAccountClientDraft";
+export { useServiceAccountClientDraft } from "./drafts/useServiceAccountClientDraft";
+export type { ServiceAccountClientSpec } from "./drafts/useServiceAccountClientDraft";
 export { useCustomerManagedKeys } from "./queries/useCustomerManagedKeys";
 export { useOrganizationKeySets, useResolveKeySet } from "./queries/useKeySets";
 export { AvailabilityBadge } from "./components/AvailabilityBadge";

@@ -4,8 +4,6 @@ import { LogsTools } from "@/components/observe/LogsTools";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
-import { IdentitySection } from "./IdentitySection";
-import { useIdentityOutlet } from "./identityRoute";
 
 /**
  * Every identifier telemetry may have recorded this identity's calls under.
@@ -27,8 +25,11 @@ function identityToolLogFilters(
   ];
 }
 
-/** The Tool Logs view from Observability, narrowed to one identity. */
-export function IdentityToolLogsSection({
+/**
+ * The Tool Logs view from Observability, narrowed to one identity: the rows
+ * behind the usage numbers above it.
+ */
+export function IdentityToolLogsPanel({
   identity,
   agentId,
 }: {
@@ -60,10 +61,10 @@ export function IdentityToolLogsSection({
     );
   }
 
-  return <IdentitySection title="Tool logs">{body}</IdentitySection>;
-}
-
-export default function IdentityToolLogs(): JSX.Element {
-  const { identity } = useIdentityOutlet();
-  return <IdentityToolLogsSection identity={identity} />;
+  return (
+    <div className="flex flex-col gap-3">
+      <h3 className="text-lg font-medium">Tool logs</h3>
+      {body}
+    </div>
+  );
 }
