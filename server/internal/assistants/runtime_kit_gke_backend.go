@@ -126,7 +126,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	p.GatewayToken = nil
 	p.TLSCertificate, p.TLSPrivateKey = nil, nil
 	raw, err := json.Marshal(map[string]any{
-		"workload_token_image": kitGKEIdentitySidecarImage, "agent_identity": config.KitGKEIdentityConfig, "tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
+		"identity_sidecar_image": kitGKEIdentitySidecarImage, "identity_sidecar_script": kitGKEIdentitySidecarScript, "agent_identity": config.KitGKEIdentityConfig, "tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
 		"identity": p.Identity.labels(), "namespace": p.Identity.Namespace, "image": p.Image,
 		"ingress_cidr": p.IngressCIDR, "guest_port": p.GuestPort, "command": p.Command, "args": p.Args,
 		"allow_insecure_http": p.AllowInsecureHTTP, "resources": p.Resources, "work_size_limit": p.WorkSizeLimit,

@@ -6,7 +6,7 @@ while :; do
     --data-urlencode "audience=$WORKLOAD_TOKEN_AUDIENCE" --data-urlencode 'format=full' \
     -o "$WORKLOAD_TOKEN_PATH.next" "$url"; then
     mv -f "$WORKLOAD_TOKEN_PATH.next" "$WORKLOAD_TOKEN_PATH"
-    sleep 300
+    sleep 60
   else
     echo 'workload token refresh failed; retrying' >&2
     rm -f "$WORKLOAD_TOKEN_PATH.next"

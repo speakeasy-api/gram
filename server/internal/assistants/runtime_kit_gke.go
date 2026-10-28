@@ -252,7 +252,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		return out, err
 	}
 	pod.Spec.Volumes = append(pod.Spec.Volumes, workload)
-	// A native sidecar's startup probe gates the Kit process on fresh authority.
+	// A native sidecar's startup probe holds the Kit process until a token exists.
 	pod.Spec.InitContainers = []corev1.Container{{
 		Name: "workload-token", Image: kitGKEIdentitySidecarImage,
 		Command: []string{"/bin/sh", "-c", kitGKEIdentitySidecarScript},

@@ -111,7 +111,9 @@ Configure the server and worker consistently:
 ## Workload identity
 
 Kit authenticates with GKE Agent Identity, which requires GKE
-`1.37.0-gke.3503000` or later and the Agent Registry API. Each bootstrap
+`1.37.0-gke.3503000` or later, the Agent Registry API and, on Standard clusters,
+Workload Identity Federation for GKE with the GKE metadata server on sandbox
+node pools. Each bootstrap
 generation gets its own Kubernetes service account (KSA) with no Google IAM
 service-account link. The Pod is annotated with
 `iam.gke.io/identity: "spiffe://<TRUST_DOMAIN>/*"`, where the trust domain is
@@ -138,7 +140,8 @@ short POSIX shell script in a pinned `curlimages/curl` image:
 1. `GET http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience=<AUDIENCE>&format=full`
    with `Metadata-Flavor: Google`, a 10-second timeout and a 16 KiB limit.
 2. Write the response to a temporary file with mode `0600` and rename it over
-   the assertion in a memory-backed `emptyDir`. Refresh every 5 minutes.
+   the assertion in a memory-backed `emptyDir`. Refresh every minute; the
+   metadata server returns its cached token until that token nears expiry.
 3. On failure, retry every 5 seconds and delete an assertion that has not been
    refreshed for 50 minutes, because Google ID tokens live for one hour.
 
@@ -201,7 +204,8 @@ credential-bearing pods even in a per-generation pool.
 ### Rollout order
 
 1. Infrastructure first: upgrade the assistant cluster to a GKE version with
-   Agent Identity, enable the Agent Registry API, and add the four
+   Agent Identity, confirm Workload Identity Federation is enabled, enable the
+   Agent Registry API, and add the four
    `GRAM_ASSISTANT_KIT_GKE_*` identity values. Keep the existing issuer/JWKS
    values; the currently deployed application still needs them.
 2. Deploy the application. It ignores the issuer/JWKS values in GKE mode.

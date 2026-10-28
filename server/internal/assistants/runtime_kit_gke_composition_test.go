@@ -40,6 +40,8 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		GKE: GKERuntimeConfig{Dynamic: fake.NewSimpleDynamicClient(runtime.NewScheme()), Namespace: "assistants", RunnerCIDRBlocks: []string{"10.0.0.0/16"}},
 	}
 	valid = kitGKENativeIssuerConfig(valid)
+	require.Equal(t, valid.issuer(), valid.WorkloadIssuerURL, "external issuer settings are replaced")
+	require.Equal(t, valid.issuer()+"/openid/jwks", valid.WorkloadJWKSURL)
 	require.NoError(t, validateKitGKEComposition(valid))
 	for _, tc := range []struct {
 		name   string
