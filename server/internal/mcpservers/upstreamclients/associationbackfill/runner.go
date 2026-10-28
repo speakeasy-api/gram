@@ -223,14 +223,14 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 	report := Report{
 		Mode:     "dry_run",
 		Servers:  0,
-		Outcomes: map[Outcome]int{},
+		Outcomes: make(map[Outcome]int),
 		Decided:  0,
 		Written:  0,
 		Skipped:  0,
 		Gaps:     0,
 		Results:  []ServerResult{},
 
-		GatewayOutcomes: map[GatewayOutcome]int{},
+		GatewayOutcomes: make(map[GatewayOutcome]int),
 		GatewayResults:  []GatewayResult{},
 	}
 	if opts.Apply {
