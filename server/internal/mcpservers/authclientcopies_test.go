@@ -10,8 +10,12 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // A credential source's non-Authorization headers are copied onto the auth
@@ -361,5 +365,66 @@ func newBackendUpdatePayload(serverID, name string, remoteID, tunneledID *string
 		ClearUserSessionIssuer: nil,
 		Visibility:             types.McpServerVisibility("private"),
 		NetworkAccessMode:      nil,
+	}
+}
+
+// The shared creation command is what remote provisioning and the
+// materializer call directly, so it is where a deleted source has to be
+// refused: the management API's own ownership check runs before any lock, and
+// a deletion committing while the create waits would otherwise slip past it.
+// The check now runs under the source's row lock, for both source kinds.
+func TestCreateMCPServerInTransaction_RefusesDeletedSources(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	fixtures := authclientbackfill.New(ti.conn)
+
+	tunneled := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	require.NoError(t, fixtures.SoftDeleteTunneledSourceFixture(ctx, tunneled))
+	remote := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	require.NoError(t, fixtures.SoftDeleteRemoteSourceFixture(ctx, remote))
+
+	for name, input := range map[string]mcpservers.MCPServerTransactionInput{
+		"tunneled": {
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			ProjectID:             *authCtx.ProjectID,
+			ActorUserID:           authCtx.UserID,
+			ActorEmail:            nil,
+			Name:                  "deleted backend",
+			Visibility:            "private",
+			NetworkAccessMode:     networkaccess.ModePublicOnly,
+			EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			RemoteMCPServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			TunneledMCPServerID:   uuid.NullUUID{UUID: tunneled, Valid: true},
+			ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			UnproxiedMCPServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
+		"remote": {
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			ProjectID:             *authCtx.ProjectID,
+			ActorUserID:           authCtx.UserID,
+			ActorEmail:            nil,
+			Name:                  "deleted backend",
+			Visibility:            "private",
+			NetworkAccessMode:     networkaccess.ModePublicOnly,
+			EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			RemoteMCPServerID:     uuid.NullUUID{UUID: remote, Valid: true},
+			TunneledMCPServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			UnproxiedMCPServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tx := testenv.BeginTx(t, ctx, ti.conn)
+			_, err := mcpservers.CreateMCPServerInTransaction(ctx, tx, audit.NewLogger(), input)
+			require.Error(t, err, "a server was created in front of a deleted %s source", name)
+		})
 	}
 }

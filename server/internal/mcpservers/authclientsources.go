@@ -40,6 +40,30 @@ func credentialSourcesOf(remote, tunneled []uuid.NullUUID) []credentialSource {
 	return out
 }
 
+// verifyLiveCredentialSources takes each source's row lock and settles its
+// liveness and project ownership under it, for a write that is putting a
+// server in front of the source. A caller that checked liveness before the
+// lock would otherwise commit a server onto a source a concurrent deletion had
+// just tombstoned. It also gives the auth client sync the lock it needs, ahead
+// of any server lock, as every other writer of a credential source does.
+func verifyLiveCredentialSources(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, sources []credentialSource) error {
+	for _, source := range sources {
+		var err error
+		switch source.kind {
+		case authclientbackfill.SourceKindRemote:
+			err = VerifyLiveRemoteMCPSourceInTransaction(ctx, tx, projectID, source.id)
+		case authclientbackfill.SourceKindTunneled:
+			err = VerifyLiveTunneledMCPSourceInTransaction(ctx, tx, projectID, source.id)
+		default:
+			err = fmt.Errorf("unknown credential source kind %q", source.kind)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // lockCredentialSources takes the source row locks the auth client sync needs,
 // before this transaction locks the server row. A source's own writers lock it
 // before touching its servers, so taking it first here keeps every path's lock

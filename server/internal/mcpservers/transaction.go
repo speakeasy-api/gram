@@ -82,18 +82,11 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server transaction input")
 	}
 
-	// Before the server row exists, so every caller takes the source lock the
-	// auth client sync below needs ahead of any server lock, as every other
-	// writer of a credential source does. For a remote source the lock also
-	// settles its liveness: a caller that checked it unlocked would otherwise
-	// commit a server onto a source a concurrent deletion had just tombstoned.
+	// Before the server row exists, so the source's liveness and ownership are
+	// settled under its row lock and the auth client sync below has that lock
+	// ahead of any server lock.
 	sources := credentialSourcesOf([]uuid.NullUUID{input.RemoteMCPServerID}, []uuid.NullUUID{input.TunneledMCPServerID})
-	if input.RemoteMCPServerID.Valid {
-		if err := VerifyLiveRemoteMCPSourceInTransaction(ctx, tx, input.ProjectID, input.RemoteMCPServerID.UUID); err != nil {
-			return repo.McpServer{}, err
-		}
-	}
-	if err := lockCredentialSources(ctx, tx, input.OrganizationID, sources); err != nil {
+	if err := verifyLiveCredentialSources(ctx, tx, input.ProjectID, sources); err != nil {
 		return repo.McpServer{}, err
 	}
 

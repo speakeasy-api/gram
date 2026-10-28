@@ -2350,6 +2350,9 @@ UPDATE remote_mcp_server_headers SET deleted_at = clock_timestamp() WHERE id = @
 -- name: SoftDeleteTunneledSourceFixture :exec
 UPDATE tunneled_mcp_servers SET deleted_at = clock_timestamp() WHERE id = @id;
 
+-- name: SoftDeleteRemoteSourceFixture :exec
+UPDATE remote_mcp_servers SET deleted_at = clock_timestamp() WHERE id = @id;
+
 -- name: RestoreRemoteHeaderFixture :exec
 UPDATE remote_mcp_server_headers SET deleted_at = NULL, updated_at = clock_timestamp() WHERE id = @id;
 

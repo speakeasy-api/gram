@@ -71,3 +71,24 @@ FOR UPDATE`, remoteMCPServerID, projectID).Scan(&sourceExists)
 	}
 	return nil
 }
+
+// VerifyLiveTunneledMCPSourceInTransaction is
+// VerifyLiveRemoteMCPSourceInTransaction for a tunneled source.
+func VerifyLiveTunneledMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, projectID, tunneledMCPServerID uuid.UUID) error {
+	if tx == nil || projectID == uuid.Nil || tunneledMCPServerID == uuid.Nil {
+		return fmt.Errorf("invalid tunneled MCP source verification input")
+	}
+
+	var sourceExists bool
+	err := tx.QueryRow(ctx, `
+SELECT TRUE
+FROM tunneled_mcp_servers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE`, tunneledMCPServerID, projectID).Scan(&sourceExists)
+	if err != nil {
+		return fmt.Errorf("verify tunneled MCP source ownership: %w", err)
+	}
+	return nil
+}
