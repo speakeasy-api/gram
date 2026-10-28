@@ -3253,7 +3253,7 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	}
 
 	require.Equal(t, uint32(0o755), modes["hooks/bootstrap.sh"], "bootstrap.sh must be executable after unzip")
-	require.Equal(t, uint32(0o755), modes["install.sh"], "install.sh must be executable after unzip")
+	require.Equal(t, uint32(0o700), modes["install.sh"], "install.sh embeds the hooks key, so it must be owner-only and executable")
 	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
 	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
 	require.Equal(t, uint32(0o600), modes["speakeasy.json"], "speakeasy.json carries the hooks key and must stay owner-only")

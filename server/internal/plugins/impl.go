@@ -1538,7 +1538,8 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 // scripts executable so the bootstrapper runs after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
 // thirdparty/github/repo.go; keep them in sync. Git has no owner-only mode, so
-// only the ZIP marks speakeasy.json 0600.
+// only the ZIP marks the key-bearing files (speakeasy.json, the root
+// install.sh) owner-only.
 func writePluginZip(w io.Writer, files map[string][]byte) error {
 	zw := zip.NewWriter(w)
 	paths := make([]string, 0, len(files))
@@ -1573,6 +1574,10 @@ func writePluginZip(w io.Writer, files map[string][]byte) error {
 		}
 		var mode os.FileMode = 0o644
 		switch {
+		case p == "install.sh":
+			// The root install script embeds the hooks API key, so it stays
+			// owner-only while still runnable.
+			mode = 0o700
 		case strings.HasSuffix(p, ".sh"):
 			mode = 0o755
 		case path.Base(p) == "speakeasy.json":
