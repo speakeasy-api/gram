@@ -70,7 +70,7 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("authclients"))
 
-	s := &Service{
+	s := &Service{enc: nil, githubApps: nil,
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/authclients"),
 		logger: logger,
 		db:     db,

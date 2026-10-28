@@ -55,7 +55,7 @@ type proxyBuildOptions struct {
 }
 
 func newProxyBuildOptions(buildOptions []BuildOption) proxyBuildOptions {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false}
+	options := proxyBuildOptions{credentialOrigin: "", renewCredential: nil, recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -509,7 +509,7 @@ func (f *ProxyManager) BuildTarget(
 			if !renewed {
 				return nil, nil
 			}
-			return &proxy.UpstreamResponseRetry{AuthorizationOverride: token}, nil
+			return &proxy.UpstreamResponseRetry{RemoteURL: "", Headers: nil, AuthorizationOverride: token}, nil
 		}
 	}
 	return p

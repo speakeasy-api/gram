@@ -117,7 +117,8 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     });
     expect(result).toMatchObject({
       status: "setup-required",
-      message: expect.stringContaining("GitHub App configured, but"),
+      message:
+        "GitHub App configured, but the server could not be enabled. Review it in Settings.",
     });
     expect(mocks.configureGitHub).toHaveBeenCalledOnce();
   });

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	remoterepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +42,10 @@ func TestGitHubAppConfiguration(t *testing.T) {
 			return errors.New("TEST_SECRET_REJECTED")
 		}
 		if changeTarget {
-			_, err := ti.conn.Exec(ctx, "UPDATE remote_mcp_servers SET url = 'https://changed.example.com/mcp' WHERE id = (SELECT remote_mcp_server_id FROM mcp_servers WHERE id = $1)", server.id)
+			q := remoterepo.New(ti.conn)
+			remote, err := q.GetServerByID(ctx, remoterepo.GetServerByIDParams{ID: server.remoteID, ProjectID: ti.projectID})
+			require.NoError(t, err)
+			_, err = q.UpdateServer(ctx, remoterepo.UpdateServerParams{ID: server.remoteID, ProjectID: ti.projectID, Name: remote.Name, Slug: remote.Slug, TransportType: remote.TransportType, Url: "https://changed.example.com/mcp"})
 			require.NoError(t, err)
 		}
 		return nil
@@ -53,7 +57,7 @@ func TestGitHubAppConfiguration(t *testing.T) {
 	require.Nil(t, created.RemoteSessionClientID)
 	require.NotNil(t, created.GithubApp)
 	require.Equal(t, "456", created.GithubApp.InstallationID)
-	raw, err := json.Marshal(created)
+	raw, err := json.Marshal(created) //nolint:musttag // Check the generated service result for secret leakage; HTTP transport owns its JSON tags.
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), "TEST_PRIVATE_KEY")
 	queries := repo.New(ti.conn)

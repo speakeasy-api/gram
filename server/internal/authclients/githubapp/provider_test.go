@@ -23,8 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 )
 
 type fixtureRow struct {
@@ -83,7 +83,7 @@ func TestCredentialLifecycle(t *testing.T) {
 	encrypted, err := enc.Encrypt(secret)
 	require.NoError(t, err)
 	db := &fixtureDB{config: repo.McpAuthClientGithubApp{AuthClientID: uuid.New(), OrganizationID: "org_fixture", InstanceUrl: "https://git.example.com", AppID: 123, InstallationID: 456, PrivateKeyEncrypted: encrypted, UpstreamOrigin: "https://mcp.example.com", CredentialVersion: uuid.New()}, target: "https://mcp.example.com/mcp"}
-	provider := New(db, enc, guardian.NewDefaultPolicy(noop.NewTracerProvider()))
+	provider := New(db, enc, guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)))
 	var calls atomic.Int32
 	provider.http.Transport = transportFunc(func(req *http.Request) (*http.Response, error) {
 		calls.Add(1)
@@ -137,7 +137,7 @@ func TestOriginAndRedirects(t *testing.T) {
 		_, err := Origin(value)
 		require.Error(t, err)
 	}
-	provider := New(nil, nil, guardian.NewDefaultPolicy(noop.NewTracerProvider()))
+	provider := New(nil, nil, guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)))
 	req, err := http.NewRequest(http.MethodGet, "https://other.example.com", nil)
 	require.NoError(t, err)
 	require.ErrorIs(t, provider.http.CheckRedirect(req, nil), http.ErrUseLastResponse)

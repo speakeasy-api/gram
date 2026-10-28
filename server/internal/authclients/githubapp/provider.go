@@ -34,7 +34,7 @@ type Provider struct {
 }
 
 func New(db repo.DBTX, enc *encryption.Client, policy *guardian.Policy) *Provider {
-	return &Provider{queries: repo.New(db), enc: enc,
+	return &Provider{flights: singleflight.Group{}, queries: repo.New(db), enc: enc,
 		http:   policy.PooledClient(guardian.WithCheckRedirect(func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse })),
 		tokens: expirable.NewLRU[string, remotesessions.ClientCredential](1024, nil, time.Hour),
 	}
@@ -54,12 +54,15 @@ func Origin(raw string) (string, error) {
 func (p *Provider) Verify(ctx context.Context, instance string, appID, installationID int64, pem string) error {
 	client, err := github.NewInstanceClient(appID, []byte(pem), instance, p.http)
 	if err != nil {
-		return err
+		return fmt.Errorf("initialize GitHub App verifier: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	_, _, err = client.MintInstallationToken(ctx, installationID)
-	return err
+	if err != nil {
+		return fmt.Errorf("verify GitHub App installation: %w", err)
+	}
+	return nil
 }
 
 // Credential checks live tenant, client, and destination state before every
@@ -93,13 +96,13 @@ func (p *Provider) Credential(ctx context.Context, organizationID string, client
 		}
 		client, err := github.NewInstanceClient(config.AppID, []byte(pem), config.InstanceUrl, p.http)
 		if err != nil {
-			return none, err
+			return none, fmt.Errorf("mint GitHub App credential: %w", err)
 		}
 		mintCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
 		defer cancel()
 		value, expires, err := client.MintInstallationToken(mintCtx, config.InstallationID)
 		if err != nil {
-			return none, err
+			return none, fmt.Errorf("mint GitHub App credential: %w", err)
 		}
 		minted := time.Now()
 		token := remotesessions.NewClientCredential(value, remotesessions.ClientCredentialSchemeBearer, expires.Add(-time.Minute), func(context.Context) (bool, error) {
@@ -114,11 +117,15 @@ func (p *Provider) Credential(ctx context.Context, organizationID string, client
 	})
 	select {
 	case <-ctx.Done():
-		return none, ctx.Err()
+		return none, fmt.Errorf("wait for GitHub App credential: %w", ctx.Err())
 	case result := <-result:
 		if result.Err != nil {
 			return none, result.Err
 		}
-		return Credential{ClientCredential: result.Val.(remotesessions.ClientCredential), Origin: config.UpstreamOrigin}, nil
+		token, ok := result.Val.(remotesessions.ClientCredential)
+		if !ok {
+			return none, fmt.Errorf("unexpected GitHub App credential result")
+		}
+		return Credential{ClientCredential: token, Origin: config.UpstreamOrigin}, nil
 	}
 }

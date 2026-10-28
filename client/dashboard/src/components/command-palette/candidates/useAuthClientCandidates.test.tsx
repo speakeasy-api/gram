@@ -4,8 +4,21 @@ const mocks = vi.hoisted(() => ({
   organization: { id: "org-fixture" },
   project: { id: "project-fixture" },
   navigate: vi.fn(),
+  list: vi.fn<
+    (
+      ...args: unknown[]
+    ) => Promise<{ result: { items: unknown[]; nextCursor?: string } }>
+  >(),
   fetchNextPage: vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined),
-  options: {} as { queryKey: unknown[]; enabled: boolean },
+  options: {} as {
+    queryKey: unknown[];
+    enabled: boolean;
+    queryFn: (context: {
+      pageParam: string | undefined;
+      signal: AbortSignal;
+    }) => Promise<unknown>;
+    getNextPageParam: (page: { nextCursor?: string }) => string | undefined;
+  },
   pages: [] as Array<{
     items: Array<{
       id: string;
@@ -22,7 +35,7 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => mocks.project,
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({ authClients: { list: vi.fn() } }),
+  useSdkClient: () => ({ authClients: { list: mocks.list } }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
@@ -56,6 +69,24 @@ describe("service account candidates", () => {
   });
   it("hides cached results and stops pagination while disabled", () => {
     mocks.hasNextPage = true;
+    mocks.pages = [
+      {
+        items: [
+          {
+            id: "cached-client",
+            name: "Cached identity",
+            enabled: true,
+            servers: [
+              {
+                id: "cached-server",
+                slug: "github",
+                projectId: "project-fixture",
+              },
+            ],
+          },
+        ],
+      },
+    ];
     const { result } = renderHook(() =>
       useAuthClientCandidates({ enabled: false }),
     );
@@ -100,6 +131,49 @@ describe("service account candidates", () => {
       "project-fixture",
     ]);
   });
+  it("forwards page cursors and request cancellation to the API", async () => {
+    renderHook(() => useAuthClientCandidates({ enabled: true }));
+    const page = { items: [], nextCursor: "next-page" };
+    mocks.list.mockResolvedValue({ result: page });
+    const signal = new AbortController().signal;
+    expect(
+      await mocks.options.queryFn({ pageParam: undefined, signal }),
+    ).toEqual(page);
+    expect(mocks.options.getNextPageParam(page)).toBe("next-page");
+    expect(mocks.options.getNextPageParam({})).toBeUndefined();
+    await mocks.options.queryFn({ pageParam: "next-page", signal });
+    expect(mocks.list).toHaveBeenLastCalledWith(
+      { clientType: "service_account", limit: 100, cursor: "next-page" },
+      undefined,
+      { signal },
+    );
+  });
+  it.each(["add", " "])(
+    "uses the server ID for a non-routable slug %s",
+    (slug) => {
+      mocks.pages = [
+        {
+          items: [
+            {
+              id: "client-fixture",
+              name: "Reader",
+              enabled: true,
+              servers: [
+                { id: "server-fixture", slug, projectId: "project-fixture" },
+              ],
+            },
+          ],
+        },
+      ];
+      const { result } = renderHook(() =>
+        useAuthClientCandidates({ enabled: true }),
+      );
+      void result.current[0]?.run("open");
+      expect(mocks.navigate).toHaveBeenCalledWith(
+        "/mcp/server-fixture/settings#authentication",
+      );
+    },
+  );
   it("drains pages but stops after a pagination failure", () => {
     mocks.hasNextPage = true;
     const { rerender } = renderHook(() =>

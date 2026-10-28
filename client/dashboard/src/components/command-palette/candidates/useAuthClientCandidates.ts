@@ -1,3 +1,4 @@
+import { mcpServerRouteParam } from "@/lib/sources";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
@@ -72,7 +73,7 @@ export function useAuthClientCandidates({
             group: "Service Accounts",
             run: () => {
               void navigate(
-                `${routes.mcp.details.settings.href(server.slug ?? server.id)}#authentication`,
+                `${routes.mcp.details.settings.href(mcpServerRouteParam(server))}#authentication`,
               );
             },
           })),
