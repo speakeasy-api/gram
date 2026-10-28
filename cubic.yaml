@@ -26,6 +26,9 @@ reviews:
       - server/gen/**/*
       - dev-idp/gen/**/*
       - infra/gen/**/*
+      - .dagger/go/dagger.gen.go
+      - .dagger/go/internal/dagger/**/*
+      - .dagger/go/internal/telemetry/**/*
       - "**/repo/*.go"
       - "**/chrepo/*.go"
       - "**/testrepo/*.go"
@@ -38,6 +41,7 @@ reviews:
       - "**/uv.lock"
       - "**/Cargo.lock"
       - "**/mise.lock"
+      - "**/dagger.lock"
       - "**/atlas.sum"
       - "**/__snapshots__/**/*"
       - "**/*.svg"
