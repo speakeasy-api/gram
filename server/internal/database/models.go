@@ -5240,6 +5240,12 @@ type RegistryPromotionCandidate struct {
 	CurationRetryRevision pgtype.Text
 	// @access: confidential
 	CurationRetryAction pgtype.Text
+	// How guide delivery resolved: requested (factory issue filed), existing_guide (guide already on the setup-docs default branch) or guide_in_review (an open guide PR is pending). NULL on rows resolved before this was recorded means requested.
+	// @access: confidential
+	DocsOutcome pgtype.Text
+	// When delivery first found an open guide PR for this slug; cleared on any other outcome. Drives the stalled-review alert.
+	// @access: confidential
+	DocsReviewSince pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

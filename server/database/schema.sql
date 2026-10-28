@@ -16157,6 +16157,8 @@ CREATE TABLE IF NOT EXISTS registry_promotion_candidates (
   curation_retry_key text,
   curation_retry_revision text,
   curation_retry_action text,
+  docs_outcome text,
+  docs_review_since timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT registry_promotion_candidates_pkey PRIMARY KEY (id),
@@ -16213,6 +16215,10 @@ COMMENT ON COLUMN registry_promotion_candidates.docs_revision IS '@access: confi
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_key IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_revision IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_by IS '@access: confidential-pii';
+COMMENT ON COLUMN registry_promotion_candidates.docs_outcome IS 'How guide delivery resolved: requested (factory issue filed), existing_guide (guide already on the setup-docs default branch) or guide_in_review (an open guide PR is pending). NULL on rows resolved before this was recorded means requested.
+@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_review_since IS 'When delivery first found an open guide PR for this slug; cleared on any other outcome. Drives the stalled-review alert.
+@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_status IS 'Staff curation state, independent of observed eligibility.
 @access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_revision IS 'Compare-and-swap revision for staff curation changes.
