@@ -76,6 +76,9 @@ type OperationReceipt struct {
 	InputHash      string
 	ExpiresAt      time.Time
 	Replayed       bool
+	// AlreadyRegistered is set when this request found the MCP server already
+	// fully added to the project, so nothing new was created.
+	AlreadyRegistered bool
 	// Invalid when the receipt was written by a surface with no OAuth
 	// connection. Unwrapping these to a bare uuid.Nil would be read downstream
 	// as "connection missing" rather than "no connection applies".
@@ -648,7 +651,9 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	if err := tx.Commit(ctx); err != nil {
 		return OperationReceipt{}, fmt.Errorf("commit platform mcp component convergence: %w", err)
 	}
-	return operationReceiptFromRow(completedReceipt, receipt.Replayed), nil
+	completed := operationReceiptFromRow(completedReceipt, receipt.Replayed)
+	completed.AlreadyRegistered = !componentsCreated
+	return completed, nil
 }
 
 func (s *RegistrationStore) CompleteRegistrationWithRemoteURL(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, remoteURL string) (OperationReceipt, error) {

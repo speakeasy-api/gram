@@ -222,3 +222,33 @@ func TestInventorySearchMatchesTheSourceURL(t *testing.T) {
 	require.Len(t, picked, 1)
 	require.Equal(t, mcpServerID.String(), picked[0].ID)
 }
+
+func TestRemoteRegistrationToolReportsAServerAlreadyInTheProject(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_remote_already_registered")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	reg := newRemoteRegistrar(store, &testRegistrationGate{enabled: true}, "https://remote.example.test/mcp")
+	callCtx := ContextWithPrincipal(ctx, principal)
+	register := func(key string) RegisterRemoteMCPToolOutput {
+		out, err := invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, reg, "register_remote_mcp", map[string]any{
+			"project_slug":    project.Slug,
+			"remote_url":      "https://remote.example.test/mcp",
+			"idempotency_key": key,
+		})
+		require.NoError(t, err)
+		return out
+	}
+
+	first := register("remote-already-first")
+	require.False(t, first.AlreadyRegistered)
+
+	again := register("remote-already-second")
+	require.Equal(t, first.RegistrationID, again.RegistrationID)
+	require.True(t, again.AlreadyRegistered)
+}
