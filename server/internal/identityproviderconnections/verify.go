@@ -65,8 +65,8 @@ func (o *verificationOutcome) lastError() string {
 	return strings.Join(o.Reasons, ",")
 }
 
-// verifyConnection mints a token for the required scopes and confirms each
-// granted scope with one cheap read. A credential rejection surfaces
+// verifyConnection mints a token for the required scopes and, when
+// okta.apps.read is granted, confirms it with one cheap apps read. A credential rejection surfaces
 // as ErrCredentialRejected; any other transport failure is returned as-is.
 // DPoP binding is required of private_key_jwt connections, and of
 // client_secret_basic connections only once dpopPinned: an installed Okta
