@@ -42,16 +42,7 @@ Next run: use the described path and inputSchema. Example, if tracker--list_issu
 
 Search returns summaries; describe returns full definitions. Exact paths: server--tool. search(query="", server=None, limit=10, cursor=None), max limit 50; server omits "--"; empty query lists tools. tools.servers(limit=10, cursor=None) lists visible prefixes and connection state. Both paginate via next_cursor. Search incomplete/failed_members means discovery missed unavailable members; reason consent_required means this connection needs new consent.
 
-Inspect or repair access inside Python, even when no member tools are callable:
-
-    page = await tools.servers()
-    action = None
-    for server in page["items"]:
-        if server["slug"] == "tracker" and server["connection"]["consent"] == "required":
-            action = await tools.connect(server=server["slug"])
-    {"servers": page, "action": action}
-
-servers() lists visible members with connection.consent (approved, required, not_required, unknown), connection.authentication (unknown, verified_at_consent, not_required) and instructions, without upstream probes or credential refresh. Unknown authentication does not mean disconnected; try permitted tools first. Consent-time verification does not guarantee current upstream access. connect(server) requires an exact member slug and returns authorization_url, expires_at, instructions and client_reconnect_required. Show the returned URL and instructions to the user, then finish this execution. Wait for the user to complete browser sign-in. If client_reconnect_required is true, the user must also reconnect this gateway in their MCP client and approve the member; upstream login alone does not update the connection's consent. Then use a fresh execution for status, search, describe and the intended call. Never poll for human login inside Python or replay an earlier program automatically. Helpers never grant access or expose credentials.
+Connection recovery: servers() reports connection.consent and connection.authentication without probing upstreams. unknown does not mean disconnected; verified_at_consent is historical. For one member needing sign-in or consent, call await tools.connect(server="tracker"). Return its authorization_url and instructions to the user, then stop. If client_reconnect_required, they must also reconnect this gateway in their MCP client. After they finish, use a fresh execution; do not poll or replay the previous program.
 
 Calls return {ok, data, content, outcome, error?}; check ok. data preserves structuredContent; None when absent. A server refusing the call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and its reason in content: describe the tool and fix the call. Disallowed paths and non-object arguments raise RuntimeError.
 
@@ -96,7 +87,7 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	case len(members) == 0 && len(gate.hiddenMembers) > 0 && gate.connectURL != "":
 		fmt.Fprintf(&description, "The user hid every server on this gateway. The user can show one again at %s.\n", gate.connectURL)
 	case len(members) == 0:
-		description.WriteString("No member tools are currently callable. Use tools.servers() to inspect access and tools.connect(server=...) to get a browser sign-in link.\n")
+		description.WriteString("No member tools are currently callable. Use tools.servers() to inspect visible members. For a user-authenticated connection with a visible member, tools.connect(server=...) can return a browser sign-in link.\n")
 	case len(gate.hiddenMembers) == 1:
 		description.WriteString("The user hid 1 more server, which is not available.\n")
 	case len(gate.hiddenMembers) > 1:

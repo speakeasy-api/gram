@@ -29,3 +29,40 @@ func TestCodeReconnectBinding(t *testing.T) {
 	var absent *CodeReconnectBinding
 	require.NoError(t, absent.authorize("", false, now))
 }
+
+func TestCodeReconnectBindingRejectsChangedIdentity(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"subject", "authorizer", "impersonation", "expiry"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			subject := urn.NewUserSubject("owner")
+			b := &CodeReconnectBinding{UserID: "owner", Server: "tracker", ServerID: uuid.New(), ExpiresAt: time.Now().Add(time.Minute)}
+			state := AuthnChallengeState{FirstParty: true, CodeReconnect: b, FocusServer: "tracker", Subject: &subject, AuthorizerUserID: "owner", AuthorizerImpersonated: new(false)}
+			switch scenario {
+			case "subject":
+				subject = urn.NewUserSubject("other")
+			case "authorizer":
+				state.AuthorizerUserID = "other"
+			case "impersonation":
+				state.AuthorizerImpersonated = new(true)
+			case "expiry":
+				b.ExpiresAt = time.Now().Add(-time.Minute)
+			}
+			require.Error(t, validateCodeReconnectBinding(state))
+		})
+	}
+}
+
+func TestCodeConnectionAuthenticationMetadata(t *testing.T) {
+	t.Parallel()
+	b := &metaCodeBackend{}
+	for _, backend := range []metaMemberBackend{metaMemberBackendHosted, metaMemberBackendProxied} {
+		state := b.knownConnectionState(t.Context(), &metaGateContext{}, metaMember{backend: backend})
+		if backend == metaMemberBackendHosted {
+			require.Equal(t, "not_required", state.Authentication)
+		} else {
+			require.Equal(t, "unknown", state.Authentication)
+		}
+		require.Empty(t, state.Instructions)
+	}
+}

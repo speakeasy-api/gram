@@ -369,6 +369,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	// Resolve identity first, then enforce the reconnect owner before recording
 	// a sign-in or handing federated credentials to any consumer.
 	if err := challengeState.CodeReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		logger.WarnContext(ctx, "code reconnect owner authorization rejected", attr.SlogError(err))
 		return err
 	}
 	if challengeState.CodeReconnect != nil {

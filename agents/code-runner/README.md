@@ -64,7 +64,7 @@ routed connections require TLS termination and authenticated ingress.
 Each frame is a four-byte big-endian length followed by UTF-8 JSON, limited to
 1 MiB plus 4 KiB of envelope. `src/wire.rs` defines the exact tagged messages:
 
-1. Speakeasy sends `start` with `version: 1`, a UUID `execution_id`, `code`, and
+1. Speakeasy sends `start` with `version: 2`, a UUID `execution_id`, `code`, and
    `wall_ms` between 1 and 30000. The runner either refuses admission or sends
    `started`. IDs are retained for two minutes in a bounded replay window;
    callers must mint a new ID for each deliberate user execution and never
@@ -73,7 +73,7 @@ Each frame is a four-byte big-endian length followed by UTF-8 JSON, limited to
    was not received. Only `admission_refused` and `capacity_exceeded` prove
    code did not run; both are sent before the execution is admitted.
 2. The runner emits `callback` with a unique integer `id`, `method` and JSON
-   `arguments`. Methods are `search`, `describe`, `call`, and `servers`.
+   `arguments`. Methods are `search`, `describe`, `call`, `servers`, and `connect`.
 3. Speakeasy answers once with `callback_result`, the same `id`, and exactly one of
    `value` or a bounded public `error`; a reply with both or neither ends the
    execution. Replies can arrive out of order. Python receives

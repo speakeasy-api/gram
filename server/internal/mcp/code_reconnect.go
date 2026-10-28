@@ -49,7 +49,7 @@ func validateCodeReconnectBinding(state AuthnChallengeState) error {
 	return nil
 }
 
-func (s *Service) consumeCodeReconnect(r *http.Request, endpoint *ResolvedMcpEndpoint) (*CodeReconnectBinding, error) {
+func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndpoint, claim bool) (*CodeReconnectBinding, error) {
 	id := r.URL.Query().Get("code_reconnect")
 	if id == "" {
 		return nil, nil
@@ -59,7 +59,14 @@ func (s *Service) consumeCodeReconnect(r *http.Request, endpoint *ResolvedMcpEnd
 	}
 	// A copied ticket cannot attach credentials: the IDP callback requires the
 	// authoritative user that requested it, before any credential handoff.
-	state, err := s.authnChallengeCache.GetAndDelete(r.Context(), "authnChallenge:"+id)
+	// Peek during preparation; claim atomically only once login setup succeeds.
+	var state AuthnChallengeState
+	var err error
+	if claim {
+		state, err = s.authnChallengeCache.GetAndDelete(r.Context(), "authnChallenge:"+id)
+	} else {
+		state, err = s.authnChallengeCache.Get(r.Context(), "authnChallenge:"+id)
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "connection request expired; request a new link")
 	}

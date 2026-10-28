@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,7 +89,7 @@ func TestCodeConnectionsWorkWithoutToolPermission(t *testing.T) {
 	mock.upsertResult = "different-user"
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+state.ID+"&code=idp-auth-code", nil).WithContext(ctx)
 	rejected := httptest.NewRecorder()
-	require.Error(t, ti.service.HandleIDPCallback(rejected, callback))
+	require.ErrorContains(t, ti.service.HandleIDPCallback(rejected, callback), "Only the user who requested this connection")
 	require.Empty(t, rejected.Header().Get("Location"))
 	require.Empty(t, mock.memberChecks)
 }
@@ -143,7 +145,7 @@ func TestCodeReconnectExpiry(t *testing.T) {
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 	request := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect/first-party?code_reconnect="+state.ID, nil).WithContext(ctx)
 	response := httptest.NewRecorder()
-	require.Error(t, ti.service.ServeFirstPartyConnect(response, request, endpoint))
+	require.ErrorContains(t, ti.service.ServeFirstPartyConnect(response, request, endpoint), "invalid or expired connection request")
 	require.Empty(t, response.Header().Get("Location"))
 }
 
@@ -186,4 +188,70 @@ func TestCodeServersExposeConsentWithoutGrantingTools(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.True(t, ran, response.Body.String())
 	require.Equal(t, before, upstream.requests.Load())
+}
+
+func TestCodeReconnectSetupFailurePreservesTicket(t *testing.T) {
+	t.Parallel()
+	mock := memberMock()
+	mock.buildAuthURLResult, _ = url.Parse("https://login.example.test/authorize")
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	slug := "setup-retry-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+	ref, err := endpoint.EndpointRef(ctx, ti.conn, ti.serverURL.String())
+	require.NoError(t, err)
+	ticket := mcp.AuthnChallengeState{ID: uuid.NewString(), FirstParty: true, CreatedAt: time.Now(), Endpoint: ref, UserSessionIssuerID: issuer, CodeReconnect: &mcp.CodeReconnectBinding{UserID: auth.UserID, Server: "tracker", ServerID: uuid.New(), Ticket: true, ExpiresAt: time.Now().Add(time.Minute)}}
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, ticket))
+	target := "/mcp/" + slug + "/connect/first-party?code_reconnect=" + ticket.ID
+	for _, conflict := range []string{"workload_reconnect", "binding_refresh_attempt", "reauthenticate_client_id"} {
+		req := httptest.NewRequest(http.MethodGet, target+"&"+conflict+"=conflict", nil).WithContext(ctx)
+		require.ErrorContains(t, ti.service.ServeFirstPartyConnect(httptest.NewRecorder(), req, endpoint), "conflicting connection requests")
+		_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+ticket.ID)
+		require.NoError(t, err, "conflict must not consume ticket")
+	}
+	mock.buildAuthURLErr = errors.New("synthetic provider unavailable")
+	req := httptest.NewRequest(http.MethodGet, target, nil).WithContext(ctx)
+	require.ErrorContains(t, ti.service.ServeFirstPartyConnect(httptest.NewRecorder(), req, endpoint), "build IDP authorization URL")
+	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+ticket.ID)
+	require.NoError(t, err, "setup failure must not consume ticket")
+	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+mock.buildAuthURLParams.State)
+	require.Error(t, err, "failed setup must discard its prepared challenge")
+	mock.buildAuthURLErr = nil
+	response := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeFirstPartyConnect(response, req, endpoint))
+	require.Equal(t, http.StatusFound, response.Code)
+	require.ErrorContains(t, ti.service.ServeFirstPartyConnect(httptest.NewRecorder(), req, endpoint), "connection request expired")
+}
+
+func TestCodeReconnectConsentGETKeepsBoundFocus(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "focus-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	seedMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Bound tracker", "tracker", 0, "public")
+	seedMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Other server", "other", 1, "public")
+	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	subject := urn.NewUserSubject(auth.UserID)
+	state.Subject = &subject
+	state.AuthorizerUserID = auth.UserID
+	state.FirstParty = true
+	state.FocusServer = "tracker"
+	state.AutoConnectDone = true
+	state.CodeReconnect = &mcp.CodeReconnectBinding{UserID: auth.UserID, Server: "tracker", ServerID: mcpServerBySlug(t, ctx, ti, *auth.ProjectID, "tracker"), ExpiresAt: time.Now().Add(time.Minute)}
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+	response := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect?state="+stateID+"&server=other", nil).WithContext(ctx)
+	require.NoError(t, ti.service.ServeConsent(response, req, endpoint))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, response.Body.String(), "Bound tracker")
+	require.NotContains(t, response.Body.String(), "Other server")
 }
