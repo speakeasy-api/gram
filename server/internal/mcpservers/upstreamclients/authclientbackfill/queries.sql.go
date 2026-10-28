@@ -5387,6 +5387,15 @@ func (q *Queries) SoftDeleteIssuerOfClientFixture(ctx context.Context, clientID 
 	return err
 }
 
+const softDeleteMCPServerFixture = `-- name: SoftDeleteMCPServerFixture :exec
+UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteMCPServerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteMCPServerFixture, id)
+	return err
+}
+
 const softDeleteProjectFixture = `-- name: SoftDeleteProjectFixture :exec
 UPDATE projects SET deleted_at = clock_timestamp() WHERE id = $1
 `
