@@ -220,8 +220,8 @@ type platformMCPConfig struct {
 	// AssetStorage reads stored MCP server logos for result cards. Nil makes
 	// every card show the server's first letter.
 	AssetStorage assets.BlobStore
-	ShadowReview    *mcpapproval.Service
-	LocalFixture    *platformMCPLocalFixtureConfig
+	ShadowReview *mcpapproval.Service
+	LocalFixture *platformMCPLocalFixtureConfig
 }
 
 func recallRiskFindingReader(reader platformmcp.RiskFindingListReader) platformmcp.RecallRiskFindingReader {
