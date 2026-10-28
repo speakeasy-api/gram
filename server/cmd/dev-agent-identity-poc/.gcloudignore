@@ -1,6 +1,0 @@
-*
-!Dockerfile
-!.dockerignore
-!requirements.txt
-!request_token.py
-!test_request_token.py
