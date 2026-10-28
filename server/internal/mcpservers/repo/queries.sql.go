@@ -782,6 +782,81 @@ func (q *Queries) ListEnabledMCPServersByToolsetID(ctx context.Context, arg List
 	return items, nil
 }
 
+const listLegacyPlatformAliasSlugs = `-- name: ListLegacyPlatformAliasSlugs :many
+SELECT t.id AS mcp_server_id, t.mcp_slug::text AS slug
+FROM toolsets t
+JOIN projects p
+  ON p.id = t.project_id
+  AND p.organization_id = $1
+  AND p.deleted IS FALSE
+JOIN mcp_servers s
+  ON s.id = t.id
+  AND s.project_id = t.project_id
+  AND s.toolset_id = t.id
+  AND s.deleted IS FALSE
+WHERE t.id = ANY($2::uuid[])
+  AND t.project_id = ANY($3::uuid[])
+  AND t.organization_id = $1
+  AND t.mcp_slug IS NOT NULL
+  AND t.custom_domain_id IS NOT NULL
+  AND t.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM toolsets o
+    WHERE o.mcp_slug = t.mcp_slug
+      AND o.custom_domain_id IS NULL
+      AND o.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM toolsets o
+    WHERE o.mcp_slug = t.mcp_slug
+      AND o.custom_domain_id IS NOT NULL
+      AND o.id <> t.id
+      AND o.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_endpoints e
+    WHERE e.slug = t.mcp_slug
+      AND e.custom_domain_id IS NULL
+      AND e.deleted IS FALSE
+  )
+`
+
+type ListLegacyPlatformAliasSlugsParams struct {
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+	ProjectIds     []uuid.UUID
+}
+
+type ListLegacyPlatformAliasSlugsRow struct {
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+// Canonical hosted servers whose toolset alias sits on a custom domain and is the only alias with its slug, with no
+// live platform endpoint holding it: the loose legacy lookup serves that alias on the platform host too.
+func (q *Queries) ListLegacyPlatformAliasSlugs(ctx context.Context, arg ListLegacyPlatformAliasSlugsParams) ([]ListLegacyPlatformAliasSlugsRow, error) {
+	rows, err := q.db.Query(ctx, listLegacyPlatformAliasSlugs, arg.OrganizationID, arg.McpServerIds, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLegacyPlatformAliasSlugsRow
+	for rows.Next() {
+		var i ListLegacyPlatformAliasSlugsRow
+		if err := rows.Scan(&i.McpServerID, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveMCPServerIDsInOrganization = `-- name: ListLiveMCPServerIDsInOrganization :many
 SELECT m.id
 FROM mcp_servers AS m

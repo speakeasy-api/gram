@@ -27,6 +27,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -425,8 +426,8 @@ type mcpInputs struct {
 	// row, so describing the server needs no second lookup by slug. Invalid
 	// for internal callers, which carry only the slug and never handshake.
 	toolsetID uuid.NullUUID
-	// toolsetIsPublic is the described toolset's own mcp_is_public flag,
-	// loaded with toolsetID. Nil reads as private.
+	// toolsetIsPublic is the hosting publicness the described toolset is
+	// served under. Nil reads as private.
 	toolsetIsPublic *bool
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
@@ -1083,7 +1084,7 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 		if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 			customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 		}
-		if toolset, wrapperID, terr := s.loadToolset(ctx, mcpSlug, customDomainID, false); terr == nil {
+		if toolset, _, wrapperID, terr := s.loadToolset(ctx, mcpSlug, customDomainID, false); terr == nil {
 			s.recordToolsetSlugFallback(ctx, logger, mcpmetrics.LegacyFallbackProxyGetDelete, mcpSlug, toolset, wrapperID)
 		}
 		return false, nil
@@ -1207,7 +1208,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, hosting, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return rejectMissingMCPTarget(w, r, logger, mcpversions.SupportedHostedToolset(),
@@ -1222,10 +1223,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// Legacy toolset-by-slug path: hosting configuration comes from the
-	// toolset columns; the canonical wrapper, when present, keys kill switches
-	// and attribution.
-	return s.serveToolsetResolved(w, r, toolset, mcpSlug, mcproute.MCP, hostedServingFromToolset(toolset, wrapperID), nil, nil, nil, nil)
+	// Legacy toolset-by-slug path: hosting comes from the canonical wrapper when
+	// present, which also keys kill switches and attribution, else the toolset
+	// columns.
+	return s.serveToolsetResolved(w, r, toolset, mcpSlug, mcproute.MCP, hostedServingFromToolset(toolset, hosting, wrapperID), nil, nil, nil, nil)
 }
 
 // hostedServing is the hosting configuration one toolset-backed MCP request
@@ -1260,24 +1261,28 @@ type hostedServing struct {
 
 	// mcpEndpointID for telemetry; nil on the legacy path.
 	mcpEndpointID *uuid.UUID
+
+	// toolsetHosting is the hosting state the legacy path serves under; nil on the wrapper path.
+	toolsetHosting *hostingstate.Hosting
 }
 
 // hostedServingFromToolset derives the hosting configuration for the legacy
-// toolsets.mcp_slug path, where the toolset columns govern serving.
+// toolsets.mcp_slug path.
 // wrapperID is the toolset's canonical mcp_servers row, when it has one.
-func hostedServingFromToolset(toolset *toolsets_repo.Toolset, wrapperID uuid.NullUUID) *hostedServing {
+func hostedServingFromToolset(toolset *toolsets_repo.Toolset, hosting hostingstate.Hosting, wrapperID uuid.NullUUID) *hostedServing {
 	var mcpServerID *uuid.UUID
 	if wrapperID.Valid {
 		mcpServerID = &wrapperID.UUID
 	}
 	return &hostedServing{
-		isPublic:              toolset.McpIsPublic,
-		runInToolsetGate:      toolset.UserSessionIssuerID.Valid,
+		isPublic:              hosting.Public,
+		runInToolsetGate:      hosting.UserSessionIssuerID.Valid,
 		callerGated:           false,
 		rbacResourceID:        toolset.ID,
 		toolVariationsGroupID: nil,
 		mcpServerID:           mcpServerID,
 		mcpEndpointID:         nil,
+		toolsetHosting:        &hosting,
 	}
 }
 
@@ -1353,9 +1358,12 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	callerAlreadyGated := cfg.callerGated
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())
 	if runInToolsetGate {
+		if cfg.toolsetHosting == nil {
+			return oops.E(oops.CodeUnexpected, nil, "legacy issuer gate has no hosting state").LogError(ctx, s.logger)
+		}
 		// The WWW-Authenticate URL, issuer URL, and consent action follow
 		// the surface the request arrived under.
-		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, *cfg.toolsetHosting, mcpRouteBase)
 		newCtx, authentication, gateToolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {
 			s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
@@ -1521,7 +1529,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		clientInfoScope:          "",
 		skipProxyTools:           false,
 		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		toolsetIsPublic:          new(toolset.McpIsPublic),
+		toolsetIsPublic:          new(cfg.isPublic),
 		tags:                     tags,
 		protocolVersion:          protocolVersion,
 		identityCoverageRecorded: hostedCoverageRecorded,
@@ -1840,7 +1848,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // every legacy-routed surface (serving, well-known metadata, OAuth
 // challenges) treats them as nonexistent — mirroring how the
 // mcp_endpoints → mcp_servers path handles visibility 'disabled'.
-func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, uuid.NullUUID, error) {
+func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, hostingstate.Hosting, uuid.NullUUID, error) {
 	var toolset toolsets_repo.Toolset
 	var err error
 	switch {
@@ -1857,36 +1865,37 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 	noWrapper := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, noWrapper, errToolsetNotFound
+		return nil, hostingstate.NotHosted(), noWrapper, errToolsetNotFound
 	case err != nil:
-		return nil, noWrapper, fmt.Errorf("lookup toolset: %w", err)
+		return nil, hostingstate.NotHosted(), noWrapper, fmt.Errorf("lookup toolset: %w", err)
 	}
 	wrapper, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		if !toolset.McpEnabled {
-			return nil, noWrapper, errToolsetNotFound
+		hosting := hostedmcp.ServerHosting(toolset, nil)
+		if !hosting.Enabled {
+			return nil, hostingstate.NotHosted(), noWrapper, errToolsetNotFound
 		}
-		return &toolset, noWrapper, nil
+		return &toolset, hosting, noWrapper, nil
 	}
 	if err != nil {
-		return nil, noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)
+		return nil, hostingstate.NotHosted(), noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)
 	}
 	if !hostedmcp.IsCanonical(&wrapper, toolset.ID) {
-		return nil, noWrapper, errToolsetNotFound
+		return nil, hostingstate.NotHosted(), noWrapper, errToolsetNotFound
 	}
 	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.
-	toolset = hostedmcp.WithServerState(toolset, &wrapper)
-	if !toolset.McpEnabled {
-		return nil, noWrapper, errToolsetNotFound
+	hosting := hostedmcp.ServerHosting(toolset, &wrapper)
+	if !hosting.Enabled {
+		return nil, hostingstate.NotHosted(), noWrapper, errToolsetNotFound
 	}
 	mode, err := networkaccess.Effective(wrapper.NetworkAccessMode)
 	if err != nil {
-		return nil, noWrapper, fmt.Errorf("invalid hosted MCP network policy: %w", err)
+		return nil, hostingstate.NotHosted(), noWrapper, fmt.Errorf("invalid hosted MCP network policy: %w", err)
 	}
 	if !mode.Allows(networkaccess.SurfacePublic) {
-		return nil, noWrapper, errToolsetNotFound
+		return nil, hostingstate.NotHosted(), noWrapper, errToolsetNotFound
 	}
-	return &toolset, uuid.NullUUID{UUID: wrapper.ID, Valid: true}, nil
+	return &toolset, hosting, uuid.NullUUID{UUID: wrapper.ID, Valid: true}, nil
 }
 
 // recordToolsetSlugFallback logs and counts one legacy toolsets.mcp_slug fallback hit.
