@@ -190,10 +190,11 @@ func undistributeSkillAnnotations() *mcp.ToolAnnotations {
 
 // linkSkillToMCPAnnotations and unlinkSkillFromMCPAnnotations are shared by
 // the live and unavailable registrations. A repeated link settles on the same
-// link, and a repeated unlink finds nothing left to remove; only unlinking
-// takes something away.
+// link, and a repeated unlink finds nothing left to remove. Both are
+// destructive: re-linking an existing target replaces its pin, which can
+// change or clear the version that target serves.
 func linkSkillToMCPAnnotations() *mcp.ToolAnnotations {
-	return writeAnnotations(false, true, false)
+	return writeAnnotations(true, true, false)
 }
 
 func unlinkSkillFromMCPAnnotations() *mcp.ToolAnnotations {

@@ -28,7 +28,7 @@ The frontmatter is never curated. `allowed-tools`, `license`, `metadata` and any
 
 A hosted endpoint serves a skill to a caller when all of the following hold:
 
-1. A live skill link names the endpoint: a link to its MCP server, a link to the organization MCP server, or, on the organization gateway, a link to the gateway itself or to a member server the caller can reach through it. Links are made from the server's Skills tab, the skill page, or the `skills.link` API.
+1. A live skill link names the endpoint: on a hosted MCP server, a link to that server; on a project gateway, a link to that gateway; on the organization gateway, a link to the organization gateway itself or to a member server the caller can reach through it. Links are made from the server's Skills tab, the skill page, or the `skills.link` API.
 2. The skill is not archived, its project is not deleted, and the link resolves to a servable version: its pinned version, or the latest valid version when it tracks latest.
 3. The caller is an authenticated member of the owning organization acting as themselves.
 
@@ -184,8 +184,8 @@ Assessment for the Platform MCP, recorded per the maintaining-platform-mcp skill
 
 - **Outcome.** An administrator can serve a skill from an MCP server or gateway, stop serving it, and see which surfaces serve which skills and whether agents load them.
 - **Actor and target.** Organization administrators (writes) and members (reads) acting on a skill in an explicit project and one MCP surface.
-- **Existing tools.** `distribute_skill` and `undistribute_skill` stay about plugin packages and are unchanged. `get_skill` and `list_skill_distributions` report `last_loaded_over_mcp_at`, and `list_skill_distributions` also returns `served_by`, the surfaces serving the skill from its live links.
-- **Decision: add `link_skill_to_mcp` and `unlink_skill_from_mcp`.** Linking is a new write with no existing tool, so it gets its own pair: admin-only, each call confirmed, and acting on one exactly named server or gateway. Where serving skills over MCP is not available both answer with a readable refusal instead of disappearing from the catalogue. The platform toolset's own catalog is delivered to the agent by the protocol itself, which no tool can improve on.
+- **Existing tools.** `distribute_skill` and `undistribute_skill` stay about plugin packages and are unchanged. `get_skill`, `list_skill_versions`, `create_skill` and `add_skill_version` return `served_digest` on valid version summaries, so an agent can match served content to skill-load logs; `get_skill` and `list_skill_distributions` also report `last_loaded_over_mcp_at`, and `list_skill_distributions` also returns `served_by`, the surfaces serving the skill from its live links.
+- **Decision: add `link_skill_to_mcp` and `unlink_skill_from_mcp`.** Linking is a new write with no existing tool, so it gets its own pair: admin-only, each call confirmed, and acting on one exactly named server or gateway. Linking a skill that is already linked to that surface replaces the link's pin (or clears it to track latest), which is why the tool is annotated destructive. Where serving skills over MCP is not available both answer with a readable refusal instead of disappearing from the catalogue. The platform toolset's own catalog is delivered to the agent by the protocol itself, which no tool can improve on.
 - **Evidence.** The Platform MCP skill link tests cover link, unlink, exact target resolution, confirmation and the unavailable refusal; the skill tool tests cover `last_loaded_over_mcp_at` end to end (a recorded MCP read shows up on the next listing).
 
 The Platform MCP's `search_docs` and `read_doc` tools index the pinned `mcp-setup-docs` module, not this repository's `docs/` tree, so this page is contributor documentation and is not agent-visible through those tools.
