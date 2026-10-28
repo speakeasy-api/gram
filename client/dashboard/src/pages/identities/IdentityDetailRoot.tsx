@@ -13,7 +13,11 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
+import {
+  getHttpStatusCode,
+  isBadRequestError,
+  isNotFoundError,
+} from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import {
@@ -99,6 +103,11 @@ function IdentityDetailContent(): JSX.Element {
   const location = useLocation();
 
   const identityQuery = useIdentitySubject(urn);
+  const statusCode = getHttpStatusCode(identityQuery.error);
+  // A failed refetch retains cached data, but a definitive loss of agent
+  // access must hide it (for example, after transferring ownership).
+  const agentUnavailable =
+    urn.startsWith("agent:") && (statusCode === 403 || statusCode === 404);
   // How far down the rail has to stick to clear the header above it. The
   // header's height is not a constant — a long name wraps, and so does a row
   // of directory groups — so a fixed offset parks the rail under the header's
@@ -116,10 +125,15 @@ function IdentityDetailContent(): JSX.Element {
   }, []);
   // Without this the recents entry is the sub-page segment ("overview"), since
   // the URN is neither an id nor long enough for the label heuristic to reject.
-  useRecentLabelOverride(location.pathname, identityQuery.data?.displayName);
+  useRecentLabelOverride(
+    location.pathname,
+    agentUnavailable ? undefined : identityQuery.data?.displayName,
+  );
   // The resolver answers any well-formed URN with a subject, so a typo renders
   // a complete page for someone who does not exist unless we check.
-  const subject = useIdentityIsKnown(identityQuery.data);
+  const subject = useIdentityIsKnown(
+    agentUnavailable ? undefined : identityQuery.data,
+  );
 
   // The bare route carries no panels of its own; overview is the landing view.
   if (encodedUrn && location.pathname === routes.identities.href(encodedUrn)) {
@@ -136,6 +150,7 @@ function IdentityDetailContent(): JSX.Element {
   if (
     identityQuery.error &&
     !identityQuery.data &&
+    !agentUnavailable &&
     !isNotFoundError(identityQuery.error) &&
     !isBadRequestError(identityQuery.error)
   ) {
@@ -144,6 +159,7 @@ function IdentityDetailContent(): JSX.Element {
 
   if (
     !urn ||
+    agentUnavailable ||
     (identityQuery.error && !identityQuery.data) ||
     (identityQuery.data && !subject.isPending && !subject.known)
   ) {
@@ -154,8 +170,14 @@ function IdentityDetailContent(): JSX.Element {
         </Page.Header>
         <Page.Body>
           <RouteNotFoundState
-            title="Identity not found"
-            description="No activity in this organization resolves to that identifier."
+            title={
+              agentUnavailable ? "Agent unavailable" : "Identity not found"
+            }
+            description={
+              agentUnavailable
+                ? "This agent no longer exists or you no longer have permission to view it."
+                : "No activity in this organization resolves to that identifier."
+            }
             action={
               <routes.identities.Link>
                 <SecondaryRouteAction>Back to identities</SecondaryRouteAction>

@@ -123,7 +123,7 @@ export function AgentIdentityProfile({
           title="Controls & Safety"
           meta="Stop this agent acting, for a while or for good"
         >
-          <AgentOwnership agent={agent} refresh={refresh} />
+          <AgentOwnership agent={agent} />
           <AgentLifecycle
             agent={agent}
             refresh={refresh}

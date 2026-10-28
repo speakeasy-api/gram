@@ -7,7 +7,7 @@ import { useOrganization, useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useTransferAgentMutation } from "@gram/client/react-query/transferAgent.js";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
 import { toast } from "sonner";
 import { AgentOwner } from "./agent-admin";
@@ -20,10 +20,8 @@ import { AgentOwner } from "./agent-admin";
  */
 export function AgentOwnership({
   agent,
-  refresh,
 }: {
   agent: ManagedAgent;
-  refresh: () => void;
 }): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const projectSlug = useProjectSlugForRequests();
@@ -57,7 +55,6 @@ export function AgentOwnership({
           key={`${agent.id}:${agent.ownerUserId}:${projectSlug}`}
           agent={agent}
           onClose={() => setOpen(false)}
-          refresh={refresh}
         />
       )}
     </SettingsSection>
@@ -67,13 +64,12 @@ export function AgentOwnership({
 function TransferOwnershipDialog({
   agent,
   onClose,
-  refresh,
 }: {
   agent: ManagedAgent;
   onClose: () => void;
-  refresh: () => void;
 }) {
   const sdk = useSdkClient();
+  const queryClient = useQueryClient();
   const projectSlug = useProjectSlugForRequests();
   const organization = useOrganization();
   const { user } = useSession();
@@ -97,10 +93,26 @@ function TransferOwnershipDialog({
     `${member.name} ${member.email}`.toLowerCase().includes(needle),
   );
   const transfer = useTransferAgentMutation({
-    onSuccess: () => {
+    onSuccess: async (updatedAgent) => {
+      const detailKey = ["managed-agents", organization.id, "detail", agent.id];
+      await queryClient.cancelQueries({ queryKey: detailKey, exact: true });
+      // The mutation returns freshly computed permissions, even if the caller
+      // no longer has read access. Never retain the previous owner's controls
+      // while the authoritative read is in flight (or fails).
+      queryClient.setQueriesData<ManagedAgent>(
+        { queryKey: detailKey, exact: true },
+        updatedAgent,
+      );
       toast.success("Agent ownership transferred");
       onClose();
-      refresh();
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["managed-agents", organization.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["identities", "registered-agents", organization.id],
+        }),
+      ]);
     },
   });
 

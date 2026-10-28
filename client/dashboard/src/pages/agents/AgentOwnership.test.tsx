@@ -1,5 +1,9 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -32,8 +36,9 @@ vi.mock("sonner", () => ({ toast: { success: mocks.success } }));
 vi.mock("@gram/client/react-query/transferAgent.js", async () => {
   const { useMutation } = await import("@tanstack/react-query");
   return {
-    useTransferAgentMutation: (options: { onSuccess: () => void }) =>
-      useMutation({ mutationFn: mocks.transfer, ...options }),
+    useTransferAgentMutation: (options: {
+      onSuccess: (agent: ManagedAgent) => Promise<void>;
+    }) => useMutation({ mutationFn: mocks.transfer, ...options }),
   };
 });
 
@@ -57,7 +62,6 @@ function setup(canTransfer = true) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   clients.push(client);
-  const refresh = vi.fn<() => void>();
   const agent = {
     id: "agent-test",
     ownerUserId: owner.id,
@@ -65,10 +69,10 @@ function setup(canTransfer = true) {
   } as ManagedAgent;
   const view = render(
     <QueryClientProvider client={client}>
-      <AgentOwnership agent={agent} refresh={refresh} />
+      <AgentOwnership agent={agent} />
     </QueryClientProvider>,
   );
-  return { client, refresh, agent, ...view };
+  return { client, agent, ...view };
 }
 async function selectMember() {
   fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
@@ -162,13 +166,13 @@ describe("AgentOwnership", () => {
   });
 
   it("does not reuse another project's member roster", async () => {
-    const { client, refresh, agent, rerender } = setup();
+    const { client, agent, rerender } = setup();
     await selectMember();
     mocks.projectSlug = "other-project";
     mocks.listMembers.mockImplementation(() => new Promise(() => {}));
     rerender(
       <QueryClientProvider client={client}>
-        <AgentOwnership agent={agent} refresh={refresh} />
+        <AgentOwnership agent={agent} />
       </QueryClientProvider>,
     );
     expect(await screen.findByText("Loading members…")).toBeTruthy();
@@ -213,6 +217,119 @@ describe("AgentOwnership", () => {
       ).toBe(false),
     );
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it.each([403, 404, 500, undefined])(
+    "refetches after transfer and replaces stale owner permissions even when read fails with %s",
+    async (statusCode) => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      clients.push(client);
+      const before = {
+        id: "agent-test",
+        ownerUserId: "owner",
+        permissions: { transfer: true },
+      } as ManagedAgent;
+      const after = {
+        ...before,
+        ownerUserId: "next-owner",
+        permissions: { ...before.permissions, transfer: false },
+      };
+      const error = Object.assign(new Error("Read failed"), { statusCode });
+      const get = vi.fn().mockRejectedValue(error);
+      mocks.transfer.mockResolvedValue(after);
+      const detailKey = ["managed-agents", "org-test", "detail", before.id];
+      const rosterKey = [
+        "identities",
+        "registered-agents",
+        "org-test",
+        "user-test",
+      ];
+      const readableKey = ["managed-agents", "org-test", "list", "user-test"];
+      const otherOrgKey = ["managed-agents", "other-org", "list", "user-test"];
+      for (const key of [rosterKey, readableKey, otherOrgKey])
+        client.setQueryData(key, [before]);
+      function ObservedAgent() {
+        const query = useQuery({
+          queryKey: detailKey,
+          queryFn: get,
+          initialData: before,
+          staleTime: Infinity,
+        });
+        return (
+          <>
+            <output aria-label="Displayed owner">
+              {query.data.ownerUserId}
+            </output>
+            <AgentOwnership agent={query.data} />
+          </>
+        );
+      }
+      render(
+        <QueryClientProvider client={client}>
+          <ObservedAgent />
+        </QueryClientProvider>,
+      );
+      await selectMember();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Transfer ownership" }),
+      );
+      await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(client.getQueryState(detailKey)?.error).toBe(error),
+      );
+      expect(screen.getByLabelText("Displayed owner").textContent).toBe(
+        "next-owner",
+      );
+      expect(screen.queryByText("Ownership")).toBeNull();
+      expect(client.getQueryData(detailKey)).toEqual(after);
+      expect(client.getQueryState(rosterKey)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(readableKey)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(otherOrgKey)?.isInvalidated).toBe(false);
+    },
+  );
+
+  it("retains ownership controls when the authoritative read grants transfer through RBAC", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    clients.push(client);
+    const before = {
+      id: "agent-test",
+      ownerUserId: "owner",
+      permissions: { transfer: true },
+    } as ManagedAgent;
+    const after = { ...before, ownerUserId: "next-owner" };
+    const get = vi.fn().mockResolvedValue(after);
+    mocks.transfer.mockResolvedValue(after);
+    function ObservedAgent() {
+      const query = useQuery({
+        queryKey: ["managed-agents", "org-test", "detail", before.id],
+        queryFn: get,
+        initialData: before,
+        staleTime: Infinity,
+      });
+      return (
+        <>
+          <output aria-label="Displayed owner">{query.data.ownerUserId}</output>
+          <AgentOwnership agent={query.data} />
+        </>
+      );
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <ObservedAgent />
+      </QueryClientProvider>,
+    );
+    await selectMember();
+    fireEvent.click(screen.getByRole("button", { name: "Transfer ownership" }));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByLabelText("Displayed owner").textContent).toBe(
+      "next-owner",
+    );
+    expect(screen.getByRole("button", { name: "Transfer" })).toBeTruthy();
   });
 
   it("shows loading then an empty state when only the current owner exists", async () => {
@@ -265,7 +382,7 @@ describe("AgentOwnership", () => {
         resolve = done;
       }),
     );
-    const { refresh } = setup();
+    setup();
     await selectMember();
     fireEvent.click(screen.getByRole("button", { name: "Transfer ownership" }));
     expect(
@@ -278,22 +395,19 @@ describe("AgentOwnership", () => {
     ).toBe(true);
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(refresh).not.toHaveBeenCalled();
     await act(async () => resolve({}));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(refresh).toHaveBeenCalledTimes(1);
     expect(mocks.success).toHaveBeenCalledWith("Agent ownership transferred");
   });
 
   it("displays transfer failure without refreshing and clears the error on Back before retrying", async () => {
     mocks.transfer.mockRejectedValueOnce(new Error("Transfer denied"));
-    const { refresh } = setup();
+    setup();
     await selectMember();
     fireEvent.click(screen.getByRole("button", { name: "Transfer ownership" }));
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Transfer denied",
     );
-    expect(refresh).not.toHaveBeenCalled();
     expect(mocks.success).not.toHaveBeenCalled();
     expect(
       screen
@@ -308,6 +422,6 @@ describe("AgentOwnership", () => {
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("button", { name: "Transfer ownership" }));
-    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
   });
 });
