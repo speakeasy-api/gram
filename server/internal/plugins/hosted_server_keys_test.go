@@ -125,7 +125,15 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryLeftOut(t *testing
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
-	require.NotContains(t, string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), "/mcp/"+toolset.Slug)
+	raw, ok := mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]
+	if !ok {
+		return
+	}
+	var config struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &config))
+	require.NotContains(t, config.MCPServers, "Hosted")
 }
 
 func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testing.T) {

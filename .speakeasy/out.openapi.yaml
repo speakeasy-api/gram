@@ -34071,7 +34071,7 @@ paths:
             format: uuid
             type: string
           deprecated: true
-          x-speakeasy-deprecation-message: Ignored
+          x-speakeasy-deprecation-message: Ignored; omit this parameter
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -101688,7 +101688,7 @@ components:
         legacy_platform_slug:
           description: 'Deprecated: always absent.'
           type: string
-          x-speakeasy-deprecation-message: Always absent
+          x-speakeasy-deprecation-message: Always absent; use platform_endpoint_slug instead
           deprecated: true
         name:
           type: string

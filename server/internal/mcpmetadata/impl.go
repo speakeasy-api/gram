@@ -2004,6 +2004,9 @@ func (s *Service) resolveMCPURL(ctx context.Context, toolset toolsets_repo.Tools
 			return "", false, fmt.Errorf("failed to get custom domain: %w", err)
 		}
 
+		if row.EndpointIsDomainRoot {
+			return "https://" + customDomain.Domain, true, nil
+		}
 		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
 	}
 

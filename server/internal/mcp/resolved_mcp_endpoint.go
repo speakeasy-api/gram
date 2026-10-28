@@ -422,8 +422,8 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if ref.IsPublic != nil && e.IsPublic != *ref.IsPublic {
 		return errToolsetEndpointMismatch
 	}
-	// A state pins the server or meta row it was minted for and, when present,
-	// the delegated toolset.
+	// A state naming a server or meta row, or a toolset, must still match it;
+	// a backend-less ref is checked on the other fields only.
 	if ref.McpServerID.Valid || ref.MetaMcpServerID.Valid {
 		if e.McpServerID != ref.McpServerID || e.MetaMcpServerID != ref.MetaMcpServerID {
 			return errToolsetEndpointMismatch

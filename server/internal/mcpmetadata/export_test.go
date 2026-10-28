@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -157,7 +158,7 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 	require.NoError(t, err, "activate custom domain")
 
 	// An endpoint on the custom domain is exported under it.
-	createServedToolset(t, ctx, ti, servedToolsetOptions{
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
 		name: "Test Custom Domain Export", slug: "test-custom-domain", mcpSlug: "custom-domain-mcp",
 		description: "A toolset with custom domain", customDomainID: uuid.NullUUID{UUID: customDomain.ID, Valid: true},
 	})
@@ -171,4 +172,20 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 	// Verify the server URL uses the custom domain
 	require.Contains(t, result.ServerURL, customDomain.Domain, "server URL should contain custom domain")
 	require.Equal(t, "https://mcp.example.com/mcp/custom-domain-mcp", result.ServerURL, "server URL should use custom domain")
+
+	endpointsRepo := mcpendpoints_repo.New(ti.conn)
+	endpoints, err := endpointsRepo.ListMCPEndpointsByMCPServerID(ctx, mcpendpoints_repo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: toolset.ID})
+	require.NoError(t, err)
+	require.Len(t, endpoints, 1)
+	_, err = endpointsRepo.UpdateMCPEndpointAddress(ctx, mcpendpoints_repo.UpdateMCPEndpointAddressParams{
+		CustomDomainID: endpoints[0].CustomDomainID, Slug: endpoints[0].Slug, IsDomainRoot: pgtype.Bool{Bool: true, Valid: true},
+		ID: endpoints[0].ID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err, "map endpoint to domain root")
+
+	result, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
+		McpSlug: new(types.Slug("custom-domain-mcp")),
+	})
+	require.NoError(t, err, "export domain-root mcp metadata")
+	require.Equal(t, "https://mcp.example.com", result.ServerURL, "domain-root endpoint is served at the bare domain")
 }

@@ -15,8 +15,8 @@ import (
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
-// The legacy slug install page treats a toolset in a deleted project as unknown.
-func TestServeInstallPage_LegacyToolsetInDeletedProjectReturnsNotFound(t *testing.T) {
+// The install page treats a hosted server in a deleted project as unknown.
+func TestServeInstallPage_HostedServerInDeletedProjectReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

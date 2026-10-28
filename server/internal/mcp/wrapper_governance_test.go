@@ -265,9 +265,10 @@ func TestDisabledCanonicalServer_NotServed(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "disabled-canonical-"+uuid.NewString()[:8])
-	exposeCanonicalWrapper(t, ctx, ti, toolset.ProjectID, toolset.ID, "canonical-"+uuid.NewString(), "disabled")
+	canonicalSlug := "canonical-" + uuid.NewString()
+	exposeCanonicalWrapper(t, ctx, ti, toolset.ProjectID, toolset.ID, canonicalSlug, "disabled")
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, "alternate-"+uuid.NewString(), "public", uuid.NullUUID{}, uuid.Nil)
-	_, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	_, err := servePublicHTTP(t, context.Background(), ti, canonicalSlug, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
@@ -276,7 +277,7 @@ func TestDisabledCanonicalServer_NotServed(t *testing.T) {
 		ti.service.HandleGetProtectedResource,
 		ti.service.HandleGetAuthorizationServer,
 	} {
-		_, err := runMCPWellKnown(t, ctx, handler, toolset.McpSlug.String)
+		_, err := runMCPWellKnown(t, ctx, handler, canonicalSlug)
 		require.ErrorAs(t, err, &shareable)
 		require.Equal(t, oops.CodeNotFound, shareable.Code)
 	}

@@ -277,9 +277,9 @@ func createUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Po
 // ---------------------------------------------------------------------------
 
 // TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints
-// confirms /mcp/{slug} resolves via the new mcp_endpoints lookup when
+// confirms /mcp/{slug} resolves via the mcp_endpoints lookup when
 // the endpoint is backed by a toolset, dispatching through
-// ServeToolsetResolved just like the legacy mcp_slug path.
+// ServeToolsetResolved.
 func TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints(t *testing.T) {
 	t.Parallel()
 
@@ -289,9 +289,8 @@ func TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints(t *testing.T
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// Toolset's mcp_slug is intentionally different from the endpoint
-	// slug — confirms resolution flows through mcp_endpoints, not the
-	// legacy toolset.mcp_slug query.
+	// The toolset slug differs from the endpoint slug, so resolution must
+	// flow through mcp_endpoints.
 	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "toolset-slug-"+uuid.NewString()[:8])
 
 	endpointSlug := "endpoint-" + uuid.NewString()
@@ -768,9 +767,8 @@ func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testin
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{UUID: customDomain.ID, Valid: true}, uuid.Nil)
 
 	// Request arrives on the platform domain (no customdomains.Context).
-	// The custom-domain mcp_endpoint must not resolve, and the legacy
-	// toolset lookup must not find the slug either (toolset.mcp_slug
-	// differs from endpointSlug). Expect CodeNotFound from ServePublic.
+	// The custom-domain mcp_endpoint must not resolve. Expect
+	// CodeNotFound from ServePublic.
 	_, err = servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
 	require.Error(t, err, "platform-domain request must not resolve a custom-domain mcp_endpoint")
 	var oopsErr *oops.ShareableError

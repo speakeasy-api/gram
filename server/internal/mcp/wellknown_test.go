@@ -116,8 +116,7 @@ func TestHandleGetAuthorizationServer_DisabledServer(t *testing.T) {
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "disabled", issuerID)
 
-	// Disabled mcp_server resolves as not-found; with no legacy toolset for
-	// the slug the fallback also misses → 404.
+	// Disabled mcp_server resolves as not-found → 404.
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
 	require.Error(t, err)
 	require.Empty(t, w.Body.String())
@@ -455,9 +454,6 @@ func TestHandleGetProtectedResource_IssuerGatedToolsetBackend_OnCustomDomain(t *
 	require.True(t, ok)
 	require.Equal(t, []any{expectedResource}, authServers)
 }
-
-// TestHandleGetProtectedResource_LegacySlugFallbackProxy is the
-// protected-resource companion of the legacy fallback test.
 
 // TestWellKnown_IssuerGatedToolsetBackend_TwoEndpoints pins the AIS-634
 // contract: a hosted (toolset-backed) server carrying two endpoints serves

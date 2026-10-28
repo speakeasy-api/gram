@@ -205,8 +205,7 @@ func deniedResult(endpoint *repo.McpEndpoint, server *mcpservers_repo.McpServer,
 }
 
 // ErrPolicyDenied marks a terminal address result whose public representation
-// is 404. Callers that support legacy fallback must not fall through when this
-// cause is present.
+// is 404. Callers must not try another lookup when this cause is present.
 var ErrPolicyDenied = errors.New("mcp endpoint policy denied")
 
 // IsPolicyDenied reports whether an error is the terminal policy outcome.
@@ -223,8 +222,7 @@ func IsAddressMiss(err error) bool {
 
 // BySlugAndCustomDomain preserves the public resolver signature while callers
 // migrate to ResolutionResult. A genuine miss remains CodeNotFound. Policy
-// denial is also represented as 404 to clients, but is authoritative and must
-// never be converted into legacy fallback by callers using Resolve directly.
+// denial is also represented as 404 to clients, but is authoritative.
 func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, slug string) (*repo.McpEndpoint, *mcpservers_repo.McpServer, *metamcp_repo.MetaMcpServer, error) {
 	input, err := FromContext(ctx, slug)
 	if err != nil {

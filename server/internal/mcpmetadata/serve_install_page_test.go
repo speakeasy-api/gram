@@ -514,9 +514,6 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 	require.Contains(t, rr.Body.String(), "https://"+domain.Domain+"/mcp/"+mcpSlug)
 }
 
-// TestServeInstallPage_CustomDomain_PlatformDomainStillWorks verifies that a
-// toolset linked to a custom domain can still be accessed via the platform
-// domain (i.e. when no custom domain context is present in the request).
 // A custom-domain endpoint's install page is not served on the platform host.
 func TestServeInstallPage_CustomDomain_PlatformDomainNotFound(t *testing.T) {
 	t.Parallel()
@@ -1658,7 +1655,7 @@ func TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL(t *testi
 }
 
 // A private-only endpoint is an authoritative 404 on the public install
-// surface and cannot fall through to a legacy toolset sharing its slug.
+// surface.
 func TestServeInstallPage_PrivateNetworkUsesControlPlanePage(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
@@ -1836,8 +1833,7 @@ func serveMetaInstallPageURL(t *testing.T, reqCtx context.Context, ti *testInsta
 
 // TestServeInstallPage_MetaBackedEndpoint_RendersGateway verifies that a
 // gateway (meta_mcp_servers) endpoint renders its install page for a
-// session in the owning org, and that the slug does not fall through to an
-// unrelated legacy toolset sharing the same mcp_slug.
+// session in the owning org.
 func TestServeInstallPage_MetaBackedEndpoint_RendersGateway(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
@@ -1856,7 +1852,6 @@ func TestServeInstallPage_MetaBackedEndpoint_RendersGateway(t *testing.T) {
 	assert.Contains(t, body, "private-badge", "gateways are never public")
 	assert.NotContains(t, body, "codex mcp login", "no issuer means no OAuth steps")
 	assert.NotContains(t, body, "Server Not Found")
-	assert.NotContains(t, body, "Legacy Same-Slug Toolset")
 }
 
 // TestServeInstallPage_MetaBackedEndpoint_PublicSurfaceSkipsIngressAdmission
@@ -1891,7 +1886,6 @@ func TestServeInstallPage_MetaBackedEndpoint_PublicSurfaceSkipsIngressAdmission(
 				rr := serveMetaInstallPage(t, ctx, ti, slug)
 				require.Equal(t, http.StatusOK, rr.Code)
 				require.Contains(t, rr.Body.String(), "Install Page Gateway")
-				require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 				require.Empty(t, admittedOrg)
 			})
 		}
@@ -1912,7 +1906,6 @@ func TestServeInstallPage_MetaBackedEndpoint_PrivateOnlyNotFoundOnPublicSurface(
 	rr := serveMetaInstallPage(t, ctx, ti, slug)
 	require.Equal(t, http.StatusNotFound, rr.Code)
 	require.NotContains(t, rr.Body.String(), "Install Page Gateway")
-	require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 }
 
 // TestServeInstallPage_MetaBackedEndpoint_CustomDomainOnPlatformHost verifies
@@ -1967,7 +1960,6 @@ func TestServeInstallPage_MetaBackedEndpoint_CustomDomainOnPlatformHost(t *testi
 		body := rr.Body.String()
 		require.Contains(t, body, "Install Page Gateway")
 		require.Contains(t, body, "https://gateway-install.example.com/mcp/"+slug)
-		require.NotContains(t, body, "Legacy Same-Slug Toolset")
 	})
 
 	t.Run("without the hint the platform namespace is authoritative", func(t *testing.T) {
@@ -2019,7 +2011,6 @@ func TestServeInstallPage_MetaBackedEndpoint_CustomDomainOnPlatformHost(t *testi
 		rr := serveMetaInstallPageURL(t, otherOrgCtx, ti, hinted(slug), slug)
 		require.Equal(t, http.StatusNotFound, rr.Code)
 		require.NotContains(t, rr.Body.String(), "Install Page Gateway")
-		require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 	})
 
 	t.Run("inactive custom domain gets not found", func(t *testing.T) {
@@ -2123,7 +2114,6 @@ func TestServeInstallPage_PrivateMetaBackedEndpoint_NetworkIngressAdmission(t *t
 				require.Equal(t, http.StatusNotFound, rr.Code)
 				require.NotContains(t, rr.Body.String(), "Install Page Gateway")
 			}
-			require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 			if admissionState == "unavailable" {
 				require.Empty(t, admittedOrg)
 			} else {
@@ -2156,8 +2146,7 @@ func TestServeInstallPage_MetaBackedEndpoint_IssuerGatedShowsOAuthSteps(t *testi
 }
 
 // TestServeInstallPage_MetaBackedEndpoint_DisabledReturnsNotFound verifies
-// that a disabled gateway is an authoritative 404 and never falls through to
-// the legacy toolset sharing its slug.
+// that a disabled gateway is an authoritative 404.
 func TestServeInstallPage_MetaBackedEndpoint_DisabledReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
@@ -2172,7 +2161,6 @@ func TestServeInstallPage_MetaBackedEndpoint_DisabledReturnsNotFound(t *testing.
 	require.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
 	assert.NotContains(t, rr.Body.String(), "Install Page Gateway")
-	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 }
 
 // TestServeInstallPage_MetaBackedEndpoint_RedirectsAnonymousToLogin verifies
@@ -2223,7 +2211,6 @@ func TestServeInstallPage_MetaBackedEndpoint_WrongOrgReturnsNotFound(t *testing.
 	require.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
 	assert.NotContains(t, rr.Body.String(), "Install Page Gateway")
-	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 
 }
 

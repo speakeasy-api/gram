@@ -32,7 +32,7 @@ export type CheckMcpEndpointSlugAvailabilityRequest = {
   /**
    * Deprecated: ignored.
    *
-   * @deprecated field: Ignored.
+   * @deprecated field: Ignored; omit this parameter.
    */
   mcpServerId?: string | undefined;
   /**

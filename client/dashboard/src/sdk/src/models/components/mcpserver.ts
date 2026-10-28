@@ -80,7 +80,7 @@ export type McpServer = {
   /**
    * Deprecated: always absent.
    *
-   * @deprecated field: Always absent.
+   * @deprecated field: Always absent; use platform_endpoint_slug instead.
    */
   legacyPlatformSlug?: string | undefined;
   /**

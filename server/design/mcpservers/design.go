@@ -469,7 +469,7 @@ var McpServer = Type("McpServer", func() {
 	Attribute("slug", String, "A URL-safe, project-unique slug derived server-side from the name and ID")
 	Attribute("platform_endpoint_slug", String, "The slug of this server's primary platform endpoint, the oldest one. Absent when no platform endpoint exists; never a custom-domain slug.")
 	Attribute("legacy_platform_slug", String, "Deprecated: always absent.", func() {
-		Meta("openapi:extension:x-speakeasy-deprecation-message", "Always absent")
+		Meta("openapi:extension:x-speakeasy-deprecation-message", "Always absent; use platform_endpoint_slug instead")
 	})
 	Attribute("environment_id", String, "The ID of the environment associated with the server", func() {
 		Format(FormatUUID)
