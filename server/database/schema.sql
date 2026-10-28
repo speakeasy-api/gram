@@ -1603,6 +1603,15 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
   organization_id TEXT NOT NULL,
   email TEXT NOT NULL,
 
+  -- The getPlugins etag last served to this user. Device attestation
+  -- compares an agent's reported applied etag against it: the etag is
+  -- derived from the user's plugin set, so it is per user, not per
+  -- organization. NULL until a poll after this column existed.
+  served_etag TEXT,
+  -- When served_etag last changed, so a device lagging a policy change can
+  -- say for how long.
+  served_etag_changed_at timestamptz,
+
   first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1616,6 +1625,8 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
 COMMENT ON COLUMN device_agent_syncs.id IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.organization_id IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.email IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_syncs.served_etag IS '@access: confidential';
+COMMENT ON COLUMN device_agent_syncs.served_etag_changed_at IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.first_seen_at IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.last_seen_at IS '@access: confidential';
 COMMENT ON COLUMN device_agent_syncs.created_at IS '@access: confidential';
@@ -1757,6 +1768,120 @@ COMMENT ON COLUMN device_agent_device_syncs.updated_at IS '@access: confidential
 -- ON CONFLICT (organization_id, LOWER(serial_number)).
 CREATE UNIQUE INDEX IF NOT EXISTS device_agent_device_syncs_org_lower_serial_key
 ON device_agent_device_syncs (organization_id, LOWER(serial_number));
+
+-- The latest state each endpoint's device agent reported through
+-- agent.reportState: the policy etag it applied, each tool's enforcement
+-- outcome, its versions and update posture. A snapshot, not a log: each
+-- report replaces the previous one. Contract: device-agent ADR-0029.
+--
+-- One row per enrolled user per machine. The email is part of the key
+-- alongside the serial because the agent runs per OS user, so two people
+-- sharing a machine report different policy from one serial. A machine
+-- that cannot read a serial reports with serial_number NULL and is keyed by
+-- email alone.
+--
+-- Endpoints only, for the reason device_agent_device_syncs is: this backs
+-- device coverage, and a cloud box must not attest a person's laptop.
+CREATE TABLE IF NOT EXISTS device_agent_state_reports (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  serial_number TEXT,
+  hostname TEXT,
+
+  -- Report envelope version the agent sent.
+  schema_version integer NOT NULL,
+  -- Agent clock; reported_at is the control plane's.
+  generated_at timestamptz NOT NULL,
+  reported_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  -- Etag of the policy snapshot the agent's last reconcile applied. NULL
+  -- before the agent has applied any.
+  applied_etag TEXT,
+  applied_at timestamptz,
+  -- True while the kill switch has halted policy enforcement.
+  enforcement_halted boolean NOT NULL,
+  remote_config_etag TEXT,
+  remote_config_failed boolean NOT NULL DEFAULT false,
+  -- Optional plugins the agent left out of the applied set by user choice:
+  -- [{marketplace, slug, reason}].
+  withheld_plugins jsonb NOT NULL DEFAULT '[]'::jsonb,
+
+  -- Per-tool enforcement outcomes: [{tool, layer, outcome, pending_reason,
+  -- error_kind, restart_required, action_required, drift_corrections}].
+  tools jsonb NOT NULL DEFAULT '[]'::jsonb,
+  -- Installed tools whose outcome is error or pending, derived from tools at
+  -- write time so coverage can filter without unpacking the array.
+  degraded_tool_count integer NOT NULL DEFAULT 0,
+  -- Start of the window tools[].drift_corrections counts over.
+  drift_counting_since timestamptz,
+
+  speakeasyd_version TEXT,
+  speakeasy_version TEXT,
+  speakeasy_ui_version TEXT,
+  os TEXT,
+  arch TEXT,
+
+  auto_update TEXT,
+  update_channel TEXT,
+  pinned_target TEXT,
+  -- True when the running build is in blocked_versions.
+  current_blocked boolean NOT NULL DEFAULT false,
+  last_rollback_at timestamptz,
+  last_rollback_from TEXT,
+  last_rollback_to TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_agent_state_reports_pkey PRIMARY KEY (id),
+  CONSTRAINT device_agent_state_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN device_agent_state_reports.id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.organization_id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.email IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_state_reports.serial_number IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_state_reports.hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_state_reports.schema_version IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.generated_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.reported_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.applied_etag IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.applied_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.enforcement_halted IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.remote_config_etag IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.remote_config_failed IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.withheld_plugins IS 'Marketplace and plugin slugs chosen by the organization.
+@access: opaque-confidential';
+COMMENT ON COLUMN device_agent_state_reports.tools IS 'Speakeasy-defined tool ids and enforcement enums.
+@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.degraded_tool_count IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.drift_counting_since IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.speakeasyd_version IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.speakeasy_version IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.speakeasy_ui_version IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.os IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.arch IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.auto_update IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.update_channel IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.pinned_target IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.current_blocked IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.last_rollback_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.last_rollback_from IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.last_rollback_to IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.updated_at IS '@access: confidential';
+
+-- The dedup key. LOWER() on both columns for the reason
+-- device_agent_device_syncs_org_lower_serial_key gives; NULLS NOT DISTINCT so
+-- serial-less machines dedup on email alone instead of piling up rows.
+CREATE UNIQUE INDEX IF NOT EXISTS device_agent_state_reports_org_lower_serial_lower_email_key
+ON device_agent_state_reports (organization_id, LOWER(serial_number), LOWER(email)) NULLS NOT DISTINCT;
+
+-- Serves the coverage join's email fallback for serial-less machines.
+CREATE INDEX IF NOT EXISTS device_agent_state_reports_organization_id_lower_email_idx
+ON device_agent_state_reports (organization_id, LOWER(email));
 
 -- Stores the organization-wide, non-secret configuration delivered to enrolled
 -- device agents. The schema version is separate from the JSON document so the
