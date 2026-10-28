@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -67,6 +68,12 @@ type DirectRemoteInspection struct {
 	OAuthDiscovery         string   `json:"oauth_discovery"`
 	Trust                  string   `json:"trust"`
 	RequiresDashboardSetup bool     `json:"requires_dashboard_setup"`
+
+	// ServerName is the upstream's own serverInfo.name from initialize, as the
+	// upstream sent it. It is empty when initialize did not succeed. It is
+	// untrusted: registration passes it through directRemoteServerName before
+	// using it as a default display name, and it is never shown to callers.
+	ServerName string `json:"-"`
 }
 
 // DirectRemoteInspector is the boundary shared by candidate inspection and
@@ -129,7 +136,11 @@ func (s *GuardianDirectRemoteInspector) inspect(ctx context.Context, rawURL stri
 	sdk := mcp.NewClient(&mcp.Implementation{Name: "gram-platform-mcp", Version: "1", Title: "", Description: "", WebsiteURL: "", Icons: nil}, nil)
 	session, err := sdk.Connect(probeCtx, sdkTransport, nil)
 	var toolList *mcp.ListToolsResult
+	serverName := ""
 	if err == nil {
+		if initialized := session.InitializeResult(); initialized != nil && initialized.ServerInfo != nil {
+			serverName = initialized.ServerInfo.Name
+		}
 		// A successful fallback supersedes discovery's authentication challenge.
 		// tools/list can still record a fresh challenge of its own.
 		transport.mu.Lock()
@@ -168,7 +179,9 @@ func (s *GuardianDirectRemoteInspector) inspect(ctx context.Context, rawURL stri
 			}
 		}
 	}
-	return directRemoteInspection(finalURL, names, "anonymous", "not_advertised", false), nil
+	inspection := directRemoteInspection(finalURL, names, "anonymous", "not_advertised", false)
+	inspection.ServerName = serverName
+	return inspection, nil
 }
 
 // directRemoteTransport retains connections even when SDK negotiation fails.
@@ -628,7 +641,29 @@ func directRemoteInspection(canonicalURL string, toolNames []string, authenticat
 		OAuthDiscovery:         oauthDiscovery,
 		Trust:                  "user_supplied_unreviewed",
 		RequiresDashboardSetup: requiresDashboardSetup,
+		ServerName:             "",
 	}
+}
+
+// directRemoteServerName makes an upstream's self-reported name safe to use as
+// a display name. Characters that are not printable become spaces, runs of
+// spaces collapse to one, and the result is cut on a character boundary to
+// the display name limit.
+func directRemoteServerName(name string) string {
+	name = strings.Join(strings.Fields(strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) {
+			return r
+		}
+		return ' '
+	}, name)), " ")
+	if len(name) > directRemoteDisplayNameMaxBytes {
+		cut := directRemoteDisplayNameMaxBytes
+		for cut > 0 && !utf8.RuneStart(name[cut]) {
+			cut--
+		}
+		name = name[:cut]
+	}
+	return strings.TrimSpace(name)
 }
 
 // canonicalDirectRemoteURL is intentionally pure so persistence can repeat the

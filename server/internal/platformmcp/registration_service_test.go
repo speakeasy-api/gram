@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -101,6 +103,63 @@ func TestRegistrationServiceRegistersDirectRemoteWithFreshInspection(t *testing.
 	require.Equal(t, "External MCP", store.configuration.displayName)
 	require.Equal(t, "https://remote.example.test/mcp", store.configuration.remoteURL)
 	require.Equal(t, registrationID.String(), result.Registration)
+}
+
+// A remote MCP added without a display name is named after the upstream's own
+// server name, then the URL's host name. The idempotency hash depends only on
+// what the caller supplied, so the upstream's name cannot change it.
+func TestRegistrationServiceDefaultsDirectRemoteDisplayName(t *testing.T) {
+	t.Parallel()
+
+	hashFor := func(name string) string {
+		return catalogRegistrationInputHash("project", directRemoteSourceKind, directRemoteProviderKey, "https://remote.example.test/mcp", catalogConfigurationHash(CatalogConfigurationValues{"name": name}))
+	}
+	urlNameHash := hashFor("https://remote.example.test/mcp")
+	cases := []struct {
+		name        string
+		displayName string
+		serverName  string
+		wantName    string
+		wantHash    string
+	}{
+		{name: "server name", serverName: "Linear", wantName: "Linear", wantHash: urlNameHash},
+		{name: "server name made printable", serverName: "  Line\x1bar\r\n\u2028MCP  ", wantName: "Line ar MCP", wantHash: urlNameHash},
+		{name: "host name when the server gives none", wantName: "remote.example.test", wantHash: urlNameHash},
+		{name: "host name when the server name is not printable", serverName: "\x00\u2029", wantName: "remote.example.test", wantHash: urlNameHash},
+		{name: "explicit display name wins", displayName: "External MCP", serverName: "Linear", wantName: "External MCP", wantHash: hashFor("External MCP")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
+			registrationID := uuid.New()
+			store := &recordingRegistrationStore{
+				project:   project,
+				begin:     OperationReceipt{ID: uuid.New()},
+				converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+				completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+			}
+			inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed", ServerName: tc.serverName}}
+			service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+			_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: "https://remote.example.test/mcp", DisplayName: tc.displayName, IdempotencyKey: "request-key"})
+
+			require.NoError(t, err)
+			require.Equal(t, tc.wantName, store.configuration.displayName)
+			require.Equal(t, tc.wantHash, store.request.InputHash)
+		})
+	}
+}
+
+func TestDirectRemoteServerNameIsBoundedOnACharacterBoundary(t *testing.T) {
+	t.Parallel()
+
+	name := directRemoteServerName(strings.Repeat("é", directRemoteDisplayNameMaxBytes))
+
+	require.LessOrEqual(t, len(name), directRemoteDisplayNameMaxBytes)
+	require.True(t, utf8.ValidString(name))
+	require.Equal(t, strings.Repeat("é", directRemoteDisplayNameMaxBytes/2), name)
 }
 
 func TestRegistrationServiceRejectsOversizedDirectRemoteDisplayNameBeforePersistence(t *testing.T) {

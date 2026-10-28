@@ -189,16 +189,17 @@ func directRemoteProtocolFixture(t *testing.T, mode string) (*directRemoteHTTPIn
 func TestDirectRemoteSDKProtocolSequence(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		mode    string
-		methods []string
+		mode       string
+		methods    []string
+		serverName string
 	}{
-		{"modern", []string{"server/discover", "tools/list"}},
-		{"sse", []string{"server/discover", "tools/list"}},
-		{"legacy", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}},
-		{"legacy-no-content", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}},
-		{"legacy-empty-ok", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}},
-		{"stateful", []string{"server/discover", "initialize", "notifications/initialized", "tools/list", "DELETE"}},
-		{"discover-blocked", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}},
+		{"modern", []string{"server/discover", "tools/list"}, "fixture"},
+		{"sse", []string{"server/discover", "tools/list"}, "fixture"},
+		{"legacy", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}, "legacy"},
+		{"legacy-no-content", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}, "legacy"},
+		{"legacy-empty-ok", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}, "legacy"},
+		{"stateful", []string{"server/discover", "initialize", "notifications/initialized", "tools/list", "DELETE"}, "legacy"},
+		{"discover-blocked", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}, "legacy"},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
 			t.Parallel()
@@ -207,6 +208,7 @@ func TestDirectRemoteSDKProtocolSequence(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, []string{"example"}, result.ToolNames)
 			require.Equal(t, tc.methods, methods())
+			require.Equal(t, tc.serverName, result.ServerName)
 		})
 	}
 }
