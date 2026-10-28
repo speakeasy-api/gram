@@ -3,15 +3,20 @@ package platformmcp
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -50,11 +55,219 @@ func (p *countingCatalogReadinessProber) ProbeCatalogReadiness(_ context.Context
 // newRemoteRegistrar returns a registrar whose register_remote_mcp tool
 // resolves every URL to canonicalURL.
 func newRemoteRegistrar(store *RegistrationStore, gate *testRegistrationGate, canonicalURL string) *Registrar {
-	registrations := newRegistrationService(testCatalog{}, gate, store).
-		WithDirectRemoteInspector(&testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: canonicalURL, Transport: "streamable-http", Trust: "user_supplied_unreviewed"}})
+	return newInspectedRemoteRegistrar(store, gate, namedRemoteInspector(canonicalURL, ""))
+}
+
+// newInspectedRemoteRegistrar returns a registrar whose register_remote_mcp
+// tool uses the given inspector, so a test can set or change the upstream's
+// own server name.
+func newInspectedRemoteRegistrar(store *RegistrationStore, gate *testRegistrationGate, inspector *testDirectRemoteInspector) *Registrar {
+	registrations := newRegistrationService(testCatalog{}, gate, store).WithDirectRemoteInspector(inspector)
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerRemoteRegistrationTool(reg, registrations, nil)
 	return reg
+}
+
+func namedRemoteInspector(canonicalURL, serverName string) *testDirectRemoteInspector {
+	return &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: canonicalURL, Transport: "streamable-http", Trust: "user_supplied_unreviewed", ServerName: serverName}}
+}
+
+// registeredServerAddress returns the name and slug of the MCP server a
+// registration created, and the slug of its endpoint address.
+func registeredServerAddress(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, registrationID string) (string, string, string) {
+	t.Helper()
+
+	id, err := uuid.Parse(registrationID)
+	require.NoError(t, err)
+	registration, err := platformrepo.New(conn).GetPlatformMCPCatalogRegistrationByID(ctx, platformrepo.GetPlatformMCPCatalogRegistrationByIDParams{
+		ID:             id,
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: registration.McpServerID.UUID, ProjectID: project.ID})
+	require.NoError(t, err)
+	endpoint, err := mcpendpointsrepo.New(conn).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{ID: registration.McpEndpointID.UUID, ProjectID: project.ID})
+	require.NoError(t, err)
+	return server.Name.String, server.Slug.String, endpoint.Slug
+}
+
+func organizationSlug(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal) string {
+	t.Helper()
+
+	organization, err := organizationsrepo.New(conn).GetOrganizationMetadata(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	return organization.Slug
+}
+
+// A server added by URL without a name takes the upstream's own name, and its
+// MCP server slug and endpoint address are derived from that name.
+func TestRemoteRegistrationUsesTheServerNameForItsAddress(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_remote_readable_address")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	reg := newInspectedRemoteRegistrar(store, &testRegistrationGate{enabled: true}, namedRemoteInspector("https://remote.example.test/mcp", "Linear"))
+	callCtx := ContextWithPrincipal(ctx, principal)
+
+	remote, err := invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, reg, "register_remote_mcp", map[string]any{
+		"project_slug":    project.Slug,
+		"remote_url":      "https://remote.example.test/mcp",
+		"idempotency_key": "readable-address",
+	})
+	require.NoError(t, err)
+
+	name, serverSlug, endpointSlug := registeredServerAddress(t, ctx, conn, principal, project, remote.RegistrationID)
+	require.Equal(t, "Linear", name)
+	require.Equal(t, "linear", serverSlug)
+	require.Equal(t, organizationSlug(t, ctx, conn, principal)+"-linear", endpointSlug)
+}
+
+// A name that fits the address limit keeps its full length. Only a suffixed
+// slug is cut shorter to make room for the suffix.
+func TestRemoteRegistrationKeepsTheWholeNameWhenItFits(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_remote_readable_full_name")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	orgSlug := organizationSlug(t, ctx, conn, principal)
+	name := strings.Repeat("a", maxPlatformEndpointSlugLength-len(orgSlug)-len("-"))
+	reg := newInspectedRemoteRegistrar(store, &testRegistrationGate{enabled: true}, namedRemoteInspector("https://remote.example.test/mcp", name))
+
+	remote, err := invokeTool[RegisterRemoteMCPToolOutput](t, ContextWithPrincipal(ctx, principal), reg, "register_remote_mcp", map[string]any{
+		"project_slug":    project.Slug,
+		"remote_url":      "https://remote.example.test/mcp",
+		"idempotency_key": "readable-full-name",
+	})
+	require.NoError(t, err)
+
+	_, serverSlug, endpointSlug := registeredServerAddress(t, ctx, conn, principal, project, remote.RegistrationID)
+	require.Equal(t, name, serverSlug)
+	require.Equal(t, orgSlug+"-"+name, endpointSlug)
+}
+
+// A second server whose name gives the same slug gets a short random suffix
+// on both its MCP server slug and its endpoint address.
+func TestRemoteRegistrationAddsASuffixWhenTheReadableAddressIsTaken(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_remote_readable_collision")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	gate := &testRegistrationGate{enabled: true}
+	callCtx := ContextWithPrincipal(ctx, principal)
+	orgSlug := organizationSlug(t, ctx, conn, principal)
+
+	first, err := invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, newInspectedRemoteRegistrar(store, gate, namedRemoteInspector("https://remote.example.test/mcp", "Linear")), "register_remote_mcp", map[string]any{
+		"project_slug":    project.Slug,
+		"remote_url":      "https://remote.example.test/mcp",
+		"idempotency_key": "readable-collision-first",
+	})
+	require.NoError(t, err)
+	second, err := invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, newInspectedRemoteRegistrar(store, gate, namedRemoteInspector("https://mirror.example.test/mcp", "linear")), "register_remote_mcp", map[string]any{
+		"project_slug":    project.Slug,
+		"remote_url":      "https://mirror.example.test/mcp",
+		"idempotency_key": "readable-collision-second",
+	})
+	require.NoError(t, err)
+
+	_, firstSlug, firstEndpoint := registeredServerAddress(t, ctx, conn, principal, project, first.RegistrationID)
+	require.Equal(t, "linear", firstSlug)
+	require.Equal(t, orgSlug+"-linear", firstEndpoint)
+
+	_, secondSlug, secondEndpoint := registeredServerAddress(t, ctx, conn, principal, project, second.RegistrationID)
+	require.Regexp(t, `^linear-[a-z0-9]{5}$`, secondSlug)
+	require.Equal(t, orgSlug+"-"+secondSlug, secondEndpoint)
+}
+
+// A retry with the same key and URL returns the same registration even when
+// the upstream reports a different name on the retry.
+func TestRemoteRegistrationRetryIgnoresAChangedServerName(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_remote_readable_retry")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	inspector := namedRemoteInspector("https://remote.example.test/mcp", "Linear")
+	reg := newInspectedRemoteRegistrar(store, &testRegistrationGate{enabled: true}, inspector)
+	callCtx := ContextWithPrincipal(ctx, principal)
+	args := map[string]any{
+		"project_slug":    project.Slug,
+		"remote_url":      "https://remote.example.test/mcp",
+		"idempotency_key": "readable-retry",
+	}
+
+	first, err := invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, reg, "register_remote_mcp", args)
+	require.NoError(t, err)
+	inspector.inspection.ServerName = "Linear (renamed upstream)"
+	retry, err := invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, reg, "register_remote_mcp", args)
+	require.NoError(t, err)
+
+	require.True(t, retry.Replayed)
+	require.Equal(t, first.RegistrationID, retry.RegistrationID)
+	require.Equal(t, first.ReceiptID, retry.ReceiptID)
+	name, serverSlug, _ := registeredServerAddress(t, ctx, conn, principal, project, retry.RegistrationID)
+	require.Equal(t, "Linear", name)
+	require.Equal(t, "linear", serverSlug)
+}
+
+// A server named after its upstream can still be found by its source URL.
+func TestInventorySearchFindsAServerNamedByItsUpstreamBySourceURL(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_inventory_upstream_name")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	reg := newInspectedRemoteRegistrar(store, &testRegistrationGate{enabled: true}, namedRemoteInspector("https://remote.example.test/mcp", "Linear"))
+	callCtx := ContextWithPrincipal(ctx, principal)
+
+	remote, err := invokeTool[RegisterRemoteMCPToolOutput](t, callCtx, reg, "register_remote_mcp", map[string]any{
+		"project_slug":    project.Slug,
+		"remote_url":      "https://remote.example.test/mcp",
+		"idempotency_key": "inventory-upstream-name",
+	})
+	require.NoError(t, err)
+	registrationID, err := uuid.Parse(remote.RegistrationID)
+	require.NoError(t, err)
+	registration, err := platformrepo.New(conn).GetPlatformMCPCatalogRegistrationByID(ctx, platformrepo.GetPlatformMCPCatalogRegistrationByIDParams{
+		ID:             registrationID,
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+
+	candidates, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidatePage(ctx, platformrepo.ListPlatformMCPInventoryAuthorizationCandidatePageParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      uuid.NullUUID{},
+		AfterMcpID:     uuid.NullUUID{},
+		QueryText:      normalizeInventoryQuery("https://remote.example.test/mcp"),
+		LimitValue:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, registration.McpServerID.UUID, candidates[0].ID)
 }
 
 // newNeverCheckedServer adds a server by URL and returns a registrar with the

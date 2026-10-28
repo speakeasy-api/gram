@@ -132,6 +132,12 @@ type Service struct {
 	// when authz is configured, and the connect-equivalent rule
 	// (connectPermitter) otherwise.
 	authClientPermitter authClientPermitter
+	// attachedConnections overrides how an attached agent's connection owner
+	// is read; nil uses remoteChallengeMgr.
+	attachedConnections attachedConnectionLookup
+	// upstreamTokens overrides how chosen clients' upstream tokens are read
+	// for serving; nil uses remoteChallengeMgr.
+	upstreamTokens upstreamTokenSource
 	// authEnforcement says which organizations have upstream auth
 	// enforcement enabled; the resolver is authoritative only for them.
 	authEnforcement           *authenforcement.Gate
@@ -558,6 +564,8 @@ func NewService(
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
 		authClientPermitter:       nil,
+		attachedConnections:       nil,
+		upstreamTokens:            nil,
 		authEnforcement:           authenforcement.NewGate(db),
 		consentBindings:           nil,
 		bindingRefresh:            nil,
