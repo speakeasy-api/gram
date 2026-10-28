@@ -17,6 +17,7 @@ import {
   AgentIdentityAudit,
   AgentIdentityChallenges,
 } from "./AgentIdentityActivity";
+import { AgentChatSessionsPanel } from "./AgentChatSessions";
 import { AgentIdentityUsage } from "./AgentIdentityUsage";
 import { IdentityPanel } from "./IdentityPanel";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
@@ -35,12 +36,12 @@ export function AgentHeaderActions({
 }): JSX.Element {
   const routes = useRoutes();
   return (
-    <div className="-ml-2 flex items-center gap-1">
+    <div className="flex items-center gap-2">
       {/* Changing what the agent reaches is the same set of questions it
           was registered with, so it is the same flow. */}
       {/* Same gate as rename: saving the edit flow needs write access. */}
       {agent.permissions.write && (
-        <Button asChild variant="tertiary" size="xs">
+        <Button asChild variant="primary" size="sm">
           <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
         </Button>
       )}
@@ -131,9 +132,14 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Sessions"
-          meta="Current agent sessions across the organization"
+          meta="What this agent did, and the clients signed in as it"
         >
-          <ManagedAgentSessions agent={agent} variant="bare" />
+          <AgentChatSessionsPanel agent={agent} limit={10} />
+          {/* Padded rather than full-bleed: the full list carries a pager and
+              permission notes beneath its table, which need an inset. */}
+          <IdentityPanel title="MCP connections" contentClassName="p-4">
+            <ManagedAgentSessions agent={agent} variant="bare" />
+          </IdentityPanel>
         </IdentitySection>
       );
     case "credentials":
@@ -234,11 +240,15 @@ export function AgentIdentityProfile({
               allowed to do: an overview is opened to find out whether
               something is wrong, and the policy is where you look next. */}
           <AgentIdentityUsage agent={agent} />
+          {/* The sessions the agent's hooks recorded. Usage above can read
+              empty for an agent that is plainly working, so this is the
+              surest sign of what it has been doing. */}
+          <AgentChatSessionsPanel agent={agent} limit={3} />
           {/* Who is signed in as it right now, capped. The Sessions section
               owns the full list and the revoking; this says whether anything
               is live without making the reader go and look. */}
           <IdentityPanel
-            title="Sessions"
+            title="MCP connections"
             handoffLabel="all sessions"
             // Carries the query across: the date range lives in the URL, so a
             // bare path silently put the reader back on the default window

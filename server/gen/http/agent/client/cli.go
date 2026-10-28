@@ -95,6 +95,78 @@ func BuildGetMyConnectionsPayload(agentGetMyConnectionsApikeyToken string, agent
 	return v, nil
 }
 
+// BuildHideMcpServerPayload builds the payload for the agent hideMcpServer
+// endpoint from CLI flags.
+func BuildHideMcpServerPayload(agentHideMcpServerBody string, agentHideMcpServerApikeyToken string, agentHideMcpServerEmail string) (*agent.HideMcpServerPayload, error) {
+	var err error
+	var body HideMcpServerRequestBody
+	{
+		err = json.Unmarshal([]byte(agentHideMcpServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentHideMcpServerApikeyToken != "" {
+			apikeyToken = &agentHideMcpServerApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentHideMcpServerEmail != "" {
+			email = &agentHideMcpServerEmail
+		}
+	}
+	v := &agent.HideMcpServerPayload{
+		McpServerID: body.McpServerID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+
+	return v, nil
+}
+
+// BuildUnhideMcpServerPayload builds the payload for the agent unhideMcpServer
+// endpoint from CLI flags.
+func BuildUnhideMcpServerPayload(agentUnhideMcpServerBody string, agentUnhideMcpServerApikeyToken string, agentUnhideMcpServerEmail string) (*agent.UnhideMcpServerPayload, error) {
+	var err error
+	var body UnhideMcpServerRequestBody
+	{
+		err = json.Unmarshal([]byte(agentUnhideMcpServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentUnhideMcpServerApikeyToken != "" {
+			apikeyToken = &agentUnhideMcpServerApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentUnhideMcpServerEmail != "" {
+			email = &agentUnhideMcpServerEmail
+		}
+	}
+	v := &agent.UnhideMcpServerPayload{
+		McpServerID: body.McpServerID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+
+	return v, nil
+}
+
 // BuildListSyncedUsersPayload builds the payload for the agent listSyncedUsers
 // endpoint from CLI flags.
 func BuildListSyncedUsersPayload(agentListSyncedUsersSessionToken string) (*agent.ListSyncedUsersPayload, error) {

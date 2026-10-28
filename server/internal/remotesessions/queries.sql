@@ -1218,15 +1218,31 @@ ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: UpdateRemoteSessionClient :one
--- A rotated secret also clears the upstream rejection marker: the rejection
--- may have been the old secret, and a client whose refreshes succeed again
--- should not stay flagged for re-registration.
+-- A rotated secret or corrected client_id also clears the upstream rejection
+-- marker: the rejection may have been the old value, and a client whose
+-- refreshes succeed again should not stay flagged for re-registration. A
+-- corrected client_id is a new registration as far as the issuer is
+-- concerned, so it drops the old one's grant evidence and issue time.
 UPDATE remote_session_clients
 SET
+    client_id = COALESCE(sqlc.narg('client_id'), client_id),
+    client_id_issued_at = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN clock_timestamp()
+        ELSE client_id_issued_at
+    END,
+    grant_types = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE grant_types
+    END,
+    display_name = CASE
+        WHEN sqlc.narg('display_name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('display_name'), display_name)
+    END,
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN upstream_rejected_at
-        ELSE NULL
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NOT NULL THEN NULL
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE upstream_rejected_at
     END,
     -- A replaced secret takes the expiry supplied with it, or none: keeping
     -- the old secret's deadline would flag the new secret as expired.
@@ -1491,7 +1507,7 @@ WHERE s.subject_urn = @subject_urn
 -- remote_session for a (subject, client) pair. Conflict target matches the
 -- partial unique index on (subject_urn, remote_session_client_id) WHERE
 -- deleted IS FALSE; on conflict advance the grant generation and overwrite tokens.
--- Attachments remain pinned to the previous grant. Token refresh uses
+-- Attachments keep this source row and read its current credentials. Token refresh uses
 -- UpdateRemoteSessionTokensIfUnchanged and never advances this generation. A
 -- soft-deleted row falls outside the partial index, so a re-auth after
 -- revocation inserts a fresh active row alongside the tombstone.
@@ -2452,7 +2468,7 @@ WITH due AS (
         )
         OR EXISTS (
           -- First-party connect need not create an inbound human session.
-          -- Only a live attachment to this exact grant can keep it alive.
+          -- Only a live attachment to this source row can keep it alive.
           SELECT 1
           FROM principal_remote_session_bindings AS b
           JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
@@ -2461,13 +2477,13 @@ WITH due AS (
           JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
             AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
           JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id AND source.deleted IS FALSE
-          WHERE b.remote_session_id = s.id AND b.grant_generation = s.grant_generation
+          WHERE b.remote_session_id = s.id
             AND b.remote_session_client_id = c.id AND b.user_session_issuer_id = usi.id
             AND b.organization_id = COALESCE(p.organization_id, usi.organization_id)
             AND b.revoked_at IS NULL
             AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
             AND a.owner_reassignment_required_at IS NULL
-            AND s.subject_urn = 'user:' || a.owner_user_id
+            AND EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
             AND b.attached_by_subject_id = s.subject_urn
             AND (usi.project_id = bp.id OR (usi.project_id IS NULL AND usi.organization_id = bp.organization_id))
             AND (source.project_id = bp.id OR (source.project_id IS NULL AND source.organization_id = bp.organization_id))
@@ -2565,7 +2581,7 @@ WHERE s.id = @id
         )
         OR EXISTS (
           -- First-party connect need not create an inbound human session.
-          -- Only a live attachment to this exact grant can keep it alive.
+          -- Only a live attachment to this source row can keep it alive.
           SELECT 1
           FROM principal_remote_session_bindings AS b
           JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
@@ -2574,13 +2590,13 @@ WHERE s.id = @id
           JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
             AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
           JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id AND source.deleted IS FALSE
-          WHERE b.remote_session_id = s.id AND b.grant_generation = s.grant_generation
+          WHERE b.remote_session_id = s.id
             AND b.remote_session_client_id = c.id AND b.user_session_issuer_id = usi.id
             AND b.organization_id = COALESCE(p.organization_id, usi.organization_id)
             AND b.revoked_at IS NULL
             AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
             AND a.owner_reassignment_required_at IS NULL
-            AND s.subject_urn = 'user:' || a.owner_user_id
+            AND EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
             AND b.attached_by_subject_id = s.subject_urn
             AND (usi.project_id = bp.id OR (usi.project_id IS NULL AND usi.organization_id = bp.organization_id))
             AND (source.project_id = bp.id OR (source.project_id IS NULL AND source.organization_id = bp.organization_id))
@@ -3247,13 +3263,28 @@ RETURNING *;
 -- passing it as client_secret_encrypted; an omitted narg keeps the existing
 -- secret. See the ORG REACHABILITY note on
 -- ListOrganizationRemoteSessionClientsByIssuerID. Note this mutates the CLIENT,
--- which the tenant owns, never the platform issuer it points at.
+-- which the tenant owns, never the platform issuer it points at. A corrected
+-- client_id resets the registration state as UpdateRemoteSessionClient does.
 UPDATE remote_session_clients AS c
 SET
+    client_id = COALESCE(sqlc.narg('client_id'), c.client_id),
+    client_id_issued_at = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN clock_timestamp()
+        ELSE c.client_id_issued_at
+    END,
+    grant_types = CASE
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE c.grant_types
+    END,
+    display_name = CASE
+        WHEN sqlc.narg('display_name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('display_name'), c.display_name)
+    END,
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), c.client_secret_encrypted),
     upstream_rejected_at = CASE
-        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN c.upstream_rejected_at
-        ELSE NULL
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NOT NULL THEN NULL
+        WHEN sqlc.narg('client_id')::text IS DISTINCT FROM c.client_id AND sqlc.narg('client_id')::text IS NOT NULL THEN NULL
+        ELSE c.upstream_rejected_at
     END,
     -- A pasted-in replacement secret carries no issuer-reported expiry, and
     -- keeping the old secret's deadline would flag the new one as expired.
@@ -3651,13 +3682,26 @@ FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+LEFT JOIN agents a ON s.subject_urn = 'agent:' || a.id::text AND a.organization_id = @organization_id AND a.deleted IS FALSE
 WHERE s.remote_session_client_id = @remote_session_client_id
   AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
-ORDER BY s.id DESC
+
+  AND (@search::text = '' OR strpos(lower(s.subject_urn::text || ' ' || COALESCE(u.display_name, '') || ' ' || COALESCE(u.email, '') || ' ' || COALESCE(a.name, '')), lower(@search)) > 0)
+  AND CASE @status::text WHEN 'active' THEN (LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) IS NULL OR LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) > now()) WHEN 'expired' THEN LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) <= now() ELSE TRUE END
+  AND (sqlc.narg('created_after')::timestamptz IS NULL OR s.created_at >= sqlc.narg('created_after'))
+  AND (sqlc.narg('created_before')::timestamptz IS NULL OR s.created_at < sqlc.narg('created_before'))
+  AND (sqlc.narg('cursor_id')::uuid IS NULL OR CASE WHEN @sort::text IN ('oldest','expiry') THEN
+  (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) > (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid)
+  ELSE (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) < (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid) END)
+ORDER BY
+ CASE WHEN @sort::text IN ('oldest','expiry') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END ASC,
+ CASE WHEN @sort::text NOT IN ('oldest','expiry','id') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END DESC,
+ CASE WHEN @sort::text IN ('oldest','expiry') THEN s.id END ASC,
+ CASE WHEN @sort::text NOT IN ('oldest','expiry') THEN s.id END DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: RevokeOrganizationRemoteSession :one
@@ -4287,7 +4331,7 @@ UPDATE remote_session_clients SET deleted_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
 
 -- name: GetPrincipalRemoteSessionBinding :one
--- Pin the exact attached row, never the owner's replacement after reconnect.
+-- Read current credentials from the attached row, never a replacement after deletion.
 SELECT s.*
 FROM principal_remote_session_bindings AS b
 JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
@@ -4297,9 +4341,8 @@ JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
 JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
   AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
 JOIN remote_sessions AS s ON s.id = b.remote_session_id
-  AND s.subject_urn = 'user:' || a.owner_user_id
+  AND EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
   AND b.attached_by_subject_id = s.subject_urn
-  AND s.grant_generation = b.grant_generation
   AND s.remote_session_client_id = b.remote_session_client_id
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id
@@ -4312,6 +4355,41 @@ WHERE b.project_id = @project_id::uuid
   AND b.principal_id = @principal_id::uuid
   AND b.user_session_issuer_id = @user_session_issuer_id::uuid
   AND b.remote_session_client_id = @remote_session_client_id::uuid
+  AND b.revoked_at IS NULL
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND provenance.deleted IS FALSE
+  AND issuer.deleted IS FALSE
+  AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+  AND (provenance.project_id = @project_id::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)));
+
+-- name: ListEligiblePrincipalRemoteSessionBindings :many
+-- Read current credentials from the attached row, never a replacement after deletion.
+SELECT s.*
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+  AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+  AND a.owner_reassignment_required_at IS NULL
+JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+  AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+JOIN remote_sessions AS s ON s.id = b.remote_session_id
+  AND EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
+  AND b.attached_by_subject_id = s.subject_urn
+  AND s.remote_session_client_id = b.remote_session_client_id
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id
+JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
+JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
+JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+WHERE b.project_id = @project_id::uuid
+  AND b.organization_id = @organization_id::text
+  AND b.principal_id = @principal_id::uuid
+  AND b.user_session_issuer_id = @user_session_issuer_id::uuid
   AND b.revoked_at IS NULL
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
@@ -4368,9 +4446,8 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND s.id = @remote_session_id
   AND EXISTS (SELECT 1 FROM agents AS a WHERE a.id = @principal_id AND a.organization_id = p.organization_id AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL)
 ON CONFLICT (project_id, principal_id, user_session_issuer_id, remote_session_client_id) WHERE revoked_at IS NULL
-DO UPDATE SET updated_at = principal_remote_session_bindings.updated_at
-WHERE principal_remote_session_bindings.grant_generation = EXCLUDED.grant_generation
-  AND principal_remote_session_bindings.remote_session_id = EXCLUDED.remote_session_id
+DO UPDATE SET grant_generation = EXCLUDED.grant_generation, updated_at = clock_timestamp()
+WHERE principal_remote_session_bindings.remote_session_id = EXCLUDED.remote_session_id
   AND principal_remote_session_bindings.project_id = EXCLUDED.project_id
   AND principal_remote_session_bindings.organization_id = EXCLUDED.organization_id
   AND principal_remote_session_bindings.attached_by_subject_id = EXCLUDED.attached_by_subject_id
@@ -4379,16 +4456,16 @@ RETURNING id, principal_id, user_session_issuer_id, remote_session_client_id, re
 -- name: ListPrincipalRemoteSessionBindings :many
 -- Keep unavailable bindings discoverable for explicit detach, but return no
 -- source identity. The handler adds a canonical view only for an eligible
--- candidate whose grant generation still matches this exact attachment.
-SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation
+-- source row that remains eligible for this exact attachment.
+SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, u.display_name AS subject_display_name, u.email AS subject_email
 FROM principal_remote_session_bindings AS b
 JOIN remote_sessions AS s ON s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
+LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
 JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
-  AND 'user:' || a.owner_user_id = b.attached_by_subject_id
 WHERE b.project_id = @project_id AND b.organization_id = @organization_id
   AND b.principal_id = @principal_id AND b.user_session_issuer_id = @user_session_issuer_id
-  AND b.attached_by_subject_id = @subject_urn AND s.subject_urn = @subject_urn
+  AND b.attached_by_subject_id = s.subject_urn
   AND b.revoked_at IS NULL
 ORDER BY b.id;
 
@@ -4397,8 +4474,7 @@ UPDATE principal_remote_session_bindings AS b
 SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE b.project_id = @project_id AND b.organization_id = @organization_id
   AND b.principal_id = @principal_id AND b.user_session_issuer_id = @user_session_issuer_id
-  AND b.id = @id AND b.attached_by_subject_id = @subject_urn AND b.revoked_at IS NULL
-  AND EXISTS (SELECT 1 FROM remote_sessions AS s WHERE s.id = b.remote_session_id AND s.subject_urn = @subject_urn)
+  AND b.id = @id AND b.revoked_at IS NULL
 RETURNING b.remote_session_id, b.remote_session_client_id, b.grant_generation;
 
 -- name: LockPrincipalRemoteSessionBindings :many
@@ -6172,3 +6248,32 @@ WHERE project_id = @project_id AND organization_id = @organization_id
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL;
+
+-- name: LockPrincipalBindingForRefresh :one
+SELECT * FROM principal_remote_session_bindings
+WHERE id = @id AND principal_id = @principal_id AND project_id = @project_id
+  AND organization_id = @organization_id AND user_session_issuer_id = @user_session_issuer_id
+  AND attached_by_subject_id = @subject_urn AND revoked_at IS NULL
+FOR UPDATE;
+
+-- name: LockRemoteSessionGrantForBindingRefresh :one
+SELECT sqlc.embed(s), u.display_name AS subject_display_name, u.email AS subject_email
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND NOT c.deleted
+JOIN remote_session_issuers AS ri ON ri.id = c.remote_session_issuer_id AND NOT ri.deleted
+JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
+JOIN user_session_issuers AS target ON target.id = @user_session_issuer_id AND NOT target.deleted
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
+JOIN projects AS p ON p.id = @project_id AND p.organization_id = @organization_id AND NOT p.deleted
+JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+JOIN organization_user_relationships AS membership ON membership.user_id = u.id AND membership.organization_id = p.organization_id AND membership.deleted_at IS NULL
+WHERE s.id = @id AND s.remote_session_client_id = @remote_session_client_id
+  AND s.subject_urn = @subject_urn AND s.grant_generation = @grant_generation
+  AND NOT s.deleted
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (ri.project_id = p.id OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = p.organization_id)))
+  AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = p.organization_id))
+  AND (target.project_id = p.id OR (target.project_id IS NULL AND target.organization_id = p.organization_id))
+  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+  AND (s.access_expires_at IS NULL OR s.access_expires_at > now() OR (s.refresh_token_encrypted IS NOT NULL AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())))
+FOR UPDATE OF s;

@@ -6,10 +6,8 @@ import { linkToolsetUserSessionIssuer } from "./linkUserSessionIssuer";
 
 const get = vi.fn();
 const update = vi.fn();
-const setUserSessionIssuer = vi.fn();
 const client = {
   mcpServers: { get, update },
-  toolsets: { setUserSessionIssuer },
 } as unknown as Parameters<typeof linkToolsetUserSessionIssuer>[0];
 
 const toolset = { id: "toolset-1", slug: "hosted-toolset" };
@@ -37,7 +35,6 @@ function notFound(): GramError {
 beforeEach(() => {
   get.mockReset();
   update.mockReset().mockResolvedValue(undefined);
-  setUserSessionIssuer.mockReset().mockResolvedValue(undefined);
 });
 
 describe("linkToolsetUserSessionIssuer", () => {
@@ -61,46 +58,36 @@ describe("linkToolsetUserSessionIssuer", () => {
       undefined,
       undefined,
     );
-    expect(setUserSessionIssuer).not.toHaveBeenCalled();
     expect(update.mock.calls[0]![0].updateMcpServerForm).not.toHaveProperty(
       "networkAccessMode",
     );
   });
 
-  it("asks for a refresh when the canonical server visibility is unknown", async () => {
+  it("refuses when the server visibility is unknown", async () => {
     get.mockResolvedValue({ ...canonical, visibility: unrecognized("future") });
 
     await expect(
       linkToolsetUserSessionIssuer(client, toolset, "issuer-1"),
-    ).rejects.toThrow("Refresh the page");
-
+    ).rejects.toThrow("not supported");
     expect(update).not.toHaveBeenCalled();
-    expect(setUserSessionIssuer).not.toHaveBeenCalled();
   });
 
-  it("falls back to the toolset call when no canonical server exists", async () => {
+  it("refuses when no canonical server exists", async () => {
     get.mockRejectedValue(notFound());
 
-    await linkToolsetUserSessionIssuer(client, toolset, "issuer-1");
-
+    await expect(
+      linkToolsetUserSessionIssuer(client, toolset, "issuer-1"),
+    ).rejects.toThrow("no hosted MCP server");
     expect(update).not.toHaveBeenCalled();
-    expect(setUserSessionIssuer).toHaveBeenCalledWith(
-      {
-        slug: "hosted-toolset",
-        setUserSessionIssuerRequestBody: { userSessionIssuerId: "issuer-1" },
-      },
-      undefined,
-      undefined,
-    );
   });
 
-  it("falls back when the server found is not the toolset's canonical one", async () => {
+  it("refuses when the server found is not the toolset's canonical one", async () => {
     get.mockResolvedValue({ ...canonical, toolsetId: "other-toolset" });
 
-    await linkToolsetUserSessionIssuer(client, toolset, "issuer-1");
-
+    await expect(
+      linkToolsetUserSessionIssuer(client, toolset, "issuer-1"),
+    ).rejects.toThrow("no hosted MCP server");
     expect(update).not.toHaveBeenCalled();
-    expect(setUserSessionIssuer).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces lookup failures other than not found", async () => {
@@ -110,7 +97,6 @@ describe("linkToolsetUserSessionIssuer", () => {
       linkToolsetUserSessionIssuer(client, toolset, "issuer-1"),
     ).rejects.toThrow("network down");
     expect(update).not.toHaveBeenCalled();
-    expect(setUserSessionIssuer).not.toHaveBeenCalled();
   });
 
   it("passes request options through", async () => {

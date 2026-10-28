@@ -313,3 +313,48 @@ type RiskResult struct {
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 }
+
+type SkillObservation struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: opaque-confidential
+	IdempotencyKey pgtype.Text
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
+	UserEmail pgtype.Text
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: opaque-confidential
+	SessionID pgtype.Text
+	// @access: confidential
+	SkillName string
+	// @access: opaque-confidential
+	Source pgtype.Text
+	// @access: opaque-confidential
+	SourceLevel pgtype.Text
+	// @access: opaque-restricted
+	SourcePath pgtype.Text
+	// @access: confidential
+	RawSha256 pgtype.Text
+	// @access: confidential
+	SeenAt pgtype.Timestamptz
+	// @access: confidential
+	SkillID uuid.NullUUID
+	// @access: confidential
+	SkillVersionID uuid.NullUUID
+	// @access: confidential
+	ReconciledAt pgtype.Timestamptz
+	// @access: confidential
+	MetricsSyncedAt pgtype.Timestamptz
+	// @access: confidential
+	EfficacyEnqueuedAt pgtype.Timestamptz
+	// @access: confidential
+	ReconcileErrorCode pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+}

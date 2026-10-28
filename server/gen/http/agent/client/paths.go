@@ -17,6 +17,16 @@ func GetMyConnectionsAgentPath() string {
 	return "/rpc/agent.getMyConnections"
 }
 
+// HideMcpServerAgentPath returns the URL path to the agent service hideMcpServer HTTP endpoint.
+func HideMcpServerAgentPath() string {
+	return "/rpc/agent.hideMcpServer"
+}
+
+// UnhideMcpServerAgentPath returns the URL path to the agent service unhideMcpServer HTTP endpoint.
+func UnhideMcpServerAgentPath() string {
+	return "/rpc/agent.unhideMcpServer"
+}
+
 // ListSyncedUsersAgentPath returns the URL path to the agent service listSyncedUsers HTTP endpoint.
 func ListSyncedUsersAgentPath() string {
 	return "/rpc/agent.listSyncedUsers"

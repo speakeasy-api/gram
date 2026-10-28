@@ -127,7 +127,7 @@ func (p *grantPlan) want(kind GrantKind, principal urn.Principal, scope authz.Sc
 // implies withShared. It only ever adds grants.
 func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, withShared, withKeys bool) error {
 	q := New(tx)
-	plan := &grantPlan{existing: map[string]bool{}, provisioned: map[string]bool{}, history: map[string]int{}, taken: map[string]int{}, missing: map[urn.Principal][]*authz.RoleGrant{}, kinds: map[urn.Principal][]GrantKind{}, order: nil, counts: map[GrantKind]int{}}
+	plan := &grantPlan{existing: map[string]bool{}, provisioned: map[string]bool{}, history: map[string]int{}, taken: map[string]int{}, missing: map[urn.Principal][]*authz.RoleGrant{}, kinds: map[urn.Principal][]GrantKind{}, order: nil, counts: make(map[GrantKind]int)}
 
 	held, err := q.ListAuthClientGrantRows(ctx, ListAuthClientGrantRowsParams{
 		OrganizationID: opts.OrganizationID,

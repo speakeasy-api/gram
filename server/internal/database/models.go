@@ -3475,6 +3475,35 @@ type McpServerToolMetadatum struct {
 	Deleted bool
 }
 
+type McpSkillLink struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: confidential
+	PinnedVersionID uuid.NullUUID
+	// @access: confidential
+	TargetKind string
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	MetaMcpServerID uuid.NullUUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type MdmDevice struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -3831,8 +3860,6 @@ type OktaIdentityProviderConnection struct {
 	OrgUrl string
 	// @access: restricted
 	IssuerUrl string
-	// @access: opaque-restricted
-	IssuerUrlOverrideReason pgtype.Text
 	// @access: confidential
 	OwnershipClaimed bool
 	// @access: confidential
@@ -4125,6 +4152,9 @@ type OrganizationMetadatum struct {
 	CreationSource pgtype.Text
 	// @access: confidential
 	DefaultHost pgtype.Text
+	// Staff-entered link to the adoption dashboard for this organization.
+	// @access: restricted
+	AdoptionDashboardUrl pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -7447,19 +7477,9 @@ type Toolset struct {
 	// @access: confidential
 	DefaultEnvironmentSlug pgtype.Text
 	// @access: confidential
-	McpSlug pgtype.Text
-	// @access: confidential
-	McpIsPublic bool
-	// @access: confidential
-	McpEnabled bool
-	// @access: confidential
 	ToolSelectionMode string
 	// @access: confidential
-	CustomDomainID uuid.NullUUID
-	// @access: confidential
 	ExternalOauthServerID uuid.NullUUID
-	// @access: confidential
-	UserSessionIssuerID uuid.NullUUID
 	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
 	// @access: confidential
@@ -7956,6 +7976,21 @@ type UserAccount struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type UserHiddenMcpServer struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type UserOauthToken struct {
