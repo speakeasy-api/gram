@@ -209,6 +209,7 @@ export default function IdentityDevices(): JSX.Element {
   return (
     <IdentitySection
       title="Accounts & devices"
+      timeRange
       meta={sectionMeta([
         { count: accounts.length, singular: "AI account" },
         { count: devices.length, singular: "device" },

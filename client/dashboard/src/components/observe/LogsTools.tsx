@@ -79,6 +79,7 @@ import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/teleme
 import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
 import type { LogFilter } from "@gram/client/models/components/logfilter.js";
+import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
 import type { ToolUsageTotals } from "@gram/client/models/components/toolusagetotals.js";
@@ -124,7 +125,26 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
   });
 }
 
-export function LogsTools(): JSX.Element {
+/** Pins the view to one identity's calls, for embedding on its page. */
+export type LogsToolsScope = {
+  /** Never empty: an empty list would show every identity's calls. */
+  userFilters: ToolUsageUserFilter[];
+  /**
+   * The host page's account filter ("" for every account), which replaces
+   * the view's own so its rows match the page around it.
+   */
+  accountType?: string;
+};
+
+/** Facets that pick identities, which a scoped view has already chosen. */
+const IDENTITY_FACETS = new Set(["role", "user", "agent"]);
+
+export function LogsTools({
+  scope,
+}: {
+  /** Embedded on an identity's page: no page header, identity facets hidden. */
+  scope?: LogsToolsScope;
+} = {}): JSX.Element {
   const { projectSlug } = useSlugs();
   const queryClient = useQueryClient();
   const client = useGramContext();
@@ -159,12 +179,14 @@ export function LogsTools(): JSX.Element {
     handleRoleSelectionChange,
     roleEmails,
     roleFilterPending,
-    accountType,
+    accountType: pickedAccountType,
     handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
     defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
     validTypes: TOOL_USAGE_VALID_TYPES,
   });
+  const accountType =
+    scope?.accountType !== undefined ? scope.accountType : pickedAccountType;
 
   const {
     attributeSearchInput,
@@ -258,6 +280,7 @@ export function LogsTools(): JSX.Element {
     accountType,
     clientKeys: selectedClientKeys,
     agentIds: selectedAgentIds,
+    scopedUserFilters: scope?.userFilters,
     from,
     to,
   });
@@ -914,23 +937,40 @@ export function LogsTools(): JSX.Element {
     ? new Error("Unable to load tool logs. Please try again.")
     : null;
 
+  const visibleFacetGroups = scope
+    ? facetGroups.filter(
+        (group) =>
+          !IDENTITY_FACETS.has(group.id) &&
+          !(group.id === "account_type" && scope.accountType !== undefined),
+      )
+    : facetGroups;
+
   return (
     <>
-      <InsightsConfig
-        mcpConfig={mcpConfig}
-        title="Explore Tool Logs"
-        subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
-        // Hide the docked assistant on this page — it floats over the last
-        // rows of the table, which is the primary surface here.
-        hideTrigger
-        suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
-      />
+      {scope ? null : (
+        <InsightsConfig
+          mcpConfig={mcpConfig}
+          title="Explore Tool Logs"
+          subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
+          // Hide the docked assistant on this page — it floats over the last
+          // rows of the table, which is the primary surface here.
+          hideTrigger
+          suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
+        />
+      )}
       {isLogsDisabled ? (
-        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <LoggingPageHeader
-            title="Tool Logs"
-            description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
-          />
+        <div
+          className={cn(
+            "min-h-0 w-full flex-1 space-y-6 overflow-y-auto",
+            !scope && "p-8 pb-24",
+          )}
+        >
+          {scope ? null : (
+            <LoggingPageHeader
+              title="Tool Logs"
+              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+            />
+          )}
           <div className="flex-1">
             <EnableLoggingOverlay
               onEnabled={refetch}
@@ -953,7 +993,8 @@ export function LogsTools(): JSX.Element {
             totals={totalsData?.totals}
             timeSeries={timeSeriesData?.targetTimeSeries ?? []}
             timeSeriesPending={timeSeriesPending}
-            facetGroups={facetGroups}
+            facetGroups={visibleFacetGroups}
+            embedded={!!scope}
             onFacetToggle={onFacetToggle}
             onFacetClearGroup={onFacetClearGroup}
             onRangeSelect={setRangeFromBrush}
@@ -1204,6 +1245,7 @@ function LogsToolsContent({
   onRangeSelect,
   onResetRange,
   isZoomed,
+  embedded = false,
 }: {
   isLoading: boolean;
   isFetching: boolean;
@@ -1259,6 +1301,8 @@ function LogsToolsContent({
   onRangeSelect: (from: Date, to: Date) => void;
   onResetRange: () => void;
   isZoomed: boolean;
+  /** Inside another page: that page supplies the heading and the inset. */
+  embedded?: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
   // Below xl the rail does not fit beside the table. It is the only filter
@@ -1287,17 +1331,29 @@ function LogsToolsContent({
       </Sheet>
 
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 short:gap-3 short:px-5 short:pt-4">
-          <div className="flex shrink-0 items-start justify-between gap-4">
-            <LoggingPageHeader
-              title="Tool Logs"
-              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
-            />
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-6 short:gap-3",
+            !embedded && "px-8 pt-8 short:px-5 short:pt-4",
+          )}
+        >
+          <div
+            className={cn(
+              "flex shrink-0 items-start gap-4",
+              embedded ? "justify-end" : "justify-between",
+            )}
+          >
+            {embedded ? null : (
+              <LoggingPageHeader
+                title="Tool Logs"
+                description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+              />
+            )}
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
                 size="sm"
-                className="xl:hidden"
+                className={embedded ? undefined : "xl:hidden"}
                 onClick={() => setFacetsOpen(true)}
               >
                 <Icon name="filter" className="size-4" />
@@ -1315,12 +1371,14 @@ function LogsToolsContent({
                 />
                 Refresh
               </Button>
-              <Button variant="secondary" size="sm" asChild>
-                <Link to={orgRoutes.logs.href()}>
-                  <Settings className="h-4 w-4" />
-                  Configure settings
-                </Link>
-              </Button>
+              {embedded ? null : (
+                <Button variant="secondary" size="sm" asChild>
+                  <Link to={orgRoutes.logs.href()}>
+                    <Settings className="h-4 w-4" />
+                    Configure settings
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
 
@@ -1471,7 +1529,12 @@ function LogsToolsContent({
 
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <div
-                className="border-border bg-background relative hidden shrink-0 border-r xl:flex"
+                className={cn(
+                  "border-border bg-background relative hidden shrink-0 border-r",
+                  // Embedded, the host page's own rail already takes the
+                  // side, so filters stay behind the Filters button.
+                  !embedded && "xl:flex",
+                )}
                 style={{ width: railWidth }}
               >
                 {rail}
