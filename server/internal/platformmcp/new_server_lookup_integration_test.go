@@ -19,6 +19,8 @@ import (
 type countingCatalogReadinessProber struct {
 	calls atomic.Int32
 	err   error
+	// ttl is how long a check stays fresh; zero means one minute.
+	ttl time.Duration
 }
 
 func (p *countingCatalogReadinessProber) ProbeCatalogReadiness(_ context.Context, principal Principal, _, registrationID, _, _, _, _ uuid.UUID) (ProviderReadinessProbeResult, error) {
@@ -27,6 +29,10 @@ func (p *countingCatalogReadinessProber) ProbeCatalogReadiness(_ context.Context
 		return ProviderReadinessProbeResult{}, p.err
 	}
 	now := time.Now().UTC()
+	ttl := p.ttl
+	if ttl == 0 {
+		ttl = time.Minute
+	}
 	return ProviderReadinessProbeResult{
 		AuthorizationIdentity: ProviderAuthorizationIdentity{
 			OrganizationID: principal.OrganizationID,
@@ -37,7 +43,7 @@ func (p *countingCatalogReadinessProber) ProbeCatalogReadiness(_ context.Context
 		State:        ReadinessNeedsConfiguration,
 		EvidenceCode: "upstream_identity_provider_not_configured",
 		CheckedAt:    now,
-		ExpiresAt:    now.Add(time.Minute),
+		ExpiresAt:    now.Add(ttl),
 	}, nil
 }
 
@@ -251,4 +257,44 @@ func TestRemoteRegistrationToolReportsAServerAlreadyInTheProject(t *testing.T) {
 	again := register("remote-already-second")
 	require.Equal(t, first.RegistrationID, again.RegistrationID)
 	require.True(t, again.AlreadyRegistered)
+}
+
+// Once the stored check has expired, a readiness read checks the server again
+// instead of reporting the expired result as stale. If that check cannot run,
+// the read still succeeds with the stale result.
+func TestReadinessToolRechecksAServerWhoseCheckHasExpired(t *testing.T) {
+	t.Parallel()
+
+	prober := &countingCatalogReadinessProber{ttl: time.Second}
+	callCtx, reg, projectSlug, registrationID := newNeverCheckedServer(t, "platform_mcp_readiness_refresh_probe", allowOperationLimiter{}, prober)
+	args := map[string]any{"project_slug": projectSlug, "registration_id": registrationID}
+	read := func() GetMCPReadinessToolOutput {
+		out, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", args)
+		require.NoError(t, err)
+		return out
+	}
+	// The last check expires one ttl after it ran; wait for that without reading,
+	// since a read would itself check again.
+	var checkedBy time.Time
+	waitUntilExpired := func() {
+		require.Eventually(t, func() bool { return time.Now().After(checkedBy.Add(prober.ttl)) }, 5*time.Second, 20*time.Millisecond)
+	}
+
+	require.Equal(t, "fresh", read().Freshness)
+	checkedBy = time.Now()
+	require.Equal(t, int32(1), prober.calls.Load())
+
+	waitUntilExpired()
+	refreshed := read()
+	require.Equal(t, "fresh", refreshed.Freshness)
+	require.Equal(t, ReadinessNeedsConfiguration, refreshed.State)
+	require.Equal(t, int32(2), prober.calls.Load(), "an expired check is run again")
+	checkedBy = time.Now()
+
+	waitUntilExpired()
+	prober.err = errors.New("provider unreachable")
+	stale := read()
+	require.Equal(t, "stale", stale.Freshness)
+	require.Equal(t, ReadinessNeedsConfiguration, stale.State)
+	require.Equal(t, int32(3), prober.calls.Load())
 }
