@@ -6,13 +6,19 @@ const VALID_TABS = [
   "resources",
   "prompts",
   "inspect",
+  "skills",
   "team-access",
   "guardrails",
   "sessions",
   "settings",
 ] as const;
 // Hosted servers manage their toolset on these tabs; every other server inspects its live tools.
-const HOSTED_ONLY_TABS: readonly TabValue[] = ["tools", "resources", "prompts"];
+const HOSTED_ONLY_TABS: readonly TabValue[] = [
+  "tools",
+  "resources",
+  "prompts",
+  "skills",
+];
 
 // Breadcrumb `skipSegments` source. Derived from VALID_TABS rather than
 // hand-maintained alongside it, so adding a tab can't leave a stray crumb.
@@ -104,6 +110,8 @@ export function mcpServerTabHref(
       return routes.mcp.details.prompts.href(mcpServerSlug);
     case "inspect":
       return routes.mcp.details.inspect.href(mcpServerSlug);
+    case "skills":
+      return routes.mcp.details.skills.href(mcpServerSlug);
     case "team-access":
       return routes.mcp.details.teamAccess.href(mcpServerSlug);
     case "guardrails":

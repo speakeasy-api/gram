@@ -75,6 +75,7 @@ import { SettingsTab } from "./tabs/settings/SettingsTab";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GuardrailsTab } from "./tabs/guardrails/GuardrailsTab";
+import { MCPSkillsTabRoute } from "../MCPSkillsTab";
 
 export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -183,10 +184,13 @@ export default function MCPServerDetails(): JSX.Element | null {
   const renderTabContent = () => {
     // Hosted tabs and settings need the toolset; never fall back to another layout.
     // Overview needs the loaded toolset only when the read's summary is missing.
+    // Skills reads links by server id and owns its flag and access checks.
     const needsToolset =
       activeTab === "overview"
         ? !mcpServer.toolset
-        : activeTab !== "sessions" && activeTab !== "guardrails";
+        : activeTab !== "sessions" &&
+          activeTab !== "guardrails" &&
+          activeTab !== "skills";
     if (hosted && needsToolset && !hostedToolset) {
       if (isLoadingToolset) return null;
       return (
@@ -251,6 +255,14 @@ export default function MCPServerDetails(): JSX.Element | null {
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
             />
+          )
+        );
+      case "skills":
+        // Only hosted servers get here; the route checks the flag before the
+        // scope, so a disabled tab always redirects to the overview.
+        return (
+          mcpServer && (
+            <MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug={idOrSlug} />
           )
         );
       case "team-access":

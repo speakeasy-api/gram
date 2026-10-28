@@ -5,6 +5,10 @@ import { isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { serverIdentityAuthMethod } from "@/lib/remote-identity/model/clientConfiguration";
+import {
+  bindServiceAccountClient,
+  type ServiceAccountClientSpec,
+} from "@/lib/remote-identity/drafts/useServiceAccountClientDraft";
 import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { CommitServerIdentityConfigurationResult } from "@gram/client/models/components/commitserveridentityconfigurationresult.js";
@@ -25,6 +29,12 @@ type ConfigureCreatedIdentityInput = {
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization?: string;
   githubApp?: GitHubAppDraft;
+  /**
+   * An OAuth service account client to bind instead of a static credential.
+   * Takes precedence over agentAuthorization.
+   */
+  serviceAccountClient?: ServiceAccountClientSpec;
+
   /** The server's issuer is organization-owned, so a project may not set it up. */
   organizationOwnedUserSessionIssuer?: boolean;
   options?: RequestOptions;
@@ -52,6 +62,8 @@ export async function configureCreatedRemoteMcpIdentity({
   identityMode,
   agentAuthorization,
   githubApp,
+  serviceAccountClient,
+
   organizationOwnedUserSessionIssuer = false,
   options,
 }: ConfigureCreatedIdentityInput): Promise<ConfigureCreatedIdentityResult> {
@@ -66,6 +78,36 @@ export async function configureCreatedRemoteMcpIdentity({
         mcpServer,
         identityMode,
         "The server could not be enabled. Review it in Settings.",
+      );
+    }
+  }
+
+  if (identityMode === "agent" && serviceAccountClient) {
+    try {
+      await bindServiceAccountClient(
+        client,
+        serviceAccountClient,
+        mcpServer.toolsetId ?? mcpServer.id,
+        options,
+      );
+    } catch {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        `Couldn't connect the server to ${serviceAccountClient.issuerName}. Finish the Service Account in Settings > Identity.`,
+      );
+    }
+
+    try {
+      return configured(
+        await setMcpServerVisibility(client, mcpServer, "private", options),
+        identityMode,
+      );
+    } catch {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
       );
     }
   }

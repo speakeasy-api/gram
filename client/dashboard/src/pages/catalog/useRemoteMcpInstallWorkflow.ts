@@ -23,6 +23,7 @@ import {
   type RemoteMcpCreationIdentity,
 } from "@/pages/sources/remote-mcp/configureCreatedIdentity";
 import type { Gram } from "@gram/client";
+import type { ServiceAccountClientSpec } from "@/lib/remote-identity";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
@@ -76,6 +77,8 @@ export interface ServerConfig {
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization: string;
   githubApp?: GitHubAppDraft;
+  /** An OAuth service account client to bind instead of agentAuthorization. */
+  serviceAccountClient: ServiceAccountClientSpec | null;
 }
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
@@ -94,6 +97,8 @@ type GuardrailOutcome =
 export interface ServerInstallStatus {
   key: string;
   name: string;
+  /** The catalog entry this server was installed from, for its logo. */
+  server?: PulseMCPServer;
   status: "pending" | "creating" | "completed" | "failed";
   /** mcp_servers row id — used by callers that bundle installs (e.g. plugins). */
   mcpServerId?: string;
@@ -146,7 +151,11 @@ export interface ConfigurePhase extends WorkflowBase {
     updates: Partial<
       Pick<
         ServerConfig,
-        "name" | "identityMode" | "agentAuthorization" | "githubApp"
+        | "name"
+        | "identityMode"
+        | "agentAuthorization"
+        | "githubApp"
+        | "serviceAccountClient"
       >
     >,
   ) => void;
@@ -265,6 +274,7 @@ function buildServerConfig(
     headerValues: {},
     identityMode: supportsAutomaticOAuth(server) ? "user" : "none",
     agentAuthorization: "",
+    serviceAccountClient: null,
   };
 }
 
@@ -281,6 +291,7 @@ interface InstallTarget {
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization: string;
   githubApp?: GitHubAppDraft;
+  serviceAccountClient: ServiceAccountClientSpec | null;
 }
 
 function buildInstallTargets(config: ServerConfig): InstallTarget[] {
@@ -299,6 +310,7 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
     identityMode: config.identityMode,
     agentAuthorization: config.agentAuthorization,
     githubApp: config.githubApp,
+    serviceAccountClient: config.serviceAccountClient,
   }));
 }
 
@@ -549,7 +561,11 @@ export function useRemoteMcpInstallWorkflow({
       updates: Partial<
         Pick<
           ServerConfig,
-          "name" | "identityMode" | "agentAuthorization" | "githubApp"
+          | "name"
+          | "identityMode"
+          | "agentAuthorization"
+          | "githubApp"
+          | "serviceAccountClient"
         >
       >,
     ) => {
@@ -633,6 +649,7 @@ export function useRemoteMcpInstallWorkflow({
             ? "user"
             : "none",
           agentAuthorization: "",
+          serviceAccountClient: null,
         },
       ]);
     }
@@ -667,7 +684,8 @@ export function useRemoteMcpInstallWorkflow({
           c.identityMode !== "agent" ||
           (c.githubApp
             ? gitHubAppReady(c.githubApp)
-            : c.agentAuthorization.trim() !== ""),
+            : c.agentAuthorization.trim() !== "" ||
+              c.serviceAccountClient !== null),
       ) &&
       serverConfigs.some((c) => c.remotes.length > 0)
     );
@@ -824,6 +842,10 @@ export function useRemoteMcpInstallWorkflow({
           target.identityMode === "agent"
             ? target.agentAuthorization.trim()
             : undefined,
+        serviceAccountClient:
+          target.identityMode === "agent"
+            ? (target.serviceAccountClient ?? undefined)
+            : undefined,
         // Organization issuers are administered at the organization level;
         // setup must not attach this project's upstream client to one.
         organizationOwnedUserSessionIssuer:
@@ -854,7 +876,13 @@ export function useRemoteMcpInstallWorkflow({
         mcpEndpointUrl: endpoint
           ? `${getServerURL()}/mcp/${endpoint.slug}`
           : undefined,
-        authConfigured: !!identityConfiguration.userIdentity?.status,
+        // A bound service account client is new auth state too, so the
+        // session-client lists are refreshed for it as well.
+        authConfigured:
+          !!identityConfiguration.userIdentity?.status ||
+          (target.identityMode === "agent" &&
+            !!target.serviceAccountClient &&
+            identityConfiguration.status === "configured"),
         identityConfiguration,
         iconPersistence,
       };
@@ -906,6 +934,7 @@ export function useRemoteMcpInstallWorkflow({
         ...targets.map((target, index) => ({
           key: `${index}-${target.remote.url}`,
           name: target.name,
+          server: target.server,
           status: "pending" as const,
         })),
         ...uninstallable.map((config, index) => ({

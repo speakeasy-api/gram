@@ -13,6 +13,7 @@ import { useIdentityOutlet } from "./identityRoute";
 import { ShareBar } from "@/components/chart/ShareBar";
 import { SplitRankedBarList } from "@/components/chart/SplitRankedBarList";
 import { IdentitySection } from "./IdentitySection";
+import { IdentityToolLogsPanel } from "./IdentityToolLogs";
 import { sectionMeta } from "./sectionMeta";
 import {
   hasMetricsSubject,
@@ -272,6 +273,9 @@ export default function IdentityUsage(): JSX.Element {
           )}
         </IdentityPanel>
       </div>
+
+      {/* The calls behind the numbers above, for reading one by one. */}
+      <IdentityToolLogsPanel identity={identity} accountType={scope} />
     </IdentitySection>
   );
 }

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { Info } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AgentIdentityRow } from "@/lib/remote-identity";
 import { IdentityExplainerCallout } from "@/lib/remote-identity";
 import { identityModeCards } from "@/lib/remote-identity";
@@ -35,6 +35,7 @@ export function CreationIdentityChoice({
   rbacLoading,
   githubApp,
   onGitHubAppChange,
+  serviceAccountPanel,
 }: {
   value: CreationIdentityMode;
   onChange: (mode: CreationIdentityMode) => void;
@@ -48,6 +49,12 @@ export function CreationIdentityChoice({
   rbacLoading: boolean;
   githubApp?: GitHubAppDraft;
   onGitHubAppChange?: (value: GitHubAppDraft | undefined) => void;
+  /**
+   * The full Service Account choice — static credentials and OAuth clients —
+   * from callers that can bind an OAuth client once the server exists.
+   * Replaces the static-only credential form.
+   */
+  serviceAccountPanel?: ReactNode;
 }): JSX.Element {
   const [explainerOpen, setExplainerOpen] = useState(false);
 
@@ -116,7 +123,7 @@ export function CreationIdentityChoice({
             )
           }
           options={[
-            { value: "static", label: "Static credential" },
+            { value: "static", label: "Other credentials" },
             {
               value: "github-app",
               label: "GitHub App",
@@ -134,6 +141,8 @@ export function CreationIdentityChoice({
           onChange={onGitHubAppChange}
           disabled={!canConfigureGitHub}
         />
+      ) : value === "agent" && serviceAccountPanel ? (
+        <div className="pt-2">{serviceAccountPanel}</div>
       ) : value === "agent" ? (
         <AgentIdentityRow
           draft={credential}
