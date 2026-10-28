@@ -2144,6 +2144,50 @@ describe("Editing an agent that already exists", () => {
       });
     });
 
+    it("trusts a new cluster and moves the rule to it", async () => {
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your cluster" });
+      fireEvent.change(screen.getByLabelText("Cluster name"), {
+        target: { value: "review" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your workload" });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      const moved = cluster.replace(/payments$/, "review");
+      expect(
+        mocks.registerIssuer.mock.calls[0]?.[0]?.request
+          ?.registerWorkloadIssuerForm?.issuer,
+      ).toBe(moved);
+      expect(
+        mocks.admitSubject.mock.calls[0]?.[0]?.request
+          ?.admitWorkloadSubjectForm,
+      ).toMatchObject({
+        issuer: moved,
+        subject: admission.subject,
+      });
+    });
+
+    it("keeps the replaced rule's label and tags", async () => {
+      mocks.workloadAdmissions.mockReturnValue([
+        { ...admission, name: "Billing pods", tags: ["prod"] },
+      ]);
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledOnce());
+      expect(
+        mocks.admitSubject.mock.calls[0]?.[0]?.request
+          ?.admitWorkloadSubjectForm,
+      ).toMatchObject({ name: "Billing pods", tags: ["prod"] });
+    });
+
     it("retries only the withdrawal when that alone failed", async () => {
       mocks.withdrawSubject.mockRejectedValueOnce(new Error("boom"));
       await reachWorkloadStep();

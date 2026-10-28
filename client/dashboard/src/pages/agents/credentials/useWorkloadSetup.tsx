@@ -150,8 +150,9 @@ export function useWorkloadSetup({
   // the new one is exactly what the retry then has to do.
   const [trustedIssuer, setTrustedIssuer] = useState<string | null>(null);
   // The rule this flow saved, which the refetched list then holds; it is not
-  // a duplicate of itself.
-  const [admittedSubject, setAdmittedSubject] = useState<string | null>(null);
+  // a duplicate of itself. Keyed on issuer and match kind as well as the
+  // subject: the same subject under another cluster is another rule.
+  const [admittedRule, setAdmittedRule] = useState<string | null>(null);
   // The replaced rule once it is gone, so a retry after the new rule saved
   // but the old one failed to withdraw only withdraws.
   const [withdrawnID, setWithdrawnID] = useState<string | null>(null);
@@ -217,9 +218,12 @@ export function useWorkloadSetup({
     connection.matchKind === replacing.matchKind;
   // The rule this flow has already written, or the one being edited: neither
   // is a clash with itself.
+  const connectionRule =
+    connection === null
+      ? null
+      : `${connection.issuer} ${connection.matchKind} ${connection.subject}`;
   const ours =
-    unchanged ||
-    (connection !== null && connection.subject === admittedSubject);
+    unchanged || (connectionRule !== null && connectionRule === admittedRule);
   // A replacement keeps the replaced rule's tier: a rule admitted for one
   // project stays with that project rather than widening to the organization.
   const replacingProjectSlug = replacing?.projectId
@@ -292,7 +296,7 @@ export function useWorkloadSetup({
         });
         setTrustedIssuer(connection.issuer);
       }
-      if (connection.subject !== admittedSubject) {
+      if (connectionRule !== admittedRule) {
         admitting = true;
         await admitSubject.mutateAsync({
           request: {
@@ -303,12 +307,14 @@ export function useWorkloadSetup({
               subject: connection.subject,
               matchKind: connection.matchKind,
               agentId: agentID,
-              tags: [],
+              // A replacement keeps the label and tags the old rule carried.
+              ...(replacing?.name ? { name: replacing.name } : {}),
+              tags: replacing?.tags ?? [],
             },
           },
         });
         admitting = false;
-        setAdmittedSubject(connection.subject);
+        setAdmittedRule(connectionRule);
       }
       if (replacing !== undefined && withdrawnID !== replacing.id) {
         replacingOld = true;
@@ -416,8 +422,8 @@ export function useWorkloadSetup({
     canConnect: connection !== null,
     connected:
       unchanged ||
-      (connection !== null &&
-        connection.subject === admittedSubject &&
+      (connectionRule !== null &&
+        connectionRule === admittedRule &&
         (replacing === undefined || withdrawnID === replacing.id)),
     error,
     values,
