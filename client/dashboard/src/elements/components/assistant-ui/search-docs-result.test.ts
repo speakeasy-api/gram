@@ -57,7 +57,9 @@ describe("findDocsExcerpts", () => {
       findDocsExcerpts({ docs: [{ path: "/docs/guides/github" }] }),
     ).toEqual([]);
     expect(
-      findDocsExcerpts("read speakeasy://platform-mcp/setup/acme/provider_setup"),
+      findDocsExcerpts(
+        "read speakeasy://platform-mcp/setup/acme/provider_setup",
+      ),
     ).toEqual([]);
     expect(findDocsExcerpts(undefined)).toEqual([]);
   });
