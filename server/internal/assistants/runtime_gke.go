@@ -365,7 +365,7 @@ func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string
 				return gkeRuntimeMetadata{}, fmt.Errorf("get sandbox %s: %w", sandboxName, err)
 			}
 			if err == nil && sandbox.Ready(resource) {
-				podIP, image, err := g.resolveRunnerPod(ctx, string(claim.GetUID()))
+				podIP, image, err := g.resolveRunnerPod(ctx, claim)
 				if err != nil {
 					return gkeRuntimeMetadata{}, err
 				}
@@ -391,17 +391,18 @@ func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string
 	}
 }
 
-// resolveRunnerPod finds the runner pod for a claim (by the controller-injected
-// claim-uid label) and returns its IP and container image once the pod is
-// Running. An empty IP means the pod is not scheduled/running yet, so the
-// caller keeps polling.
-func (g *GKERuntimeBackend) resolveRunnerPod(ctx context.Context, claimUID string) (podIP string, image string, err error) {
-	pods, err := sandbox.RunningPods(ctx, g.config.Dynamic, g.config.Namespace, claimUID)
+// resolveRunnerPod finds the claim's runner across managed controller versions.
+// An empty IP means the pod is not ready yet, so the caller keeps polling.
+func (g *GKERuntimeBackend) resolveRunnerPod(ctx context.Context, claim *unstructured.Unstructured) (podIP string, image string, err error) {
+	pods, err := sandbox.RunningPodsForClaim(ctx, g.config.Dynamic, g.config.Namespace, claim)
 	if err != nil {
-		return "", "", fmt.Errorf("list runner pods for claim %s: %w", claimUID, err)
+		return "", "", fmt.Errorf("list runner pods for claim %s: %w", claim.GetUID(), err)
 	}
 	if len(pods) == 0 {
 		return "", "", nil
+	}
+	if len(pods) != 1 {
+		return "", "", fmt.Errorf("sandbox claim must own exactly one running pod")
 	}
 	pod := &pods[0]
 	ip, _, _ := unstructured.NestedString(pod.Object, "status", "podIP")
@@ -532,7 +533,7 @@ func (g *GKERuntimeBackend) RecycleImage(ctx context.Context, runtime assistantR
 		return RuntimeBackendRecycleResult{}, fmt.Errorf("get sandbox claim %s: %w", name, err)
 	}
 
-	podIP, image, err := g.resolveRunnerPod(ctx, string(claim.GetUID()))
+	podIP, image, err := g.resolveRunnerPod(ctx, claim)
 	if err != nil {
 		return RuntimeBackendRecycleResult{}, err
 	}
