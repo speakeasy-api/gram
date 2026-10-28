@@ -87,7 +87,7 @@ export default function IdentityFindingsPage(): JSX.Element {
 
   if (!canReadRisk) {
     return (
-      <IdentitySection title="Findings">
+      <IdentitySection title="Findings" timeRange>
         <IdentityPanel title="Findings">
           <IdentityPanelEmpty>{RISK_UNAVAILABLE}</IdentityPanelEmpty>
         </IdentityPanel>
@@ -98,6 +98,7 @@ export default function IdentityFindingsPage(): JSX.Element {
   return (
     <IdentitySection
       title="Findings"
+      timeRange
       meta={sectionMeta([{ count: findings, singular: "finding" }])}
       action={
         <FindingsFilterControls

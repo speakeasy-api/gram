@@ -51,7 +51,7 @@ export function StepAuthentication({
   return (
     <div className="space-y-5">
       <WizardStepHeader
-        title="MCP authentication"
+        title="MCP Authentication"
         description="Choose how the agent connects to each selected MCP server. Open a row to manage its connection, or remove a server here."
       />
       {allServers && missing.length > 0 && (
@@ -65,7 +65,13 @@ export function StepAuthentication({
           Allow popups, then try connecting again.
         </Text>
       )}
-      <Accordion type="multiple" className="border-border border">
+      {/* The first row starts open, so the step shows what a connection
+          looks like without a click. */}
+      <Accordion
+        type="multiple"
+        defaultValue={servers[0] ? [servers[0].id] : []}
+        className="border-border border"
+      >
         {servers.map((server) => {
           const connection = displayedConnections.get(server.id);
           const shared =
