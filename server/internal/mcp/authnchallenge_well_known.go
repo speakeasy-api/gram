@@ -4,8 +4,8 @@
 // dispatch on mcp_servers.user_session_issuer_id — issuer-gated servers get
 // the new metadata shape keyed on the endpoint the request arrived at.
 // Servers without an mcp_endpoints row fall back to the legacy
-// toolsets.mcp_slug lookup, where toolsets.user_session_issuer_id gates the
-// shape and legacy toolsets fall through to wellknown.Resolve*.
+// toolsets.mcp_slug lookup, where the canonical server's issuer gates the
+// shape and toolsets without one fall through to wellknown.Resolve*.
 
 package mcp
 

@@ -206,8 +206,6 @@ func TestSetUserSessionIssuer_RejectsToolsetWithoutHostedServer(t *testing.T) {
 		Slug:                   "shim-unwrapped",
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 

@@ -1129,9 +1129,9 @@ type installContext struct {
 
 // isPublic returns true when the install page is accessible without auth.
 // When resolution went through an mcp_servers row — any backend, hosted
-// (toolset-backed) included — that row's visibility is authoritative; the
-// toolset's McpIsPublic flag only decides for pure legacy toolset routing
-// where no wrapper exists. Gateways (meta_mcp_servers) have no public
+// (toolset-backed) included — that row's visibility is authoritative; a
+// legacy slug route uses the hosting state of the toolset's canonical
+// server. Gateways (meta_mcp_servers) have no public
 // visibility, so their install page is always session-gated.
 func (ic *installContext) isPublic() bool {
 	if ic.mcpServer != nil {
@@ -2170,11 +2170,9 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 	server, err := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		hosting := hostedmcp.ServerHosting(toolset, nil)
-		if !hosting.Enabled {
-			return nil, hostingstate.NotHosted(), false, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
-		}
-		return &toolset, hosting, false, nil
+		s.logger.WarnContext(ctx, "legacy MCP alias names a toolset without a hosted MCP server; not serving it",
+			attr.SlogToolsetID(toolset.ID.String()), attr.SlogProjectID(toolset.ProjectID.String()))
+		return nil, hostingstate.NotHosted(), false, fmt.Errorf("%w: no hosted MCP server", errToolsetNotFound)
 	case err != nil:
 		return nil, hostingstate.NotHosted(), false, fmt.Errorf("load hosted MCP network policy: %w", err)
 	case !hostedmcp.IsCanonical(&server, toolset.ID):
@@ -2200,8 +2198,8 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 // When an mcp_servers row is present (server non-nil) it governs: OAuth is
 // decided by the wrapper's user_session_issuer with the toolset's external
 // OAuth reference as the only toolset input, and publicness comes from the
-// wrapper's visibility. The legacy toolset flags decide only for pure toolset
-// routing where no wrapper exists.
+// wrapper's visibility. Legacy slug routing passes the canonical server's
+// hosting state instead.
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, hosting hostingstate.Hosting, server *mcpservers_repo.McpServer) securityMode {
 	if server != nil {
 		sessionGated := server.UserSessionIssuerID.Valid ||

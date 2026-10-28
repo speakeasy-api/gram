@@ -358,19 +358,8 @@ func attachCustomDomainToToolset(
 	})
 	require.NoError(t, err)
 
-	toolset, err = toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            toolset.McpIsPublic,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpEnabled:             toolset.McpEnabled,
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, toolset.McpSlug.String, uuid.NullUUID{UUID: domain.ID, Valid: true})
+	toolset.CustomDomainID = uuid.NullUUID{UUID: domain.ID, Valid: true}
 
 	return toolset, domain
 }

@@ -87,16 +87,10 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 		Slug:                   otherSlug,
 		Description:            conv.ToPGText("Alternate OAuth endpoint surface"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(otherSlug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	otherToolset, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                otherToolset.Slug,
-		ProjectID:           otherToolset.ProjectID,
-	})
-	require.NoError(t, err)
+	otherToolset = hostLegacyToolset(t, ctx, ti, otherToolset, otherSlug, "private", noIssuer())
+	otherToolset = setToolsetIssuer(t, ctx, ti.conn, otherToolset.ProjectID, otherToolset, issuer.ID)
 
 	otherEndpoint := performRefresh(otherSlug, client.ClientID, refreshToken)
 	require.NoError(t, otherEndpoint.err)
