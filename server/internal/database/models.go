@@ -3178,7 +3178,7 @@ type McpAuthClientGithubApp struct {
 	AppID int64
 	// @access: confidential
 	InstallationID int64
-	// @access: secret
+	// @access: secret-restricted
 	PrivateKeyEncrypted string
 	// @access: confidential
 	UpstreamOrigin string
