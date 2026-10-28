@@ -51,6 +51,14 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
+vi.mock("@gram/client/react-query/authClients.js", () => ({
+  useAuthClients: () => ({
+    data: { result: { items: [] } },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
   useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
 }));

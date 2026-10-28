@@ -2,14 +2,12 @@ package authclients
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -91,6 +89,10 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
 	}
+	lockedTarget, err := queries.LockGitHubAppServerURL(ctx, repo.LockGitHubAppServerURLParams{McpServerID: serverID, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil || lockedTarget != target {
+		return nil, oops.E(oops.CodeBadRequest, nil, "MCP destination changed during verification; retry configuration")
+	}
 	var client repo.McpAuthClient
 	var before *types.AuthClient
 	if payload.ID != nil {
@@ -105,8 +107,12 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 		if client.ClientType != "service_account" || client.RemoteSessionClientID.Valid || (client.ProjectID.Valid && client.ProjectID.UUID != server.ProjectID) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "auth client is not a GitHub App in this project")
 		}
-		if _, err := queries.GetGitHubAppConfiguration(ctx, repo.GetGitHubAppConfigurationParams{AuthClientID: id, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		existing, err := queries.GetGitHubAppConfiguration(ctx, repo.GetGitHubAppConfigurationParams{AuthClientID: id, OrganizationID: authCtx.ActiveOrganizationID})
+		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, nil, "auth client is not a GitHub App")
+		}
+		if existing.UpstreamOrigin != origin {
+			return nil, oops.E(oops.CodeBadRequest, nil, "create a separate GitHub App service account for a different MCP origin")
 		}
 		before, err = s.view(ctx, queries, authCtx.ActiveOrganizationID, client, logger)
 		if err != nil {
@@ -145,15 +151,4 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 		return nil, fmt.Errorf("save GitHub App: %w", err)
 	}
 	return after, nil
-}
-
-func githubAppView(ctx context.Context, queries *repo.Queries, organizationID string, clientID uuid.UUID) (*types.GitHubAppConfiguration, error) {
-	config, err := queries.GetGitHubAppConfiguration(ctx, repo.GetGitHubAppConfigurationParams{OrganizationID: organizationID, AuthClientID: clientID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &types.GitHubAppConfiguration{InstanceURL: config.InstanceUrl, AppID: strconv.FormatInt(config.AppID, 10), InstallationID: strconv.FormatInt(config.InstallationID, 10), UpstreamOrigin: config.UpstreamOrigin}, nil
 }

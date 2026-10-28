@@ -1040,6 +1040,82 @@ func (q *Queries) ListAuthClients(ctx context.Context, arg ListAuthClientsParams
 	return items, nil
 }
 
+const listGitHubAppConfigurations = `-- name: ListGitHubAppConfigurations :many
+SELECT auth_client_id, instance_url, app_id, installation_id, upstream_origin
+FROM mcp_auth_client_github_apps
+WHERE organization_id = $1 AND auth_client_id = ANY($2::uuid[])
+`
+
+type ListGitHubAppConfigurationsParams struct {
+	OrganizationID string
+	AuthClientIds  []uuid.UUID
+}
+
+type ListGitHubAppConfigurationsRow struct {
+	AuthClientID   uuid.UUID
+	InstanceUrl    string
+	AppID          int64
+	InstallationID int64
+	UpstreamOrigin string
+}
+
+func (q *Queries) ListGitHubAppConfigurations(ctx context.Context, arg ListGitHubAppConfigurationsParams) ([]ListGitHubAppConfigurationsRow, error) {
+	rows, err := q.db.Query(ctx, listGitHubAppConfigurations, arg.OrganizationID, arg.AuthClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGitHubAppConfigurationsRow
+	for rows.Next() {
+		var i ListGitHubAppConfigurationsRow
+		if err := rows.Scan(
+			&i.AuthClientID,
+			&i.InstanceUrl,
+			&i.AppID,
+			&i.InstallationID,
+			&i.UpstreamOrigin,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGitHubAppServers = `-- name: ListGitHubAppServers :many
+SELECT DISTINCT a.mcp_server_id FROM mcp_server_auth_clients a
+JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+WHERE a.organization_id = $1 AND a.mcp_server_id = ANY($2::uuid[])
+`
+
+type ListGitHubAppServersParams struct {
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+func (q *Queries) ListGitHubAppServers(ctx context.Context, arg ListGitHubAppServersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listGitHubAppServers, arg.OrganizationID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIssuanceProfileChoices = `-- name: ListIssuanceProfileChoices :many
 SELECT sel.credential_id AS profile_id,
        sel.mcp_server_id,
@@ -1376,6 +1452,26 @@ func (q *Queries) LockAuthClientOfferingServers(ctx context.Context, arg LockAut
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockGitHubAppServerURL = `-- name: LockGitHubAppServerURL :one
+SELECT r.url FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id AND p.organization_id = $1 AND NOT p.deleted
+JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND NOT r.deleted
+WHERE m.id = $2 AND NOT m.deleted
+FOR UPDATE OF m, r
+`
+
+type LockGitHubAppServerURLParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+}
+
+func (q *Queries) LockGitHubAppServerURL(ctx context.Context, arg LockGitHubAppServerURLParams) (string, error) {
+	row := q.db.QueryRow(ctx, lockGitHubAppServerURL, arg.OrganizationID, arg.McpServerID)
+	var url string
+	err := row.Scan(&url)
+	return url, err
 }
 
 const lockIssuanceProfile = `-- name: LockIssuanceProfile :one

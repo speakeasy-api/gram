@@ -298,6 +298,9 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 			gate.memberChoices.apply(ctx, logger, members, true)
 		}
 	}
+	if err == nil {
+		err = s.rejectLegacyGitHubMembers(ctx, gate.organizationID, members)
+	}
 	return ctx, members, err
 }
 

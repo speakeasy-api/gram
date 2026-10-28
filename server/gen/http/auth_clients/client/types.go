@@ -3766,6 +3766,12 @@ func NewConfigureGitHubAppAuthClientRequestBody(p *authclients.ConfigureGitHubAp
 		PrivateKey:     p.PrivateKey,
 		UpstreamOrigin: p.UpstreamOrigin,
 	}
+	{
+		var zero string
+		if body.InstanceURL == zero {
+			body.InstanceURL = "https://github.com"
+		}
+	}
 	return body
 }
 

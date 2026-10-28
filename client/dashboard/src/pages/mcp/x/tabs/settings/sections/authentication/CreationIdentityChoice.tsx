@@ -136,7 +136,11 @@ export function CreationIdentityChoice({
         />
       ) : null}
       {value === "agent" && githubApp && onGitHubAppChange ? (
-        <GitHubAppFields value={githubApp} onChange={onGitHubAppChange} />
+        <GitHubAppFields
+          value={githubApp}
+          onChange={onGitHubAppChange}
+          disabled={!canConfigureGitHub}
+        />
       ) : value === "agent" && serviceAccountPanel ? (
         <div className="pt-2">{serviceAccountPanel}</div>
       ) : value === "agent" ? (
