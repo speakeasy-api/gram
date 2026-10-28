@@ -135,7 +135,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
-	server.SetUserSessionIssuer = middleware.DeprecatedEndpoint(setUserSessionIssuerDeprecatedAt, setUserSessionIssuerSunset)(server.SetUserSessionIssuer)
 	srv.Mount(mux, server)
 }
 
