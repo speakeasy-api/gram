@@ -1,3 +1,5 @@
+import { GitHubAppFields } from "@/lib/remote-identity/components/GitHubAppFields";
+import { useGitHubAppDraft } from "@/lib/remote-identity/drafts/useGitHubAppDraft";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -163,7 +165,15 @@ export function RemoteMcpIdentitySectionBody({
   const headers = headersQuery.data?.headers ?? [];
   const authorizationHeader = findStaticAuthorizationHeader(headers);
   const passThroughAuthorization = findPassThroughAuthorizationHeader(headers);
-  const identityQueryError = headersQuery.isError || clientsError;
+  const githubDraft = useGitHubAppDraft(
+    target.permissionResourceId,
+    sourceQuery.data?.url,
+    sourceQuery.data?.name ?? "GitHub",
+    !rbacLoading && hasScope("org:read"),
+  );
+  const canManageGitHub = !rbacLoading && hasScope("org:admin");
+  const identityQueryError =
+    headersQuery.isError || clientsError || githubDraft.error;
   // A service account client (credential_owner self) is bound the same way as
   // a per-user one, but it is the Service Account choice: one credential every
   // caller shares, obtained by the client rather than pasted as a header.
@@ -175,11 +185,14 @@ export function RemoteMcpIdentitySectionBody({
   );
   const actualMode = identityQueryError
     ? null
-    : selfClient
+    : selfClient || githubDraft.bound
       ? "agent"
       : deriveIdentityMode(subjectClients.length, headers);
   const loading =
-    headersQuery.isLoading || clientsLoading || siblingsQuery.isLoading;
+    headersQuery.isLoading ||
+    clientsLoading ||
+    siblingsQuery.isLoading ||
+    githubDraft.loading;
   const identityResolved = !loading && !identityQueryError;
   const [selectedMode, setSelectedMode] = useState<IdentityMode>("none");
   // Raised by Save when it would remove an existing identity, which is the
@@ -281,13 +294,16 @@ export function RemoteMcpIdentitySectionBody({
   );
   const saFormat: ServiceAccountFormat =
     formatPick ??
-    (selfClient
-      ? oauthFormatOf(selfClient)
-      : agentDraft.format === "client-credentials"
-        ? "bearer"
-        : agentDraft.format);
+    (githubDraft.bound
+      ? "github-app"
+      : selfClient
+        ? oauthFormatOf(selfClient)
+        : agentDraft.format === "client-credentials"
+          ? "bearer"
+          : agentDraft.format);
   const oauthFormat =
     selectedMode === "agent" && isOAuthFormat(saFormat) ? saFormat : null;
+  const githubSelected = selectedMode === "agent" && saFormat === "github-app";
   const oauthSelected = oauthFormat !== null;
 
   // The pin belongs to the server's protected resource; the panel shows it to
@@ -399,7 +415,10 @@ export function RemoteMcpIdentitySectionBody({
   const sharedIssuerImpact = useSharedIssuerImpact(impactRequest);
   const repointLookupPending = sharedIssuerImpact.pending;
   const needsConfirm =
-    destructive || needsSharedIssuerConfirm(sharedIssuerImpact);
+    destructive ||
+    (githubSelected &&
+      (!!selfClient || !!authorizationHeader || actualMode === "user")) ||
+    needsSharedIssuerConfirm(sharedIssuerImpact);
 
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
@@ -484,6 +503,7 @@ export function RemoteMcpIdentitySectionBody({
     !!selfClient &&
     selectedMode === "agent" &&
     !oauthSelected &&
+    !githubSelected &&
     !agentDraft.canSave &&
     !authorizationHeader;
   // Leaving User for a service account client keeps the user client until
@@ -507,58 +527,66 @@ export function RemoteMcpIdentitySectionBody({
     // signing key client, and a second one would delete it again.
     let draftReset = false;
     try {
-      // Binding a service account client replaces the user clients in the
-      // same commit, so they are only detached here when nothing is bound.
-      if (leavingUser && !oauthFormat) await detachUserIdentity();
-      // Leaving for a static credential unbinds the client only once that
-      // credential is written, below.
-      if (removingSelf) {
-        await detachSelfClient();
-        clientDraft.reset();
-        draftReset = true;
-      }
-      if (oauthFormat) {
-        // Bind first, so a failed commit never leaves the server with no
-        // identity; then drop the static credential the client replaces. An
-        // unchanged bound client has nothing to bind, and a header or pin
-        // edit still goes through.
-        const binding = clientDraft.canSave(oauthFormat);
-        if (binding && !(await clientDraft.save(oauthFormat))) return;
-        if (replacingCredential) await deleteStaticCredential();
-        if (binding) setFormatPick(null);
-      } else if (selectedMode === "user" && leavingAgent) {
-        // Bind the client before dropping the credential, so a failed commit
-        // never leaves the server with no identity; the client outranks the
-        // header while both exist.
-        if (!(await userDraft.save())) return;
-        await removeAgentCredential();
+      if (githubSelected) {
+        if (!canManageGitHub) return;
+        if (githubDraft.canSave && !(await githubDraft.save())) return;
+        if (!githubDraft.bound && !githubDraft.canSave) return;
+        setFormatPick(null);
       } else {
-        if (leavingAgent) await removeAgentCredential();
-        if (selectedMode === "agent") {
-          const written = await agentDraft.save();
-          if (leavingSelf) {
-            // A failed write has already said so; stop there. Otherwise
-            // unbind only with a credential to fall back on, new or already
-            // on the server, or the server is left with no identity.
-            if (agentDraft.canSave && !written) return;
-            if (written || authorizationHeader) {
-              await detachSelfClient();
-              clientDraft.reset();
-              draftReset = true;
-            }
-          }
-        } else if (
-          selectedMode === "user" &&
-          (actualMode !== "user" || userDraft.canSave)
-        ) {
-          // A pin or header edit alone must not recommit the connected client.
-          await userDraft.save();
+        // Binding a service account client replaces the user clients in the
+        // same commit, so they are only detached here when nothing is bound.
+        if (leavingUser && !oauthFormat) await detachUserIdentity();
+        // Leaving for a static credential unbinds the client only once that
+        // credential is written, below.
+        if (removingSelf) {
+          await detachSelfClient();
+          clientDraft.reset();
+          draftReset = true;
         }
-      }
-      // A signing key client made for the Service Account choice and left
-      // behind by a save that chose otherwise is never bound, so it goes.
-      if (!oauthFormat && clientDraft.created && !draftReset) {
-        clientDraft.reset();
+        if (oauthFormat) {
+          // Bind first, so a failed commit never leaves the server with no
+          // identity; then drop the static credential the client replaces. An
+          // unchanged bound client has nothing to bind, and a header or pin
+          // edit still goes through.
+          const binding = clientDraft.canSave(oauthFormat);
+          if (binding && !(await clientDraft.save(oauthFormat))) return;
+          if (replacingCredential) await deleteStaticCredential();
+          if (binding) setFormatPick(null);
+        } else if (selectedMode === "user" && leavingAgent) {
+          // Bind the client before dropping the credential, so a failed commit
+          // never leaves the server with no identity; the client outranks the
+          // header while both exist.
+          if (!(await userDraft.save())) return;
+          await removeAgentCredential();
+        } else {
+          if (leavingAgent) await removeAgentCredential();
+          if (selectedMode === "agent") {
+            const written = await agentDraft.save();
+            if (leavingSelf) {
+              // A failed write has already said so; stop there. Otherwise
+              // unbind only with a credential to fall back on, new or already
+              // on the server, or the server is left with no identity.
+              if (agentDraft.canSave && !written) return;
+              if (written || authorizationHeader) {
+                await detachSelfClient();
+                clientDraft.reset();
+                draftReset = true;
+              }
+            }
+          } else if (
+            selectedMode === "user" &&
+            (actualMode !== "user" || userDraft.canSave)
+          ) {
+            // A pin or header edit alone must not recommit the connected client.
+            await userDraft.save();
+          }
+        }
+        if (githubDraft.bound) await githubDraft.detach();
+        // A signing key client made for the Service Account choice and left
+        // behind by a save that chose otherwise is never bound, so it goes.
+        if (!oauthFormat && clientDraft.created && !draftReset) {
+          clientDraft.reset();
+        }
       }
     } catch (error) {
       toast.error(errorMessage(error, "Failed to save identity"));
@@ -606,7 +634,9 @@ export function RemoteMcpIdentitySectionBody({
   // mode, and it disappears into a disabled state when there is nothing to do
   // rather than sprouting a button per sub-form.
   let identityCanSave: boolean;
-  if (selectedMode === "user") {
+  if (githubSelected) {
+    identityCanSave = canManageGitHub && githubDraft.canSave;
+  } else if (selectedMode === "user") {
     identityCanSave = userDraft.canSave;
   } else if (oauthFormat) {
     identityCanSave = clientDraft.canSave(oauthFormat);
@@ -632,6 +662,8 @@ export function RemoteMcpIdentitySectionBody({
     headerDrafts.isDirty && headerDrafts.validationError !== null;
   const headersReason = headersBlocked && headerDrafts.reportErrors;
   const canSave =
+    (!githubSelected ||
+      (canManageGitHub && (!!githubDraft.bound || githubDraft.canSave))) &&
     !headersBlocked &&
     !userSwitchBlocked &&
     !userEditIncomplete &&
@@ -639,6 +671,7 @@ export function RemoteMcpIdentitySectionBody({
     !oauthSwitchBlocked &&
     (identityCanSave || headerDrafts.isDirty || scopePinDirty);
   const savePending =
+    githubDraft.saving ||
     detachIssuer.isPending ||
     scopePin.saving ||
     saving ||
@@ -874,6 +907,25 @@ export function RemoteMcpIdentitySectionBody({
             <div className="px-6 py-5">
               <ServiceAccountPanel
                 format={saFormat}
+                githubAppFields={
+                  <div className="space-y-3">
+                    <GitHubAppFields
+                      value={githubDraft.value}
+                      onChange={githubDraft.setDraft}
+                      disabled={
+                        identityReadOnly ||
+                        !canManageGitHub ||
+                        githubDraft.saving
+                      }
+                    />
+                    {!canManageGitHub ? (
+                      <Text small muted>
+                        Organization administrator access is required to
+                        configure a GitHub App.
+                      </Text>
+                    ) : null}
+                  </div>
+                }
                 onFormatChange={setFormatPick}
                 agentDraft={agentDraft}
                 clientDraft={clientDraft}

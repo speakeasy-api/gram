@@ -17,6 +17,10 @@ import (
 
 // Client lists the authClients service endpoint HTTP clients.
 type Client struct {
+	// ConfigureGitHubAppAuthClient Doer is the HTTP client used to make requests
+	// to the configureGitHubAppAuthClient endpoint.
+	ConfigureGitHubAppAuthClientDoer goahttp.Doer
+
 	// ListAuthClients Doer is the HTTP client used to make requests to the
 	// listAuthClients endpoint.
 	ListAuthClientsDoer goahttp.Doer
@@ -69,6 +73,7 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		ConfigureGitHubAppAuthClientDoer:        doer,
 		ListAuthClientsDoer:                     doer,
 		GetAuthClientDoer:                       doer,
 		UpdateAuthClientDoer:                    doer,
@@ -82,6 +87,30 @@ func NewClient(
 		host:                                    host,
 		decoder:                                 dec,
 		encoder:                                 enc,
+	}
+}
+
+// ConfigureGitHubAppAuthClient returns an endpoint that makes HTTP requests to
+// the authClients service configureGitHubAppAuthClient server.
+func (c *Client) ConfigureGitHubAppAuthClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeConfigureGitHubAppAuthClientRequest(c.encoder)
+		decodeResponse = DecodeConfigureGitHubAppAuthClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildConfigureGitHubAppAuthClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ConfigureGitHubAppAuthClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("authClients", "configureGitHubAppAuthClient", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

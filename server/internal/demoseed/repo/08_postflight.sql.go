@@ -308,6 +308,17 @@ func (q *Queries) PostflightCountGatewayMembers(ctx context.Context, projectID u
 	return count, err
 }
 
+const postflightCountGitHubApps = `-- name: PostflightCountGitHubApps :one
+SELECT count(*)::bigint FROM mcp_auth_client_github_apps WHERE organization_id = $1
+`
+
+func (q *Queries) PostflightCountGitHubApps(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountGitHubApps, orgID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const postflightCountHTTPTools = `-- name: PostflightCountHTTPTools :one
 SELECT count(*)
 FROM http_tool_definitions WHERE project_id = $1::uuid AND deleted IS FALSE

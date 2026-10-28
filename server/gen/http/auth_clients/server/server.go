@@ -19,6 +19,7 @@ import (
 // Server lists the authClients service endpoint HTTP handlers.
 type Server struct {
 	Mounts                              []*MountPoint
+	ConfigureGitHubAppAuthClient        http.Handler
 	ListAuthClients                     http.Handler
 	GetAuthClient                       http.Handler
 	UpdateAuthClient                    http.Handler
@@ -56,6 +57,7 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"ConfigureGitHubAppAuthClient", "POST", "/rpc/authClients.configureGitHubApp"},
 			{"ListAuthClients", "GET", "/rpc/authClients.list"},
 			{"GetAuthClient", "GET", "/rpc/authClients.get"},
 			{"UpdateAuthClient", "POST", "/rpc/authClients.update"},
@@ -65,6 +67,7 @@ func New(
 			{"GetAuthClientAudience", "GET", "/rpc/authClients.getAudience"},
 			{"SetAuthClientAudience", "POST", "/rpc/authClients.setAudience"},
 		},
+		ConfigureGitHubAppAuthClient:        NewConfigureGitHubAppAuthClientHandler(e.ConfigureGitHubAppAuthClient, mux, decoder, encoder, errhandler, formatter),
 		ListAuthClients:                     NewListAuthClientsHandler(e.ListAuthClients, mux, decoder, encoder, errhandler, formatter),
 		GetAuthClient:                       NewGetAuthClientHandler(e.GetAuthClient, mux, decoder, encoder, errhandler, formatter),
 		UpdateAuthClient:                    NewUpdateAuthClientHandler(e.UpdateAuthClient, mux, decoder, encoder, errhandler, formatter),
@@ -81,6 +84,7 @@ func (s *Server) Service() string { return "authClients" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.ConfigureGitHubAppAuthClient = m(s.ConfigureGitHubAppAuthClient)
 	s.ListAuthClients = m(s.ListAuthClients)
 	s.GetAuthClient = m(s.GetAuthClient)
 	s.UpdateAuthClient = m(s.UpdateAuthClient)
@@ -96,6 +100,7 @@ func (s *Server) MethodNames() []string { return authclients.MethodNames[:] }
 
 // Mount configures the mux to serve the authClients endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountConfigureGitHubAppAuthClientHandler(mux, h.ConfigureGitHubAppAuthClient)
 	MountListAuthClientsHandler(mux, h.ListAuthClients)
 	MountGetAuthClientHandler(mux, h.GetAuthClient)
 	MountUpdateAuthClientHandler(mux, h.UpdateAuthClient)
@@ -109,6 +114,60 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the authClients endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountConfigureGitHubAppAuthClientHandler configures the mux to serve the
+// "authClients" service "configureGitHubAppAuthClient" endpoint.
+func MountConfigureGitHubAppAuthClientHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/authClients.configureGitHubApp", f)
+}
+
+// NewConfigureGitHubAppAuthClientHandler creates a HTTP handler which loads
+// the HTTP request and calls the "authClients" service
+// "configureGitHubAppAuthClient" endpoint.
+func NewConfigureGitHubAppAuthClientHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeConfigureGitHubAppAuthClientRequest(mux, decoder)
+		encodeResponse = EncodeConfigureGitHubAppAuthClientResponse(encoder)
+		encodeError    = EncodeConfigureGitHubAppAuthClientError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "configureGitHubAppAuthClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "authClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountListAuthClientsHandler configures the mux to serve the "authClients"

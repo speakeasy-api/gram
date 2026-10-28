@@ -16,6 +16,7 @@ import (
 
 // Endpoints wraps the "authClients" service endpoints.
 type Endpoints struct {
+	ConfigureGitHubAppAuthClient        goa.Endpoint
 	ListAuthClients                     goa.Endpoint
 	GetAuthClient                       goa.Endpoint
 	UpdateAuthClient                    goa.Endpoint
@@ -31,6 +32,7 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		ConfigureGitHubAppAuthClient:        NewConfigureGitHubAppAuthClientEndpoint(s, a.APIKeyAuth),
 		ListAuthClients:                     NewListAuthClientsEndpoint(s, a.APIKeyAuth),
 		GetAuthClient:                       NewGetAuthClientEndpoint(s, a.APIKeyAuth),
 		UpdateAuthClient:                    NewUpdateAuthClientEndpoint(s, a.APIKeyAuth),
@@ -44,6 +46,7 @@ func NewEndpoints(s Service) *Endpoints {
 
 // Use applies the given middleware to all the "authClients" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.ConfigureGitHubAppAuthClient = m(e.ConfigureGitHubAppAuthClient)
 	e.ListAuthClients = m(e.ListAuthClients)
 	e.GetAuthClient = m(e.GetAuthClient)
 	e.UpdateAuthClient = m(e.UpdateAuthClient)
@@ -52,6 +55,41 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SetMcpServerUpstreamAuthRequirement = m(e.SetMcpServerUpstreamAuthRequirement)
 	e.GetAuthClientAudience = m(e.GetAuthClientAudience)
 	e.SetAuthClientAudience = m(e.SetAuthClientAudience)
+}
+
+// NewConfigureGitHubAppAuthClientEndpoint returns an endpoint function that
+// calls the method "configureGitHubAppAuthClient" of service "authClients".
+func NewConfigureGitHubAppAuthClientEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ConfigureGitHubAppAuthClientPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ConfigureGitHubAppAuthClient(ctx, p)
+	}
 }
 
 // NewListAuthClientsEndpoint returns an endpoint function that calls the

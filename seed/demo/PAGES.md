@@ -427,3 +427,7 @@ Browser verification: [~] — follow check 33 in `seed/demo/verify.md`.
 - This is display-only trust configuration: no working platform key, token, API key, or inference session is seeded. Runtime exchange uses the shared issuer token endpoint with `resource=urn:speakeasy:inference` and `project_id`; returned access tokens are for `/chat/completions`, not MCP.
 - Reseeding removes workload trust and agent rows through the existing organization-scoped cleanup, and explicitly removes the owner's deterministic direct grant before recreating it. Postflight checks verify the exact trust chain and both project-scoped grants, and reject additional inference grants.
 - Browser verification and live reseeding have not been run for this addition.
+
+### GitHub App service account
+
+The GitHub MCP server offers a disabled **GitHub App (demo — disabled)** service account. Its instance, app, and installation fields illustrate the configuration; its placeholder private key cannot mint a token. Inspect Settings → Identity → Service Account → GitHub App. The provider row is removed through the auth client's project cascade on reseed, and postflight checks require exactly one demo GitHub App row.

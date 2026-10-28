@@ -1,3 +1,7 @@
+import {
+  gitHubAppReady,
+  type GitHubAppDraft,
+} from "@/lib/remote-identity/components/GitHubAppFields";
 import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
 import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
@@ -72,6 +76,7 @@ function CreateRemoteMcpForm() {
     useState<RemoteMcpCreationIdentity>("none");
   const [identityChoiceTouched, setIdentityChoiceTouched] = useState(false);
   const agentCredential = useAgentCredentialFields();
+  const [githubApp, setGitHubApp] = useState<GitHubAppDraft | undefined>();
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
@@ -180,6 +185,7 @@ function CreateRemoteMcpForm() {
           organizationOwnedUserSessionIssuer:
             selectedIssuer !== PROJECT_SPECIFIC_ISSUER_VALUE,
           identityMode,
+          githubApp: identityMode === "agent" ? githubApp : undefined,
           agentAuthorization:
             identityMode === "agent"
               ? agentCredential.authorizationValue.trim()
@@ -373,6 +379,8 @@ function CreateRemoteMcpForm() {
                 setIdentityMode(next);
               }}
               credential={agentCredential}
+              githubApp={githubApp}
+              onGitHubAppChange={setGitHubApp}
               upstreamName={upstreamName}
               advertisesOAuth={
                 verify.result?.outcome === "authentication_required"
@@ -381,6 +389,7 @@ function CreateRemoteMcpForm() {
                 verify.result?.outcome === "authentication_required"
               }
               canCreateIdentity={canCreateIdentity}
+              canConfigureGitHub={!rbacLoading && hasScope("org:admin")}
               rbacLoading={rbacLoading}
             />
           ) : null}
@@ -415,7 +424,9 @@ function CreateRemoteMcpForm() {
                 (mode === "proxied" &&
                   isVerified &&
                   identityMode === "agent" &&
-                  agentCredential.authorizationValue.trim() === "") ||
+                  (githubApp
+                    ? !hasScope("org:admin") || !gitHubAppReady(githubApp)
+                    : agentCredential.authorizationValue.trim() === "")) ||
                 (mode === "proxied" &&
                   isVerified &&
                   identityMode === "user" &&

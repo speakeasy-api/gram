@@ -12,6 +12,66 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const attachGitHubAppAuthClient = `-- name: AttachGitHubAppAuthClient :exec
+INSERT INTO mcp_server_auth_clients (organization_id, project_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT ac.organization_id, $1::uuid, $2, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients ac
+WHERE ac.id = $3 AND ac.organization_id = $4 AND NOT ac.deleted
+ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO UPDATE SET deleted_at = NULL, source = 'admin', updated_at = clock_timestamp()
+`
+
+type AttachGitHubAppAuthClientParams struct {
+	ProjectID      uuid.UUID
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) AttachGitHubAppAuthClient(ctx context.Context, arg AttachGitHubAppAuthClientParams) error {
+	_, err := q.db.Exec(ctx, attachGitHubAppAuthClient,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.AuthClientID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
+const createGitHubAppAuthClient = `-- name: CreateGitHubAppAuthClient :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
+VALUES ($1, $2, 'service_account', 'admin', $3)
+RETURNING id, organization_id, project_id, attachment_scope, client_type, source, name, enabled, created_by_user_id, remote_session_client_id, client_attachment_scope, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateGitHubAppAuthClientParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+}
+
+func (q *Queries) CreateGitHubAppAuthClient(ctx context.Context, arg CreateGitHubAppAuthClientParams) (McpAuthClient, error) {
+	row := q.db.QueryRow(ctx, createGitHubAppAuthClient, arg.OrganizationID, arg.ProjectID, arg.Name)
+	var i McpAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AttachmentScope,
+		&i.ClientType,
+		&i.Source,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedByUserID,
+		&i.RemoteSessionClientID,
+		&i.ClientAttachmentScope,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const detachAuthClientFromServer = `-- name: DetachAuthClientFromServer :one
 UPDATE mcp_server_auth_clients msac
 SET deleted_at = clock_timestamp(),
@@ -94,6 +154,86 @@ func (q *Queries) GetAuthClient(ctx context.Context, arg GetAuthClientParams) (M
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getGitHubAppConfiguration = `-- name: GetGitHubAppConfiguration :one
+SELECT instance_url, app_id, installation_id, upstream_origin
+FROM mcp_auth_client_github_apps
+WHERE auth_client_id = $1 AND organization_id = $2
+`
+
+type GetGitHubAppConfigurationParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+type GetGitHubAppConfigurationRow struct {
+	InstanceUrl    string
+	AppID          int64
+	InstallationID int64
+	UpstreamOrigin string
+}
+
+func (q *Queries) GetGitHubAppConfiguration(ctx context.Context, arg GetGitHubAppConfigurationParams) (GetGitHubAppConfigurationRow, error) {
+	row := q.db.QueryRow(ctx, getGitHubAppConfiguration, arg.AuthClientID, arg.OrganizationID)
+	var i GetGitHubAppConfigurationRow
+	err := row.Scan(
+		&i.InstanceUrl,
+		&i.AppID,
+		&i.InstallationID,
+		&i.UpstreamOrigin,
+	)
+	return i, err
+}
+
+const getGitHubAppCredential = `-- name: GetGitHubAppCredential :one
+SELECT g.auth_client_id, g.organization_id, g.instance_url, g.app_id, g.installation_id, g.private_key_encrypted, g.upstream_origin, g.credential_version
+FROM mcp_auth_client_github_apps g
+JOIN mcp_auth_clients ac ON ac.id = g.auth_client_id AND ac.organization_id = g.organization_id
+WHERE g.auth_client_id = $1 AND g.organization_id = $2
+  AND ac.client_type = 'service_account' AND ac.remote_session_client_id IS NULL
+  AND ac.enabled AND NOT ac.deleted
+  AND (ac.project_id IS NULL OR EXISTS (SELECT 1 FROM projects p WHERE p.id = ac.project_id AND p.organization_id = ac.organization_id AND NOT p.deleted))
+`
+
+type GetGitHubAppCredentialParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetGitHubAppCredential(ctx context.Context, arg GetGitHubAppCredentialParams) (McpAuthClientGithubApp, error) {
+	row := q.db.QueryRow(ctx, getGitHubAppCredential, arg.AuthClientID, arg.OrganizationID)
+	var i McpAuthClientGithubApp
+	err := row.Scan(
+		&i.AuthClientID,
+		&i.OrganizationID,
+		&i.InstanceUrl,
+		&i.AppID,
+		&i.InstallationID,
+		&i.PrivateKeyEncrypted,
+		&i.UpstreamOrigin,
+		&i.CredentialVersion,
+	)
+	return i, err
+}
+
+const getGitHubAppServerURL = `-- name: GetGitHubAppServerURL :one
+SELECT r.url FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id AND p.organization_id = $1 AND NOT p.deleted
+JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND NOT r.deleted
+WHERE m.id = $2 AND NOT m.deleted
+`
+
+type GetGitHubAppServerURLParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+}
+
+func (q *Queries) GetGitHubAppServerURL(ctx context.Context, arg GetGitHubAppServerURLParams) (string, error) {
+	row := q.db.QueryRow(ctx, getGitHubAppServerURL, arg.OrganizationID, arg.McpServerID)
+	var url string
+	err := row.Scan(&url)
+	return url, err
 }
 
 const getOrganizationMCPServer = `-- name: GetOrganizationMCPServer :one
@@ -543,6 +683,85 @@ func (q *Queries) LockOrganizationMCPServer(ctx context.Context, arg LockOrganiz
 		&i.ToolsetID,
 	)
 	return i, err
+}
+
+const replaceServerAuthWithGitHubApp = `-- name: ReplaceServerAuthWithGitHubApp :exec
+WITH retired AS (
+ UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp(), source = 'admin', updated_at = clock_timestamp()
+ WHERE mcp_server_id = $1 AND organization_id = $2
+   AND auth_client_id <> $3 AND NOT deleted
+), oauth AS (
+ UPDATE mcp_server_remote_session_clients SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE mcp_server_id = $1 AND organization_id = $2 AND NOT deleted
+)
+UPDATE mcp_servers m SET requires_upstream_auth = TRUE, updated_at = clock_timestamp()
+FROM projects p WHERE m.id = $1 AND m.project_id = p.id
+ AND p.organization_id = $2 AND NOT m.deleted AND NOT p.deleted
+`
+
+type ReplaceServerAuthWithGitHubAppParams struct {
+	McpServerID    uuid.UUID
+	OrganizationID string
+	AuthClientID   uuid.UUID
+}
+
+func (q *Queries) ReplaceServerAuthWithGitHubApp(ctx context.Context, arg ReplaceServerAuthWithGitHubAppParams) error {
+	_, err := q.db.Exec(ctx, replaceServerAuthWithGitHubApp, arg.McpServerID, arg.OrganizationID, arg.AuthClientID)
+	return err
+}
+
+const serverHasGitHubAppAuthClient = `-- name: ServerHasGitHubAppAuthClient :one
+SELECT EXISTS (
+ SELECT 1 FROM mcp_server_auth_clients a
+ JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+ WHERE a.mcp_server_id = $1 AND a.organization_id = $2
+) AS present
+`
+
+type ServerHasGitHubAppAuthClientParams struct {
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ServerHasGitHubAppAuthClient(ctx context.Context, arg ServerHasGitHubAppAuthClientParams) (bool, error) {
+	row := q.db.QueryRow(ctx, serverHasGitHubAppAuthClient, arg.McpServerID, arg.OrganizationID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
+}
+
+const setGitHubAppCredential = `-- name: SetGitHubAppCredential :exec
+INSERT INTO mcp_auth_client_github_apps
+(auth_client_id, organization_id, instance_url, app_id, installation_id, private_key_encrypted, upstream_origin)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (auth_client_id) DO UPDATE SET
+instance_url = EXCLUDED.instance_url, app_id = EXCLUDED.app_id,
+installation_id = EXCLUDED.installation_id, private_key_encrypted = EXCLUDED.private_key_encrypted,
+upstream_origin = EXCLUDED.upstream_origin, credential_version = generate_uuidv7()
+WHERE mcp_auth_client_github_apps.organization_id = EXCLUDED.organization_id
+`
+
+type SetGitHubAppCredentialParams struct {
+	AuthClientID        uuid.UUID
+	OrganizationID      string
+	InstanceUrl         string
+	AppID               int64
+	InstallationID      int64
+	PrivateKeyEncrypted string
+	UpstreamOrigin      string
+}
+
+func (q *Queries) SetGitHubAppCredential(ctx context.Context, arg SetGitHubAppCredentialParams) error {
+	_, err := q.db.Exec(ctx, setGitHubAppCredential,
+		arg.AuthClientID,
+		arg.OrganizationID,
+		arg.InstanceUrl,
+		arg.AppID,
+		arg.InstallationID,
+		arg.PrivateKeyEncrypted,
+		arg.UpstreamOrigin,
+	)
+	return err
 }
 
 const setMCPServerRequiresUpstreamAuth = `-- name: SetMCPServerRequiresUpstreamAuth :execrows

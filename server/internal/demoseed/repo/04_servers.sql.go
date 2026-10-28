@@ -715,6 +715,30 @@ func (q *Queries) ServersInsertGatewayEndpoints(ctx context.Context, arg Servers
 	return err
 }
 
+const serversInsertGitHubApp = `-- name: ServersInsertGitHubApp :exec
+WITH disabled AS (
+ UPDATE mcp_auth_clients ac SET enabled = FALSE, source = 'admin'
+ WHERE ac.id = $1 AND ac.organization_id = $2
+ RETURNING ac.id, ac.organization_id
+)
+INSERT INTO mcp_auth_client_github_apps
+(auth_client_id, organization_id, instance_url, app_id, installation_id, private_key_encrypted, upstream_origin)
+SELECT id, organization_id, 'https://github.com', 123456, 789012,
+       'DEMO_NOT_A_PRIVATE_KEY', 'https://api.githubcopilot.com' FROM disabled
+`
+
+type ServersInsertGitHubAppParams struct {
+	AuthClientID uuid.UUID
+	OrgID        string
+}
+
+// The placeholder is deliberately unusable and the client stays disabled.
+// Its project FK cascades through the auth client on each reseed.
+func (q *Queries) ServersInsertGitHubApp(ctx context.Context, arg ServersInsertGitHubAppParams) error {
+	_, err := q.db.Exec(ctx, serversInsertGitHubApp, arg.AuthClientID, arg.OrgID)
+	return err
+}
+
 const serversInsertGitHubContractorsBlock = `-- name: ServersInsertGitHubContractorsBlock :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
 SELECT $1::uuid, $2::text,

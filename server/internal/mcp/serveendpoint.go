@@ -783,7 +783,11 @@ func authClientBuildOptions(authentication *issuerGateAuthentication) []remotemc
 	if authentication == nil || authentication.authClient == nil {
 		return nil
 	}
-	return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
+	options := []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
+	if credential := authentication.authClient.githubCredential; credential != nil {
+		options = append(options, remotemcp.WithRenewableCredential(credential.Origin, authentication.authClient.githubRenew))
+	}
+	return options
 }
 
 // remoteBackendProxyBuilder loads a remote-backed server once and yields fresh one-request proxies for it.

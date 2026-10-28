@@ -41,3 +41,22 @@ type McpAuthClient struct {
 	// @access: confidential
 	Deleted bool
 }
+
+type McpAuthClientGithubApp struct {
+	// @access: confidential
+	AuthClientID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	InstanceUrl string
+	// @access: confidential
+	AppID int64
+	// @access: confidential
+	InstallationID int64
+	// @access: secret
+	PrivateKeyEncrypted string
+	// @access: confidential
+	UpstreamOrigin string
+	// @access: confidential
+	CredentialVersion uuid.UUID
+}

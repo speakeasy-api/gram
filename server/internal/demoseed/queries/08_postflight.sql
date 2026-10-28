@@ -527,3 +527,6 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- used, denied and expired.
 SELECT count(*) FROM risk_policy_approvals
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- name: PostflightCountGitHubApps :one
+SELECT count(*)::bigint FROM mcp_auth_client_github_apps WHERE organization_id = @org_id;

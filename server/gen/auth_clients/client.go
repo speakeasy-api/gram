@@ -16,6 +16,7 @@ import (
 
 // Client is the "authClients" service client.
 type Client struct {
+	ConfigureGitHubAppAuthClientEndpoint        goa.Endpoint
 	ListAuthClientsEndpoint                     goa.Endpoint
 	GetAuthClientEndpoint                       goa.Endpoint
 	UpdateAuthClientEndpoint                    goa.Endpoint
@@ -27,8 +28,9 @@ type Client struct {
 }
 
 // NewClient initializes a "authClients" service client given the endpoints.
-func NewClient(listAuthClients, getAuthClient, updateAuthClient, detachAuthClientFromMcpServer, getMcpServerAuthentication, setMcpServerUpstreamAuthRequirement, getAuthClientAudience, setAuthClientAudience goa.Endpoint) *Client {
+func NewClient(configureGitHubAppAuthClient, listAuthClients, getAuthClient, updateAuthClient, detachAuthClientFromMcpServer, getMcpServerAuthentication, setMcpServerUpstreamAuthRequirement, getAuthClientAudience, setAuthClientAudience goa.Endpoint) *Client {
 	return &Client{
+		ConfigureGitHubAppAuthClientEndpoint:        configureGitHubAppAuthClient,
 		ListAuthClientsEndpoint:                     listAuthClients,
 		GetAuthClientEndpoint:                       getAuthClient,
 		UpdateAuthClientEndpoint:                    updateAuthClient,
@@ -38,6 +40,29 @@ func NewClient(listAuthClients, getAuthClient, updateAuthClient, detachAuthClien
 		GetAuthClientAudienceEndpoint:               getAuthClientAudience,
 		SetAuthClientAudienceEndpoint:               setAuthClientAudience,
 	}
+}
+
+// ConfigureGitHubAppAuthClient calls the "configureGitHubAppAuthClient"
+// endpoint of the "authClients" service.
+// ConfigureGitHubAppAuthClient may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ConfigureGitHubAppAuthClient(ctx context.Context, p *ConfigureGitHubAppAuthClientPayload) (res *types.AuthClient, err error) {
+	var ires any
+	ires, err = c.ConfigureGitHubAppAuthClientEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.AuthClient), nil
 }
 
 // ListAuthClients calls the "listAuthClients" endpoint of the "authClients"

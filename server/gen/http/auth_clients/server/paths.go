@@ -7,6 +7,11 @@
 
 package server
 
+// ConfigureGitHubAppAuthClientAuthClientsPath returns the URL path to the authClients service configureGitHubAppAuthClient HTTP endpoint.
+func ConfigureGitHubAppAuthClientAuthClientsPath() string {
+	return "/rpc/authClients.configureGitHubApp"
+}
+
 // ListAuthClientsAuthClientsPath returns the URL path to the authClients service listAuthClients HTTP endpoint.
 func ListAuthClientsAuthClientsPath() string {
 	return "/rpc/authClients.list"

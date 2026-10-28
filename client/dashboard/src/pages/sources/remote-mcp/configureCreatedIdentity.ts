@@ -1,3 +1,4 @@
+import type { GitHubAppDraft } from "@/lib/remote-identity/components/GitHubAppFields";
 import { requireKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { isNotFoundError } from "@/lib/errors";
@@ -23,6 +24,7 @@ type ConfigureCreatedIdentityInput = {
   mcpServer: McpServer;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization?: string;
+  githubApp?: GitHubAppDraft;
   /** The server's issuer is organization-owned, so a project may not set it up. */
   organizationOwnedUserSessionIssuer?: boolean;
   options?: RequestOptions;
@@ -49,6 +51,7 @@ export async function configureCreatedRemoteMcpIdentity({
   mcpServer,
   identityMode,
   agentAuthorization,
+  githubApp,
   organizationOwnedUserSessionIssuer = false,
   options,
 }: ConfigureCreatedIdentityInput): Promise<ConfigureCreatedIdentityResult> {
@@ -68,6 +71,32 @@ export async function configureCreatedRemoteMcpIdentity({
   }
 
   if (identityMode === "agent") {
+    if (githubApp) {
+      try {
+        await client.authClients.configureGitHubApp(
+          {
+            configureGitHubAppAuthClientRequestBody: {
+              ...githubApp,
+              mcpServerId: mcpServer.id,
+              name: `${mcpServer.name ?? "GitHub"} service account`,
+              upstreamOrigin: new URL(remoteMcpServer.url).origin,
+            },
+          },
+          undefined,
+          options,
+        );
+        return configured(
+          await setMcpServerVisibility(client, mcpServer, "private", options),
+          identityMode,
+        );
+      } catch {
+        return setupRequired(
+          mcpServer,
+          identityMode,
+          "GitHub App setup failed. Check the app credentials and installation in Settings > Identity.",
+        );
+      }
+    }
     const authorization = agentAuthorization?.trim();
     if (!authorization) {
       return setupRequired(

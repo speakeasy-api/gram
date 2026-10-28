@@ -5060,6 +5060,10 @@ mapped AS (
                AND ol.deleted IS FALSE
                AND other.client_type IN ('remote_session', 'service_account', 'ema')
            ))
+       OR (d.remote_session_client_id IS NULL AND d.no_auth
+           AND ac.client_type = 'service_account'
+           AND EXISTS (SELECT 1 FROM mcp_auth_client_github_apps g
+                       WHERE g.auth_client_id = ac.id AND g.organization_id = ac.organization_id))
     GROUP BY d.mcp_server_id
 )
 INSERT INTO upstream_client_selections (

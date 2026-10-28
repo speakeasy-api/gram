@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 // Client authenticates as a GitHub App and performs API operations
 // on behalf of installations.
 type Client struct {
+	apiBase     string
 	appID       int64
 	privateKey  *rsa.PrivateKey
 	httpClient  *guardian.HTTPClient
@@ -56,6 +59,7 @@ func NewClient(appID int64, privateKeyPEM []byte, httpClient *guardian.HTTPClien
 	}
 
 	return &Client{
+		apiBase:     "https://api.github.com",
 		appID:       appID,
 		privateKey:  key,
 		httpClient:  httpClient,
@@ -124,48 +128,93 @@ func (c *Client) installationToken(ctx context.Context, installationID int64) (s
 	return token, nil
 }
 
+// APIBase validates a GitHub instance origin and derives its REST API base.
+func APIBase(instanceURL string) (string, error) {
+	if instanceURL == "" {
+		instanceURL = "https://github.com"
+	}
+	u, err := url.Parse(instanceURL)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/") || u.Opaque != "" {
+		return "", fmt.Errorf("GitHub instance must be an HTTPS origin without credentials, path, query, or fragment")
+	}
+	u.Host = strings.TrimSuffix(strings.ToLower(u.Host), ":443")
+	u.Path = ""
+	if u.Host == "github.com" {
+		return "https://api.github.com", nil
+	}
+	return u.String() + "/api/v3", nil
+}
+
+// NewInstanceClient uses a customer-owned app on GitHub.com or Enterprise Server.
+// The supplied transport must enforce outbound network and redirect policy.
+func NewInstanceClient(appID int64, privateKeyPEM []byte, instanceURL string, httpClient *guardian.HTTPClient) (*Client, error) {
+	if appID <= 0 {
+		return nil, fmt.Errorf("app ID must be positive")
+	}
+	base, err := APIBase(instanceURL)
+	if err != nil {
+		return nil, err
+	}
+	c, err := NewClient(appID, privateKeyPEM, httpClient)
+	if err != nil {
+		return nil, err
+	}
+	if c.privateKey.N.BitLen() < 2048 {
+		return nil, fmt.Errorf("GitHub App key must be at least 2048 bits")
+	}
+	c.apiBase = base
+	return c, nil
+}
+
 func (c *Client) mintInstallationToken(ctx context.Context, installationID int64) (string, error) {
+	token, expiresAt, err := c.MintInstallationToken(ctx, installationID)
+	if err != nil {
+		return "", err
+	}
+	c.mu.Lock()
+	c.tokens[installationID] = cachedToken{token: token, expiresAt: expiresAt.Add(-5 * time.Minute)}
+	c.mu.Unlock()
+	return token, nil
+}
+
+// MintInstallationToken performs one exchange. The caller owns caching and
+// invalidation; the returned expiry is the upstream expiry, not a cache TTL.
+func (c *Client) MintInstallationToken(ctx context.Context, installationID int64) (string, time.Time, error) {
+	if installationID <= 0 {
+		return "", time.Time{}, fmt.Errorf("installation ID must be positive")
+	}
 	appJWT, err := c.appJWT()
 	if err != nil {
-		return "", fmt.Errorf("create app JWT: %w", err)
+		return "", time.Time{}, fmt.Errorf("create app JWT: %w", err)
 	}
-
-	url := fmt.Sprintf("https://api.github.com/app/installations/%d/access_tokens", installationID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	endpoint := fmt.Sprintf("%s/app/installations/%d/access_tokens", c.apiBase, installationID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
-		return "", fmt.Errorf("create token request: %w", err)
+		return "", time.Time{}, fmt.Errorf("create token request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+appJWT)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("request installation token: %w", err)
+		return "", time.Time{}, fmt.Errorf("request installation token: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
-
 	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
-		return "", fmt.Errorf("request installation token: status %d: %s", resp.StatusCode, body)
+		// The upstream body is untrusted and may echo credentials.
+		return "", time.Time{}, fmt.Errorf("GitHub installation token request returned status %d", resp.StatusCode)
 	}
-
 	var result struct {
 		Token     string    `json:"token"`
 		ExpiresAt time.Time `json:"expires_at"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode installation token: %w", err)
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
+		return "", time.Time{}, fmt.Errorf("decode installation token response")
 	}
-
-	c.mu.Lock()
-	c.tokens[installationID] = cachedToken{
-		token:     result.Token,
-		expiresAt: result.ExpiresAt.Add(-5 * time.Minute),
+	if result.Token == "" || !result.ExpiresAt.After(time.Now().Add(time.Minute)) {
+		return "", time.Time{}, fmt.Errorf("GitHub returned an empty or expired installation token")
 	}
-	c.mu.Unlock()
-
-	return result.Token, nil
+	return result.Token, result.ExpiresAt, nil
 }
 
 func (c *Client) doAPI(ctx context.Context, installationID int64, method, url string, body io.Reader) (*http.Response, error) {

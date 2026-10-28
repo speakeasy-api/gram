@@ -24,6 +24,12 @@ import (
 // elsewhere, including in shadow mode, existing upstream configuration keeps
 // serving.
 type Service interface {
+	// Create or rotate a customer-owned GitHub App service account and make it the
+	// MCP server's upstream identity. Replaces that server's other auth-client and
+	// OAuth-registration associations, without deleting shared clients. Existing
+	// connections must reconnect. Verifies the installation before saving.
+	// Requires org:admin. Does not grant callers permission to use it.
+	ConfigureGitHubAppAuthClient(context.Context, *ConfigureGitHubAppAuthClientPayload) (res *types.AuthClient, err error)
 	// List the auth clients in the caller's organization. Requires org:read.
 	ListAuthClients(context.Context, *ListAuthClientsPayload) (res *ListAuthClientsResult, err error)
 	// Get an auth client in the caller's organization. Requires org:read.
@@ -80,7 +86,7 @@ const ServiceName = "authClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listAuthClients", "getAuthClient", "updateAuthClient", "detachAuthClientFromMcpServer", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement", "getAuthClientAudience", "setAuthClientAudience"}
+var MethodNames = [9]string{"configureGitHubAppAuthClient", "listAuthClients", "getAuthClient", "updateAuthClient", "detachAuthClientFromMcpServer", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement", "getAuthClientAudience", "setAuthClientAudience"}
 
 // A rule to store for an auth client.
 type AuthClientAudienceRule struct {
@@ -88,6 +94,29 @@ type AuthClientAudienceRule struct {
 	PrincipalUrn string
 	// use or blocked.
 	Level string
+}
+
+// ConfigureGitHubAppAuthClientPayload is the payload type of the authClients
+// service configureGitHubAppAuthClient method.
+type ConfigureGitHubAppAuthClientPayload struct {
+	// Existing GitHub App auth client to rotate. Omit to create.
+	ID *string
+	// MCP server to offer this credential.
+	McpServerID string
+	// Service account display name.
+	Name string
+	// GitHub instance origin, including HTTPS.
+	InstanceURL string
+	// Positive numeric GitHub App ID.
+	AppID string
+	// Positive numeric installation ID.
+	InstallationID string
+	// GitHub App RSA private key in PEM format. Write-only.
+	PrivateKey string `json:"private_key"`
+	// Explicit HTTPS MCP origin allowed to receive the token.
+	UpstreamOrigin string
+	SessionToken   *string
+	ApikeyToken    *string
 }
 
 // DetachAuthClientFromMcpServerPayload is the payload type of the authClients

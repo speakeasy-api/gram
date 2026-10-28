@@ -257,6 +257,9 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 		return none, false, oops.E(oops.CodeUnexpected, err, "load upstream client choice").LogError(ctx, s.logger)
 	}
 	mode, err := s.authClientMode(ctx, endpoint.OrganizationID)
+	if err == nil {
+		mode, err = s.githubAppMode(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID, mode)
+	}
 	if err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, s.logger)
 	}
@@ -510,6 +513,16 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	typed = typed || c.enforced || c.profile
 	var resolved map[uuid.UUID]authClientResolution
 	var err error
+	if !typed {
+		candidates, readErr := c.selector.resolveAuthClients(ctx, ids)
+		err = readErr
+		resolved = make(map[uuid.UUID]authClientResolution)
+		for id, res := range candidates {
+			if res.githubApp {
+				resolved[id] = res
+			}
+		}
+	}
 	if typed {
 		resolved, err = c.selector.resolveAuthClients(ctx, ids)
 		ids = ids[:0]
@@ -536,7 +549,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	}
 	memberErrors := make(map[uuid.UUID]error)
 	var headerIDs []uuid.UUID
-	if typed && err == nil {
+	if err == nil {
 		for id, res := range resolved {
 			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, authClientPermitRequest{
 				OrganizationID: c.selector.organizationID, ProjectID: projects[id], ServerID: id, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
@@ -559,7 +572,8 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		res := gapResolution(authClientReasonMissingChoice)
 		memberErr := err
 		if memberErr == nil {
-			if typed {
+			_, hasProvider := resolved[member.serverID]
+			if typed || hasProvider {
 				if choice, ok := resolved[member.serverID]; ok {
 					res = choice
 				}
@@ -570,7 +584,11 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 						clientHeaders := headers[res.clientID]
 						memberErr = clientHeaders.err
 						if memberErr == nil {
-							res = applyAuthClientHeaders(res, clientHeaders.headers)
+							if res.githubApp {
+								res, memberErr = c.selector.service.prepareGitHubApp(ctx, c.selector.organizationID, member.serverID, res, clientHeaders.headers)
+							} else {
+								res = applyAuthClientHeaders(res, clientHeaders.headers)
+							}
 						}
 					}
 				}

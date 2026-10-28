@@ -1,3 +1,9 @@
+import {
+  GitHubAppFields,
+  newGitHubAppDraft,
+  type GitHubAppDraft,
+} from "@/lib/remote-identity/components/GitHubAppFields";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
@@ -25,7 +31,10 @@ export function CreationIdentityChoice({
   advertisesOAuth,
   authenticationRequired,
   canCreateIdentity,
+  canConfigureGitHub = false,
   rbacLoading,
+  githubApp,
+  onGitHubAppChange,
 }: {
   value: CreationIdentityMode;
   onChange: (mode: CreationIdentityMode) => void;
@@ -35,7 +44,10 @@ export function CreationIdentityChoice({
   advertisesOAuth: boolean;
   authenticationRequired: boolean;
   canCreateIdentity: boolean;
+  canConfigureGitHub?: boolean;
   rbacLoading: boolean;
+  githubApp?: GitHubAppDraft;
+  onGitHubAppChange?: (value: GitHubAppDraft | undefined) => void;
 }): JSX.Element {
   const [explainerOpen, setExplainerOpen] = useState(false);
 
@@ -95,7 +107,30 @@ export function CreationIdentityChoice({
         ))}
       </RadioCardGroup>
 
-      {value === "agent" ? (
+      {value === "agent" && onGitHubAppChange ? (
+        <SegmentedControl
+          value={githubApp ? "github-app" : "static"}
+          onChange={(next) =>
+            onGitHubAppChange(
+              next === "github-app" ? newGitHubAppDraft() : undefined,
+            )
+          }
+          options={[
+            { value: "static", label: "Static credential" },
+            {
+              value: "github-app",
+              label: "GitHub App",
+              disabled: !canConfigureGitHub,
+              tooltip: !canConfigureGitHub
+                ? "Organization administrator access is required"
+                : undefined,
+            },
+          ]}
+        />
+      ) : null}
+      {value === "agent" && githubApp && onGitHubAppChange ? (
+        <GitHubAppFields value={githubApp} onChange={onGitHubAppChange} />
+      ) : value === "agent" ? (
         <AgentIdentityRow
           draft={credential}
           disabled={false}
