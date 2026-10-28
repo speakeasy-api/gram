@@ -127,7 +127,7 @@ func TestRunRestrictionNarrowsDiscoveryAndCalls(t *testing.T) {
 	require.NoError(t, err)
 	servers, err := host.Servers(t.Context(), PageArgs{})
 	require.NoError(t, err)
-	require.Equal(t, []Server{{Slug: "crm", Name: "CRM"}}, servers.Items)
+	require.Equal(t, backend.servers, servers.Items)
 	page, err := host.Search(t.Context(), SearchArgs{})
 	require.NoError(t, err)
 	require.Len(t, page.Items, 1)

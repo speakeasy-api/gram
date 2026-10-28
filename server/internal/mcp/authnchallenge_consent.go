@@ -625,7 +625,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// A gateway's page approves the gateway and lists its servers; the
 	// services it shows are those of one server, on that server's connect
 	// page. A first-party connect opened for a server lands on its page, and
-	// an explicit server parameter (empty for the gateway's own page) wins.
+	// an explicit server parameter (empty for the gateway's own page) wins,
+	// except code reconnect always pins focus to its bound server.
 	var gateway *gatewayConsentView
 	focusServer := ""
 	if endpoint.MetaMcpServerID.Valid {

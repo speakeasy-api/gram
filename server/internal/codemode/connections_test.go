@@ -43,7 +43,8 @@ func TestConnectionHelpersDoNotWidenToolAllowlist(t *testing.T) {
 }
 func TestConnectionCallbacksUseStrictArguments(t *testing.T) {
 	t.Parallel()
-	host, err := NewHost(t.Context(), &recoveryFixture{}, "scope", nil)
+	backend := &recoveryFixture{}
+	host, err := NewHost(t.Context(), backend, "scope", nil)
 	require.NoError(t, err)
 	state := &executionState{}
 	for _, method := range []string{"connect"} {
@@ -53,7 +54,7 @@ func TestConnectionCallbacksUseStrictArguments(t *testing.T) {
 		_, err = state.callback(t.Context(), host, runnerMessage{Method: method, Arguments: []byte(`{"server":"tracker","user":"forged"}`)})
 		require.Error(t, err)
 	}
-	require.Empty(t, state.calls, "recovery never dispatches a business tool")
+	require.Empty(t, backend.calls, "recovery never dispatches a business tool")
 }
 
 func TestCodeServerPaginationIgnoresConnectionChanges(t *testing.T) {

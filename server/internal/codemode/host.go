@@ -143,7 +143,7 @@ func (h *CatalogHost) Servers(ctx context.Context, args PageArgs) (*ServerPage, 
 	if backend, ok := h.backend.(ConnectionBackend); ok {
 		servers, err = backend.DiscoveryServers(ctx)
 	} else {
-		servers, _, err = h.members(ctx)
+		servers, _, err = h.backend.Members(ctx)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("list servers: %w", err)

@@ -466,3 +466,11 @@ manage server configuration, not this OAuth grant. Recovery therefore belongs
 to the gateway host API, with no new management tool or staff-admin capability.
 Focused host, runner and gateway tests cover helper visibility, expiry and
 identity binding.
+
+`get_my_mcp_connection_status` in Platform MCP intentionally retains its canonical
+endpoint and client-owned OAuth reconnect action. It operates under the Platform
+principal for an exact MCP server, without the gateway execution's credential,
+member admission snapshot, or immutable client catalogue grant. It cannot safely
+mint this user-and-member-bound recovery ticket or renew that client's consent.
+The gateway's `servers` / `connect` helpers own that scoped handoff; the focused
+recovery tests verify its identity and admission boundaries.

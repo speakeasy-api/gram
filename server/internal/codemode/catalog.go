@@ -22,7 +22,7 @@ const (
 
 // Host performs discovery and invocation under the admitted gateway identity.
 type Host interface {
-	// Servers lists the currently permitted gateway members.
+	// Servers lists currently visible members, including those needing consent.
 	Servers(context.Context, PageArgs) (*ServerPage, error)
 	// Search loads and ranks current authorized catalogs.
 	Search(context.Context, SearchArgs) (*SearchPage, error)
@@ -146,13 +146,14 @@ type ToolResult struct {
 type ConnectionState struct {
 	Consent        string `json:"consent"`
 	Authentication string `json:"authentication"`
-	Instructions   string `json:"instructions"`
+	Instructions   string `json:"instructions,omitempty"`
 }
 
 // ConnectionAction contains no credentials. The URL starts a browser login.
 type ConnectionAction struct {
-	Server                  string     `json:"server"`
-	Status                  string     `json:"status"`
+	Server string `json:"server"`
+	Status string `json:"status"`
+	// Reason is a machine-readable code: upstream_sign_in or consent_required.
 	Reason                  string     `json:"reason,omitempty"`
 	AuthorizationURL        string     `json:"authorization_url,omitempty"`
 	ExpiresAt               *time.Time `json:"expires_at,omitempty"`

@@ -28,7 +28,7 @@ type runnerHost struct {
 }
 
 func (*runnerHost) Servers(context.Context, PageArgs) (*ServerPage, error) {
-	return &ServerPage{Items: []Server{{Slug: "remote", Name: "Remote tools"}}}, nil
+	return &ServerPage{Items: []Server{{Slug: "remote", Name: "Remote tools", Connection: &ConnectionState{Consent: "required", Authentication: "unknown", Instructions: "Connect this server"}}}}, nil
 }
 func (*runnerHost) Search(context.Context, SearchArgs) (*SearchPage, error) {
 	return &SearchPage{Items: []Candidate{{Path: "remote--ping", Description: "Ping"}}}, nil
@@ -279,8 +279,8 @@ len(response["data"])`, func(context.Context) (Host, error) { return host, nil }
 	require.Equal(t, []CallOutcome{{Path: "remote--ping", Outcome: "completed"}}, result.ToolCalls)
 }
 
-func (*runnerHost) Connect(context.Context, string) (*ConnectionAction, error) {
-	return &ConnectionAction{Server: "tracker", Status: "authorization_required", AuthorizationURL: "https://gateway.example.test/connect", Instructions: "Open the URL"}, nil
+func (*runnerHost) Connect(_ context.Context, server string) (*ConnectionAction, error) {
+	return &ConnectionAction{Server: server, Status: "authorization_required", AuthorizationURL: "https://gateway.example.test/connect", Instructions: "Open the URL"}, nil
 }
 
 func TestCodeRunnerConnectionHelpers(t *testing.T) {
@@ -288,8 +288,7 @@ func TestCodeRunnerConnectionHelpers(t *testing.T) {
 	host := &runnerHost{}
 	result := realRunnerClient(t).Run(t.Context(), uuid.New(), `[await tools.servers(), await tools.connect(server="tracker")]`, func(context.Context) (Host, error) { return host, nil })
 	require.Nil(t, result.Error, "%+v", result.Error)
-	require.Contains(t, string(result.Value), "authorization_url")
-	require.Contains(t, string(result.Value), "remote")
+	require.JSONEq(t, `[{"items":[{"slug":"remote","name":"Remote tools","connection":{"consent":"required","authentication":"unknown","instructions":"Connect this server"}}]},{"server":"tracker","status":"authorization_required","authorization_url":"https://gateway.example.test/connect","client_reconnect_required":false,"instructions":"Open the URL"}]`, string(result.Value))
 	require.Empty(t, result.ToolCalls)
 	require.Zero(t, host.called.Load())
 }

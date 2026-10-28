@@ -491,8 +491,8 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 		seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, fx.subject.ID, id.String())
 	}
 	if mode == metamcp.DiscoveryModeCode {
+		enableCodeMode(t, ctx, ti)
 		mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, code string, host codemode.Host) (*codemode.ExecutionResult, error) {
-			enableCodeMode(t, ctx, ti)
 			if code != "discover" {
 				result, err := host.Call(ctx, code, json.RawMessage(`{}`))
 				if err != nil {
@@ -504,8 +504,13 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 			}
 			servers, err := host.Servers(ctx, codemode.PageArgs{})
 			require.NoError(t, err)
-			require.Contains(t, servers.Items, codemode.Server{Slug: hosted.slug, Name: "Hosted tools"})
-			require.Contains(t, servers.Items, codemode.Server{Slug: "remote-counted", Name: "Remote"})
+			names := make(map[string]string)
+			for _, server := range servers.Items {
+				names[server.Slug] = server.Name
+				require.NotNil(t, server.Connection)
+			}
+			require.Equal(t, "Hosted tools", names[hosted.slug])
+			require.Equal(t, "Remote", names["remote-counted"])
 			page, err := host.Search(ctx, codemode.SearchArgs{Query: ""})
 			require.NoError(t, err)
 			require.False(t, page.Incomplete)

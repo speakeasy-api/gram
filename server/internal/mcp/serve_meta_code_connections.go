@@ -37,8 +37,8 @@ func (b *metaCodeBackend) DiscoveryServers(ctx context.Context) ([]codemode.Serv
 }
 
 func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGateContext, member metaMember) *codemode.ConnectionState {
-	state := &codemode.ConnectionState{Consent: "not_required", Authentication: "unknown", Instructions: "Search and call permitted tools. If sign-in is required, call tools.connect(server=...) and show its URL and instructions. Unknown authentication is not a reason to reconnect."}
-	if !member.remoteSessionIssuerID.Valid {
+	state := &codemode.ConnectionState{Consent: "not_required", Authentication: "unknown", Instructions: ""}
+	if member.backend == metaMemberBackendHosted && !member.remoteSessionIssuerID.Valid {
 		state.Authentication = "not_required"
 	}
 	if gate.catalog != nil {

@@ -131,8 +131,20 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login parent mismatch"), oauthui.ReasonSessionChanged))
 	}
-	if err := validateCodeReconnectBinding(parent); err != nil {
+	if err := validateWorkloadReconnectBinding(parent); err != nil {
 		return err
+	}
+	// A login on another callback host carries its own browser binding, set
+	// there by the bind stop of the remote login browser hop.
+	if remote.BrowserHash != "" {
+		if err := s.validateRemoteLoginHopBrowser(r, parent, remote); err != nil {
+			return err
+		}
+	} else if err := validateChallengeBrowser(r, parent, true); err != nil {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding"), oauthui.ReasonSessionChanged))
+	}
+	if err := validateCodeReconnectBinding(parent); err != nil {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid code connection binding"), oauthui.ReasonSessionChanged))
 	}
 	if parent.CodeReconnect != nil {
 		endpoint, err := s.loadResolvedMcpEndpointByRef(r.Context(), parent.Endpoint)
@@ -142,18 +154,6 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 		if _, err := s.consentSubjectMembers(r.Context(), endpoint, parent); err != nil {
 			return err
 		}
-	}
-	if err := validateWorkloadReconnectBinding(parent); err != nil {
-		return err
-	}
-	// A login on another callback host carries its own browser binding, set
-	// there by the bind stop of the remote login browser hop.
-	if remote.BrowserHash != "" {
-		return s.validateRemoteLoginHopBrowser(r, parent, remote)
-	}
-	err = validateChallengeBrowser(r, parent, true)
-	if err != nil {
-		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding"), oauthui.ReasonSessionChanged))
 	}
 	return nil
 }
