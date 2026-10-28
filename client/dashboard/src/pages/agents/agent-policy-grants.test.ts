@@ -54,11 +54,15 @@ describe("agent policy scope catalog", () => {
 
   it("never offers a scope outside the safe set", () => {
     for (const scope of AGENT_POLICY_SCOPES) {
+      const family = scope.slug.split(":")[0];
       expect(scope.slug).not.toMatch(/blocked_/);
-      expect(scope.slug).not.toBe("org:read");
-      expect(scope.slug).not.toBe("org:admin");
-      expect(scope.slug.split(":")[0]).not.toBe("chat");
-      expect(scope.slug.split(":")[0]).not.toBe("agent");
+      if (family === "org") {
+        expect(["org:device_agent_sync", "org:hooks_ingest"]).toContain(
+          scope.slug,
+        );
+      }
+      expect(family).not.toBe("chat");
+      expect(family).not.toBe("agent");
       expect(scope.slug).not.toBe("risk_policy:bypass");
       expect(scope.slug).not.toBe("risk_policy:block");
     }

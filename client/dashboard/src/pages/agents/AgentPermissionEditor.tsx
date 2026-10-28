@@ -12,6 +12,7 @@ import {
   RolePermissionsSection,
   type ScopeGroup,
 } from "@/pages/access/RolePermissionsSection";
+import type { ResourceType } from "@/pages/access/types";
 import { invalidateAllAgentsListPolicyGrants } from "@gram/client/react-query/agentsListPolicyGrants.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
@@ -24,6 +25,11 @@ import {
   invalidateAgentPolicy,
   isAgentPolicyNarrowable,
 } from "./agent-policy-grants";
+
+/** What a scope with no resource choice applies to. */
+function unnarrowedRuleLabel(resourceType: ResourceType | undefined): string {
+  return resourceType === "org" ? "Whole organization" : "All resources";
+}
 
 /** The role permission picker and resource drawer, applied to an agent's policy. */
 export function AgentPermissionEditor({
@@ -239,9 +245,7 @@ export function AgentPermissionEditor({
             if (!resource || !isAgentPolicyNarrowable(resource.resourceType))
               return (
                 <Text small muted>
-                  {resource?.resourceType === "org"
-                    ? "Whole organization"
-                    : "All resources"}
+                  {unnarrowedRuleLabel(resource?.resourceType)}
                 </Text>
               );
             return (

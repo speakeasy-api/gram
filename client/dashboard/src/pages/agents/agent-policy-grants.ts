@@ -127,7 +127,7 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     resourceType: "org",
     visibility: "user_visible",
     description:
-      "Fetch the plugins assigned to this agent from a device agent.",
+      "Enroll devices under this agent and let their device agent fetch its plugins.",
     agentEligible: true,
   },
   {
@@ -172,8 +172,7 @@ export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
  * `ResourceKindForScope` in server/internal/authz/selector.go, which derives it
  * from the scope; `ValidateSelector` rejects a selector that disagrees.
  * mcp:auth grants are deliberately unrepresentable here until the auth client
- * editor exists, so stored ones are preserved and locked. So are org:hooks_ingest
- * grants narrowed to a project, since the draft has no project dimension for org.
+ * editor exists, so stored ones are preserved and locked.
  */
 const RESOURCE_KIND_BY_SCOPE_FAMILY: Record<
   string,
@@ -264,6 +263,8 @@ export function agentPolicyGrantsFromDraft(
  * The dimensions the editor's draft can hold and reproduce exactly. Narrower
  * than `ALLOWED_SELECTOR_KEYS`: the server also accepts `server_url` and
  * `server_identity`, which have no control and nowhere in the draft selector.
+ * It also accepts `project_id` on org:hooks_ingest alone, and org has no draft
+ * dimension, so a project-narrowed hooks grant is preserved and locked.
  */
 const DRAFT_DIMENSIONS: Record<string, readonly string[]> = {
   mcp: ["projectId", "disposition", "tool"],
