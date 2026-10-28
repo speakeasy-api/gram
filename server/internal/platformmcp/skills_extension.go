@@ -145,6 +145,9 @@ func skillsMiddleware(catalog *mcpskills.EmbeddedCatalog, gate SkillsGate) mcp.M
 					res.Capabilities = withSkillsExtension(res.Capabilities)
 				case *mcp.DiscoverResult:
 					res.Capabilities = withSkillsExtension(res.Capabilities)
+					// The capabilities now depend on the caller's organization,
+					// so no shared cache may hand one caller's answer to another.
+					res.CacheScope = "private"
 				}
 				return result, nil
 			case mcpversions.MethodSkillsList, mcpversions.MethodSkillsGet:
