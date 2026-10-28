@@ -71,7 +71,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # (uid 65532). Pinned by digest for reproducible, tamper-evident builds.
 # Debian 13's CA bundle removes the affected eMudhra trust paths; Debian 12's
 # still contains them. See docs/runbooks/emudhra-ca-update.md.
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:b7e81cb1af38d9345680e68bcf564d388f96304e25222030fc8c051faf8565b3
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:3ee00291cf386ec52a552e6a858d555debd74776eb4bfa53fa3df2cd6677515e
 
 # Bring the standalone interpreter and the resolved virtualenv over from the
 # builder, at the SAME paths they were created on so the venv's interpreter
