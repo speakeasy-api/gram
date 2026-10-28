@@ -1,5 +1,3 @@
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { IdentityRail } from "@/components/identity-rail";
 import { identityRailItems } from "@/components/identity-rail-items";
@@ -21,6 +19,7 @@ import type { IdentityModel } from "@gram/client/models/components/identitymodel
 import {
   AgentHeaderActions,
   AgentIdentityProfile,
+  AgentRenameAction,
 } from "./AgentIdentityProfile";
 import { useIdentitySubject } from "./useIdentitySubject";
 import {
@@ -225,13 +224,16 @@ function IdentityDetailContent(): JSX.Element {
         >
           <IdentityHeader
             identity={identity}
-            actions={
+            nameAction={
               identity.agent && (
-                <AgentHeaderActions
+                <AgentRenameAction
                   agent={identity.agent}
                   refresh={() => void identityQuery.refetch()}
                 />
               )
+            }
+            actions={
+              identity.agent && <AgentHeaderActions agent={identity.agent} />
             }
           />
         </div>
@@ -298,21 +300,15 @@ function IdentityDetailContent(): JSX.Element {
 
 function IdentityHeader({
   identity,
+  nameAction,
   actions,
 }: {
   identity: IdentityModel;
-  /** Controls on the subject itself, under its badges. */
+  /** A control on the name itself (rename), shown beside it on hover. */
+  nameAction?: ReactNode;
+  /** Controls on the subject itself, in the header's top right. */
   actions?: ReactNode;
 }): JSX.Element {
-  const {
-    dateRange,
-    customRange,
-    customRangeLabel,
-    setDateRangeParam,
-    setCustomRangeParam,
-    clearCustomRange,
-  } = useDateRangeFilter();
-
   const primaryEmail = identity.emails[0];
   // Tobias is for names. When the only name we have is the address itself, the
   // display face loses the punctuation that makes it readable, and repeating it
@@ -340,15 +336,22 @@ function IdentityHeader({
             <AvatarFallback>{getInitials(identity.displayName)}</AvatarFallback>
           </Avatar>
           <div className="flex min-w-0 flex-col gap-1">
-            <h1
-              className={
-                nameIsAddress
-                  ? "truncate font-mono text-xl"
-                  : "text-display-sm truncate font-thin"
-              }
-            >
-              {identity.displayName}
-            </h1>
+            <div className="group/name flex min-w-0 items-center gap-1">
+              <h1
+                className={
+                  nameIsAddress
+                    ? "truncate font-mono text-xl"
+                    : "text-display-sm truncate font-thin"
+                }
+              >
+                {identity.displayName}
+              </h1>
+              {nameAction && (
+                <span className="shrink-0 opacity-0 transition-opacity group-hover/name:opacity-100 focus-within:opacity-100">
+                  {nameAction}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {primaryEmail && !nameIsAddress && (
                 <Text variant="small" muted className="truncate">
@@ -360,19 +363,11 @@ function IdentityHeader({
                 <Badge variant="neutral">No linked account</Badge>
               )}
             </div>
-            {actions}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <TimeRangePicker
-            preset={customRange ? null : dateRange}
-            customRange={customRange}
-            customRangeLabel={customRangeLabel}
-            onPresetChange={setDateRangeParam}
-            onCustomRangeChange={setCustomRangeParam}
-            onClearCustomRange={clearCustomRange}
-          />
-        </div>
+        {actions && (
+          <div className="flex shrink-0 items-center gap-2">{actions}</div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

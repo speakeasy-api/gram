@@ -100,6 +100,7 @@ export default function IdentitySecurity(): JSX.Element {
   return (
     <IdentitySection
       title="Security"
+      timeRange
       meta={sectionMeta(
         canReadRisk
           ? [
