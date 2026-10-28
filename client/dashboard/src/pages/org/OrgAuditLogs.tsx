@@ -1276,7 +1276,20 @@ function OrgAuditLogsInner() {
                           key={run.key}
                           run={run}
                           expanded={expandedRuns.has(run.key)}
-                          onToggle={() => toggleRun(run.key)}
+                          onToggle={() => {
+                            // Collapsing the run that holds the selected entry
+                            // clears the selection; otherwise the selection
+                            // would open the run again straight away.
+                            if (
+                              expandedRuns.has(run.key) &&
+                              currentLogIndex !== null &&
+                              collapsibleRunByIndex.get(currentLogIndex) ===
+                                run.key
+                            ) {
+                              setCurrentLogIndex(null);
+                            }
+                            toggleRun(run.key);
+                          }}
                           identities={identities}
                           projectSlug={
                             run.logs[0]!.projectSlug ||

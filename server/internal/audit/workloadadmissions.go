@@ -28,8 +28,8 @@ const LegacyKitRuntimeActorID = "kit-runtime"
 
 // SecurityAdmittedSubjects reports which of the given admissions were admitted
 // as security entries, as a Kit runtime admits its own workload, according to
-// the audit trail. Later entries about those admissions are security entries
-// too.
+// the audit trail. Withdrawals of those admissions cascaded from withdrawing
+// their issuer are security entries too.
 func SecurityAdmittedSubjects(ctx context.Context, dbtx repo.DBTX, organizationID string, admissionIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
 	if len(admissionIDs) == 0 {
 		return map[uuid.UUID]bool{}, nil
