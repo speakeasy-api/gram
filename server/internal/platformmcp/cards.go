@@ -31,20 +31,24 @@ var cardShellHTML string
 // cardTemplate is the markup shared by every card. html/template escapes each
 // value for its context and replaces any URL that is not http(s) or mailto.
 var cardTemplate = template.Must(template.New("card").Parse(`<article class="card">` +
-	`<header><span class="mark" aria-hidden="true">{{.Initial}}</span><div class="heading"><h1>{{.Title}}</h1>{{with .Subtitle}}<p class="sub">{{.}}</p>{{end}}</div></header>` +
+	`<header>{{with .Logo}}<img class="mark" src="{{.}}" alt="">{{else}}<span class="mark" aria-hidden="true">{{.Initial}}</span>{{end}}<div class="heading"><h1>{{.Title}}</h1>{{with .Subtitle}}<p class="sub">{{.}}</p>{{end}}</div></header>` +
 	`{{with .Note}}<p class="note">{{.}}</p>{{end}}` +
 	`{{with .NextStep}}<p class="next">{{.}}</p>{{end}}` +
 	`{{with .Action}}<a class="action" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{end}}` +
 	`</article>`))
 
-// resultCard is what one card shows. Every value is plain text; the template
-// escapes it.
+// resultCard is what one card shows. Every value except Logo is plain text;
+// the template escapes it.
 type resultCard struct {
 	Title    string
 	Subtitle string
 	Note     string
 	NextStep string
 	Action   *cardAction
+
+	// Logo is the MCP server's logo as a data: URI built by cardLogoDataURI
+	// from stored, validated bytes, or empty to show Initial instead.
+	Logo template.URL
 }
 
 // cardAction is the card's one link. Its URL must come from the tool result
@@ -116,7 +120,7 @@ const (
 )
 
 // serverCard describes an MCP server just added to a project and its next step.
-func serverCard(serverName string, project ResolvedProject, nextAction, dashboardSetupURL string) resultCard {
+func serverCard(serverName string, logo template.URL, project ResolvedProject, nextAction, dashboardSetupURL string) resultCard {
 	projectName := project.Name
 	if projectName == "" {
 		projectName = project.Slug
@@ -127,6 +131,7 @@ func serverCard(serverName string, project ResolvedProject, nextAction, dashboar
 		Note:     "Private until added to a plugin",
 		NextStep: "Next: check that it is ready to use.",
 		Action:   nil,
+		Logo:     logo,
 	}
 	if nextAction != nextActionContinueDashboardSetup && nextAction != nextActionSecureDashboardSetup {
 		return card
@@ -146,7 +151,7 @@ func serverCard(serverName string, project ResolvedProject, nextAction, dashboar
 }
 
 // signInCard offers the one sign-in step after a provider is connected.
-func signInCard(serverName, authorizationURL string) resultCard {
+func signInCard(serverName string, logo template.URL, authorizationURL string) resultCard {
 	label := "Sign in"
 	if serverName != "" {
 		label = "Sign in to " + serverName
@@ -157,6 +162,7 @@ func signInCard(serverName, authorizationURL string) resultCard {
 		Note:     "",
 		NextStep: "Sign in to finish connecting it, then check that it is ready to use.",
 		Action:   &cardAction{Label: label, URL: authorizationURL},
+		Logo:     logo,
 	}
 }
 

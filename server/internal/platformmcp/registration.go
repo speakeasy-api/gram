@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -88,13 +89,26 @@ type OperationReceipt struct {
 // create project components.
 type RegistrationStore struct {
 	db *pgxpool.Pool
+
+	// icons fetches a new MCP server's logo after it is added, the same way
+	// the dashboard does. Nil leaves new servers without a logo.
+	icons mcpservers.DefaultServerIconSetter
 }
 
 func NewRegistrationStore(db *pgxpool.Pool) (*RegistrationStore, error) {
 	if db == nil {
 		return nil, ErrRegistrationInvalid
 	}
-	return &RegistrationStore{db: db}, nil
+	return &RegistrationStore{db: db, icons: nil}, nil
+}
+
+// WithServerIcons fetches and stores a logo for each MCP server this store
+// adds, so result cards and the dashboard can show it.
+func (s *RegistrationStore) WithServerIcons(icons mcpservers.DefaultServerIconSetter) *RegistrationStore {
+	if s != nil {
+		s.icons = icons
+	}
+	return s
 }
 
 func (s *RegistrationStore) ResolveProject(ctx context.Context, organizationID, projectSlug string) (ResolvedProject, error) {
@@ -647,6 +661,12 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return OperationReceipt{}, fmt.Errorf("commit platform mcp component convergence: %w", err)
+	}
+	if componentsCreated && s.icons != nil {
+		// The logo fetch runs detached and stores the image as a project
+		// asset, which needs the project-scoped auth context.
+		iconCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID})
+		s.icons.ScheduleDefaultRemoteServerIcon(iconCtx, project.ID, registration.McpServerID.UUID, registration.RemoteMcpServerID.UUID)
 	}
 	return operationReceiptFromRow(completedReceipt, receipt.Replayed), nil
 }

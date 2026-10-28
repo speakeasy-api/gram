@@ -94,7 +94,7 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 		if err != nil {
 			return identityProviderAttachmentAuthorizationUnavailableResult()
 		}
-		return cardResult(signInCard(authorization.ServerName, authorization.URL)), identityProviderAttachmentOutput(input.ProjectSlug, input.RegistrationID, attachment, authorization.URL), nil
+		return cardResult(signInCard(authorization.ServerName, authorization.Logo, authorization.URL)), identityProviderAttachmentOutput(input.ProjectSlug, input.RegistrationID, attachment, authorization.URL), nil
 	})
 }
 

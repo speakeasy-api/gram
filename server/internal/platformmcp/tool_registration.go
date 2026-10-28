@@ -115,7 +115,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				dashboardSetupURL = ""
 			}
 		}
-		return cardResult(serverCard(result.ServerName, result.Project, nextAction, dashboardSetupURL)), RegisterCatalogMCPToolOutput{
+		return cardResult(serverCard(result.ServerName, registrations.cardLogo(ctx, principal, result.Project, result.Registration), result.Project, nextAction, dashboardSetupURL)), RegisterCatalogMCPToolOutput{
 			ProjectSlug:         result.Project.Slug,
 			ProviderKey:         result.ProviderKey,
 			CatalogRef:          result.CatalogRef,
@@ -171,7 +171,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
 			}
 		}
-		return cardResult(serverCard(result.ServerName, result.Project, result.NextAction, result.DashboardSetupURL)), RegisterRemoteMCPToolOutput{
+		return cardResult(serverCard(result.ServerName, registrations.cardLogo(ctx, principal, result.Project, result.Registration), result.Project, result.NextAction, result.DashboardSetupURL)), RegisterRemoteMCPToolOutput{
 			ProjectSlug:       result.Project.Slug,
 			CanonicalURL:      result.RemoteURL,
 			ReceiptID:         result.Receipt.ID.String(),

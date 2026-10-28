@@ -1984,6 +1984,8 @@ func newStartCommand() *cli.Command {
 				LogsEnabled:               platformmcp.FeatureChecker(logsEnabled),
 				ShadowInventory:           accessService,
 				ShadowReview:              mcpApprovalService,
+				ServerIcons:               mcpServersService,
+				AssetStorage:              assetStorage,
 				SessionCapture:            platformmcp.FeatureChecker(sessionCaptureEnabled),
 				SessionPortability:        platformmcp.FeatureChecker(sessionPortabilityEnabled),
 				LocalFixture:              platformFixture,

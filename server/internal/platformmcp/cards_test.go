@@ -101,7 +101,7 @@ func TestCardToolsLinkTheServedCardView(t *testing.T) {
 func TestCardEscapesUntrustedText(t *testing.T) {
 	t.Parallel()
 
-	card := serverCard(`<img src=x onerror="alert(1)">`, ResolvedProject{Name: `"><script>alert(2)</script>`, Slug: "project"}, nextActionSecureDashboardSetup, "https://dashboard.example.test/setup?a=1&b=2")
+	card := serverCard(`<img src=x onerror="alert(1)">`, "", ResolvedProject{Name: `"><script>alert(2)</script>`, Slug: "project"}, nextActionSecureDashboardSetup, "https://dashboard.example.test/setup?a=1&b=2")
 	rendered := renderCard(t, card)
 	require.NotContains(t, rendered, "<img")
 	require.NotContains(t, rendered, "<script")
@@ -109,7 +109,7 @@ func TestCardEscapesUntrustedText(t *testing.T) {
 	require.Contains(t, rendered, "&lt;script&gt;")
 	require.Contains(t, rendered, `href="https://dashboard.example.test/setup?a=1&amp;b=2"`)
 
-	unsafe := renderCard(t, signInCard("Example", "javascript:alert(3)"))
+	unsafe := renderCard(t, signInCard("Example", "", "javascript:alert(3)"))
 	require.NotContains(t, unsafe, "javascript:")
 	require.Contains(t, unsafe, `href="#ZgotmplZ"`)
 }
@@ -131,7 +131,7 @@ func TestServerCardNextStep(t *testing.T) {
 		{nextActionSecureDashboardSetup, setupURL, "Next: enter its credentials in the dashboard.", &cardAction{Label: "Open dashboard setup", URL: setupURL}},
 		{nextActionContinueDashboardSetup, "", "Next: finish setup from the MCP server's page in the dashboard.", nil},
 	} {
-		card := serverCard("Example", project, tc.nextAction, tc.setupURL)
+		card := serverCard("Example", "", project, tc.nextAction, tc.setupURL)
 		require.Equal(t, "Example", card.Title)
 		require.Equal(t, "Added to project Support", card.Subtitle)
 		require.Equal(t, "Private until added to a plugin", card.Note)
@@ -139,7 +139,7 @@ func TestServerCardNextStep(t *testing.T) {
 		require.Equal(t, tc.action, card.Action, tc.nextAction)
 	}
 
-	unnamed := serverCard("", ResolvedProject{Name: "", Slug: "support"}, "ready", "")
+	unnamed := serverCard("", "", ResolvedProject{Name: "", Slug: "support"}, "ready", "")
 	require.Equal(t, "MCP server", unnamed.Title)
 	require.Equal(t, "Added to project support", unnamed.Subtitle)
 }
@@ -148,10 +148,10 @@ func TestSignInCardOpensTheAuthorizationURL(t *testing.T) {
 	t.Parallel()
 
 	authorizationURL := "https://dashboard.example.test/org/projects/p/mcp/example/inspect"
-	rendered := renderCard(t, signInCard("Example", authorizationURL))
+	rendered := renderCard(t, signInCard("Example", "", authorizationURL))
 	require.Contains(t, rendered, `href="`+authorizationURL+`"`)
 	require.Contains(t, rendered, ">Sign in to Example</a>")
 	require.Equal(t, 1, strings.Count(rendered, "<a "), "the card offers one link")
 
-	require.Equal(t, &cardAction{Label: "Sign in", URL: authorizationURL}, signInCard("", authorizationURL).Action)
+	require.Equal(t, &cardAction{Label: "Sign in", URL: authorizationURL}, signInCard("", "", authorizationURL).Action)
 }

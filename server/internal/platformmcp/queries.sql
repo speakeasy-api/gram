@@ -4030,3 +4030,17 @@ SELECT n.id, n.seq, n.created_at, n.role, n.generation,
                ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
        ), '[]')::jsonb AS participants
 FROM neighbors n ORDER BY n.seq;
+
+-- name: GetPlatformMCPRegistrationLogo :one
+-- The stored logo of a registration's MCP server, for its result card. Every
+-- join is pinned to the registration's organization and project.
+SELECT a.url, a.content_type, a.content_length
+FROM platform_mcp_catalog_registrations r
+JOIN mcp_metadata m ON m.mcp_server_id = r.mcp_server_id AND m.project_id = r.project_id
+JOIN assets a ON a.id = m.logo_id AND a.project_id = r.project_id
+WHERE r.id = @registration_id
+  AND r.organization_id = @organization_id
+  AND r.project_id = @project_id
+  AND r.deleted IS FALSE
+  AND a.kind = 'image'
+  AND a.deleted IS FALSE;

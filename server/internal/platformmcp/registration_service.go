@@ -5,12 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/assets"
 )
 
 var ErrRegistrationUnavailable = errors.New("platform mcp catalog registration unavailable")
@@ -91,6 +96,7 @@ type RegistrationService struct {
 	clientAdmission            *ClientAdmissionService
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
+	logos                      *cardLogos
 }
 
 func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
@@ -125,6 +131,23 @@ func (s *RegistrationService) WithTelemetry(telemetry LifecycleTelemetry) *Regis
 		s.telemetry = telemetry
 	}
 	return s
+}
+
+// WithCardLogos lets result cards show the logo stored for an MCP server.
+// Without it every card shows the server's first letter.
+func (s *RegistrationService) WithCardLogos(logger *slog.Logger, db *pgxpool.Pool, storage assets.BlobStore) *RegistrationService {
+	if s != nil && logger != nil && db != nil && storage != nil {
+		s.logos = &cardLogos{logger: logger, db: db, storage: storage}
+	}
+	return s
+}
+
+// cardLogo is the stored logo of a registration's MCP server, or empty.
+func (s *RegistrationService) cardLogo(ctx context.Context, principal Principal, project ResolvedProject, registrationID string) template.URL {
+	if s == nil {
+		return ""
+	}
+	return s.logos.registrationLogo(ctx, principal.OrganizationID, project.ID, registrationID)
 }
 
 func (s *RegistrationService) WithReadiness(readiness *ReadinessService) *RegistrationService {
@@ -351,6 +374,9 @@ type DashboardAuthorization struct {
 
 	// ServerName is the MCP server's display name, which may be empty.
 	ServerName string
+
+	// Logo is the MCP server's stored logo for its card, or empty.
+	Logo template.URL
 }
 
 // DashboardAuthorization returns the Inspect page only after the upstream
@@ -377,6 +403,7 @@ func (s *RegistrationService) DashboardAuthorization(ctx context.Context, princi
 	return DashboardAuthorization{
 		URL:        s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "inspect").String(),
 		ServerName: setup.ServerName,
+		Logo:       s.cardLogo(ctx, principal, project, registrationID),
 	}, nil
 }
 
