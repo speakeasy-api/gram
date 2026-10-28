@@ -39,13 +39,14 @@ type RegisterRemoteMCPToolInput struct {
 }
 
 type RegisterRemoteMCPToolOutput struct {
-	ProjectSlug       string `json:"project_slug"`
-	CanonicalURL      string `json:"canonical_url"`
-	ReceiptID         string `json:"receipt_id"`
-	RegistrationID    string `json:"registration_id"`
-	Replayed          bool   `json:"replayed"`
-	NextAction        string `json:"next_action"`
-	DashboardSetupURL string `json:"dashboard_setup_url,omitempty"`
+	ProjectSlug                 string `json:"project_slug"`
+	CanonicalURL                string `json:"canonical_url"`
+	ReceiptID                   string `json:"receipt_id"`
+	RegistrationID              string `json:"registration_id"`
+	Replayed                    bool   `json:"replayed"`
+	AutomaticClientRegistration string `json:"automatic_client_registration,omitempty" jsonschema:"for a server that requires sign-in: dynamic_client_registration or client_id_metadata_document means its OAuth provider is connected automatically and only the user's sign-in remains; none means a client must be configured by hand in the dashboard"`
+	NextAction                  string `json:"next_action"`
+	DashboardSetupURL           string `json:"dashboard_setup_url,omitempty"`
 }
 
 // registerCatalogRegistrationTool registers the reviewed-catalogue workflow in
@@ -137,7 +138,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 	addTool(reg, &mcp.Tool{
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
-		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin, and a project Shadow MCP policy is applied at that later step, where the administrator's distribution counts as the review.",
+		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin, and a project Shadow MCP policy is applied at that later step, where the administrator's distribution counts as the review. When next_action is connect_sign_in, the server signs users in with OAuth and its client is set up automatically: tell the user so, offer to connect sign-in now, and only after explicit confirmation call attach_platform_mcp_identity_provider and present its authorization URL; dashboard_setup_url is the fallback.",
 		Annotations: registrationAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterRemoteMCPToolInput) (*mcp.CallToolResult, RegisterRemoteMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -170,13 +171,14 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			}
 		}
 		return nil, RegisterRemoteMCPToolOutput{
-			ProjectSlug:       result.Project.Slug,
-			CanonicalURL:      result.RemoteURL,
-			ReceiptID:         result.Receipt.ID.String(),
-			RegistrationID:    result.Registration,
-			Replayed:          result.Receipt.Replayed,
-			NextAction:        result.NextAction,
-			DashboardSetupURL: result.DashboardSetupURL,
+			ProjectSlug:                 result.Project.Slug,
+			CanonicalURL:                result.RemoteURL,
+			ReceiptID:                   result.Receipt.ID.String(),
+			RegistrationID:              result.Registration,
+			Replayed:                    result.Receipt.Replayed,
+			AutomaticClientRegistration: result.AutomaticClientRegistration,
+			NextAction:                  result.NextAction,
+			DashboardSetupURL:           result.DashboardSetupURL,
 		}, nil
 	})
 }

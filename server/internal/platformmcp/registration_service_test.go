@@ -736,11 +736,13 @@ func TestRegistrationServiceDirectRemoteProtocols(t *testing.T) {
 		{"modern", "ready"},
 		{"legacy", "ready"},
 		{"stateful", "ready"},
-		{"auth401", "secure_dashboard_setup_required"},
-		{"auth403", "secure_dashboard_setup_required"},
-		{"tools-auth", "secure_dashboard_setup_required"},
-		{"discover-auth", "secure_dashboard_setup_required"},
-		{"stateful-auth-cleanup", "secure_dashboard_setup_required"},
+		// These fixtures advertise dynamic client registration, so sign-in can be
+		// connected in chat.
+		{"auth401", "connect_sign_in"},
+		{"auth403", "connect_sign_in"},
+		{"tools-auth", "connect_sign_in"},
+		{"discover-auth", "connect_sign_in"},
+		{"stateful-auth-cleanup", "connect_sign_in"},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
 			t.Parallel()
@@ -760,11 +762,46 @@ func TestRegistrationServiceDirectRemoteProtocols(t *testing.T) {
 			require.Equal(t, registrationID.String(), result.Registration)
 			require.Equal(t, "https://remote.example.test/mcp", store.configuration.remoteURL)
 			require.Equal(t, tc.nextAction, result.NextAction)
-			if tc.nextAction == "secure_dashboard_setup_required" {
+			if tc.nextAction != "ready" {
 				require.NotEmpty(t, result.DashboardSetupURL)
 			} else {
 				require.Empty(t, result.DashboardSetupURL)
 			}
+		})
+	}
+}
+
+func TestRegistrationServiceOffersSignInInChatWhenTheClientIsAutomatic(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		oauthDiscovery string
+		nextAction     string
+		registration   string
+	}{
+		{oauthDiscoveryAvailableDCR, "connect_sign_in", AutomaticClientRegistrationDCR},
+		{oauthDiscoveryAvailableCIMD, "connect_sign_in", AutomaticClientRegistrationCIMD},
+		{oauthDiscoveryAvailable, "secure_dashboard_setup_required", AutomaticClientRegistrationNone},
+		{oauthDiscoveryIncomplete, "secure_dashboard_setup_required", AutomaticClientRegistrationNone},
+	} {
+		t.Run(tc.oauthDiscovery, func(t *testing.T) {
+			t.Parallel()
+			registrationID := uuid.New()
+			store := &recordingRegistrationStore{
+				project:   ResolvedProject{ID: uuid.New(), Slug: "project"},
+				begin:     OperationReceipt{ID: uuid.New()},
+				converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+				completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+				dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server"},
+			}
+			inspector := &testDirectRemoteInspector{inspection: directRemoteInspection("https://remote.example.test/mcp", nil, "authentication_required", tc.oauthDiscovery, true)}
+			service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+			service.WithDashboardURL(&url.URL{Scheme: "https", Host: "dashboard.example.test"})
+
+			result, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: "Example", IdempotencyKey: "request-key"})
+			require.NoError(t, err)
+			require.Equal(t, tc.nextAction, result.NextAction)
+			require.Equal(t, tc.registration, result.AutomaticClientRegistration)
+			require.NotEmpty(t, result.DashboardSetupURL, "the dashboard stays available as the fallback")
 		})
 	}
 }
