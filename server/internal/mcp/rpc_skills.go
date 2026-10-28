@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -163,7 +164,11 @@ func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 // the creator's organization skills to every agent holding the key, and
 // recording each read as the creator's activation, would be wrong on both
 // counts. The RBAC engine refuses the same identification (an API key is not
-// a user principal), so the skill scope follows it.
+// a user principal), so the skill scope follows it. The same holds for every
+// other credential whose user claim is attribution rather than proof: an
+// assistant, agent, workload or chat-session token, or a consent-discovery
+// sign-in. Only a validated user session, or a request no MCP credential
+// stamped (a dashboard session), names the caller.
 func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs) (scope mcpskills.Scope, ok bool) {
 	// The dispatcher leaves attribution to the handlers, and it must not turn
 	// an otherwise valid skills request into an error.
@@ -179,7 +184,7 @@ func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	}
 
 	userID := ""
-	if payload.authenticated && payload.apiKeyID == "" {
+	if payload.authenticated && payload.apiKeyID == "" && actsAsUser(ctx) {
 		userID = payload.userID
 	}
 	return mcpskills.Scope{
@@ -188,6 +193,14 @@ func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		MemberMCPServerIDs: nil,
 		UserID:             userID,
 	}, true
+}
+
+// actsAsUser reports whether the request's MCP credential, if any, proves an
+// acting user. Unstamped requests did not come through an MCP credential, so
+// the auth context's user is the caller.
+func actsAsUser(ctx context.Context) bool {
+	identity, ok := mcpidentity.FromContext(ctx)
+	return !ok || identity.Kind() == mcpidentity.KindUserSession
 }
 
 // skillResourceURI reports the skill URI a resources/read request names, when
