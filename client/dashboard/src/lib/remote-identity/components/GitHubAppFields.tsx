@@ -3,30 +3,7 @@ import { Text } from "@/components/ui/Text";
 import { TextArea } from "@/components/ui/Textarea";
 import { useId } from "react";
 
-export type GitHubAppDraft = {
-  instanceUrl: string;
-  appId: string;
-  installationId: string;
-  privateKey: string;
-};
-
-export function newGitHubAppDraft(): GitHubAppDraft {
-  return {
-    instanceUrl: "https://github.com",
-    appId: "",
-    installationId: "",
-    privateKey: "",
-  };
-}
-
-export function gitHubAppReady(draft: GitHubAppDraft): boolean {
-  return (
-    /^https:\/\/[^/]+\/?$/.test(draft.instanceUrl) &&
-    /^[1-9][0-9]*$/.test(draft.appId) &&
-    /^[1-9][0-9]*$/.test(draft.installationId) &&
-    /-----BEGIN (RSA )?PRIVATE KEY-----/.test(draft.privateKey)
-  );
-}
+import type { GitHubAppDraft } from "../model/githubApp";
 
 export function GitHubAppFields({
   value,
@@ -36,7 +13,7 @@ export function GitHubAppFields({
   value: GitHubAppDraft;
   onChange: (value: GitHubAppDraft) => void;
   disabled?: boolean;
-}) {
+}): JSX.Element {
   const id = useId();
   return (
     <div className="space-y-3">

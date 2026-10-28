@@ -1,7 +1,7 @@
 import {
   gitHubAppReady,
   type GitHubAppDraft,
-} from "@/lib/remote-identity/components/GitHubAppFields";
+} from "@/lib/remote-identity/model/githubApp";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {

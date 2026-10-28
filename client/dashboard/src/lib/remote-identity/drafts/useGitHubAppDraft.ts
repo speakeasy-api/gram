@@ -1,4 +1,5 @@
-import { useState } from "react";
+import type { AuthClient } from "@gram/client/models/components/authclient.js";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useAuthClients } from "@gram/client/react-query/authClients.js";
 import { toast } from "sonner";
@@ -6,14 +7,26 @@ import {
   gitHubAppReady,
   newGitHubAppDraft,
   type GitHubAppDraft,
-} from "../components/GitHubAppFields";
+} from "../model/githubApp";
+
+type GitHubAppDraftState = {
+  value: GitHubAppDraft;
+  setDraft: Dispatch<SetStateAction<GitHubAppDraft | null>>;
+  bound: AuthClient | undefined;
+  saving: boolean;
+  canSave: boolean;
+  save: () => Promise<boolean>;
+  detach: () => Promise<void>;
+  loading: boolean;
+  error: boolean;
+};
 
 export function useGitHubAppDraft(
   serverId: string,
   upstreamUrl: string | undefined,
   name: string,
   enabled: boolean,
-) {
+): GitHubAppDraftState {
   const client = useSdkClient();
   const query = useAuthClients(
     { mcpServerId: serverId, clientType: "service_account", limit: 100 },

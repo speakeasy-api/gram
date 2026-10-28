@@ -1,8 +1,8 @@
+import { GitHubAppFields } from "@/lib/remote-identity/components/GitHubAppFields";
 import {
-  GitHubAppFields,
   newGitHubAppDraft,
   type GitHubAppDraft,
-} from "@/lib/remote-identity/components/GitHubAppFields";
+} from "@/lib/remote-identity/model/githubApp";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
