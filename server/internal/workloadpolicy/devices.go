@@ -288,6 +288,7 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	}
 
 	if err := s.audit.LogWorkloadAdmissionAdmit(ctx, dbtx, audit.LogWorkloadAdmissionAdmitEvent{
+		Visibility:             audit.VisibilityCustomer,
 		OrganizationID:         org,
 		ProjectID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Actor:                  actor,

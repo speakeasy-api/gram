@@ -61,6 +61,11 @@ type LogWorkloadAdmissionAdmitEvent struct {
 	AdmissionDisplayName string
 
 	AdmissionSnapshotAfter *WorkloadAdmissionSnapshot
+
+	// Visibility is VisibilityInternal when Speakeasy admits or withdraws a
+	// workload on its own, as a runtime does for itself on every start and
+	// teardown. Empty means VisibilityCustomer.
+	Visibility Visibility
 }
 
 func (l *Logger) LogWorkloadAdmissionAdmit(ctx context.Context, dbtx repo.DBTX, event LogWorkloadAdmissionAdmitEvent) error {
@@ -90,6 +95,8 @@ func (l *Logger) LogWorkloadAdmissionAdmit(ctx context.Context, dbtx repo.DBTX, 
 		Metadata:       nil,
 		BeforeSnapshot: nil,
 		AfterSnapshot:  after,
+
+		Visibility: string(event.Visibility),
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.WorkloadAdmissionV1})
@@ -159,6 +166,11 @@ type LogWorkloadAdmissionWithdrawEvent struct {
 	AdmissionDisplayName string
 
 	AdmissionSnapshotBefore *WorkloadAdmissionSnapshot
+
+	// Visibility is VisibilityInternal when Speakeasy admits or withdraws a
+	// workload on its own, as a runtime does for itself on every start and
+	// teardown. Empty means VisibilityCustomer.
+	Visibility Visibility
 }
 
 func (l *Logger) LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBTX, event LogWorkloadAdmissionWithdrawEvent) error {
@@ -188,6 +200,8 @@ func (l *Logger) LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBT
 		Metadata:       nil,
 		BeforeSnapshot: before,
 		AfterSnapshot:  nil,
+
+		Visibility: string(event.Visibility),
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.WorkloadAdmissionV1})

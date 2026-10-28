@@ -105,6 +105,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		SubjectIds:             normalizeSubjectIDs(payload.SubjectIds),
 		ActingSurface:          conv.PtrToPGTextEmpty(payload.ActingSurface),
 		IncludeAssistantEvents: false,
+		IncludeInternalEvents:  false,
 		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 	}

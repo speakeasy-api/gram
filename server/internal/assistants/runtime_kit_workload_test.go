@@ -17,6 +17,8 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -174,6 +176,36 @@ func TestKitWorkloadDBSharedIssuerAndExactRevoke(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
 	require.Equal(t, identity.AgentID, assignments[0].AgentID)
+}
+
+// A runtime admitting and withdrawing its own workload on every start and
+// teardown is operational activity, so those entries are internal. Registering
+// the cluster issuer happens once per project and is a configuration change the
+// customer sees, attributed to the assistant's agent rather than to an
+// anonymous system component.
+func TestKitWorkloadDBAuditVisibilityAndAttribution(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+
+	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.NoError(t, err)
+
+	issuerCreate, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadIssuerCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(urn.PrincipalTypeAgent), issuerCreate.ActorType)
+	require.Equal(t, identity.AgentID.String(), issuerCreate.ActorID)
+	require.Equal(t, audit.VisibilityCustomer, issuerCreate.Visibility)
+
+	admit, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	require.Equal(t, binding.Subject, admit.SubjectDisplay)
+	require.Equal(t, audit.VisibilityInternal, admit.Visibility)
+
+	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
+	withdraw, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, binding.Subject, withdraw.SubjectDisplay)
+	require.Equal(t, audit.VisibilityInternal, withdraw.Visibility)
 }
 
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {

@@ -37,6 +37,7 @@ type auditLogSeed struct {
 	beforeSnapshot     []byte
 	afterSnapshot      []byte
 	metadata           []byte
+	visibility         audit.Visibility
 }
 
 func TestAuditService_List_Unauthorized(t *testing.T) {
@@ -747,6 +748,63 @@ func TestAuditService_List_ExcludesAssistantEventsByDefault(t *testing.T) {
 	require.Equal(t, insertedPlatform.String(), result.Logs[0].ID)
 }
 
+func TestAuditService_List_ExcludesInternalEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	projectID := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        "kit-runtime",
+		actorType:      "system",
+		action:         string(audit.ActionWorkloadAdmissionAdmit),
+		subjectID:      uuid.NewString(),
+		subjectType:    "workload_admission",
+		visibility:     audit.VisibilityInternal,
+	})
+	customer := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        "user:first",
+		actorType:      "user",
+		action:         string(audit.ActionWorkloadAdmissionAdmit),
+		subjectID:      uuid.NewString(),
+		subjectType:    "workload_admission",
+		visibility:     audit.VisibilityCustomer,
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1, "internal events must not appear in the customer feed")
+	require.Equal(t, customer.String(), result.Logs[0].ID)
+
+	// Naming the subject type or actor explicitly must not reveal them either.
+	result, err = ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      new("kit-runtime"),
+		Action:       nil,
+		SubjectType:  new("workload_admission"),
+		SubjectID:    nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.Logs)
+}
+
 func TestAuditService_List_FilterBySubjectTypeAndSubjectID(t *testing.T) {
 	t.Parallel()
 
@@ -839,6 +897,7 @@ func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed au
 		BeforeSnapshot:     seed.beforeSnapshot,
 		AfterSnapshot:      seed.afterSnapshot,
 		Metadata:           seed.metadata,
+		Visibility:         string(seed.visibility),
 	})
 	require.NoError(t, err)
 

@@ -95,6 +95,21 @@ const (
 
 type Action string
 
+// Visibility says who an audit entry is for.
+//
+// The customer audit log is the record of configuration changes made by an
+// organization's members or by the Speakeasy team. Activity Speakeasy performs
+// on its own to keep the platform running, such as a runtime admitting its own
+// workload identity on every start, is recorded as internal: it stays out of
+// the customer feed and customer webhooks, and remains available to staff and
+// internal analytics.
+type Visibility string
+
+const (
+	VisibilityCustomer Visibility = "customer"
+	VisibilityInternal Visibility = "internal"
+)
+
 func marshalAuditPayload(value any) ([]byte, error) {
 	if value == nil {
 		return nil, nil

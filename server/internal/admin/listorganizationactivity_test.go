@@ -299,6 +299,7 @@ type activitySeed struct {
 	subjectName, subjectSlug       pgtype.Text
 	before, after, metadata        []byte
 	surface, clientID              pgtype.Text
+	visibility                     string
 }
 
 func insertActivity(t *testing.T, ctx context.Context, conn *pgxpool.Pool, seed activitySeed) uuid.UUID {
@@ -317,6 +318,7 @@ func insertActivity(t *testing.T, ctx context.Context, conn *pgxpool.Pool, seed 
 		ActorDisplayName: seed.actorName, ActorSlug: seed.actorSlug, Action: seed.action, SubjectID: seed.subjectID,
 		SubjectType: seed.subjectType, SubjectDisplayName: seed.subjectName, SubjectSlug: seed.subjectSlug,
 		BeforeSnapshot: seed.before, AfterSnapshot: seed.after, Metadata: seed.metadata, ActingSurface: seed.surface, ActingClientID: seed.clientID,
+		Visibility: seed.visibility,
 	})
 	require.NoError(t, err)
 	return row.ID
@@ -406,6 +408,23 @@ func TestListOrganizationActivityFiltered_Predicates(t *testing.T) {
 	missing, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: orgID, ActingSurface: new("not_recorded")})
 	require.NoError(t, err)
 	require.Empty(t, missing.Logs)
+}
+
+// Staff see internal entries that the customer audit log hides.
+func TestListOrganizationActivityFiltered_IncludesInternalEntries(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_internal", name: "Internal", slug: "activity-internal"})
+	internal := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_internal", actorID: "kit-runtime", actorType: "system", subjectType: "workload_admission", action: "workload-admission:admit", visibility: "internal"})
+	customer := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_internal", subjectType: "project", action: "project:update"})
+
+	result, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: "org_activity_internal"})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(result.Logs))
+	for _, log := range result.Logs {
+		ids = append(ids, log.ID)
+	}
+	require.ElementsMatch(t, []string{internal.String(), customer.String()}, ids)
 }
 
 func TestListOrganizationActivityFiltered_ProjectIsolation(t *testing.T) {

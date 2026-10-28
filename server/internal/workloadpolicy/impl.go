@@ -803,6 +803,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 		}
 
 		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
+			Visibility:              audit.VisibilityCustomer,
 			OrganizationID:          t.organizationID,
 			ProjectID:               admission.ProjectID,
 			Actor:                   t.actor,
@@ -1033,6 +1034,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	}
 
 	if err := s.audit.LogWorkloadAdmissionAdmit(ctx, dbtx, audit.LogWorkloadAdmissionAdmitEvent{
+		Visibility:             audit.VisibilityCustomer,
 		OrganizationID:         t.organizationID,
 		ProjectID:              projectID,
 		Actor:                  t.actor,
@@ -1379,6 +1381,7 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 	}
 
 	if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
+		Visibility:              audit.VisibilityCustomer,
 		OrganizationID:          t.organizationID,
 		ProjectID:               withdrawn.ProjectID,
 		Actor:                   t.actor,

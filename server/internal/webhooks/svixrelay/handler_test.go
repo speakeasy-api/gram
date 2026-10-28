@@ -248,3 +248,18 @@ func TestHandle_NacksTransientFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestHandle_DropsInternalEvents(t *testing.T) {
+	t.Parallel()
+
+	inst := newHandlerTestInstance(t)
+	orgID := seedOrg(t, inst.conn, "app_123", true)
+
+	err := inst.handler.Handle(t.Context(), newEvent(orgID, uuid.NewString(), []byte(validPayload)), gcp.MessageMetadata{
+		ID:              "",
+		Attributes:      map[string]string{"event_type": "audit_log.workload_admission_event_v1", "audience": "internal"},
+		DeliveryAttempt: nil,
+	})
+	require.NoError(t, err)
+	inst.svixSrv.AssertNotCalled(t, "CreateMessage", mock.Anything, mock.Anything, mock.Anything)
+}

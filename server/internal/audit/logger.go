@@ -54,6 +54,16 @@ func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) erro
 	// blank are different answers to "which client acted".
 	entry.Params.ActingClientID = conv.ToPGTextEmpty(identity.ClientID)
 
+	// Most writers never set visibility, so an entry is for customers unless
+	// its Log function marks it internal.
+	switch Visibility(entry.Params.Visibility) {
+	case "":
+		entry.Params.Visibility = string(VisibilityCustomer)
+	case VisibilityCustomer, VisibilityInternal:
+	default:
+		return fmt.Errorf("log %s: unknown audit visibility %q", entry.Params.Action, entry.Params.Visibility)
+	}
+
 	row, err := repo.New(dbtx).InsertAuditLog(ctx, entry.Params)
 	if err != nil {
 		return fmt.Errorf("log %s: %w", entry.Params.Action, err)

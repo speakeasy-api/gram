@@ -15,7 +15,8 @@ INSERT INTO audit_logs (
   after_snapshot,
   metadata,
   acting_surface,
-  acting_client_id
+  acting_client_id,
+  visibility
 ) VALUES (
   @organization_id,
   @project_id,
@@ -32,7 +33,10 @@ INSERT INTO audit_logs (
   @after_snapshot,
   @metadata,
   @acting_surface,
-  @acting_client_id
+  @acting_client_id,
+  -- Blank means the column default, so a writer that never sets visibility
+  -- records a customer entry.
+  COALESCE(NULLIF(@visibility::text, ''), 'customer')
 )
 RETURNING id, organization_id;
 
@@ -68,7 +72,9 @@ LEFT JOIN LATERAL (
 -- name: ListAuditLogs :many
 -- When no subject_type filter is given, assistant activity events (one per
 -- assistant tool call) are excluded so they don't drown out the platform
--- audit feed. The private admin caller can explicitly include all events.
+-- audit feed. Internal entries (operational activity Speakeasy performs on its
+-- own) are excluded the same way. The private admin caller can explicitly
+-- include both.
 -- The actor name is resolved at read time rather than trusted from the row.
 -- Every writer stores the acting user's EMAIL in actor_display_name, so the
 -- stored value renders the feed as a column of addresses; joining the
@@ -115,6 +121,7 @@ WHERE a.organization_id = @organization_id
     )
     OR a.subject_type = sqlc.narg(subject_type)::text
   )
+  AND (@include_internal_events::boolean OR a.visibility = 'customer')
   AND (
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
@@ -146,13 +153,14 @@ ORDER BY a.seq DESC
 LIMIT 51;
 
 -- name: ListAuditActorFacets :many
--- Assistant activity events are excluded: facets power the platform audit
--- feed, which hides them (see ListAuditLogs).
+-- Assistant activity and internal events are excluded: facets power the
+-- platform audit feed, which hides them (see ListAuditLogs).
 WITH filtered_logs AS (
   SELECT actor_id, actor_type, actor_display_name, acting_surface, seq
   FROM audit_logs
   WHERE organization_id = @organization_id
     AND subject_type <> 'assistant'
+    AND visibility = 'customer'
     AND (
       sqlc.narg(project_id)::uuid IS NULL
       OR project_id = sqlc.narg(project_id)::uuid
@@ -202,8 +210,8 @@ LEFT JOIN users u ON u.id = actor_membership.user_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
 
 -- name: ListAuditSurfaceFacets :many
--- Assistant activity events are excluded: facets power the platform audit
--- feed, which hides them (see ListAuditLogs).
+-- Assistant activity and internal events are excluded: facets power the
+-- platform audit feed, which hides them (see ListAuditLogs).
 -- Rows predating attribution have no surface and are counted as 'unknown',
 -- so the facet totals reconcile with the unfiltered feed rather than silently
 -- omitting an organization's older history.
@@ -214,6 +222,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
+  AND visibility = 'customer'
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
@@ -225,8 +234,8 @@ GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC;
 
 -- name: ListAuditActionFacets :many
--- Assistant activity events are excluded: facets power the platform audit
--- feed, which hides them (see ListAuditLogs).
+-- Assistant activity and internal events are excluded: facets power the
+-- platform audit feed, which hides them (see ListAuditLogs).
 SELECT
   action AS value,
   action AS display_name,
@@ -234,6 +243,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
+  AND visibility = 'customer'
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
@@ -246,3 +256,33 @@ ORDER BY count DESC, action ASC;
 UPDATE audit_logs
 SET created_at = @created_at
 WHERE id = ANY(@ids::uuid[]);
+
+-- name: CountCustomerKitRuntimeWorkloadAdmissions :one
+-- Counts the entries MarkKitRuntimeWorkloadAdmissionsInternal would change.
+SELECT COUNT(*)::bigint
+FROM audit_logs
+WHERE actor_type = 'system'
+  AND actor_id = 'kit-runtime'
+  AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
+  AND visibility = 'customer';
+
+-- name: MarkKitRuntimeWorkloadAdmissionsInternal :execrows
+-- Marks Kit runtime admission entries that are still customer entries as
+-- internal. Each Kit runtime admits and withdraws its own workload identity on
+-- every start and teardown, which is operational activity rather than a
+-- configuration change. Updates at most batch_size rows; callers repeat until
+-- no rows change.
+WITH batch AS (
+  SELECT id
+  FROM audit_logs
+  WHERE actor_type = 'system'
+    AND actor_id = 'kit-runtime'
+    AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
+    AND visibility = 'customer'
+  ORDER BY seq
+  LIMIT @batch_size
+)
+UPDATE audit_logs
+SET visibility = 'internal'
+FROM batch
+WHERE audit_logs.id = batch.id;

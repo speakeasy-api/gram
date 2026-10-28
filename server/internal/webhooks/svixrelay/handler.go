@@ -30,6 +30,7 @@ import (
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 )
 
 const (
@@ -45,6 +46,7 @@ const (
 	dropReasonInvalidPayload = "invalid_payload"
 	dropReasonRejected       = "rejected"
 	dropReasonDuplicate      = "duplicate"
+	dropReasonInternal       = "internal"
 )
 
 type Handler struct {
@@ -91,9 +93,17 @@ func NewHandler(
 	}
 }
 
-func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.MessageMetadata) error {
+func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, md gcp.MessageMetadata) error {
 	orgID := ev.GetOrganizationId()
 	eventID := ev.GetEventId()
+
+	// Internal events share the topic so Speakeasy's own consumers see them,
+	// but they are never a customer's to receive. Checked first because no
+	// later outcome, including a retry, may deliver one.
+	if outbox.IsInternalEvent(md.Attributes) {
+		h.drop(ctx, dropReasonInternal)
+		return nil
+	}
 
 	// Neither field can be filled in by a later attempt, so this is a drop
 	// rather than a nack. Without an organization there is no Svix application
