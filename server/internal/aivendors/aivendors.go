@@ -10,10 +10,7 @@
 // depend on it without depending on each other.
 package aivendors
 
-import (
-	"slices"
-	"strings"
-)
+import "slices"
 
 // Category classifies a product. Mirrors aitargets.Category, duplicated rather
 // than imported to keep this package a leaf.
@@ -44,11 +41,6 @@ type Document struct {
 
 	// Enabled gates the document without deleting it.
 	Enabled bool
-
-	// IDJAG admits the document's client to the ID-JAG grant. It applies only
-	// while Enabled, and only to an exact URL: pattern documents are
-	// deliberately never accepted, since their client_id space is unbounded.
-	IDJAG bool
 }
 
 // Signatures are the on-device footprints that identify a product. Mirrors
@@ -152,44 +144,6 @@ func CIMDDocuments() []ProductDocument {
 		}
 	}
 	return out
-}
-
-// IDJAGDocuments returns the enabled, exact documents whose clients may
-// exchange an ID-JAG, in declaration order.
-func IDJAGDocuments() []ProductDocument {
-	var out []ProductDocument
-	for _, entry := range CIMDDocuments() {
-		if entry.Document.Enabled && entry.Document.IDJAG && !strings.Contains(entry.Document.URL, "*") {
-			out = append(out, entry)
-		}
-	}
-	return out
-}
-
-// IDJAGDocument returns the ID-JAG document whose URL is exactly clientID.
-func IDJAGDocument(clientID string) (ProductDocument, bool) {
-	for _, entry := range IDJAGDocuments() {
-		if entry.Document.URL == clientID {
-			return entry, true
-		}
-	}
-	var none ProductDocument
-	return none, false
-}
-
-// IDJAGProductForDocument returns the product that publishes documentURL when
-// that product also has an ID-JAG document, so a client presenting another of
-// its documents can be told to update.
-func IDJAGProductForDocument(documentURL string) (Product, bool) {
-	for _, entry := range IDJAGDocuments() {
-		for _, document := range entry.Product.Documents {
-			if document.URL == documentURL {
-				return entry.Product, true
-			}
-		}
-	}
-	var none Product
-	return none, false
 }
 
 // ProductDocument pairs a document with its publisher, so a consumer carries

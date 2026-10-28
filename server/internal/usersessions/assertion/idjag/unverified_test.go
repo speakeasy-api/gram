@@ -55,6 +55,14 @@ func TestUnverifiedResourceRejectsMalformedAssertion(t *testing.T) {
 	t.Parallel()
 
 	_, ok, err := idjag.UnverifiedResource("not.a.jwt")
-	require.False(t, ok)
+	require.True(t, ok)
 	require.Equal(t, idjag.ReasonMalformed, idjag.ReasonOf(err))
+}
+
+func TestUnverifiedResourceReportsAbsentAssertion(t *testing.T) {
+	t.Parallel()
+
+	_, ok, err := idjag.UnverifiedResource("")
+	require.NoError(t, err)
+	require.False(t, ok)
 }

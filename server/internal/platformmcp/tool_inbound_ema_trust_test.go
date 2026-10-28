@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -18,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type fakeInboundEMAUsers struct {
@@ -140,6 +145,7 @@ type inboundEMAFixture struct {
 	users     *fakeInboundEMAUsers
 	remote    *fakeInboundEMARemote
 	issuerID  string
+	conn      *pgxpool.Pool
 }
 
 func newInboundEMAFixture(t *testing.T, directoryUsers int) inboundEMAFixture {
@@ -165,7 +171,7 @@ func newInboundEMAFixture(t *testing.T, directoryUsers int) inboundEMAFixture {
 		records: map[string]*types.RemoteSessionIssuer{},
 	}
 	service := NewPostgresReader(testenv.NewLogger(t), conn).WithInboundEMATrust(users, remote).inboundEMATrust
-	return inboundEMAFixture{principal: principal, service: service, users: users, remote: remote, issuerID: issuerID}
+	return inboundEMAFixture{principal: principal, service: service, users: users, remote: remote, issuerID: issuerID, conn: conn}
 }
 
 func TestInboundEMATrustToolContracts(t *testing.T) {
@@ -215,10 +221,8 @@ func TestInboundEMATrustGetReportsAudienceDirectoryAndProvider(t *testing.T) {
 	output, err := f.service.Get(t.Context(), f.principal)
 	require.NoError(t, err)
 	require.Equal(t, InboundEMADirectory{ResolvableDirectoryUsers: 2, Synced: true}, output.Directory)
-	require.Equal(t, []InboundEMAClient{
-		{Name: "Claude Code", ClientID: "https://claude.ai/oauth/claude-code-client-metadata"},
-		{Name: "Codex", ClientID: "https://chatgpt.com/oauth/codex/client.json"},
-	}, output.AcceptedClients)
+	require.Contains(t, output.PresetClients, InboundEMAClient{Name: "Anthropic (Claude Code)", ClientID: "https://claude.ai/oauth/claude-code-client-metadata"})
+	require.Contains(t, output.PresetClients, InboundEMAClient{Name: "Codex CLI (stable document)", ClientID: "https://chatgpt.com/oauth/codex/client.json"})
 	require.Len(t, output.Issuers, 2)
 	for _, issuer := range output.Issuers {
 		switch issuer.UserSessionIssuerID {
@@ -572,4 +576,53 @@ func TestInboundEMATrustGetNextStepExplainsDisabledAdmissionBlocksIDJAG(t *testi
 	output, err = f.service.Get(t.Context(), f.principal)
 	require.NoError(t, err)
 	require.NotContains(t, output.NextStep, "cannot work until admission")
+}
+
+func TestInboundEMATrustGetNextStepKeepsAudienceGuidanceWithDisabledAdmission(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	providerID := uuid.NewString()
+	f.remote.records[providerID] = &types.RemoteSessionIssuer{ID: providerID, Issuer: inboundEMATestIDP, JwksURI: new(inboundEMATestIDP + "/keys")}
+	f.users.issuers[f.issuerID].AuthorizationServerMode = "endpoint"
+	f.users.issuers[f.issuerID].IssuerURL = nil
+	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
+	f.users.issuers[f.issuerID].ClientIDMetadataAdmissionMode = "disabled"
+
+	output, err := f.service.Get(t.Context(), f.principal)
+	require.NoError(t, err)
+	require.Contains(t, output.NextStep, "no single audience")
+	require.Contains(t, output.NextStep, "ID-JAG sign-in cannot work until admission")
+	require.Equal(t, 1, strings.Count(output.NextStep, "Issuer "+output.Issuers[0].Slug+":"))
+}
+
+func TestInboundEMATrustGetListsCustomClientURLsInPresetsMode(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	q := usersessionsrepo.New(f.conn)
+	issuer, err := q.CreateOrganizationUserSessionIssuer(t.Context(), usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:     conv.ToPGText(f.principal.OrganizationID),
+		Slug:               "presets-" + uuid.NewString(),
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	const customURL = "https://client.example.test/oauth/client.json"
+	_, err = q.CreateOrganizationUserSessionIssuerCimdClient(t.Context(), usersessionsrepo.CreateOrganizationUserSessionIssuerCimdClientParams{
+		ClientIDMetadataUri: customURL,
+		UserSessionIssuerID: issuer.ID,
+		OrganizationID:      f.principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	f.users.issuers[issuer.ID.String()] = &types.UserSessionIssuer{ID: issuer.ID.String(), Slug: issuer.Slug, AuthorizationServerMode: "shared", ClientIDMetadataAdmissionMode: "presets"}
+	f.users.issuers[f.issuerID].ClientIDMetadataAdmissionMode = "open"
+
+	output, err := f.service.Get(t.Context(), f.principal)
+	require.NoError(t, err)
+	for _, view := range output.Issuers {
+		if view.UserSessionIssuerID == issuer.ID.String() {
+			require.Equal(t, []string{customURL}, view.CustomClientURLs)
+		} else {
+			require.Empty(t, view.CustomClientURLs, "custom URLs are listed in presets mode only")
+		}
+	}
 }

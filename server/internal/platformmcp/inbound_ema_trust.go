@@ -18,7 +18,6 @@ import (
 	orgremotegen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	orgusergen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
@@ -26,6 +25,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // InboundEMAUserIssuerManagement is the organization user session issuer
@@ -140,7 +140,11 @@ type InboundEMAIssuer struct {
 
 	// ClientIDMetadataAdmissionMode is the issuer's effective client ID
 	// metadata document admission mode: disabled, presets, or open.
-	ClientIDMetadataAdmissionMode string `json:"client_id_metadata_admission_mode" jsonschema:"disabled refuses every client ID metadata document, so no accepted client can exchange an ID-JAG; presets and open admit them"`
+	ClientIDMetadataAdmissionMode string `json:"client_id_metadata_admission_mode" jsonschema:"the client gate ID-JAG exchanges share with sign-in: open admits any valid client ID metadata document, presets admits preset_clients and custom_client_urls, disabled admits none"`
+
+	// CustomClientURLs are the client ID metadata document URLs this issuer
+	// admits beyond the presets, listed in presets mode only.
+	CustomClientURLs []string `json:"custom_client_urls,omitempty"`
 
 	// OrganizationGatewayURL is the organization gateway, set when it signs
 	// users in through this issuer.
@@ -172,14 +176,14 @@ type GetInboundEMATrustOutput struct {
 	// Directory reports the directory sync users resolve through.
 	Directory InboundEMADirectory `json:"directory"`
 
-	// AcceptedClients are the only MCP clients that may exchange an ID-JAG.
-	AcceptedClients []InboundEMAClient `json:"accepted_clients"`
+	// PresetClients are the clients an issuer in presets mode admits.
+	PresetClients []InboundEMAClient `json:"preset_clients" jsonschema:"Speakeasy's preset client ID metadata documents, admitted by every issuer in presets mode; a client_id containing * is a pattern, not a value to configure"`
 
 	// NextStep is the next safe action.
 	NextStep string `json:"next_step"`
 }
 
-// InboundEMAClient is an MCP client that may exchange an ID-JAG.
+// InboundEMAClient is a preset MCP client.
 type InboundEMAClient struct {
 	// Name is the client's name.
 	Name string `json:"name"`
@@ -314,7 +318,7 @@ func (s *InboundEMATrustService) Get(ctx context.Context, principal Principal) (
 	if err != nil {
 		return GetInboundEMATrustOutput{}, err
 	}
-	output := GetInboundEMATrustOutput{OrganizationID: principal.OrganizationID, Issuers: []InboundEMAIssuer{}, Truncated: listed.NextCursor != nil, AcceptedClients: inboundEMAAcceptedClients()}
+	output := GetInboundEMATrustOutput{OrganizationID: principal.OrganizationID, Issuers: []InboundEMAIssuer{}, Truncated: listed.NextCursor != nil, PresetClients: inboundEMAPresetClients()}
 	for _, issuer := range listed.Items {
 		if issuer == nil || issuer.ProjectID != "" {
 			continue
@@ -322,6 +326,11 @@ func (s *InboundEMATrustService) Get(ctx context.Context, principal Principal) (
 		view, err := s.issuerState(ctx, issuer, gateway)
 		if err != nil {
 			return GetInboundEMATrustOutput{}, err
+		}
+		if admission.Mode(view.ClientIDMetadataAdmissionMode) == admission.ModePresets {
+			if view.CustomClientURLs, err = s.customClientURLs(ctx, principal.OrganizationID, issuer.ID); err != nil {
+				return GetInboundEMATrustOutput{}, err
+			}
 		}
 		output.Issuers = append(output.Issuers, view)
 	}
@@ -739,10 +748,14 @@ func inboundEMAReadNextStep(output GetInboundEMATrustOutput) string {
 		if issuer.TrustedIdentityProvider != nil {
 			step := "Configure the identity provider to issue ID-JAGs with the reported audience."
 			if issuer.Audience == "" {
-				step = "Issuer " + issuer.Slug + ": " + issuer.AudienceNote
+				step = issuer.AudienceNote
 			}
-			if note := inboundEMAAdmissionNote(issuer); note != "" {
-				step = "Issuer " + issuer.Slug + ": " + note
+			note := inboundEMAAdmissionNote(issuer)
+			if note != "" {
+				step += " " + note
+			}
+			if issuer.Audience == "" || note != "" {
+				step = "Issuer " + issuer.Slug + ": " + step
 			}
 			return step + " Users resolve only through an active synced directory user, with the ID-JAG's email, who is a live member."
 		}
@@ -764,13 +777,36 @@ func inboundEMATrustNextStep(issuer InboundEMAIssuer, directory InboundEMADirect
 	return step + " The trust does not prove the identity provider issues valid ID-JAGs; test a sign-in."
 }
 
-func inboundEMAAcceptedClients() []InboundEMAClient {
-	documents := aivendors.IDJAGDocuments()
-	clients := make([]InboundEMAClient, 0, len(documents))
-	for _, entry := range documents {
-		clients = append(clients, InboundEMAClient{Name: entry.Product.DisplayName, ClientID: entry.Document.URL})
+func inboundEMAPresetClients() []InboundEMAClient {
+	presets := admission.Catalog()
+	clients := make([]InboundEMAClient, 0, len(presets))
+	for _, preset := range presets {
+		if preset.Enabled {
+			clients = append(clients, InboundEMAClient{Name: preset.DisplayName, ClientID: preset.URL})
+		}
 	}
 	return clients
+}
+
+func (s *InboundEMATrustService) customClientURLs(ctx context.Context, organizationID, rawIssuerID string) ([]string, error) {
+	issuerID, err := uuid.Parse(rawIssuerID)
+	if err != nil {
+		return nil, fmt.Errorf("parse user session issuer id: %w", err)
+	}
+	rows, err := usersessionsrepo.New(s.db).ListOrganizationUserSessionIssuerCimdClientsByIssuerID(ctx, usersessionsrepo.ListOrganizationUserSessionIssuerCimdClientsByIssuerIDParams{
+		OrganizationID:      organizationID,
+		UserSessionIssuerID: issuerID,
+		Cursor:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		LimitValue:          clientAdmissionCustomURLLimit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list issuer custom client urls: %w", err)
+	}
+	urls := make([]string, 0, len(rows))
+	for _, row := range rows {
+		urls = append(urls, row.ClientIDMetadataUri)
+	}
+	return urls, nil
 }
 
 // inboundEMAAdmissionNote explains an admission mode that refuses every
@@ -779,5 +815,5 @@ func inboundEMAAdmissionNote(issuer InboundEMAIssuer) string {
 	if admission.Mode(issuer.ClientIDMetadataAdmissionMode) != admission.ModeDisabled {
 		return ""
 	}
-	return "Client ID metadata documents are disabled for this issuer, so ID-JAG sign-in cannot work until admission is set to presets or open to allow the accepted clients."
+	return "Client ID metadata documents are disabled for this issuer, so ID-JAG sign-in cannot work until admission is set to presets or open."
 }

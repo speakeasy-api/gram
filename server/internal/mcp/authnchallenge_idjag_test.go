@@ -298,60 +298,106 @@ func TestTokenIDJAGExchangeRejectsMismatchedResourceWithoutConsumingAssertion(t 
 	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
 }
 
-func TestTokenIDJAGExchangeRefusesClientsBeforeConsumingAssertion(t *testing.T) {
-	t.Parallel()
-
+// newIDJAGAdmissionFixture is a toolset on a trusted ID-JAG issuer, with a
+// directory user granted connect, and a client metadata document server.
+func newIDJAGAdmissionFixture(t *testing.T) (context.Context, *testInstance, idJAGTestAssertion, *cimdDocServer, usersessionsrepo.UserSessionIssuer, string, string) {
+	t.Helper()
 	ds := startCIMDDocServer(t)
 	ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t, ds.srv.Certificate())
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
+	authCtx := requireProjectAuthContext(t, ctx)
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	const upstreamIssuer = "https://identity.example.test"
-	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, upstreamIssuer, jwksURL)
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, "https://identity.example.test", jwksURL)
 	toolset, err := toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 		Slug:                toolset.Slug,
 		ProjectID:           *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	listed := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
-	dcr := createDCRClient(t, ctx, ti, issuer.ID)
 	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
-
 	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
-	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, listed.ClientID, mockidp.MockUserEmail, uuid.NewString())
-	const notAllowed = `{"error":"unauthorized_client","error_description":"this client is not allowed to use the ID-JAG grant"}`
+	return ctx, ti, assertionSigner, ds, issuer, toolset.McpSlug.String, resource
+}
 
-	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeOpen)
-	rejected := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, ds.clientID, assertion, resource)
+// The ID-JAG grant admits clients through the issuer's CIMD admission gate,
+// and no refusal spends the assertion.
+func TestTokenIDJAGExchangeAppliesCIMDAdmissionBeforeConsumingAssertion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, signer, ds, issuer, slug, resource := newIDJAGAdmissionFixture(t)
+	codex := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
+	dcr := createDCRClient(t, ctx, ti, issuer.ID)
+	jti := uuid.NewString()
+	sign := func(clientID string) string {
+		return signer.sign(t, "https://identity.example.test", resource, resource, clientID, mockidp.MockUserEmail, jti)
+	}
+
+	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModePresets)
+	rejected := postIDJAGToken(t, ctx, ti, slug, ds.clientID, sign(ds.clientID))
 	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
-	require.JSONEq(t, notAllowed, rejected.Body.String())
-	require.Zero(t, ds.requests.Load(), "an unlisted client must be refused before its metadata is fetched")
-	_, err = usersessionsrepo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessionsrepo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: issuer.ID, ClientID: ds.clientID})
+	require.JSONEq(t, `{"error":"invalid_client","error_description":"this client ID metadata document URL is not permitted by the server's client policy; the server operator must allow it"}`, rejected.Body.String())
+	require.Zero(t, ds.requests.Load(), "presets must refuse an unlisted URL before fetching it")
+	_, err := usersessionsrepo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessionsrepo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: issuer.ID, ClientID: ds.clientID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
-	rejected = postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, "https://chatgpt.com/oauth/codex/abc123/client.json", assertion, resource)
-	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
-	require.JSONEq(t, `{"error":"unauthorized_client","error_description":"this client is not allowed to use the ID-JAG grant; use a current version of Codex"}`, rejected.Body.String())
-
-	rejected = postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, dcr.ClientID, assertion, resource)
-	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
-	require.JSONEq(t, notAllowed, rejected.Body.String())
-
 	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeDisabled)
-	rejected = postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, listed.ClientID, assertion, resource)
+	rejected = postIDJAGToken(t, ctx, ti, slug, codex.ClientID, sign(codex.ClientID))
 	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
 	require.JSONEq(t, `{"error":"invalid_client","error_description":"this server does not accept client ID metadata documents"}`, rejected.Body.String())
 
+	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeOpen)
+	rejected = postIDJAGToken(t, ctx, ti, slug, dcr.ClientID, sign(dcr.ClientID))
+	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
+	require.JSONEq(t, `{"error":"unauthorized_client","error_description":"this client is not allowed to use the ID-JAG grant"}`, rejected.Body.String())
+
 	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModePresets)
-	accepted := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, listed.ClientID, assertion)
+	accepted := postIDJAGToken(t, ctx, ti, slug, codex.ClientID, sign(codex.ClientID))
 	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
 }
 
-func TestTokenIDJAGExchangeRejectsAssertionIssuedToAnotherListedClient(t *testing.T) {
+func TestTokenIDJAGExchangeAdmitsCatalogClientsInPresetsAndOpenModes(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, signer, _, issuer, slug, resource := newIDJAGAdmissionFixture(t)
+	for _, mode := range []admission.Mode{admission.ModePresets, admission.ModeOpen} {
+		setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, mode)
+		for _, clientID := range []string{codexCIMDClientID, claudeCodeCIMDClientID} {
+			client := seedCIMDClient(t, ctx, ti, issuer.ID, clientID)
+			w := postIDJAGToken(t, ctx, ti, slug, client.ClientID, signer.sign(t, "https://identity.example.test", resource, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString()))
+			require.Equal(t, http.StatusOK, w.Code, "%s %s: %s", mode, clientID, w.Body.String())
+		}
+	}
+}
+
+func TestTokenIDJAGExchangeAdmitsIssuerCustomURLInPresetsMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, signer, ds, issuer, slug, resource := newIDJAGAdmissionFixture(t)
+	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModePresets)
+	_, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuerCimdClient(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerCimdClientParams{
+		ClientIDMetadataUri: ds.clientID,
+		UserSessionIssuerID: issuer.ID,
+		OrganizationID:      issuer.OrganizationID.String,
+	})
+	require.NoError(t, err)
+
+	w := postIDJAGToken(t, ctx, ti, slug, ds.clientID, signer.sign(t, "https://identity.example.test", resource, resource, ds.clientID, mockidp.MockUserEmail, uuid.NewString()))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.EqualValues(t, 1, ds.requests.Load())
+}
+
+func TestTokenIDJAGExchangeAdmitsAnyValidDocumentInOpenMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, signer, ds, issuer, slug, resource := newIDJAGAdmissionFixture(t)
+	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeOpen)
+
+	w := postIDJAGToken(t, ctx, ti, slug, ds.clientID, signer.sign(t, "https://identity.example.test", resource, resource, ds.clientID, mockidp.MockUserEmail, uuid.NewString()))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.EqualValues(t, 1, ds.requests.Load())
+}
+
+func TestTokenIDJAGExchangeRejectsAssertionIssuedToAnotherClient(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, assertionSigner, jwksURL := newIDJAGTestService(t)
