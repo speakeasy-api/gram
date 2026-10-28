@@ -30,6 +30,9 @@ type ChallengeBrowserBinding struct {
 }
 
 func validateChallengeBrowser(r *http.Request, state AuthnChallengeState, callback bool) error {
+	if err := validateCodeReconnectBinding(state); err != nil {
+		return err
+	}
 	if err := validateWorkloadReconnectBinding(state); err != nil {
 		return err
 	}
@@ -127,6 +130,18 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	}
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login parent mismatch"), oauthui.ReasonSessionChanged))
+	}
+	if err := validateCodeReconnectBinding(parent); err != nil {
+		return err
+	}
+	if parent.CodeReconnect != nil {
+		endpoint, err := s.loadResolvedMcpEndpointByRef(r.Context(), parent.Endpoint)
+		if err != nil {
+			return err
+		}
+		if _, err := s.consentSubjectMembers(r.Context(), endpoint, parent); err != nil {
+			return err
+		}
 	}
 	if err := validateWorkloadReconnectBinding(parent); err != nil {
 		return err

@@ -139,7 +139,7 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 # Started by start only when the local code provider is configured.
 [daemons.code-runtime]
 run = "exec mise run start:code-runtime"
-ready_output = "gram-code-runner protocol 1 listening on"
+ready_output = "gram-code-runner protocol 2 listening on"
 retry = 0
 
 # Not a service: a cron that checks, every five minutes, whether this

@@ -630,7 +630,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	focusServer := ""
 	if endpoint.MetaMcpServerID.Valid {
 		focus := challengeState.FocusServer
-		if r.URL.Query().Has("server") {
+		if challengeState.CodeReconnect == nil && r.URL.Query().Has("server") {
 			focus = r.URL.Query().Get("server")
 		}
 		if len(focus) > maxFocusServerLength {

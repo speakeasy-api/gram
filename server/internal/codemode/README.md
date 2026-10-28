@@ -435,3 +435,29 @@ settings retains the existing dashboard/API authorization and audit workflow.
 Managed assistants do not receive the external-admin settings tool. No shipped
 Platform MCP skill names a changed tool or procedure. There is no new staff
 capability or admin workflow, so Admin MCP requires no change.
+
+## Connection recovery
+
+`await tools.connection_status(server="")` reports visible members, including
+ones needing new consent, without invoking their tools.
+`await tools.connect(server="tracker")` returns a short-lived browser sign-in
+URL, instructions, and `client_reconnect_required`. The link is bound to the
+requesting user, gateway and member; the browser must authenticate that user.
+The same execution reuses its link. Neither helper expands the optional tool
+allowlist, so they also work with `tools=[]`.
+
+An authenticated code-mode connection whose catalogue expired can run these
+recovery helpers, but cannot invoke or discover business tools. Expired or
+revoked gateway credentials still fail normal MCP authentication. Upstream
+sign-in does not replace the immutable catalogue on an existing OAuth grant:
+when `client_reconnect_required` is true, the user must reconnect the gateway
+in their MCP client and approve the member. The agent returns the link, ends
+execution, and checks access in a fresh execution after the user finishes.
+Programs and tool calls are never replayed by the recovery flow.
+
+Platform MCP assessment: the actor is the signed-in gateway caller and the
+target is that caller's member connection. Existing connection-settings tools
+manage server configuration, not this OAuth grant. Recovery therefore belongs
+to the gateway host API, with no new management tool or staff-admin capability.
+Focused host, runner and gateway tests cover helper visibility, expiry and
+identity binding.

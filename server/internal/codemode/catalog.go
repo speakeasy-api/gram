@@ -4,6 +4,7 @@ package codemode
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 const (
@@ -27,6 +28,10 @@ type Host interface {
 	Search(context.Context, SearchArgs) (*SearchPage, error)
 	// Describe returns the original definition of one exact qualified name.
 	Describe(context.Context, string) (*Description, error)
+	// ConnectionStatus reports visible members without granting tool access.
+	ConnectionStatus(context.Context, string) (*ConnectionStatus, error)
+	// Connect returns a browser handoff for one visible member.
+	Connect(context.Context, string) (*ConnectionAction, error)
 	// Call invokes one member tool without changing the execution's identity.
 	Call(context.Context, string, json.RawMessage) (*ToolResult, error)
 }
@@ -135,4 +140,29 @@ type ToolResult struct {
 	Content json.RawMessage `json:"content"`
 	// Error is a client-safe explanation when OK is false.
 	Error string `json:"error,omitempty"`
+}
+
+// ConnectionStatus describes recoverable access separately from callable tools.
+type ConnectionStatus struct {
+	Servers []ConnectionState `json:"servers"`
+}
+
+// ConnectionState never treats stored consent as proof of upstream access.
+type ConnectionState struct {
+	Server       string `json:"server"`
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	Reason       string `json:"reason,omitempty"`
+	Instructions string `json:"instructions,omitempty"`
+}
+
+// ConnectionAction contains no credentials. The URL starts a browser login.
+type ConnectionAction struct {
+	Server                  string     `json:"server"`
+	Status                  string     `json:"status"`
+	Reason                  string     `json:"reason,omitempty"`
+	AuthorizationURL        string     `json:"authorization_url,omitempty"`
+	ExpiresAt               *time.Time `json:"expires_at,omitempty"`
+	ClientReconnectRequired bool       `json:"client_reconnect_required"`
+	Instructions            string     `json:"instructions"`
 }

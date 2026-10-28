@@ -69,7 +69,17 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 
+	codeReconnect, err := s.consumeCodeReconnect(r, endpoint)
+	if err != nil {
+		return err
+	}
+	if codeReconnect != nil && (reconnect != nil || r.URL.Query().Get("binding_refresh_attempt") != "" || r.URL.Query().Get("reauthenticate_client_id") != "") {
+		return oops.E(oops.CodeBadRequest, nil, "conflicting connection requests")
+	}
 	focusServer := r.URL.Query().Get("server")
+	if codeReconnect != nil {
+		focusServer = codeReconnect.Server
+	}
 	if len(focusServer) > maxFocusServerLength {
 		return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
 	}
@@ -127,6 +137,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		BindingRefreshAttemptID: attemptID,
 		ReauthenticateClientID:  reauthenticateClientID,
 		WorkloadReconnect:       reconnect,
+		CodeReconnect:           codeReconnect,
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
 		FocusServer:     focusServer,

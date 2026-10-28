@@ -47,7 +47,7 @@ impl Run {
         write_frame(
             &mut client,
             &ClientFrame::Start {
-                version: 1,
+                version: 2,
                 execution_id: id,
                 code: code.into(),
                 wall_ms,
@@ -839,7 +839,7 @@ async fn cancellation_during_a_partial_write_keeps_frames_intact() {
     write_frame(
         &mut stream,
         &ClientFrame::Start {
-            version: 1,
+            version: 2,
             execution_id: Uuid::new_v4().to_string(),
             code: "await tools.call('a--write', {'payload': 'x' * 300000})".into(),
             wall_ms: 5000,
@@ -878,7 +878,7 @@ async fn a_preopened_stream_cannot_start_execution_after_shutdown() {
     let shutdown = CancellationToken::new();
     let task = tokio::spawn(serve_stream(server, state(1).await, shutdown.clone()));
     let start = serde_json::to_vec(&ClientFrame::Start {
-        version: 1,
+        version: 2,
         execution_id: Uuid::new_v4().to_string(),
         code: "await tools.call('a--write', {})".into(),
         wall_ms: 30000,

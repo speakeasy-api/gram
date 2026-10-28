@@ -51,10 +51,10 @@ The default listen address is `127.0.0.1:8081`. The dedicated Docker image
 listens on port 8081 and runs as UID 65532. Build it from the repository root:
 `docker build -f agents/code-runner/Dockerfile -t gram-code-runner:dev .`.
 
-## Transport contract, version 1
+## Transport contract, version 2
 
 Speakeasy initiates `GET /v1/connect` with `Authorization: Bearer <runner secret>`,
-`Connection: upgrade`, `Upgrade: gram-code-yamux`, and `Gram-Code-Protocol: 1`.
+`Connection: upgrade`, `Upgrade: gram-code-yamux`, and `Gram-Code-Protocol: 2`.
 The runner verifies authentication and version before returning 101. The upgraded
 byte stream carries yamux, with Speakeasy as client and the runner as server. One
 stream owns one execution. `/health` returns the runtime and protocol version.
@@ -122,3 +122,8 @@ The tests exercise fresh state, discovery/calls, concurrent futures, filesystem
 denial, allocator/time/output limits, cancellation, deadlines, framing, duplicate
 IDs, authentication and multiplexing against real Monty subprocesses. This
 runner layer does not expose a public MCP tool or change management settings.
+
+Protocol 2 adds the `connection_status` and `connect` Python helpers. Both use
+the bounded host callback channel; OAuth credentials remain in the gateway.
+Protocol 1 peers are refused before a program is submitted. Deploy the new
+runner image with the matching server version.
