@@ -557,7 +557,7 @@ func TestDirectRemoteOAuthDiscoveryRecoversFromMetadataTransportFailure(t *testi
 		}
 	})}
 	client := clientWithDirectRemoteBudget(t, base, directRemoteResponseBudget{remaining: directRemoteProbeMaxBytes, requestsRemaining: directRemoteProbeMaxRequests})
-	discovery, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp")
+	discovery, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp")
 	require.NoError(t, err)
 	require.Equal(t, "available_dcr", discovery)
 	require.Equal(t, []string{"/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server"}, requests)

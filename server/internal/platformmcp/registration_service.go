@@ -502,6 +502,9 @@ type RegisterRemoteMCPResult struct {
 	Registration      string
 	NextAction        string
 	DashboardSetupURL string
+	// AutomaticClientRegistration says how an OAuth client is obtained from the
+	// server's provider; empty when the server needs no sign-in.
+	AutomaticClientRegistration string
 }
 
 // RegisterRemoteMCP re-inspects the exact URL before persistence. An inspection
@@ -586,9 +589,15 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
 		}
 		nextAction = "secure_dashboard_setup_required"
+		// Attachment can set up the provider's client automatically, so the
+		// only step left is the user's sign-in, which the agent can connect in
+		// chat. The dashboard link stays as the fallback.
+		if inspection.AttachmentSupported {
+			nextAction = "connect_sign_in"
+		}
 	}
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})
-	return RegisterRemoteMCPResult{Project: project, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL}, nil
+	return RegisterRemoteMCPResult{Project: project, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection)}, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
