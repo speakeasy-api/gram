@@ -77,15 +77,13 @@ p { margin: 0; overflow-wrap: anywhere; }
     }
   }
   // A result without a card, such as a refusal, leaves the view empty and
-  // reports its zero height so the host can collapse it.
+  // clears any earlier card and reports zero height so the host can collapse it.
   function render(meta) {
     var card = meta && meta[CARD_KEY];
-    if (typeof card === "string") {
-      root.innerHTML = card;
-    }
+    root.innerHTML = typeof card === "string" ? card : "";
     notify("ui/notifications/size-changed", {
       width: document.documentElement.scrollWidth,
-      height: document.documentElement.scrollHeight
+      height: root.offsetHeight
     });
   }
 

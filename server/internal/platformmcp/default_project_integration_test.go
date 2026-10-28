@@ -179,6 +179,27 @@ func TestSetupToolsActOnTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 		readiness, err := invokeTool[GetMCPReadinessToolOutput](t, callerCtx, reg, "get_mcp_readiness", map[string]any{"project_slug": namedProject.Slug, "registration_id": remote.RegistrationID})
 		require.NoError(t, err)
 		require.Equal(t, namedProject.Slug, readiness.ProjectSlug)
+
+		// Over MCP, the attach result carries a sign-in card for its
+		// authorization URL next to the unchanged structured output.
+		reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+		reg.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+			return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				return next(contextWithPrincipal(ctx, principal), method, req)
+			}
+		})
+		result, err := connectTestClient(t, reg.server).CallTool(ctx, &mcp.CallToolParams{Name: "attach_platform_mcp_identity_provider", Arguments: map[string]any{"project_slug": namedProject.Slug, "registration_id": remote.RegistrationID, "confirmed": true}})
+		require.NoError(t, err)
+		require.False(t, result.IsError)
+		structured, err := json.Marshal(result.StructuredContent)
+		require.NoError(t, err)
+		var attached AttachPlatformMCPIdentityProviderToolOutput
+		require.NoError(t, json.Unmarshal(structured, &attached))
+		require.NotEmpty(t, attached.AuthorizationURL)
+		card, ok := result.Meta[cardMetaKey].(string)
+		require.True(t, ok)
+		require.Contains(t, card, `href="`+attached.AuthorizationURL+`"`)
+		require.Contains(t, card, ">Sign in to https://remote.example.test/mcp</a>")
 	}
 
 	// An omitted project in an organization without a default project is refused.

@@ -67,24 +67,35 @@ func TestCardShellLoadsNothingFromTheNetwork(t *testing.T) {
 	}
 }
 
-func TestCardToolsLinkTheCardView(t *testing.T) {
+// The live composition serves the card view next to the tools that link to it,
+// so a missing resource registration cannot ship with the links intact.
+func TestCardToolsLinkTheServedCardView(t *testing.T) {
 	t.Parallel()
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "card-tools"}, nil))
-	registerCatalogRegistrationTool(reg, &RegistrationService{}, nil)
-	registerRemoteRegistrationTool(reg, &RegistrationService{}, nil)
-	registerIdentityProviderTool(reg, &RegistrationService{})
-	listed, err := connectTestClient(t, reg.server).ListTools(t.Context(), nil)
-	require.NoError(t, err)
-	require.Len(t, listed.Tools, 3)
+	registrations := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, &recordingRegistrationStore{}).
+		WithDirectRemoteInspector(&testDirectRemoteInspector{})
+	registrations.budgets.Registration = OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}
+	server, _ := newServer(nil, nil, registrations, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	var served []string
+	for resource, err := range connectTestClient(t, server).Resources(t.Context(), nil) {
+		require.NoError(t, err)
+		served = append(served, resource.URI)
+	}
+	require.Contains(t, served, cardResourceURI)
 
-	for _, tool := range listed.Tools {
+	linked := map[string]bool{}
+	for _, tool := range listAdvertisedTools(t, server) {
+		if tool.Meta == nil {
+			continue
+		}
 		require.Equal(t, map[string]any{"resourceUri": cardResourceURI}, tool.Meta["ui"], tool.Name)
 		require.Equal(t, cardResourceURI, tool.Meta["openai/outputTemplate"], tool.Name)
 		encoded, err := json.Marshal(tool.Meta)
 		require.NoError(t, err)
 		require.Less(t, len(encoded), 128, "keep tool _meta small for the host tool budget")
+		linked[tool.Name] = true
 	}
+	require.Equal(t, map[string]bool{"register_catalog_mcp": true, "register_remote_mcp": true, "attach_platform_mcp_identity_provider": true}, linked)
 }
 
 func TestCardEscapesUntrustedText(t *testing.T) {
