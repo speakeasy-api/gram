@@ -50,6 +50,8 @@ func TestPlatformMCPAuditAdmissionPrecedesProtectedQueries(t *testing.T) { //nol
 	auth.SessionID = nil
 	base := contextvalues.WithAuthenticatedActor(t.Context(), &auth, urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID))
 	base = contextvalues.SetActingSurface(base, contextvalues.ActingSurfacePlatformMCP)
+	_, grantsLoaded := authz.GrantsFromContext(base)
+	require.False(t, grantsLoaded, "base must have no grant snapshot, unlike the loaded-but-empty required denial case")
 	read := authztest.WithExactGrants(t, base, authz.NewGrant(authz.ScopeOrgRead, auth.ActiveOrganizationID))
 	request := auditapi.PlatformMCPAuditRequest{OrganizationID: auth.ActiveOrganizationID, UserID: auth.UserID, Cursor: ""}
 	recorder := &auditQueryRecorder{}
@@ -63,7 +65,7 @@ func TestPlatformMCPAuditAdmissionPrecedesProtectedQueries(t *testing.T) { //nol
 	service := auditapi.NewService(logger, testenv.NewTracerProvider(t), pool, ti.sessionManager, engine)
 	otherActor := contextvalues.WithAuthenticatedActor(read, &auth, urn.NewPrincipal(urn.PrincipalTypeUser, "other-user"))
 	for name, deniedContext := range map[string]context.Context{ //nolint:paralleltest // Sequential cases share the query counter with the positive control below.
-		"missing grants":        authztest.WithExactGrants(t, base),
+		"missing grants":        base,
 		"required denial":       authztest.WithExactGrants(t, base),
 		"foreign read":          authztest.WithExactGrants(t, base, authz.NewGrant(authz.ScopeOrgRead, "other-org")),
 		"identity mismatch":     otherActor,
