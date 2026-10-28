@@ -2,9 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  getRecentLabelOverride,
+  recordVisit,
+} from "@/components/command-palette/recentlyVisited";
 import IdentityDetailRoot from "./IdentityDetailRoot";
 
-const mocks = vi.hoisted(() => ({ orgRead: false }));
+const mocks = vi.hoisted(() => ({
+  orgRead: false,
+  subject: vi.fn(),
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example", name: "Example Org" }),
   useProject: () => ({ id: "project_one", slug: "project-one" }),
@@ -40,6 +47,7 @@ vi.mock("@/routes", () => ({
         permissions: page("permissions"),
         credentials: page("credentials"),
         sessions: page("sessions"),
+        controls: page("controls"),
       },
     },
   }),
@@ -53,13 +61,14 @@ vi.mock("@/components/require-scope", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "default" }),
   useProjectSlugForRequests: () => "example",
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
 vi.mock("./useIdentitySubject", () => ({
-  useIdentitySubject: () => ({ isLoading: true, data: undefined }),
+  useIdentitySubject: () => mocks.subject(),
 }));
 vi.mock("@/components/page-layout", () => {
   const Box = ({ children }: { children?: React.ReactNode }) => (
@@ -72,6 +81,31 @@ vi.mock("@/components/page-layout", () => {
     }),
   };
 });
+
+vi.mock("./useIdentityQueries", () => ({
+  useCanReadRisk: () => false,
+  useIdentityIsKnown: () => ({ isPending: false, known: true }),
+}));
+vi.mock("@gram/client/react-query/sessionInfo.js", () => ({
+  useSessionInfo: () => ({ data: { result: { userId: "user_example" } } }),
+}));
+vi.mock("@/components/identity-rail", () => ({
+  IdentityRail: () => <nav>Identity navigation</nav>,
+}));
+vi.mock("./AgentIdentityProfile", () => ({
+  AgentIdentityProfile: ({
+    agent,
+  }: {
+    agent: { permissions: { write: boolean; transfer: boolean } };
+  }) => (
+    <div>
+      Agent profile: write={String(agent.permissions.write)}, transfer=
+      {String(agent.permissions.transfer)}
+    </div>
+  ),
+  AgentHeaderActions: () => <button>Agent header actions</button>,
+  AgentRenameAction: () => <button>Rename agent</button>,
+}));
 
 function setup(urn: string) {
   const client = new QueryClient({
@@ -93,9 +127,21 @@ function setup(urn: string) {
   );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 beforeEach(() => {
+  localStorage.clear();
   mocks.orgRead = false;
+  mocks.subject.mockReturnValue({ isPending: true, data: undefined });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
 });
 
 // An agent resolves through its own management API, which authorizes per
@@ -119,3 +165,104 @@ it("keeps human profiles behind organization read", () => {
   setup("user:user_example");
   expect(screen.getByText("Scope: org:read")).toBeTruthy();
 });
+
+const cachedAgent = {
+  canonicalUrn: "agent:agent_example",
+  kind: "agent",
+  displayName: "Private agent name",
+  emails: [],
+  directory: { groups: [] },
+  agent: { id: "agent_example", permissions: { write: true, transfer: true } },
+};
+
+it.each([403, 404])(
+  "hides cached agent details after a %s refetch",
+  (statusCode) => {
+    mocks.subject.mockReturnValue({
+      data: cachedAgent,
+      error: { statusCode },
+      isPending: false,
+    });
+    setup("agent:agent_example");
+    expect(screen.getByText("Agent unavailable")).toBeTruthy();
+    expect(screen.queryByText(cachedAgent.displayName)).toBeNull();
+    expect(screen.queryByText(/Agent profile:/)).toBeNull();
+    expect(screen.queryByText("Agent header actions")).toBeNull();
+    expect(screen.queryByText("Rename agent")).toBeNull();
+    expect(screen.queryByText("Identity navigation")).toBeNull();
+  },
+);
+
+it.each([{ statusCode: 500 }, new Error("Network unavailable")])(
+  "keeps cached agent details on a transient error: %s",
+  (error) => {
+    mocks.subject.mockReturnValue({
+      data: cachedAgent,
+      error,
+      isPending: false,
+    });
+    setup("agent:agent_example");
+    expect(screen.queryByText("Agent unavailable")).toBeNull();
+    expect(screen.getByText(cachedAgent.displayName)).toBeTruthy();
+    expect(
+      screen.getByText("Agent profile: write=true, transfer=true"),
+    ).toBeTruthy();
+  },
+);
+
+it("renders a successful retained-access result with updated permissions", () => {
+  mocks.subject.mockReturnValue({
+    data: {
+      ...cachedAgent,
+      agent: {
+        ...cachedAgent.agent,
+        permissions: { write: false, transfer: false },
+      },
+    },
+    error: null,
+    isPending: false,
+  });
+  setup("agent:agent_example");
+  expect(screen.queryByText("Agent unavailable")).toBeNull();
+  expect(screen.getByText(cachedAgent.displayName)).toBeTruthy();
+  expect(
+    screen.getByText("Agent profile: write=false, transfer=false"),
+  ).toBeTruthy();
+});
+
+it.each([403, 404])(
+  "forgets a previously readable agent in recents after %s",
+  (statusCode) => {
+    const href = "/identities/agent%3Aagent_example/overview";
+    mocks.subject.mockReturnValue({
+      data: cachedAgent,
+      error: null,
+      isPending: false,
+    });
+    setup("agent:agent_example");
+    expect(getRecentLabelOverride(href)).toBe(cachedAgent.displayName);
+    recordVisit("user_example", "example", "default", {
+      href,
+      label: cachedAgent.displayName,
+    });
+    recordVisit("user_example", "example", "default", {
+      href: "/identities/agent%3Aother/overview",
+      label: "Other agent",
+    });
+    cleanup();
+
+    mocks.subject.mockReturnValue({
+      data: cachedAgent,
+      error: { statusCode },
+      isPending: false,
+    });
+    setup("agent:agent_example");
+    expect(getRecentLabelOverride(href)).toBeUndefined();
+    const stored = Array.from({ length: localStorage.length }, (_, i) =>
+      localStorage.getItem(localStorage.key(i)!),
+    ).join("");
+    expect(stored).not.toContain(cachedAgent.displayName);
+    expect(stored).not.toContain(href);
+    expect(stored).toContain("Other agent");
+  },
+);

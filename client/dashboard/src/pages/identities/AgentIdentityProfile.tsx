@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
+import { AgentOwnership } from "@/pages/agents/AgentOwnership";
 import {
   AgentIdentityFacts,
   AgentLifecycle,
@@ -22,6 +23,7 @@ import { AgentIdentityUsage } from "./AgentIdentityUsage";
 import { IdentityPanel } from "./IdentityPanel";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { IdentitySection } from "./IdentitySection";
+import { IdentityToolLogsPanel } from "./IdentityToolLogs";
 
 /**
  * Edit, for the page header's top right: it acts on the agent itself, not on
@@ -122,6 +124,7 @@ export function AgentIdentityProfile({
           title="Controls & Safety"
           meta="Stop this agent acting, for a while or for good"
         >
+          <AgentOwnership agent={agent} />
           <AgentLifecycle
             agent={agent}
             refresh={refresh}
@@ -263,6 +266,8 @@ export function AgentIdentityProfile({
             <ManagedAgentSessions agent={agent} variant="panel" limit={3} />
           </IdentityPanel>
           <AgentIdentityAudit agent={agent} subject />
+          {/* Every call it made, under the usage summary's numbers. */}
+          <IdentityToolLogsPanel agentId={agent.id} />
         </IdentitySection>
       );
   }
