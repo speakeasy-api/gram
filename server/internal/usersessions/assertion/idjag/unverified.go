@@ -18,18 +18,18 @@ func UnverifiedResource(raw string) (string, bool, error) {
 	if err != nil {
 		return "", true, reject(ReasonMalformed, err)
 	}
-	// Decoded as Validate decodes the verified payload, so both read the same claim.
+	// Decoded with encoding/json as Validate does; go-jose's decoder is case-sensitive.
 	var payload json.RawMessage
 	if err := token.UnsafeClaimsWithoutVerification(&payload); err != nil {
 		return "", true, reject(ReasonMalformed, err)
 	}
-	var extra struct {
+	var claims struct {
 		Resource json.RawMessage `json:"resource,omitempty"`
 	}
-	if err := json.Unmarshal(payload, &extra); err != nil {
+	if err := json.Unmarshal(payload, &claims); err != nil {
 		return "", true, reject(ReasonMalformed, err)
 	}
-	resource, ok, err := additionalClaims{Resource: extra.Resource, ClientID: "", Email: "", Scope: ""}.resource()
+	resource, ok, err := parseResourceClaim(claims.Resource)
 	if err != nil {
 		return "", true, reject(ReasonResourceMismatch, err)
 	}

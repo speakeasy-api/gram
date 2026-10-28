@@ -16,13 +16,13 @@ type additionalClaims struct {
 // errResourceClaimInvalid is a present resource claim that is not a non-empty string.
 var errResourceClaimInvalid = errors.New("resource claim must be a non-empty string")
 
-// resource returns the resource claim and whether the assertion carries one.
-func (c additionalClaims) resource() (string, bool, error) {
-	if len(c.Resource) == 0 {
+// parseResourceClaim parses a raw resource claim and reports whether the assertion carries one.
+func parseResourceClaim(raw json.RawMessage) (string, bool, error) {
+	if len(raw) == 0 {
 		return "", false, nil
 	}
 	var value *string
-	if err := json.Unmarshal(c.Resource, &value); err != nil || value == nil || *value == "" {
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil || *value == "" {
 		return "", true, errResourceClaimInvalid
 	}
 	return *value, true, nil
