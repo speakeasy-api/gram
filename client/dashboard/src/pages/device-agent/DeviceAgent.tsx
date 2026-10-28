@@ -104,10 +104,7 @@ function DeviceAgentTabs() {
             <PageTabsTrigger value="setup">Setup</PageTabsTrigger>
             {canConfigure && (
               <PageTabsTrigger value="configuration">
-                <span className="inline-flex items-center gap-2">
-                  Configuration
-                  <ReleaseStageBadge stage="preview" noTooltip />
-                </span>
+                Configuration
               </PageTabsTrigger>
             )}
             {canConfigure && (
