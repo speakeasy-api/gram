@@ -287,7 +287,7 @@ func backfillAliasEndpointsInTx(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}
 	if err := auditLogger.LogToolsetMoveLegacyAlias(ctx, tx, audit.LogToolsetMoveLegacyAliasEvent{
 		OrganizationID: candidate.OrganizationID, ProjectID: candidate.ProjectID, Actor: urn.NewSystemPrincipal(AliasBackfillActor),
-		ActorDisplayName: nil, ActorSlug: nil, ToolsetURN: urn.NewToolset(toolset.ID), ToolsetName: toolset.Name, ToolsetSlug: toolset.Slug,
+		ActorDisplayName: new("Speakeasy"), ActorSlug: nil, ToolsetURN: urn.NewToolset(toolset.ID), ToolsetName: toolset.Name, ToolsetSlug: toolset.Slug,
 		LegacyAliasSnapshotBefore: auditAliasAddress(before), LegacyAliasSnapshotAfter: auditAliasAddress(after),
 	}); err != nil {
 		return result, fmt.Errorf("audit alias move: %w", err)
@@ -374,7 +374,7 @@ func backfillAliasAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, a
 	}
 	if err := auditLogger.LogMcpEndpointCreate(ctx, tx, audit.LogMcpEndpointCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, Actor: urn.NewSystemPrincipal(AliasBackfillActor),
-		ActorDisplayName: nil, ActorSlug: nil, McpEndpointURN: urn.NewMcpEndpoint(created.ID), Slug: created.Slug,
+		ActorDisplayName: new("Speakeasy"), ActorSlug: nil, McpEndpointURN: urn.NewMcpEndpoint(created.ID), Slug: created.Slug,
 	}); err != nil {
 		return fmt.Errorf("audit endpoint creation: %w", err)
 	}
