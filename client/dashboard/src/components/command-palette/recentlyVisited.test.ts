@@ -129,5 +129,9 @@ it("forgets resource overrides and scoped visits without matching sibling resour
     href: overview,
     label: getRecentLabelOverride(overview) ?? "Agents",
   });
-  expect(getRecentLabelOverride(overview)).toBeUndefined();
+  const rerecorded = Array.from({ length: localStorage.length }, (_, i) =>
+    localStorage.getItem(localStorage.key(i)!),
+  ).join("");
+  expect(rerecorded).not.toContain("Private name");
+  expect(rerecorded).toContain("Agents");
 });
