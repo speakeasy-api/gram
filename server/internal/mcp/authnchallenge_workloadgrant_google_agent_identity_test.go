@@ -32,7 +32,7 @@ func TestWorkloadAssertionGrant_GoogleAgentIdentity(t *testing.T) {
 	// fetching below intentionally uses the fixture's HTTPS JWKS server.
 	_, err := jwks.NewRemoteSource(issuer + "/jwks")
 	require.NoError(t, err)
-	mint := func(sub, aud string) string {
+	mint := func(t *testing.T, sub, aud string) string {
 		t.Helper()
 		now := time.Now()
 		return oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", jwt.Claims{
@@ -47,11 +47,11 @@ func TestWorkloadAssertionGrant_GoogleAgentIdentity(t *testing.T) {
 		{"subject is not URL normalized", subject + "/", f.advertisedIssuer},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			requireWorkloadGrantRefused(t, f.exchange(t, mint(tc.sub, tc.aud), f.resource))
+			requireWorkloadGrantRefused(t, f.exchange(t, mint(t, tc.sub, tc.aud), f.resource))
 			require.Empty(t, f.workloadSessions(t))
 		})
 	}
-	assertion := mint(subject, f.advertisedIssuer)
+	assertion := mint(t, subject, f.advertisedIssuer)
 	w := f.exchange(t, assertion, f.resource)
 	f.requireWorkloadSession(t, w, f.advertisedIssuer)
 	var response struct {
