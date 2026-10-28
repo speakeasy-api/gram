@@ -256,7 +256,7 @@ jobs:
   # action). No job depends on it.
   go-module-cache:
     name: Populate Go module cache
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -422,6 +422,7 @@ jobs:
 
   docker-build-server:
     name: docker-build-server
+    # Smoke-test the cross-compiled production binary natively on x86-64.
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -484,9 +485,9 @@ jobs:
       - name: Pull and Run Image
         run: |
           echo "Pulling image: ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}"
-          docker pull ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}
+          docker pull --platform linux/amd64 ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}
           echo "Running image..."
-          docker run --rm ${STEPS_BUILD_OUTPUTS_IMAGE_TAG} version
+          docker run --rm --platform linux/amd64 ${STEPS_BUILD_OUTPUTS_IMAGE_TAG} version
         env:
           STEPS_BUILD_OUTPUTS_IMAGE_TAG: ${{ steps.build.outputs.image-tag }}
 
@@ -1331,7 +1332,7 @@ jobs:
   # lint and codegen checks. ci-gate still requires server-checks.
   server-build:
     name: server-build
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
@@ -1366,11 +1367,28 @@ jobs:
 
       - name: Build
         env:
+          # The build host is ARM; production runs Linux x86-64. Scope the
+          # target to these builds so tooling and tests still run natively.
+          GOOS: linux
+          GOARCH: amd64
           GRAM_ASSISTANT_RUNTIME_IMAGE_HASH: ${{ steps.assistant-runtime-hash.outputs.hash }}
         run: mise run build:server --readonly
 
       - name: Build tunnel gateway
+        env:
+          GOOS: linux
+          GOARCH: amd64
         run: mise run build:tunnel-gateway --readonly
+
+      - name: Verify production binary targets
+        run: |
+          for binary in server/bin/gram server/bin/tunnel-gateway; do
+            metadata=$(go version -m "$binary")
+            printf '%s\n' "$metadata"
+            grep -Fxq $'\tbuild\tGOOS=linux' <<< "$metadata"
+            grep -Fxq $'\tbuild\tGOARCH=amd64' <<< "$metadata"
+            grep -Fxq $'\tbuild\tCGO_ENABLED=0' <<< "$metadata"
+          done
 
       - name: Upload server build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -1381,7 +1399,7 @@ jobs:
 
   server-checks:
     name: server-checks
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
@@ -1568,7 +1586,7 @@ jobs:
 
   cli-build-lint:
     name: cli-build-lint
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     needs: changes
     if: needs.changes.outputs.cli == 'true'
     env:
@@ -1630,7 +1648,7 @@ jobs:
 
   hooks-build-test:
     name: hooks-build-test
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     needs: changes
     if: needs.changes.outputs.hooks == 'true'
     env:
@@ -1665,7 +1683,7 @@ jobs:
 
   glint-test:
     name: glint-test
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     needs: changes
     if: needs.changes.outputs.glint == 'true'
     env:
@@ -1697,7 +1715,7 @@ jobs:
 
   plog-build-lint:
     name: plog-build-lint
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     needs: changes
     if: needs.changes.outputs.plog == 'true'
     env:
@@ -1744,7 +1762,8 @@ jobs:
 
   server-test:
     name: server-test (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # The pinned Postgres/ClickHouse images and Redis support native ARM64.
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
     needs: changes
     if: needs.changes.outputs.server == 'true'
     strategy:
@@ -1849,7 +1868,7 @@ jobs:
   # as its own required check so a failure is immediately attributable.
   demo-seed-safety:
     name: demo-seed-safety
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
@@ -2261,6 +2280,8 @@ jobs:
 
   functions-build-host:
     name: functions-build-host
+    # Melange executes the x86-64 package build inside Docker; moving this
+    # combined test/package job to ARM would emulate the production build.
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.functions == 'true'

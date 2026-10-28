@@ -159,6 +159,8 @@ runs:
       with:
         context: ${{ inputs.context }}
         file: ${{ inputs.file }}
+        # Deployment images must target production, independently of the runner.
+        platforms: linux/amd64
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
