@@ -104,7 +104,9 @@ it.each([
   mocks.session.mockReturnValue({ ...mocks.session(), trial });
   const fetcher = setup();
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 20);
+    });
   });
   expect(fetcher).not.toHaveBeenCalled();
   expect(
@@ -123,7 +125,9 @@ it.each(["member", "disabled flag"])(
     else mocks.flag.mockReturnValue({ status: "disabled" });
     const fetcher = setup();
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 20);
+      });
     });
     expect(fetcher).not.toHaveBeenCalled();
     expect(screen.getByRole("progressbar")).toBeTruthy();
