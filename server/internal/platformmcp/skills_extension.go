@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"maps"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -202,7 +201,9 @@ func withSkillsExtension(capabilities *mcp.ServerCapabilities) *mcp.ServerCapabi
 		out = *capabilities
 	}
 	extensions := make(map[string]any, len(out.Extensions)+1)
-	maps.Copy(extensions, out.Extensions)
+	for name, settings := range out.Extensions {
+		extensions[name] = settings
+	}
 	extensions[mcpversions.ExtensionSkills] = map[string]any{}
 	out.Extensions = extensions
 	return &out
