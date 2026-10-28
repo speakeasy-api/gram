@@ -24,16 +24,7 @@ import (
 
 func TestKitGKEIAMPendingRecoversUnobservedCreateAndFailedDeletes(t *testing.T) {
 	t.Parallel()
-	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-	client.PrependReactor("create", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
-		create, ok := action.(ktesting.CreateAction)
-		require.True(t, ok)
-		obj, ok := create.GetObject().(*unstructured.Unstructured)
-		require.True(t, ok)
-		obj.SetUID("pending-uid")
-		obj.SetResourceVersion("1")
-		return false, nil, nil
-	})
+	k, client, r, _ := kitGKEBackendFixture(t)
 	journalDeleteFails := true
 	client.PrependReactor("delete", "configmaps", func(action ktesting.Action) (bool, runtime.Object, error) {
 		if journalDeleteFails {
@@ -43,10 +34,9 @@ func TestKitGKEIAMPendingRecoversUnobservedCreateAndFailedDeletes(t *testing.T) 
 		deletion, ok := action.(ktesting.DeleteAction)
 		require.True(t, ok)
 		opts := deletion.GetDeleteOptions()
-		require.EqualValues(t, "pending-uid", *opts.Preconditions.UID)
+		require.EqualValues(t, "uid-"+kitGKEName(r)+"-iam", *opts.Preconditions.UID)
 		return false, nil, nil
 	})
-	r := assistantRuntimeRecord{ID: uuid.New(), AssistantID: uuid.New(), ProjectID: uuid.New(), LifecycleTx: kitGKEFixtureTransaction{}}
 	const ksa = "kit-generation"
 	exists, iamDeleteFails := false, true
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -97,13 +87,40 @@ func TestKitGKEIAMPendingRecoversUnobservedCreateAndFailedDeletes(t *testing.T) 
 	_, err = kitGKEWorkloadSubject(ctx, ksa)
 	require.Error(t, err)
 	require.True(t, exists)
-	require.Error(t, m.removePending(t.Context(), r)) // IAM delete failed; intent remains.
-	require.ErrorContains(t, m.removePending(t.Context(), r), "journal deletion unavailable")
+	// The remote create succeeded before runtime metadata was published. Retire
+	// the durable empty row, deliberately passing stale caller metadata.
+	require.NoError(t, k.config.AuthorityStore.Save(t.Context(), r.LifecycleTx, r, []byte("{}"), []byte("{}")))
+	r.Retired = true
+	r.BackendMetadataJSON = []byte(`{"workload":{"subject":"stale"}}`)
+	fenceFails := true
+	k.config.Fence = func(ctx context.Context, fenced assistantRuntimeRecord) error {
+		require.JSONEq(t, "{}", string(fenced.BackendMetadataJSON))
+		if fenceFails {
+			return fmt.Errorf("credential fence unavailable")
+		}
+		if err := m.removeRuntime(ctx, fenced); err != nil {
+			return err
+		}
+		return m.removePending(ctx, fenced)
+	}
+	require.ErrorContains(t, k.Reap(t.Context(), r), "credential fence unavailable")
+	require.True(t, exists)
+	fenceFails = false
+	// An unobserved create followed by 404 is ambiguous, not deletion proof.
+	exists = false
+	require.ErrorContains(t, k.Reap(t.Context(), r), "remains uncertain")
+	exists = true
+	require.Error(t, k.Reap(t.Context(), r)) // IAM delete failed; intent remains.
+	require.True(t, exists)
+	require.ErrorContains(t, k.ReapStoppedMachine(t.Context(), r), "journal deletion unavailable")
 	require.False(t, exists)
-	require.NoError(t, m.removePending(t.Context(), r)) // Recorded numeric ID makes 404 safe.
+	require.NoError(t, k.Reap(t.Context(), r)) // Recorded numeric ID makes 404 safe.
 	_, err = client.Resource(kitGKEIAMPendingGVR).Namespace("kit-test").Get(t.Context(), kitGKEName(r)+"-iam", metav1.GetOptions{})
 	require.True(t, apierrors.IsNotFound(err))
-	require.NoError(t, m.removePending(t.Context(), r))
+	require.NoError(t, k.ReapStoppedMachine(t.Context(), r))
+	persisted, err := k.config.AuthorityStore.Load(t.Context(), r.LifecycleTx, r)
+	require.NoError(t, err)
+	require.JSONEq(t, "{}", string(persisted))
 }
 
 func TestKitGKEIAMUsesFixedGoogleIssuer(t *testing.T) {

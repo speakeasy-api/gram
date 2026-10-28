@@ -216,7 +216,8 @@ rejection can be cleared, but an uncertain result stays fenced until reconciled.
    images are still selected.
 4. In **one infrastructure revision**, pin the published metadata-sidecar digest
    in `GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE`, select the new server and worker
-   application image digests, set `GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT`,
+   application image digests, set `GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT` and
+   `GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT`,
    and remove the local issuer/JWKS configuration. Apply these paired images and
    settings together; do not deploy the configuration cleanup with old application
    images or the new application with old issuer/JWKS settings. Include all

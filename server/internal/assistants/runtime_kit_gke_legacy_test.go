@@ -114,7 +114,9 @@ func TestKitGKEFailedProjectedGenerationCleanup(t *testing.T) {
 				require.Empty(t, client.Actions())
 			}
 			if mode == "delete retry" {
-				require.Equal(t, 2, *fences)
+				require.Equal(t, 4, *fences)
+			} else if r.Retired {
+				require.Equal(t, 3, *fences)
 			} else {
 				require.Equal(t, 1, *fences)
 			}

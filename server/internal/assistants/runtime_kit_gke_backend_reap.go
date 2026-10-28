@@ -35,10 +35,14 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		if err != nil {
 			return fmt.Errorf("load retired Kit authority: %w", err)
 		}
-		// Legacy cleanup clears durable authority before its caller marks the
-		// row reaped. Retrying that final bookkeeping must not require resources
-		// already deleted. Accept only the explicit empty-object sentinel.
+		// Empty authority can mean completed legacy cleanup or a bootstrap that
+		// crashed before publishing metadata. Always finish credential fencing
+		// and pending IAM cleanup before the caller marks the row reaped.
 		if len(raw) != 0 && kitLocalUnprovisionedMetadata(raw) {
+			r.BackendMetadataJSON = raw
+			if err := k.config.Fence(ctx, r); err != nil {
+				return fmt.Errorf("fence unprovisioned retired Kit authority: %w", err)
+			}
 			return nil
 		}
 		var prior kitGKEBackendMetadata
