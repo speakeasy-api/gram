@@ -660,7 +660,7 @@ function ResourceLinkContent({
   item: Extract<ContentItem, { type: "resource_link" }>;
 }): React.JSX.Element {
   // Only http(s) resources are somewhere a browser can go. Scheme-specific URIs
-  // like gram:// address a document on the MCP server, so they are shown and
+  // like speakeasy:// address a document on the MCP server, so they are shown and
   // copyable rather than dressed up as a link that would fail to open.
   const href = /^https?:\/\//i.test(item.uri) ? item.uri : undefined;
   const label = item.title ?? item.name ?? item.uri;

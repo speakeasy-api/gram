@@ -423,18 +423,10 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 	}
 	beforeView := UserSessionIssuerView(existing)
 
-	// Compare under the issuer row lock, which also serializes binding
-	// preparation. Slug-only and no-op patches do not reconfigure bindings.
-	bindingSensitive := (payload.AuthnChallengeMode != nil && *payload.AuthnChallengeMode != existing.AuthnChallengeMode) ||
-		(durPtr != nil && conv.PtrToPGInterval(durPtr) != existing.SessionDuration) ||
-		(payload.ClientIDMetadataAdmissionMode != nil && *payload.ClientIDMetadataAdmissionMode != existing.ClientIDMetadataAdmissionMode.String) ||
-		(payload.TrustedRemoteSessionIssuerID != nil && trustedIssuerID != existing.TrustedRemoteSessionIssuerID) ||
-		(payload.TrustedRemoteSessionClientID != nil && trustedClientID != existing.TrustedRemoteSessionClientID)
-	if bindingSensitive {
-		if err := guardUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
-			return nil, err
-		}
-	}
+	// Settings and trust changes leave identity-chaining bindings intact:
+	// chaining reads the trusted issuer/client pair live on every request, and
+	// credentials minted under a replaced pair stop matching it. Only deletion
+	// orphans bindings, so only DeleteIssuer guards them.
 
 	resultingTrustedIssuerID := existing.TrustedRemoteSessionIssuerID
 	if payload.TrustedRemoteSessionIssuerID != nil {

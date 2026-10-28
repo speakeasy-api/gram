@@ -1,3 +1,6 @@
+import { firstPartyConnectUrl, getServerURL } from "@/lib/utils";
+import { useQueries } from "@tanstack/react-query";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useOrganization } from "@/contexts/Auth";
 import { mcpUrlSuffix } from "@/hooks/useToolsetUrl";
 import { isKnownEnumValue } from "@/lib/enum";
@@ -16,13 +19,24 @@ export interface InventoryServer {
   /** The id a policy selector names, which for a toolset is the toolset. */
   resourceId: string;
   name: string;
-  /** The path under /mcp/ the server answers on, which is what a row shows. */
+  /** The path under /mcp/ the server answers on. */
   slug: string;
+  /**
+   * The absolute URL a runtime calls this server at, or absent when it has no
+   * addressable endpoint.
+   */
+  mcpUrl?: string;
+  upstreamUrl?: string;
+  description?: string;
+  toolsetSlug?: string;
+  recentToolCalls?: number;
   projectId: string;
   projectName: string;
   projectSlug: string;
   /** Present when the server authorizes each person separately. */
   issuerId?: string;
+  activityTarget?: string;
+  connectUrl?: string;
   kind: "Hosted" | "Remote" | "Tunneled" | "Toolset";
 }
 
@@ -33,8 +47,49 @@ export interface ServerInventory {
   refetch: () => void;
 }
 
+/**
+ * An MCP path on this deployment as an absolute URL. A runtime calls it from
+ * outside the browser, so a path relative to the dashboard is no use to it;
+ * getServerURL is empty when the build leaves it unset, and then the current
+ * origin is what serves MCP.
+ */
+function platformMcpUrl(path: string): string {
+  return new URL(`/mcp/${path}`, getServerURL() || window.location.origin).href;
+}
+
 export function useServerInventory(): ServerInventory {
   const organization = useOrganization();
+  const sdk = useSdkClient();
+  const activity = useQueries({
+    queries: (organization.projects ?? [])
+      .filter((project) => project.slug)
+      .map((project) => ({
+        queryKey: ["agent-server-activity", organization.id, project.id],
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          sdk.telemetry.getMcpServerActivity(
+            {
+              gramProject: project.slug,
+              getMcpServerActivityPayload: { recentWindowDays: 1 },
+            },
+            undefined,
+            { signal },
+          ),
+        retry: false,
+        throwOnError: false,
+        staleTime: 60_000,
+      })),
+  });
+  const calls = new Map<string, number>();
+  (organization.projects ?? [])
+    .filter((project) => project.slug)
+    .forEach((project, index) => {
+      for (const row of activity[index]?.data?.activity ?? []) {
+        calls.set(
+          `${project.id}:${row.targetType}:${row.targetId}`,
+          row.recentToolCalls,
+        );
+      }
+    });
   const toolsets = useListToolsetsForOrg(undefined, undefined, {
     retry: false,
     throwOnError: false,
@@ -43,6 +98,28 @@ export function useServerInventory(): ServerInventory {
     retry: false,
     throwOnError: false,
   });
+
+  const remoteSources = useQueries({
+    queries: (organization.projects ?? [])
+      .filter((project) => project.slug)
+      .map((project) => ({
+        queryKey: ["agent-remote-server-urls", organization.id, project.id],
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          sdk.remoteMcp.listServers({ gramProject: project.slug }, undefined, {
+            signal,
+          }),
+        retry: false,
+        throwOnError: false,
+        staleTime: 60_000,
+      })),
+  });
+  const upstreamUrls = new Map(
+    remoteSources.flatMap((query) =>
+      (query.data?.remoteMcpServers ?? []).map(
+        (server) => [server.id, server.url] as const,
+      ),
+    ),
+  );
 
   const projects = new Map(
     (organization.projects ?? []).map((project) => [project.id, project]),
@@ -68,6 +145,25 @@ export function useServerInventory(): ServerInventory {
     ...servableServers.map((server) => ({
       id: server.id,
       resourceId: server.toolsetId ?? server.id,
+      connectUrl: firstPartyConnectUrl(
+        server.platformEndpointSlug
+          ? `${getServerURL()}/mcp/${server.platformEndpointSlug}`
+          : server.primaryEndpointUrl,
+      ),
+      // The server's own public URL first: on a custom domain it is the one
+      // the server answers on, and a lockdown can refuse the platform host.
+      mcpUrl:
+        server.primaryEndpointUrl ??
+        (server.platformEndpointSlug
+          ? platformMcpUrl(server.platformEndpointSlug)
+          : undefined),
+      activityTarget: server.toolsetId
+        ? `hosted_mcp_server:${toolsets.data?.toolsets?.find((toolset) => toolset.id === server.toolsetId)?.slug ?? ""}`
+        : `tunneled_mcp_server:${server.slug ?? ""}`,
+      upstreamUrl: server.remoteMcpServerId
+        ? upstreamUrls.get(server.remoteMcpServerId)
+        : undefined,
+      description: server.toolset?.description,
       name: server.name ?? server.slug ?? "Unnamed server",
       slug: server.slug ?? "",
       projectId: server.projectId,
@@ -89,14 +185,18 @@ export function useServerInventory(): ServerInventory {
       )
       .map((toolset) => {
         const projectSlug = projects.get(toolset.projectId)?.slug ?? "";
+        const slug = mcpUrlSuffix({ slug: projectSlug }, toolset) ?? "";
         return {
           id: toolset.id,
           resourceId: toolset.id,
+          activityTarget: `hosted_mcp_server:${toolset.slug}`,
           name: toolset.name,
+          toolsetSlug: toolset.slug,
           // A toolset answers on its own mcpSlug, or on the legacy
           // project/toolset/environment route — never on the toolset slug by
           // itself, so the shared resolver decides the path.
-          slug: mcpUrlSuffix({ slug: projectSlug }, toolset) ?? "",
+          slug,
+          mcpUrl: slug ? platformMcpUrl(slug) : undefined,
           projectId: toolset.projectId,
           projectName: projects.get(toolset.projectId)?.name ?? "",
           projectSlug,
@@ -112,13 +212,33 @@ export function useServerInventory(): ServerInventory {
       ),
   ];
 
+  const measuredProjects = new Set(
+    (organization.projects ?? [])
+      .filter((project) => project.slug)
+      .filter((_, index) => activity[index]?.data !== undefined)
+      .map((project) => project.id),
+  );
+  for (const server of inventory) {
+    server.recentToolCalls = measuredProjects.has(server.projectId)
+      ? (calls.get(`${server.projectId}:${server.activityTarget}`) ?? 0)
+      : undefined;
+  }
+
   return {
-    servers: inventory,
+    servers: inventory.sort(
+      (a, b) =>
+        (calls.get(`${b.projectId}:${b.activityTarget}`) ?? 0) -
+          (calls.get(`${a.projectId}:${a.activityTarget}`) ?? 0) ||
+        a.name.localeCompare(b.name) ||
+        a.id.localeCompare(b.id),
+    ),
     isLoading: toolsets.isLoading || servers.isLoading,
     isError: toolsets.isError || servers.isError,
     refetch: () => {
       void toolsets.refetch();
       void servers.refetch();
+      for (const query of remoteSources) void query.refetch();
+      for (const query of activity) void query.refetch();
     },
   };
 }
