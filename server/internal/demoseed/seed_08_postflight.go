@@ -411,7 +411,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "mcp skill links",
 			count: byProject(s.q.PostflightCountMCPSkillLinks),
-			fail:  postflightMustEqual(5, "expected 5 skills served over MCP, found %d"),
+			fail:  postflightMustEqual(5, "expected 5 MCP skill links, found %d"),
 		},
 		{
 			what:  "approvals server",

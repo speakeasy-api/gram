@@ -4,6 +4,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { mcpServerRouteParam } from "@/lib/sources";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { usePluginServerQueries } from "@/pages/plugins/usePluginServerQueries";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import type { SkillLink } from "@gram/client/models/components/skilllink.js";
@@ -79,6 +81,17 @@ export function SkillServedOverMcpSection({
           server.id,
           server.toolsetId,
         ]),
+      ),
+    [serversQuery.data?.mcpServers],
+  );
+  // The route slug of each server that hosts its toolset, the only servers
+  // whose Skills tab lists their links.
+  const hostedServerSlugs = useMemo(
+    () =>
+      new Map(
+        (serversQuery.data?.mcpServers ?? [])
+          .filter(standsInForToolset)
+          .map((server) => [server.id, mcpServerRouteParam(server)]),
       ),
     [serversQuery.data?.mcpServers],
   );
@@ -174,6 +187,7 @@ export function SkillServedOverMcpSection({
               link={row}
               toolsetSlugs={toolsetSlugs}
               serverToolsets={serverToolsets}
+              hostedServerSlugs={hostedServerSlugs}
               isRemoving={unlink.isPending}
               onRemove={() => handleRemove(row)}
             />
@@ -189,12 +203,14 @@ function ServedByRow({
   link,
   toolsetSlugs,
   serverToolsets,
+  hostedServerSlugs,
   isRemoving,
   onRemove,
 }: {
   link: SkillLink;
   toolsetSlugs: ReadonlyMap<string, string>;
   serverToolsets: ReadonlyMap<string, string | undefined>;
+  hostedServerSlugs: ReadonlyMap<string, string>;
   isRemoving: boolean;
   onRemove: () => void;
 }): JSX.Element {
@@ -214,11 +230,15 @@ function ServedByRow({
   let href: string | undefined;
   switch (link.targetKind) {
     case "mcp_server": {
-      // Only the toolset's own server has a Skills tab that lists this link.
-      const slug =
-        link.mcpServerId && toolsetId === link.mcpServerId
-          ? toolsetSlugs.get(link.mcpServerId)
-          : undefined;
+      // Only the server hosting its toolset has a Skills tab that lists this
+      // link; before the server list loads, the canonical wrapper (which
+      // shares its toolset's id) is linked by toolset slug.
+      const slug = link.mcpServerId
+        ? (hostedServerSlugs.get(link.mcpServerId) ??
+          (toolsetId === link.mcpServerId
+            ? toolsetSlugs.get(link.mcpServerId)
+            : undefined))
+        : undefined;
       href = slug ? routes.mcp.details.skills.href(slug) : undefined;
       break;
     }

@@ -28,7 +28,7 @@ The frontmatter is never curated. `allowed-tools`, `license`, `metadata` and any
 
 A hosted endpoint serves a skill to a caller when all of the following hold:
 
-1. A live skill link names the endpoint: on a hosted MCP server, a link to that server; on a project gateway, a link to that gateway; on the organization gateway, a link to the organization gateway itself or to a member server the caller can reach through it. Links are made from the server's Skills tab, the skill page, or the `skills.link` API.
+1. A live skill link names the endpoint: on a hosted MCP server, a link to that server; on a project gateway, a link to that gateway; on the organization gateway, a link to the organization gateway itself. Links are made from the server's Skills tab, the skill page, or the `skills.link` API. A gateway does not yet serve the links of its member servers: the resolver accepts member server ids, but no gateway passes them, so a skill linked only to a member server reaches agents connected to that server directly and not through the gateway.
 2. The skill is not archived, its project is not deleted, and the link resolves to a servable version: its pinned version, or the latest valid version when it tracks latest.
 3. The caller is an authenticated member of the owning organization acting as themselves.
 
