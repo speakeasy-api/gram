@@ -123,20 +123,27 @@ func TestCommitServerIdentityConfigurationRetiresCopiesItInvalidates(t *testing.
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	orgID := activeOrganizationID(t, ctx)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "copies-commit-issuer")
-	_, soleSource := sourceBackedTarget(t, ctx, ti, "copies-commit-sole", userIssuerID)
+	sole, soleSource := sourceBackedTarget(t, ctx, ti, "copies-commit-sole", userIssuerID)
 	arriving, _ := sourceBackedTarget(t, ctx, ti, "copies-commit-arriving", userIssuerID)
 	seedAuxiliaryHeader(t, ctx, ti, soleSource, "X-Tenant-Key")
 
 	providerID := createServerIdentityProvider(t, ctx, ti, "copies-commit-provider", "", false, []string{"client_secret_basic"})
 	oauthClientID := createServerIdentityClient(t, ctx, ti, "copies-commit-client", providerID, false)
+	// The client reaches the header-bearing source alone, which is what
+	// entitles it to that source's credentials.
+	associate(t, ctx, ti.conn, orgID, projectID, sole, oauthClientID)
 	authClientID := seedDerivedAuthClient(t, ctx, ti, oauthClientID, "X-Tenant-Key")
 	require.Equal(t, []string{"X-Tenant-Key"}, copiedHeaderNames(t, ctx, ti, authClientID))
 
 	// The real writer: configuring the arriving server puts the client on a
-	// second source.
+	// second source, so it is shared and entitled to neither source's headers.
 	_, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(arriving, providerID, oauthClientID))
 	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{oauthClientID}, associatedClients(t, ctx, ti.conn, projectID, sole),
+		"the sole server keeps its association, so the client really is shared")
 
 	require.Empty(t, copiedHeaderNames(t, ctx, ti, authClientID),
 		"a client shared across sources still carries the first source's credentials")
