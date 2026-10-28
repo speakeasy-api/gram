@@ -809,3 +809,35 @@ func TestOrganizationUserSessionIssuerTrustLinkJWKSRequirement(t *testing.T) {
 	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{ID: inbound.ID, Slug: &renamed})
 	require.NoError(t, err)
 }
+
+func TestOrganizationUserSessionIssuerUpdateIfTrustingRefusesChangedTrust(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	organizationID := pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true}
+	first := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "cas-first", uuid.NullUUID{}, organizationID).String()
+	second := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "cas-second", uuid.NullUUID{}, organizationID).String()
+
+	issuer, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{
+		SessionToken:                 nil,
+		Slug:                         "cas-inbound",
+		AuthnChallengeMode:           "chain",
+		SessionDurationHours:         24,
+		TrustedRemoteSessionIssuerID: nil,
+		TrustedRemoteSessionClientID: nil,
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateIssuerIfTrusting(ctx, &orggen.UpdateIssuerPayload{ID: issuer.ID, TrustedRemoteSessionIssuerID: &first}, "")
+	require.NoError(t, err)
+	require.Equal(t, first, *updated.TrustedRemoteSessionIssuerID)
+
+	_, err = ti.service.UpdateIssuerIfTrusting(ctx, &orggen.UpdateIssuerPayload{ID: issuer.ID, TrustedRemoteSessionIssuerID: &second}, "")
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	updated, err = ti.service.UpdateIssuerIfTrusting(ctx, &orggen.UpdateIssuerPayload{ID: issuer.ID, TrustedRemoteSessionIssuerID: &second}, first)
+	require.NoError(t, err)
+	require.Equal(t, second, *updated.TrustedRemoteSessionIssuerID)
+}

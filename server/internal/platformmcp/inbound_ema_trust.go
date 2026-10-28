@@ -32,7 +32,7 @@ import (
 type InboundEMAUserIssuerManagement interface {
 	ListIssuers(context.Context, *orgusergen.ListIssuersPayload) (*orgusergen.ListOrganizationUserSessionIssuersResult, error)
 	GetIssuer(context.Context, *orgusergen.GetIssuerPayload) (*types.UserSessionIssuer, error)
-	UpdateIssuer(context.Context, *orgusergen.UpdateIssuerPayload) (*types.UserSessionIssuer, error)
+	UpdateIssuerIfTrusting(ctx context.Context, payload *orgusergen.UpdateIssuerPayload, expectedTrustedRemoteSessionIssuerID string) (*types.UserSessionIssuer, error)
 }
 
 // InboundEMARemoteIssuerManagement is the organization remote session issuer
@@ -180,6 +180,9 @@ type TrustInboundEMAIdentityProviderInput struct {
 
 	// ExpectedTrustedRemoteSessionIssuerID is the trust the preview read.
 	ExpectedTrustedRemoteSessionIssuerID string `json:"expected_trusted_remote_session_issuer_id,omitempty" jsonschema:"on confirmed=true, the expected_trusted_remote_session_issuer_id the preview returned; empty means the issuer trusted no provider. A different current value is refused as a conflict"`
+
+	// ExpectedIdentityProviderIssuerURL is the provider the preview showed.
+	ExpectedIdentityProviderIssuerURL string `json:"expected_identity_provider_issuer_url,omitempty" jsonschema:"required on confirmed=true: identity_provider.issuer_url exactly as the preview returned it. A different discovered issuer is refused as a conflict"`
 
 	// Confirmed applies the change; false only previews it.
 	Confirmed bool `json:"confirmed" jsonschema:"false previews without changing anything; true only after the user confirms this exact issuer and identity provider"`
@@ -335,6 +338,9 @@ func (s *InboundEMATrustService) Trust(ctx context.Context, principal Principal,
 		}
 		return TrustInboundEMAIdentityProviderOutput{}, fmt.Errorf("fetch identity provider metadata: %w", err)
 	}
+	if input.Confirmed && strings.TrimSpace(input.ExpectedIdentityProviderIssuerURL) != draft.Issuer {
+		return TrustInboundEMAIdentityProviderOutput{}, inboundEMARefuse(inboundEMARefusalConflict, "The identity provider at that issuer URL is not the one the preview showed. Preview again and confirm with the user before retrying.")
+	}
 	if conv.PtrValOr(draft.JwksURI, "") == "" {
 		return TrustInboundEMAIdentityProviderOutput{}, inboundEMARefuse(inboundEMARefusalNoKeySet, "The identity provider's metadata publishes no jwks_uri, so Speakeasy could not verify its ID-JAGs. Use the issuer URL of an authorization server that publishes a key set.")
 	}
@@ -373,7 +379,7 @@ func (s *InboundEMATrustService) Trust(ctx context.Context, principal Principal,
 		if err != nil {
 			return TrustInboundEMAIdentityProviderOutput{}, err
 		}
-		output.NextStep = "Nothing has changed. Show the user this issuer, the identity provider, whether its record is reused or created, and any warnings. Once they agree, call again with confirmed=true and expected_trusted_remote_session_issuer_id set to the value returned here."
+		output.NextStep = "Nothing has changed. Show the user this issuer, the identity provider, whether its record is reused or created, and any warnings. Once they agree, call again with confirmed=true, expected_trusted_remote_session_issuer_id set to the value returned here, and expected_identity_provider_issuer_url set to identity_provider.issuer_url."
 		return output, nil
 	}
 
@@ -383,7 +389,7 @@ func (s *InboundEMATrustService) Trust(ctx context.Context, principal Principal,
 	}
 	output := inboundEMATrustOutput(previous, provider, reused, directory)
 	if output.Changed {
-		if _, err := s.users.UpdateIssuer(ctx, &orgusergen.UpdateIssuerPayload{ID: current.ID, TrustedRemoteSessionIssuerID: new(provider.RemoteSessionIssuerID)}); err != nil {
+		if _, err := s.users.UpdateIssuerIfTrusting(ctx, &orgusergen.UpdateIssuerPayload{ID: current.ID, TrustedRemoteSessionIssuerID: new(provider.RemoteSessionIssuerID)}, previous); err != nil {
 			refused := inboundEMAManagementError("trust identity provider", err)
 			if refusal, ok := errors.AsType[*InboundEMATrustRefusalError](refused); ok && !reused {
 				refusal.Message += " The identity provider record " + provider.RemoteSessionIssuerID + " was created and kept; a retry reuses it."
@@ -501,7 +507,7 @@ func (s *InboundEMATrustService) Untrust(ctx context.Context, principal Principa
 		return output, nil
 	}
 	if output.Changed {
-		if _, err := s.users.UpdateIssuer(ctx, &orgusergen.UpdateIssuerPayload{ID: current.ID, TrustedRemoteSessionIssuerID: new("")}); err != nil {
+		if _, err := s.users.UpdateIssuerIfTrusting(ctx, &orgusergen.UpdateIssuerPayload{ID: current.ID, TrustedRemoteSessionIssuerID: new("")}, previous); err != nil {
 			return UntrustInboundEMAIdentityProviderOutput{}, inboundEMAManagementError("remove identity provider trust", err)
 		}
 	}
@@ -591,7 +597,7 @@ func (s *InboundEMATrustService) issuerState(ctx context.Context, issuer *types.
 	}
 	switch {
 	case authserver.Mode(issuer.AuthorizationServerMode) != authserver.ModeShared:
-		state.AudienceNote = "This issuer gives each MCP server its own authorization server, so there is no single audience. Switch it to a shared authorization server in the dashboard to accept ID-JAGs."
+		state.AudienceNote = "This issuer gives each MCP server its own authorization server, so there is no single audience: each ID-JAG must name its MCP server's URL. Switch the issuer to a shared authorization server in the dashboard, or configure the identity provider for each MCP server."
 	case issuer.IssuerURL == nil || *issuer.IssuerURL == "":
 		state.AudienceNote = "This issuer's shared authorization server is unavailable: " + conv.PtrValOr(issuer.AuthorizationServerUnavailableReason, "unknown") + "."
 	default:
@@ -712,7 +718,11 @@ func inboundEMAReadNextStep(output GetInboundEMATrustOutput) string {
 	}
 	for _, issuer := range output.Issuers {
 		if issuer.TrustedIdentityProvider != nil {
-			return "Configure the identity provider to issue ID-JAGs with the reported audience. Users resolve only through an active synced directory user, with the ID-JAG's email, who is a live member."
+			step := "Configure the identity provider to issue ID-JAGs with the reported audience."
+			if issuer.Audience == "" {
+				step = "Issuer " + issuer.Slug + ": " + issuer.AudienceNote
+			}
+			return step + " Users resolve only through an active synced directory user, with the ID-JAG's email, who is a live member."
 		}
 	}
 	return "To accept ID-JAGs, call trust_inbound_ema_identity_provider with an issuer and the identity provider's issuer URL."

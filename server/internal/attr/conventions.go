@@ -545,7 +545,7 @@ const (
 	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
 
-	// OAuthIDJAGOutcomeKey is whether an ID-JAG token exchange was accepted or rejected.
+	// OAuthIDJAGOutcomeKey is an ID-JAG token exchange's outcome: accepted, rejected, or error for an unexpected server failure.
 	OAuthIDJAGOutcomeKey = attribute.Key("gram.oauth.id_jag.outcome")
 
 	// OAuthIDJAGRejectionReasonKey is the bounded reason an ID-JAG token exchange was rejected.

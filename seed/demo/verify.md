@@ -592,10 +592,19 @@ open their effective assignments; the dropdown always offers compact member sear
       Enterprise Managed Authorization section, and Acme Identity is not
       offered as a provider a service can accept on the strength of this
       trust.
-    - The Platform MCP `get_inbound_ema_trust` tool reports `acme-workforce`
-      trusting Acme Identity (`https://login.acme-identity.example`, key set
-      `/oauth2/v1/keys`) with the workforce shared authorization server as the
-      audience.
+    - Call the Platform MCP `get_inbound_ema_trust` tool. It must report:
+      - `acme-workforce` trusting Acme Identity: `issuer_url`
+        `https://login.acme-identity.example`, and a `key_set_url` that is a
+        full URL on that host ending in `/oauth2/v1/keys` (record the URL it
+        returns).
+      - `audience` set to the workforce shared authorization server's issuer
+        URL.
+      - `organization_gateway_url` on `acme-workforce`: the URL ending in
+        `/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy`
+        after `mise run seed` (enable the organization gateway first, as in
+        step 31).
+      - `directory.resolvable_directory_users` greater than zero and
+        `directory.synced` true.
     - Both servers are seeded disabled. Connect through the organization
       gateway: its consent page must not list Acme Tracker or Acme Wiki.
 

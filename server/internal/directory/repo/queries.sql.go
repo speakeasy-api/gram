@@ -159,6 +159,7 @@ JOIN organization_user_relationships AS membership
   AND membership.organization_id = du.organization_id
   AND membership.deleted_at IS NULL
 WHERE du.organization_id = $1
+  AND du.email IS NOT NULL
   AND du.deleted IS FALSE
   AND du.workos_deleted IS FALSE
   AND candidate.deleted_at IS NULL

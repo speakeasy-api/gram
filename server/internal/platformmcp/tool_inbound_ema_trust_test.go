@@ -15,6 +15,7 @@ import (
 	orgusergen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -53,7 +54,7 @@ func (f *fakeInboundEMAUsers) GetIssuer(_ context.Context, payload *orgusergen.G
 	return &copied, nil
 }
 
-func (f *fakeInboundEMAUsers) UpdateIssuer(_ context.Context, payload *orgusergen.UpdateIssuerPayload) (*types.UserSessionIssuer, error) {
+func (f *fakeInboundEMAUsers) UpdateIssuerIfTrusting(_ context.Context, payload *orgusergen.UpdateIssuerPayload, expected string) (*types.UserSessionIssuer, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.updates = append(f.updates, payload)
@@ -61,6 +62,9 @@ func (f *fakeInboundEMAUsers) UpdateIssuer(_ context.Context, payload *orguserge
 		return nil, f.updateErr
 	}
 	issuer := f.issuers[payload.ID]
+	if conv.PtrValOr(issuer.TrustedRemoteSessionIssuerID, "") != expected {
+		return nil, oops.E(oops.CodeConflict, nil, "trusted identity provider changed")
+	}
 	if payload.TrustedRemoteSessionIssuerID != nil {
 		issuer.TrustedRemoteSessionIssuerID = nil
 		if *payload.TrustedRemoteSessionIssuerID != "" {
@@ -250,7 +254,7 @@ func TestInboundEMATrustPreviewChangesNothing(t *testing.T) {
 func TestInboundEMATrustCreatesProviderThroughManagementAPI(t *testing.T) {
 	t.Parallel()
 	f := newInboundEMAFixture(t, 1)
-	output, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: true})
+	output, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
 	require.NoError(t, err)
 	require.True(t, output.Applied)
 	require.False(t, output.IdentityProviderReused)
@@ -264,7 +268,7 @@ func TestInboundEMATrustCreatesProviderThroughManagementAPI(t *testing.T) {
 	require.Contains(t, output.NextStep, output.Issuer.Audience)
 
 	// Repeating it reuses the created record and changes nothing.
-	again, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedTrustedRemoteSessionIssuerID: output.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	again, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, ExpectedTrustedRemoteSessionIssuerID: output.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
 	require.NoError(t, err)
 	require.True(t, again.IdentityProviderReused)
 	require.False(t, again.Changed)
@@ -283,7 +287,7 @@ func TestInboundEMATrustReusesOrganizationRecordBeforePlatformRecord(t *testing.
 		{ID: organizationID, Issuer: inboundEMATestIDP, Tier: remoteIssuerTierOrganization},
 		{ID: platformID, Issuer: inboundEMATestIDP, Tier: remoteIssuerTierPlatform},
 	}
-	output, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: true})
+	output, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
 	require.NoError(t, err)
 	require.True(t, output.IdentityProviderReused)
 	require.Equal(t, organizationID, output.IdentityProvider.RemoteSessionIssuerID)
@@ -294,7 +298,7 @@ func TestInboundEMATrustRefusesProviderWithoutKeySet(t *testing.T) {
 	t.Parallel()
 	f := newInboundEMAFixture(t, 1)
 	f.remote.draft = &types.RemoteSessionIssuerDraft{Issuer: inboundEMATestIDP}
-	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: true})
+	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
 	var refusal *InboundEMATrustRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, inboundEMARefusalNoKeySet, refusal.Code)
@@ -307,7 +311,7 @@ func TestInboundEMATrustRefusesReplacingFederatedSignInProvider(t *testing.T) {
 	trusted := uuid.NewString()
 	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(trusted)
 	f.users.issuers[f.issuerID].TrustedRemoteSessionClientID = new(uuid.NewString())
-	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedTrustedRemoteSessionIssuerID: trusted, Confirmed: true})
+	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, ExpectedTrustedRemoteSessionIssuerID: trusted, Confirmed: true})
 	var refusal *InboundEMATrustRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, inboundEMARefusalBrowserSignIn, refusal.Code)
@@ -319,7 +323,7 @@ func TestInboundEMATrustRelaysManagementValidation(t *testing.T) {
 	t.Parallel()
 	f := newInboundEMAFixture(t, 1)
 	f.users.updateErr = oops.E(oops.CodeBadRequest, nil, "inbound-only trust requires a shared authorization server")
-	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: true})
+	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
 	var refusal *InboundEMATrustRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, inboundEMARefusalRejected, refusal.Code)
@@ -331,7 +335,7 @@ func TestInboundEMATrustRefusesProjectIssuer(t *testing.T) {
 	f := newInboundEMAFixture(t, 1)
 	projectIssuer := uuid.NewString()
 	f.users.issuers[projectIssuer] = &types.UserSessionIssuer{ID: projectIssuer, ProjectID: uuid.NewString(), AuthorizationServerMode: "shared"}
-	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: projectIssuer, IssuerURL: inboundEMATestIDP, Confirmed: true})
+	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: projectIssuer, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
 	var refusal *InboundEMATrustRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, inboundEMARefusalNotOrganizationLevel, refusal.Code)
@@ -380,7 +384,7 @@ func TestInboundEMATrustRefusesConfirmationAfterTrustChanged(t *testing.T) {
 
 	// Another administrator trusts a different provider in between.
 	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(uuid.NewString())
-	_, err = f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	_, err = f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
 	var refusal *InboundEMATrustRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, inboundEMARefusalConflict, refusal.Code)
@@ -399,7 +403,7 @@ func TestInboundEMATrustReusesOnlyAnExactIssuerMatch(t *testing.T) {
 	slashed := uuid.NewString()
 	f.remote.records[slashed] = &types.RemoteSessionIssuer{ID: slashed, OrganizationID: f.principal.OrganizationID, Issuer: inboundEMATestIDP + "/", JwksURI: new(inboundEMATestIDP + "/keys")}
 	f.remote.matches = []*types.RemoteSessionIssuerDuplicateMatch{{ID: slashed, Issuer: inboundEMATestIDP, Tier: remoteIssuerTierOrganization}}
-	output, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: true})
+	output, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
 	require.NoError(t, err)
 	require.False(t, output.IdentityProviderReused, "a record spelled differently would never match the ID-JAG's iss")
 	require.NotEqual(t, slashed, output.IdentityProvider.RemoteSessionIssuerID)
@@ -411,7 +415,7 @@ func TestInboundEMATrustConcurrentConfirmationsCreateOneProvider(t *testing.T) {
 	t.Parallel()
 	f := newInboundEMAFixture(t, 1)
 	f.remote.createStarted, f.remote.createGate = make(chan struct{}), make(chan struct{})
-	input := TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: true}
+	input := TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true}
 
 	holder := make(chan error, 1)
 	go func() {
@@ -458,7 +462,7 @@ func TestInboundEMATrustSaysCreatedProviderWasKeptWhenTrustIsRefused(t *testing.
 	t.Parallel()
 	f := newInboundEMAFixture(t, 1)
 	f.users.updateErr = oops.E(oops.CodeBadRequest, nil, "trust refused")
-	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: true})
+	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
 	var refusal *InboundEMATrustRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Len(t, f.remote.created, 1)
@@ -474,7 +478,7 @@ func TestInboundEMATrustPreviewReportsWhatConfirmationWouldRefuse(t *testing.T) 
 	f.remote.records[keyless] = &types.RemoteSessionIssuer{ID: keyless, OrganizationID: f.principal.OrganizationID, Issuer: inboundEMATestIDP}
 	f.remote.matches = []*types.RemoteSessionIssuerDuplicateMatch{{ID: keyless, Issuer: inboundEMATestIDP, Tier: remoteIssuerTierOrganization}}
 	for _, confirmed := range []bool{false, true} {
-		_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, Confirmed: confirmed})
+		_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: confirmed})
 		var refusal *InboundEMATrustRefusalError
 		require.ErrorAs(t, err, &refusal)
 		require.Equal(t, inboundEMARefusalNoKeySet, refusal.Code)
@@ -492,4 +496,56 @@ func TestInboundEMATrustPreviewReportsWhatConfirmationWouldRefuse(t *testing.T) 
 	require.Empty(t, f.users.updates)
 	require.Empty(t, federated.remote.created)
 	require.Empty(t, federated.users.updates)
+}
+
+func TestInboundEMATrustRefusesConfirmingADifferentProvider(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	preview, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP})
+	require.NoError(t, err)
+
+	other := "https://other-idp.example.test"
+	f.remote.draft = &types.RemoteSessionIssuerDraft{Issuer: other, JwksURI: new(other + "/keys")}
+	_, err = f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: other, ExpectedIdentityProviderIssuerURL: preview.IdentityProvider.IssuerURL, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	var refusal *InboundEMATrustRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, inboundEMARefusalConflict, refusal.Code)
+	require.Empty(t, f.remote.created)
+	require.Empty(t, f.users.updates)
+}
+
+func TestInboundEMATrustRefusesTrustChangedDuringConfirmation(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	f.remote.createStarted = make(chan struct{})
+	f.remote.createGate = make(chan struct{})
+	go func() {
+		<-f.remote.createStarted
+		f.users.mu.Lock()
+		f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(uuid.NewString())
+		f.users.mu.Unlock()
+		close(f.remote.createGate)
+	}()
+
+	_, err := f.service.Trust(t.Context(), f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID, IssuerURL: inboundEMATestIDP, ExpectedIdentityProviderIssuerURL: inboundEMATestIDP, Confirmed: true})
+	var refusal *InboundEMATrustRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, inboundEMARefusalConflict, refusal.Code)
+	require.Len(t, f.users.updates, 1)
+}
+
+func TestInboundEMATrustGetNextStepExplainsEndpointModeHasNoAudience(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	providerID := uuid.NewString()
+	f.remote.records[providerID] = &types.RemoteSessionIssuer{ID: providerID, Issuer: inboundEMATestIDP, JwksURI: new(inboundEMATestIDP + "/keys")}
+	f.users.issuers[f.issuerID].AuthorizationServerMode = "endpoint"
+	f.users.issuers[f.issuerID].IssuerURL = nil
+	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
+
+	output, err := f.service.Get(t.Context(), f.principal)
+	require.NoError(t, err)
+	require.NotContains(t, output.NextStep, "reported audience")
+	require.Contains(t, output.NextStep, "no single audience")
+	require.Contains(t, output.NextStep, "shared authorization server")
 }

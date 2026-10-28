@@ -41,6 +41,9 @@ import (
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
+// The key set is never fetched here; it only has to be a valid https URL.
+const inboundEMAIntegrationKeySetURL = "https://keys.idp.example.test/keys"
+
 type inboundEMAServicesFixture struct {
 	conn      *pgxpool.Pool
 	project   ResolvedProject
@@ -82,7 +85,7 @@ func newInboundEMAServicesFixture(t *testing.T, maxConns int32) (context.Context
 		"issuer":                   idp.URL,
 		"authorization_endpoint":   idp.URL + "/authorize",
 		"token_endpoint":           idp.URL + "/token",
-		"jwks_uri":                 idp.URL + "/keys",
+		"jwks_uri":                 inboundEMAIntegrationKeySetURL,
 		"response_types_supported": []string{"code"},
 	})
 	require.NoError(t, err)
@@ -136,11 +139,11 @@ func TestInboundEMATrustThroughManagementServices(t *testing.T) {
 	require.False(t, preview.Applied)
 	require.Empty(t, preview.Warnings)
 
-	trusted, err := service.Trust(ctx, principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	trusted, err := service.Trust(ctx, principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, ExpectedIdentityProviderIssuerURL: preview.IdentityProvider.IssuerURL, Confirmed: true})
 	require.NoError(t, err)
 	require.True(t, trusted.Applied)
 	require.False(t, trusted.IdentityProviderReused)
-	require.Equal(t, f.idpURL+"/keys", trusted.IdentityProvider.KeySetURL)
+	require.Equal(t, inboundEMAIntegrationKeySetURL, trusted.IdentityProvider.KeySetURL)
 	require.NotNil(t, trusted.Issuer.TrustedIdentityProvider)
 	require.Equal(t, trusted.IdentityProvider.RemoteSessionIssuerID, trusted.Issuer.TrustedIdentityProvider.RemoteSessionIssuerID)
 	require.Equal(t, "https://app.example.test/oauth/usi/"+f.issuerID.String(), trusted.Issuer.Audience)
@@ -184,7 +187,7 @@ func TestInboundEMATrustConcurrentConfirmationsOnSmallPool(t *testing.T) {
 	ctx, f := newInboundEMAServicesFixture(t, 3)
 	ctx, cancel := context.WithTimeout(ctx, inboundEMASmallPoolDeadline)
 	defer cancel()
-	input := TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL, Confirmed: true}
+	input := TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL, ExpectedIdentityProviderIssuerURL: f.idpURL, Confirmed: true}
 
 	var wg sync.WaitGroup
 	errs := make([]error, 6)
@@ -238,7 +241,7 @@ func TestInboundEMATrustIgnoresEMABindingsForInboundOnlyLink(t *testing.T) {
 	preview, err := f.service.Trust(ctx, f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL})
 	require.NoError(t, err)
 	require.True(t, preview.Changed)
-	trusted, err := f.service.Trust(ctx, f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, Confirmed: true})
+	trusted, err := f.service.Trust(ctx, f.principal, TrustInboundEMAIdentityProviderInput{UserSessionIssuerID: f.issuerID.String(), IssuerURL: f.idpURL, ExpectedTrustedRemoteSessionIssuerID: preview.ExpectedTrustedRemoteSessionIssuerID, ExpectedIdentityProviderIssuerURL: preview.IdentityProvider.IssuerURL, Confirmed: true})
 	require.NoError(t, err)
 	require.True(t, trusted.Applied)
 	require.NotNil(t, trusted.Issuer.TrustedIdentityProvider)
