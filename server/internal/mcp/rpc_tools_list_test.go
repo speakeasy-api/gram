@@ -214,6 +214,16 @@ func TestServePublic_ToolsList_ReturnsEmptyForEmptyToolset(t *testing.T) {
 
 	resp := parseToolsListResponse(t, w.Body.Bytes())
 	require.Empty(t, resp.Result.Tools)
+
+	// Clients such as Codex CLI reject a null tools array, which a
+	// skills-only server with no tools would otherwise send.
+	var raw struct {
+		Result struct {
+			Tools json.RawMessage `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
+	require.JSONEq(t, `[]`, string(raw.Result.Tools))
 }
 
 func TestServePublic_ToolsList_ReturnsAllTools(t *testing.T) {

@@ -56,6 +56,7 @@ export function ServiceAccountPanel({
   customerManagedKeys,
   providersHref,
   clientHref,
+  compact = false,
 }: {
   format: ServiceAccountFormat;
   onFormatChange: (format: ServiceAccountFormat) => void;
@@ -67,6 +68,11 @@ export function ServiceAccountPanel({
   customerManagedKeys: boolean;
   providersHref: string;
   clientHref: (issuerId: string, clientId: string) => string;
+  /**
+   * For narrow hosts such as a dialog: the formats become a grid of
+   * title-only tiles above the fields rather than a column beside them.
+   */
+  compact?: boolean;
 }): JSX.Element {
   const choose = (next: string) => {
     const picked = next as ServiceAccountFormat;
@@ -79,10 +85,22 @@ export function ServiceAccountPanel({
     isOAuthFormat(format) && clientDraft.showingBound(format);
 
   return (
-    <div className="flex flex-wrap items-start gap-x-8 gap-y-6">
+    <div
+      className={cn(
+        compact
+          ? "flex flex-col gap-4"
+          : "flex flex-wrap items-start gap-x-8 gap-y-6",
+      )}
+    >
       {showingSaved ? null : (
-        <div className="flex max-w-[280px] min-w-[240px] flex-1 flex-col gap-4">
+        <div
+          className={cn(
+            "flex flex-col",
+            compact ? "gap-3" : "max-w-[280px] min-w-[240px] flex-1 gap-4",
+          )}
+        >
           <FormatGroup
+            compact={compact}
             label="Static"
             value={format}
             onChange={choose}
@@ -106,6 +124,7 @@ export function ServiceAccountPanel({
             ]}
           />
           <FormatGroup
+            compact={compact}
             label="OAuth"
             value={format}
             onChange={choose}
@@ -129,7 +148,16 @@ export function ServiceAccountPanel({
         </div>
       )}
 
-      <div className="flex min-w-0 flex-[999_1_480px] flex-col gap-4">
+      <div
+        className={cn(
+          "flex min-w-0 flex-col gap-4",
+          // Compact stacks the fields under the format tiles, so they sit in
+          // their own inset panel to read as a separate step.
+          compact
+            ? "border-border bg-muted/40 border p-4"
+            : "flex-[999_1_480px]",
+        )}
+      >
         {isOAuthFormat(format) ? (
           <OAuthClientFields
             format={format}
@@ -156,6 +184,7 @@ function FormatGroup({
   onChange,
   disabled,
   options,
+  compact,
 }: {
   label: string;
   value: ServiceAccountFormat;
@@ -167,17 +196,27 @@ function FormatGroup({
     description: string;
     unavailable?: string;
   }[];
+  /** Title-only tiles in a row; the description moves to a tooltip. */
+  compact: boolean;
 }): JSX.Element {
   // Both groups are one choice, so each shows nothing selected while the
   // other holds it.
   const inGroup = options.some((option) => option.value === value);
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-2")}>
       <span className="text-eyebrow">{label}</span>
       <RadioCardGroup
         aria-label={`${label} credential`}
         size="sm"
         showIndicator={false}
+        className={
+          compact
+            ? cn(
+                "grid gap-2",
+                options.length >= 3 ? "grid-cols-3" : "grid-cols-2",
+              )
+            : undefined
+        }
         value={inGroup ? value : null}
         onValueChange={onChange}
         disabled={disabled}
@@ -188,7 +227,10 @@ function FormatGroup({
             value={option.value}
             disabled={!!option.unavailable}
             title={
-              <span className="flex flex-wrap items-center gap-2">
+              <span
+                className="flex flex-wrap items-center gap-2"
+                title={compact ? option.description : undefined}
+              >
                 {option.title}
                 {option.unavailable ? (
                   <AvailabilityBadge>{option.unavailable}</AvailabilityBadge>
@@ -196,7 +238,7 @@ function FormatGroup({
               </span>
             }
           >
-            {option.description}
+            {compact ? null : option.description}
           </RadioCard>
         ))}
       </RadioCardGroup>
