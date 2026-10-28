@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // createPublicMCPToolsetWithCustomDomain creates a public MCP toolset, then creates
@@ -28,7 +27,7 @@ func createPublicMCPToolsetWithCustomDomain(
 	authCtx *contextvalues.AuthContext,
 	slug string,
 	domainName string,
-) (toolsets_repo.Toolset, customdomains_repo.CustomDomain) {
+) (hostedToolset, customdomains_repo.CustomDomain) {
 	t.Helper()
 
 	domainsRepo := customdomains_repo.New(ti.conn)

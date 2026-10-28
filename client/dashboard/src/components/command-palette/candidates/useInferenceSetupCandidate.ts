@@ -1,3 +1,5 @@
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -19,6 +21,9 @@ export function useInferenceSetupCandidate({
   enabled: boolean;
   inProject?: boolean;
 }): LauncherCandidate[] {
+  const inferenceSetupFlag = useFeatureFlag(
+    FEATURE_FLAGS.inferenceWorkloadSetup,
+  );
   const project = useProject();
   const organization = useOrganization();
   const session = useSession();
@@ -39,7 +44,12 @@ export function useInferenceSetupCandidate({
   return useMemo(() => {
     if (!allowed) return [];
     const candidates: LauncherCandidate[] = [];
-    if (inProject && project.id && (canConfigureWorkloads || canManageRoles)) {
+    if (
+      inferenceSetupFlag.status === "enabled" &&
+      inProject &&
+      project.id &&
+      (canConfigureWorkloads || canManageRoles)
+    ) {
       candidates.push({
         id: "inference-workload-setup",
         kind: "page",
@@ -80,6 +90,7 @@ export function useInferenceSetupCandidate({
     return candidates;
   }, [
     allowed,
+    inferenceSetupFlag.status,
     inProject,
     project.id,
     canConfigureWorkloads,

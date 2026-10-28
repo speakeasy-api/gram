@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -53,18 +54,14 @@ func loadCanonical(t *testing.T, ctx context.Context, ti *testInstance, toolset 
 	return canonicalState{server: server, endpoints: endpoints}
 }
 
-// requireHostingColumnsUnset asserts no toolset write has touched the frozen hosting columns.
+// requireHostingColumnsUnset asserts no toolset write has given the toolset a legacy alias.
 func requireHostingColumnsUnset(t *testing.T, ctx context.Context, ti *testInstance, toolsetID string) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	row, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: uuid.MustParse(toolsetID), ProjectID: *authCtx.ProjectID})
+	alias, err := legacyalias.Get(ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(toolsetID))
 	require.NoError(t, err)
-	require.False(t, row.McpSlug.Valid)
-	require.False(t, row.McpEnabled)
-	require.False(t, row.McpIsPublic)
-	require.False(t, row.CustomDomainID.Valid)
-	require.False(t, row.UserSessionIssuerID.Valid)
+	require.Equal(t, legacyalias.None(), alias)
 }
 
 // requireCanonicalMatches checks the toolset view reports its canonical wrapper's state and single
