@@ -542,13 +542,17 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return RegisterRemoteMCPResult{}, err
 	}
+	// The idempotency hash covers only what the caller chose: their display
+	// name, or the URL when they gave none. The upstream's own name can change
+	// between a call and its retry, so it must not change the request's hash.
+	requestedName := displayName
+	if requestedName == "" {
+		requestedName = inspection.CanonicalURL
+	}
 	if displayName == "" {
-		displayName = inspection.CanonicalURL
+		displayName = defaultDirectRemoteDisplayName(inspection)
 	}
-	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.IndexFunc(displayName, isDirectRemoteDisplayNameBreak) >= 0 {
-		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
-	}
-	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": displayName})
+	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": requestedName})
 	request := CatalogRegistrationRequest{
 		ProjectSlug:       project.Slug,
 		SourceKind:        directRemoteSourceKind,
@@ -696,6 +700,20 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 // plugin, audit, and MCP surfaces, so accepting only CR/LF is insufficient.
 func isDirectRemoteDisplayNameBreak(value rune) bool {
 	return unicode.IsControl(value) || value == '\u2028' || value == '\u2029'
+}
+
+// defaultDirectRemoteDisplayName names a remote MCP whose caller gave no name:
+// the upstream's own server name, then the URL's host name, then the URL.
+func defaultDirectRemoteDisplayName(inspection DirectRemoteInspection) string {
+	if name := directRemoteServerName(inspection.ServerName); name != "" {
+		return name
+	}
+	if parsed, err := url.Parse(inspection.CanonicalURL); err == nil {
+		if host := directRemoteServerName(parsed.Hostname()); host != "" {
+			return host
+		}
+	}
+	return inspection.CanonicalURL
 }
 
 func catalogDisplayName(catalog CatalogDetails) string {
