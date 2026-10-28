@@ -35,7 +35,9 @@ it("adds the gateway to OpenClaw by hand without the key in argv", () => {
   // through a private batch file the shell fills in, never through argv.
   expect(copied).toContain("umask 077");
   expect(copied).toContain('openclaw config set --batch-file "$batch"');
-  expect(copied).toContain("chmod 600 ~/.openclaw/openclaw.json");
+  // A failed update fails the block and skips the chmod.
+  expect(copied).toContain('exit "$rc"');
+  expect(copied).toContain(") && chmod 600 ~/.openclaw/openclaw.json");
   expect(copied).not.toContain("openclaw mcp add");
   const batch = copied.split("\n").find((line) => line.startsWith("[{"));
   expect(JSON.parse(batch ?? "")).toEqual([

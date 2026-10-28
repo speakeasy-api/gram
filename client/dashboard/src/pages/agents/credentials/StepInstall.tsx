@@ -298,7 +298,7 @@ export function StepInstall({
                     "# Saves the key in ~/.openclaw/openclaw.json. Restart the Gateway after.",
                     "(",
                     "  umask 077",
-                    "  batch=$(mktemp)",
+                    "  batch=$(mktemp) || exit 1",
                     '  cat >"$batch" <<EOF',
                     JSON.stringify([
                       {
@@ -312,9 +312,10 @@ export function StepInstall({
                     ]),
                     "EOF",
                     '  openclaw config set --batch-file "$batch"',
+                    "  rc=$?",
                     '  rm -f "$batch"',
-                    ")",
-                    "chmod 600 ~/.openclaw/openclaw.json",
+                    '  exit "$rc"',
+                    ") && chmod 600 ~/.openclaw/openclaw.json",
                   ].join("\n")}
                   label="OpenClaw"
                   language="shell"
