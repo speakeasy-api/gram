@@ -153,13 +153,6 @@ func (f hostedAttachmentFixture) updateWrapper(t *testing.T, ms mcpserversrepo.M
 	require.NoError(t, err)
 }
 
-func (f hostedAttachmentFixture) toolset(t *testing.T) toolsetsrepo.Toolset {
-	t.Helper()
-	ts, err := toolsetsrepo.New(f.db).GetToolsetByIDAndProject(t.Context(), toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.hosted.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
-	return ts
-}
-
 func (f hostedAttachmentFixture) wrapper(t *testing.T) mcpserversrepo.McpServer {
 	t.Helper()
 	ms, err := mcpserversrepo.New(f.db).GetMCPServerByIDAndProjectID(t.Context(), mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.hosted.ID, ProjectID: f.projectID})
@@ -358,7 +351,7 @@ func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.ErrorIs(t, err, errAssistantValidation)
 		require.ErrorContains(t, err, "is disabled")
-		require.False(t, f.toolset(t).McpEnabled)
+		require.Equal(t, "disabled", f.wrapper(t).Visibility)
 		require.Equal(t, wrapper.Visibility, f.wrapper(t).Visibility)
 		require.Zero(t, f.counts(t))
 	})
@@ -373,7 +366,7 @@ func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 		_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil, nil,
 			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
-		require.False(t, f.toolset(t).McpEnabled)
+		require.Equal(t, "disabled", f.wrapper(t).Visibility)
 		require.Equal(t, wrapper.Visibility, f.wrapper(t).Visibility)
 		require.EqualValues(t, 1, f.counts(t))
 	})
@@ -463,6 +456,22 @@ func TestHostedAttachmentUndialableToolsetUsesWrapper(t *testing.T) {
 	require.NoError(t, err)
 	counts := f.counts(t)
 	require.EqualValues(t, 1, counts)
+}
+
+// A disabled, endpointless hosted server whose legacy alias still serves is enabled when attached.
+func TestHostedAttachmentEnablesAliasOnlyWrapper(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_alias_only")
+	f.disableHosted(t)
+	f.deleteHostedEndpoints(t)
+	testenv.SetLegacyAlias(t, t.Context(), f.db, f.projectID, f.hosted.ID, "org-test-billing-x1", uuid.NullUUID{})
+
+	name := "updated"
+	_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil,
+		[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil, allowAllMCPEnable)
+	require.NoError(t, err)
+	require.Equal(t, "private", f.wrapper(t).Visibility)
+	require.Equal(t, []string{"billing"}, runtimeIDs(f.runtime(t)))
 }
 
 // A toolset without a canonical wrapper has no MCP server to attach.

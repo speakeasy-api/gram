@@ -632,7 +632,7 @@ func TestRiskScan_ResourceReadKeepsIdentityAndSyntheticBody(t *testing.T) {
 			projectID := *authCtx.ProjectID
 			slug := "scan-resource-" + uuid.NewString()[:8]
 			toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
-			server := hostedEndpointServer(t, ctx, ti, toolset, slug, legacy)
+			server := hostedEndpointServer(t, ctx, ti, toolset.Toolset, slug, legacy)
 			deployments := deploymentsrepo.New(ti.conn)
 			deploymentID, err := deployments.InsertDeployment(ctx, deploymentsrepo.InsertDeploymentParams{
 				ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID,

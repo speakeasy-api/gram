@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
@@ -222,15 +222,11 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 			return MCPConnectionSettings{}, err
 		}
 		settings.UpstreamAuthentication = upstream
-		legacy, err := mcpserversrepo.New(db).ListLegacyPlatformAliasSlugs(ctx, mcpserversrepo.ListLegacyPlatformAliasSlugsParams{
-			OrganizationID: principal.OrganizationID, ProjectIds: []uuid.UUID{projectID}, McpServerIds: []uuid.UUID{targetID},
-		})
+		legacy, err := legacyalias.PlatformServedSlugs(ctx, db, principal.OrganizationID, []uuid.UUID{projectID}, []uuid.UUID{targetID})
 		if err != nil {
 			return MCPConnectionSettings{}, fmt.Errorf("list legacy platform alias: %w", err)
 		}
-		if len(legacy) > 0 {
-			settings.LegacyPlatformSlug = legacy[0].Slug
-		}
+		settings.LegacyPlatformSlug = legacy[targetID]
 	}
 	if input.TargetKind == MCPConnectionSettingsGateway {
 		available := s.codeModeAvailable != nil && s.codeModeAvailable(ctx, principal.OrganizationID)

@@ -424,7 +424,7 @@ func TestMintUserSessionForToolsetIgnoresUngovernedWrapper(t *testing.T) {
 				urn.NewToolset(toolset.ID).String(),
 			)
 			require.NoError(t, err)
-			require.Equal(t, "http://0.0.0.0/mcp/"+toolset.McpSlug.String, claims.Issuer)
+			require.Equal(t, "http://0.0.0.0/mcp/"+slug, claims.Issuer)
 		})
 	}
 }

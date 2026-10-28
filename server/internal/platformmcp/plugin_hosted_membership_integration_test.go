@@ -131,6 +131,12 @@ func TestGetPluginEndpointlessWrapperKeepsToolsetSlug(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, member, 2)
-	require.Equal(t, serverKeyedAlias, member[0].McpSlug)
-	require.Empty(t, member[1].McpSlug)
+	require.Equal(t, uuid.NullUUID{UUID: serverKeyed.ID, Valid: true}, member[0].AliasToolsetID)
+	require.False(t, member[1].AliasToolsetID.Valid)
+	aliases, err := pluginMemberAliases(ctx, conn, project.ID, member, func(row platformrepo.ListPlatformMCPPluginServersRow) (string, uuid.NullUUID) {
+		return row.McpSlug, row.AliasToolsetID
+	})
+	require.NoError(t, err)
+	require.Equal(t, serverKeyedAlias, memberSlug(member[0].McpSlug, member[0].AliasToolsetID, aliases))
+	require.Empty(t, memberSlug(member[1].McpSlug, member[1].AliasToolsetID, aliases))
 }

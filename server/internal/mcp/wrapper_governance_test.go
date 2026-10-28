@@ -35,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
@@ -376,7 +375,7 @@ func TestServePublic_WrapperGovernance_FallbackAttributionLog(t *testing.T) {
 	lines := fallbackLogLines(t, buf)
 	require.Len(t, lines, 5)
 	expect := []struct {
-		toolset      toolsets_repo.Toolset
+		toolset      hostedToolset
 		wrapper      bool
 		host         string
 		customDomain string
