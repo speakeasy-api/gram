@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -539,6 +540,14 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server").LogError(ctx, logger)
+	}
+
+	// Retire the typed auth clients, server links and header copies derived
+	// from the deleted source's credential headers. Nothing else does: the
+	// headers stay on the tombstoned source, so only its liveness says they
+	// are gone.
+	if err := authclientbackfill.SyncTunneledSource(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync tunneled mcp server auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogTunneledMcpServerDelete(ctx, dbtx, audit.LogTunneledMcpServerDeleteEvent{
