@@ -244,6 +244,9 @@ type UpdateResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of reconciled activations observed for this skill.
 	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Returned by list and get only.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 	// The active public share token, absent when the skill is not shared.
 	ShareToken *string `form:"share_token,omitempty" json:"share_token,omitempty" xml:"share_token,omitempty"`
 	// When the skill was created.
@@ -427,6 +430,9 @@ type DistributeResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the distribution configuration last changed.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Loads are counted per skill, not per distribution.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // ShareResponseBody is the type of the "skills" service "share" endpoint HTTP
@@ -5258,6 +5264,9 @@ type SkillResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of reconciled activations observed for this skill.
 	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Returned by list and get only.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 	// The active public share token, absent when the skill is not shared.
 	ShareToken *string `form:"share_token,omitempty" json:"share_token,omitempty" xml:"share_token,omitempty"`
 	// When the skill was created.
@@ -5554,6 +5563,9 @@ type PluginSkillDistributionResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the distribution configuration last changed.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Loads are counted per skill, not per distribution.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // SkillLinkResponseBody is used to define fields on response body types.
@@ -5632,22 +5644,23 @@ func NewRestoreVersionResponseBody(res *skills.RecordSkillResult) *RestoreVersio
 // "update" endpoint of the "skills" service.
 func NewUpdateResponseBody(res *types.Skill) *UpdateResponseBody {
 	body := &UpdateResponseBody{
-		ID:              res.ID,
-		ProjectID:       res.ProjectID,
-		Name:            res.Name,
-		DisplayName:     res.DisplayName,
-		Summary:         res.Summary,
-		SourceKind:      res.SourceKind,
-		Classification:  res.Classification,
-		LatestVersionID: res.LatestVersionID,
-		VersionCount:    res.VersionCount,
-		HasValidVersion: res.HasValidVersion,
-		FirstSeenAt:     res.FirstSeenAt,
-		LastSeenAt:      res.LastSeenAt,
-		SeenCount:       res.SeenCount,
-		ShareToken:      res.ShareToken,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		Name:                res.Name,
+		DisplayName:         res.DisplayName,
+		Summary:             res.Summary,
+		SourceKind:          res.SourceKind,
+		Classification:      res.Classification,
+		LatestVersionID:     res.LatestVersionID,
+		VersionCount:        res.VersionCount,
+		HasValidVersion:     res.HasValidVersion,
+		FirstSeenAt:         res.FirstSeenAt,
+		LastSeenAt:          res.LastSeenAt,
+		SeenCount:           res.SeenCount,
+		LastLoadedOverMcpAt: res.LastLoadedOverMcpAt,
+		ShareToken:          res.ShareToken,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.Tags != nil {
 		body.Tags = make([]string, len(res.Tags))
@@ -5938,21 +5951,22 @@ func NewListVersionsResponseBody(res *skills.ListSkillVersionsResult) *ListVersi
 // the "distribute" endpoint of the "skills" service.
 func NewDistributeResponseBody(res *types.SkillDistribution) *DistributeResponseBody {
 	body := &DistributeResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		SkillID:           res.SkillID,
-		SkillName:         res.SkillName,
-		SkillDisplayName:  res.SkillDisplayName,
-		PluginID:          res.PluginID,
-		PluginName:        res.PluginName,
-		AssistantID:       res.AssistantID,
-		AssistantName:     res.AssistantName,
-		PinnedVersionID:   res.PinnedVersionID,
-		ResolvedVersionID: res.ResolvedVersionID,
-		Channel:           res.Channel,
-		CreatedByUserID:   res.CreatedByUserID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		SkillID:             res.SkillID,
+		SkillName:           res.SkillName,
+		SkillDisplayName:    res.SkillDisplayName,
+		PluginID:            res.PluginID,
+		PluginName:          res.PluginName,
+		AssistantID:         res.AssistantID,
+		AssistantName:       res.AssistantName,
+		PinnedVersionID:     res.PinnedVersionID,
+		ResolvedVersionID:   res.ResolvedVersionID,
+		Channel:             res.Channel,
+		CreatedByUserID:     res.CreatedByUserID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
+		LastLoadedOverMcpAt: res.LastLoadedOverMcpAt,
 	}
 	return body
 }

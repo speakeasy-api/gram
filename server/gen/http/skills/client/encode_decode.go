@@ -6306,22 +6306,23 @@ func DecodeListLinksResponse(decoder func(*http.Response) goahttp.Decoder, resto
 // from a value of type *SkillResponseBody.
 func unmarshalSkillResponseBodyToTypesSkill(v *SkillResponseBody) *types.Skill {
 	res := &types.Skill{
-		ID:              *v.ID,
-		ProjectID:       *v.ProjectID,
-		Name:            *v.Name,
-		DisplayName:     *v.DisplayName,
-		Summary:         v.Summary,
-		SourceKind:      *v.SourceKind,
-		Classification:  *v.Classification,
-		LatestVersionID: v.LatestVersionID,
-		VersionCount:    *v.VersionCount,
-		HasValidVersion: *v.HasValidVersion,
-		FirstSeenAt:     v.FirstSeenAt,
-		LastSeenAt:      v.LastSeenAt,
-		SeenCount:       *v.SeenCount,
-		ShareToken:      v.ShareToken,
-		CreatedAt:       *v.CreatedAt,
-		UpdatedAt:       *v.UpdatedAt,
+		ID:                  *v.ID,
+		ProjectID:           *v.ProjectID,
+		Name:                *v.Name,
+		DisplayName:         *v.DisplayName,
+		Summary:             v.Summary,
+		SourceKind:          *v.SourceKind,
+		Classification:      *v.Classification,
+		LatestVersionID:     v.LatestVersionID,
+		VersionCount:        *v.VersionCount,
+		HasValidVersion:     *v.HasValidVersion,
+		FirstSeenAt:         v.FirstSeenAt,
+		LastSeenAt:          v.LastSeenAt,
+		SeenCount:           *v.SeenCount,
+		LastLoadedOverMcpAt: v.LastLoadedOverMcpAt,
+		ShareToken:          v.ShareToken,
+		CreatedAt:           *v.CreatedAt,
+		UpdatedAt:           *v.UpdatedAt,
 	}
 	res.Tags = make([]string, len(v.Tags))
 	for i, val := range v.Tags {
@@ -6597,19 +6598,20 @@ func unmarshalUnknownSkillActivationResponseBodyToSkillsUnknownSkillActivation(v
 // *PluginSkillDistributionResponseBody.
 func unmarshalPluginSkillDistributionResponseBodyToTypesPluginSkillDistribution(v *PluginSkillDistributionResponseBody) *types.PluginSkillDistribution {
 	res := &types.PluginSkillDistribution{
-		ID:                *v.ID,
-		ProjectID:         *v.ProjectID,
-		SkillID:           *v.SkillID,
-		SkillName:         *v.SkillName,
-		SkillDisplayName:  *v.SkillDisplayName,
-		PluginID:          *v.PluginID,
-		PluginName:        *v.PluginName,
-		PinnedVersionID:   v.PinnedVersionID,
-		ResolvedVersionID: *v.ResolvedVersionID,
-		Channel:           *v.Channel,
-		CreatedByUserID:   *v.CreatedByUserID,
-		CreatedAt:         *v.CreatedAt,
-		UpdatedAt:         *v.UpdatedAt,
+		ID:                  *v.ID,
+		ProjectID:           *v.ProjectID,
+		SkillID:             *v.SkillID,
+		SkillName:           *v.SkillName,
+		SkillDisplayName:    *v.SkillDisplayName,
+		PluginID:            *v.PluginID,
+		PluginName:          *v.PluginName,
+		PinnedVersionID:     v.PinnedVersionID,
+		ResolvedVersionID:   *v.ResolvedVersionID,
+		Channel:             *v.Channel,
+		CreatedByUserID:     *v.CreatedByUserID,
+		CreatedAt:           *v.CreatedAt,
+		UpdatedAt:           *v.UpdatedAt,
+		LastLoadedOverMcpAt: v.LastLoadedOverMcpAt,
 	}
 
 	return res
