@@ -370,11 +370,12 @@
               </div>
               {{$panel := .Panel}} {{if .Scopes}}
                 <div class="mt-1 text-xs text-muted-foreground">
-                  Permissions: <button type="button" class="text-left underline underline-offset-4" popovertarget="connection-scopes-{{.ClientID}}" data-permission-details>{{.ScopeSummary}}</button>
+                  Permissions: {{if gt (len .Scopes) 3}}<button type="button" class="text-left underline underline-offset-4" popovertarget="connection-scopes-{{.ClientID}}" data-permission-details>{{.ScopeSummary}}</button>
                   <div id="connection-scopes-{{.ClientID}}" popover class="bg-card text-foreground fixed m-0 max-h-64 w-80 overflow-y-auto border p-4 shadow-lg">
                     <h3 class="text-sm font-semibold">Connection permissions</h3>
                     <ul class="mt-2 space-y-1 text-xs">{{range .Scopes}}<li class="break-words font-mono">{{.}}</li>{{end}}</ul>
                   </div>
+                  {{else}}{{.ScopeSummary}}{{end}}
                 </div>
                 {{end}}
                 {{if $panel.ShowDetails}}

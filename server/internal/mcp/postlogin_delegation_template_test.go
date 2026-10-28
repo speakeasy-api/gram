@@ -97,7 +97,7 @@ func TestConnectionScopeSummary(t *testing.T) {
 		{nil, ""},
 		{[]string{"read"}, "read"},
 		{[]string{"read", "write"}, "read, write"},
-		{[]string{"read", "write", "admin"}, "read, write & 1 other"},
+		{[]string{"read", "write", "admin"}, "read, write, admin"},
 		{[]string{"read", "write", "admin", "profile"}, "read, write & 2 others"},
 	} {
 		t.Run(tc.want, func(t *testing.T) {

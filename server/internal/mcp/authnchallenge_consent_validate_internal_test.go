@@ -151,6 +151,7 @@ func TestConsentTemplateValidationStates(t *testing.T) {
 		card                  remoteSessionCard
 		contains, notContains []string
 	}{
+		{name: "three scopes inline", card: remoteSessionCard{Connected: true, Scopes: []string{"read", "write", "admin"}}, contains: []string{`read, write, admin`}, notContains: []string{`popovertarget`, `Connection permissions`}},
 		{name: "upstream scopes", card: remoteSessionCard{Connected: true, Scopes: []string{"read", "write", "admin", "<custom>"}}, contains: []string{`read, write &amp; 2 others`, `popover`, `Connection permissions`, `&lt;custom&gt;`}, notContains: []string{`<custom>`}},
 		{name: "notice", card: remoteSessionCard{Connected: true, Verified: true, ValidatedAt: "2026-09-08T12:00:00Z", ValidatedAgo: "just now", ValidationNotice: validationLimitedNotice, CanValidate: true}, contains: []string{`data-validation="valid"`, `data-validation-notice >Try again in a moment`, `data-validate-link > Verify`}},
 		{name: "verified", card: remoteSessionCard{Connected: true, Verified: true, ValidatedAt: "2026-09-08T12:00:00Z", ValidatedAgo: "3 minutes ago", CanValidate: true}, contains: []string{`data-card-status >Service connected<span class="text-muted-foreground" data-validation="valid" > · Verified <time datetime="2026-09-08T12:00:00Z">3 minutes ago</time></span >`, `value="validate"`, `data-validate-link > Verify`}, notContains: []string{"Reconnect", "Not yet verified", "data-card-details"}},

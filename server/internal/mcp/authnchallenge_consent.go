@@ -387,11 +387,8 @@ type cardPanel struct {
 
 // ScopeSummary keeps the connection's permissions compact while preserving exact scope names.
 func (c remoteSessionCard) ScopeSummary() string {
-	if len(c.Scopes) <= 2 {
+	if len(c.Scopes) <= 3 {
 		return strings.Join(c.Scopes, ", ")
-	}
-	if len(c.Scopes) == 3 {
-		return strings.Join(c.Scopes[:2], ", ") + " & 1 other"
 	}
 	return fmt.Sprintf("%s & %d others", strings.Join(c.Scopes[:2], ", "), len(c.Scopes)-2)
 }
