@@ -275,7 +275,7 @@ export default function IdentityUsage(): JSX.Element {
       </div>
 
       {/* The calls behind the numbers above, for reading one by one. */}
-      <IdentityToolLogsPanel identity={identity} />
+      <IdentityToolLogsPanel identity={identity} accountType={scope} />
     </IdentitySection>
   );
 }

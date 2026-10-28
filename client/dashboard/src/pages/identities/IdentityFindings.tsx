@@ -340,13 +340,12 @@ function FindingsTable({
   ];
 
   if (externalUserIds.length === 0) {
+    // The caller's panel already carries the Findings header.
     return (
-      <IdentityPanel title="Findings">
-        <IdentityPanelEmpty>
-          This identity reports no agent identifier, so there are no findings to
-          list.
-        </IdentityPanelEmpty>
-      </IdentityPanel>
+      <IdentityPanelEmpty>
+        This identity reports no agent identifier, so there are no findings to
+        list.
+      </IdentityPanelEmpty>
     );
   }
   if (query.isLoading || (skipPage && results.length === 0)) {

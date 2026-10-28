@@ -32,10 +32,13 @@ function identityToolLogFilters(
 export function IdentityToolLogsPanel({
   identity,
   agentId,
+  accountType,
 }: {
   /** A person; an agent passes agentId instead. */
   identity?: IdentityModel;
   agentId?: string;
+  /** The page's account filter: "team", "personal", or "" for every account. */
+  accountType?: string;
 }): JSX.Element {
   const canViewToolLogs = useCanViewToolLogs();
   const userFilters = useMemo(
@@ -56,7 +59,7 @@ export function IdentityToolLogsPanel({
       // The view fills its container and scrolls inside it, so it needs a
       // definite height rather than growing with the page.
       <div className="flex h-[calc(100vh-16rem)] min-h-[560px] flex-col">
-        <LogsTools scope={{ userFilters }} />
+        <LogsTools scope={{ userFilters, accountType }} />
       </div>
     );
   }

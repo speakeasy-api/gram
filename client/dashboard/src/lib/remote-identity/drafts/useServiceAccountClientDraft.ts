@@ -122,7 +122,7 @@ export async function bindServiceAccountClient(
   const discard = () => {
     if (!madeHere) return;
     void client.remoteSessionClients
-      .delete({ id: madeHere.id })
+      .delete({ id: madeHere.id }, undefined, options)
       .catch((error: unknown) =>
         console.error("Couldn't delete an unbound client", error),
       );
@@ -147,10 +147,11 @@ export async function bindServiceAccountClient(
     if (isExpectedAPIError(error)) discard();
     throw error;
   }
-  if (result.failure) {
+  // A commit that names no status bound nothing, failure or not.
+  if (result.failure || !result.status) {
     discard();
     throw new Error(
-      result.failure.providerMessage ??
+      result.failure?.providerMessage ??
         `Couldn't connect this server to ${spec.issuerName}.`,
     );
   }

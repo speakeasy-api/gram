@@ -43,7 +43,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type CompletePhase,
   type ConfigurePhase,
@@ -230,6 +230,72 @@ export function AddServerDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when dialog open/close state changes, not on every releaseState update
   }, [open]);
+
+  // Signing key clients are made from the configure step, before the server
+  // exists, so their drafts cannot clean them up: a draft unmounts on every
+  // step change. Track them here until an install takes them over, and delete
+  // any the dialog lets go of — a changed choice, Back, or closing.
+  const client = useSdkClient();
+  const pendingSigningClients = useRef(new Set<string>());
+  const deleteSigningClient = useCallback(
+    (id: string) => {
+      void client.remoteSessionClients
+        .delete(
+          { id },
+          undefined,
+          projectSlug
+            ? { headers: { "gram-project": projectSlug } }
+            : undefined,
+        )
+        .catch((error: unknown) =>
+          console.error("Couldn't delete an unused signing key client", error),
+        );
+    },
+    [client, projectSlug],
+  );
+  const referencedSigningClients =
+    releaseState.phase === "configure"
+      ? releaseState.serverConfigs
+          .flatMap((config) =>
+            config.serviceAccountClient?.format === "signing-key"
+              ? [config.serviceAccountClient.clientRowId]
+              : [],
+          )
+          .join(",")
+      : null;
+  useEffect(() => {
+    const pending = pendingSigningClients.current;
+    if (
+      releaseState.phase === "installing" ||
+      releaseState.phase === "complete"
+    ) {
+      // The install binds them, or reports the server for setup.
+      pending.clear();
+      return;
+    }
+    if (referencedSigningClients === null) return;
+    const referenced = new Set(
+      referencedSigningClients ? referencedSigningClients.split(",") : [],
+    );
+    for (const id of pending) {
+      if (!referenced.has(id)) {
+        pending.delete(id);
+        deleteSigningClient(id);
+      }
+    }
+    for (const id of referenced) pending.add(id);
+  }, [releaseState.phase, referencedSigningClients, deleteSigningClient]);
+  useEffect(() => {
+    if (open) return;
+    for (const id of pendingSigningClients.current) deleteSigningClient(id);
+    pendingSigningClients.current.clear();
+  }, [open, deleteSigningClient]);
+  useEffect(
+    () => () => {
+      for (const id of pendingSigningClients.current) deleteSigningClient(id);
+    },
+    [deleteSigningClient],
+  );
 
   useEffect(() => {
     autoStartRef.current = false;
@@ -969,6 +1035,7 @@ function CatalogServerIdentity({
               config={config}
               index={index}
               updateServerConfig={updateServerConfig}
+              projectSlug={releaseState.projectSlug}
               format={format}
               onFormatChange={setFormat}
               credential={credential}
@@ -990,6 +1057,7 @@ function CatalogServiceAccount({
   config,
   index,
   updateServerConfig,
+  projectSlug,
   format,
   onFormatChange,
   credential,
@@ -997,11 +1065,13 @@ function CatalogServiceAccount({
   config: ServerConfig;
   index: number;
   updateServerConfig: ConfigurePhase["updateServerConfig"];
+  /** The project the server is installed into, which may not be this one. */
+  projectSlug?: string;
   format: ServiceAccountFormat;
   onFormatChange: (format: ServiceAccountFormat) => void;
   credential: AgentCredentialFields;
 }) {
-  const routes = useRoutes();
+  const routes = useRoutes(projectSlug ? { projectSlug } : undefined);
   // This draft unmounts when the dialog moves on, before the install binds
   // its signing key client, so unmounting must not delete that client.
   const clientDraft = useServiceAccountClientDraft({

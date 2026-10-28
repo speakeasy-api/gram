@@ -120,6 +120,11 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
 export type LogsToolsScope = {
   /** Never empty: an empty list would show every identity's calls. */
   userFilters: ToolUsageUserFilter[];
+  /**
+   * The host page's account filter ("" for every account), which replaces
+   * the view's own so its rows match the page around it.
+   */
+  accountType?: string;
 };
 
 /** Facets that pick identities, which a scoped view has already chosen. */
@@ -165,12 +170,14 @@ export function LogsTools({
     handleRoleSelectionChange,
     roleEmails,
     roleFilterPending,
-    accountType,
+    accountType: pickedAccountType,
     handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
     defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
     validTypes: TOOL_USAGE_VALID_TYPES,
   });
+  const accountType =
+    scope?.accountType !== undefined ? scope.accountType : pickedAccountType;
 
   const {
     attributeSearchInput,
@@ -863,7 +870,11 @@ export function LogsTools({
     : null;
 
   const visibleFacetGroups = scope
-    ? facetGroups.filter((group) => !IDENTITY_FACETS.has(group.id))
+    ? facetGroups.filter(
+        (group) =>
+          !IDENTITY_FACETS.has(group.id) &&
+          !(group.id === "account_type" && scope.accountType !== undefined),
+      )
     : facetGroups;
 
   return (

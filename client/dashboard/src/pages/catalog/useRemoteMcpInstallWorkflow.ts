@@ -860,7 +860,13 @@ export function useRemoteMcpInstallWorkflow({
         mcpEndpointUrl: endpoint
           ? `${getServerURL()}/mcp/${endpoint.slug}`
           : undefined,
-        authConfigured: !!identityConfiguration.userIdentity?.status,
+        // A bound service account client is new auth state too, so the
+        // session-client lists are refreshed for it as well.
+        authConfigured:
+          !!identityConfiguration.userIdentity?.status ||
+          (target.identityMode === "agent" &&
+            !!target.serviceAccountClient &&
+            identityConfiguration.status === "configured"),
         identityConfiguration,
         iconPersistence,
       };
