@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -35,9 +36,10 @@ func seedHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 		Slug:                   slug,
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             true,
 	})
+	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, conn, projectID, toolset.ID, mcpSlug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	toolset, err = toolsetsrepo.New(conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: projectID})
 	require.NoError(t, err)
 
 	return toolset

@@ -193,13 +193,11 @@ func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Querie
 		UpstreamAuth:      nil,
 	}
 
-	if !server.ToolsetOnly {
-		upstream, err := authclients.ReadServerAuthentication(ctx, s.db, organizationID, server.ID)
-		if err != nil {
-			return nil, fmt.Errorf("read upstream authentication: %w", err)
-		}
-		result.UpstreamAuth = healthUpstreamAuth(upstream)
+	upstream, err := authclients.ReadServerAuthentication(ctx, s.db, organizationID, server.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read upstream authentication: %w", err)
 	}
+	result.UpstreamAuth = healthUpstreamAuth(upstream)
 
 	if server.UserSessionIssuerID.Valid {
 		issuer, err := s.readUserSessionIssuer(ctx, queries, organizationID, projectID, server.ID, server.UserSessionIssuerID.UUID, windowStart)
@@ -224,11 +222,9 @@ func healthCorrelation(server repo.AdminGetMcpServerAuthRow) *gen.AdminMcpServer
 		McpServerID: nil,
 		ToolsetSlug: nil,
 	}
-	if !server.ToolsetOnly {
-		id := server.ID.String()
-		correlation.McpServerID = &id
-	}
-	if server.ToolsetSlug != "" && (server.ToolsetOnly || server.ToolsetWrapperCount <= 1) {
+	id := server.ID.String()
+	correlation.McpServerID = &id
+	if server.ToolsetSlug != "" && server.ToolsetWrapperCount <= 1 {
 		slug := server.ToolsetSlug
 		correlation.ToolsetSlug = &slug
 	}
@@ -237,8 +233,6 @@ func healthCorrelation(server repo.AdminGetMcpServerAuthRow) *gen.AdminMcpServer
 
 func healthServerSource(server repo.AdminGetMcpServerAuthRow) string {
 	switch {
-	case server.ToolsetOnly:
-		return "toolset_only"
 	case server.ToolsetID.Valid:
 		return "toolset"
 	case server.RemoteMcpServerID.Valid:

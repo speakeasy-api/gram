@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -159,16 +160,11 @@ func TestHostedAliasCannotMoveOntoAnotherCustomDomainAliasSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newHostedAddressFixture(t, "pro")
-	_, err := toolsetsrepo.New(f.ti.conn).UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
-		Name: f.toolset.Name, Description: f.toolset.Description, DefaultEnvironmentSlug: f.toolset.DefaultEnvironmentSlug,
-		McpSlug: conv.ToPGText(f.endpoint.Slug), McpIsPublic: false, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpEnabled: true, ToolSelectionMode: f.toolset.ToolSelectionMode, Slug: f.toolset.Slug, ProjectID: f.projectID,
-	})
-	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, f.ti.conn, f.projectID, f.toolset.ID, f.endpoint.Slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	_, _, slug := seedCustomDomainAliasInOtherProject(t, ctx, f.ti)
 	domain := f.activeDomain(t, ctx, "own-"+uuid.NewString()[:8]+".example.com")
 
-	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+	_, err := f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
 		McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(slug), CustomDomainID: new(domain.ID.String()),
 	})
 	require.NoError(t, err, "the custom-domain endpoint itself does not touch the platform")

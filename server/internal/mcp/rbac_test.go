@@ -82,8 +82,7 @@ func TestServePublic_RBAC_PublicMCP_AllowedWithoutGrants(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "rbac-public-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "rbac-public-"+uuid.NewString()[:8])
 
 	ctx = authztest.WithExactGrants(t, ctx)
 
@@ -278,10 +277,9 @@ func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance
 		Slug:                   slug,
 		Description:            conv.ToPGText("A test private MCP for RBAC testing"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	toolset = hostLegacyToolset(t, ctx, ti, toolset, slug, "private", noIssuer())
 
 	return toolset
 }
