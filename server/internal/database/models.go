@@ -972,7 +972,7 @@ type AuditLog struct {
 	// @access: confidential
 	ActingClientID pgtype.Text
 	// @access: confidential
-	Visibility string
+	Category string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 }

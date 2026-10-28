@@ -9435,17 +9435,18 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   -- which is not the same as an unrecognized one.
   acting_client_id TEXT,
 
-  -- Who the entry is for. 'customer' entries are configuration changes an
-  -- organization reads in its audit log and receives as webhooks. 'internal'
-  -- entries record operational activity Speakeasy performs on its own, such as
-  -- a runtime admitting its own workload identity; they stay out of the
-  -- customer feed and customer webhooks but remain available to staff.
-  visibility TEXT NOT NULL DEFAULT 'customer',
+  -- What kind of event the entry records. 'configuration' entries are changes
+  -- to the platform's configuration made by an organization's members or the
+  -- Speakeasy team; the audit log page shows these. 'security' entries record
+  -- machine access and other security-relevant activity that is not a
+  -- configuration decision, such as a runtime admitting its own workload
+  -- identity on every start. Every category is delivered as webhooks.
+  category TEXT NOT NULL DEFAULT 'configuration',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT audit_logs_pkey PRIMARY KEY (id),
-  CONSTRAINT audit_logs_visibility_check CHECK (visibility IN ('customer', 'internal'))
+  CONSTRAINT audit_logs_category_check CHECK (category IN ('configuration', 'security'))
   -- Foreign key constraints on project_id and organization_id are intentionally
   -- omitted to retain authorative event data even if related projects or orgs
   -- are later deleted.
@@ -9469,7 +9470,7 @@ COMMENT ON COLUMN audit_logs.after_snapshot IS '@access: opaque-restricted';
 COMMENT ON COLUMN audit_logs.metadata IS '@access: opaque-restricted';
 COMMENT ON COLUMN audit_logs.acting_surface IS '@access: confidential';
 COMMENT ON COLUMN audit_logs.acting_client_id IS '@access: confidential';
-COMMENT ON COLUMN audit_logs.visibility IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.category IS '@access: confidential';
 COMMENT ON COLUMN audit_logs.created_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_seq_idx
