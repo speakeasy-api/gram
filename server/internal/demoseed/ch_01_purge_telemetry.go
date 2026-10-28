@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -846,6 +847,7 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 			content = skillContentRunbookV2
 		}
 		digest := sha256.Sum256([]byte(content))
+		uri := mcpskills.SkillURI(demoProjectSlug, name)
 		cidx := s.chClientIdx(i)
 		rows = append(rows, chTelemetryRow{
 			timeNano:     ts,
@@ -856,15 +858,15 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 			attributes: `{"gram.event.source":"resource_read"` +
 				`,"gram.tool.name":"Skill"` +
 				`,"gen_ai.tool.call.arguments":"{\"skill\":\"` + name + `\"}"` +
-				`,"gram.resource.uri":"` + mcpskills.SkillURI(demoProjectSlug, name) + `"` +
+				`,"gram.resource.uri":"` + uri + `"` +
 				`,"gram.mcp.skill.id":"` + s.skillID(pos).String() + `"` +
 				`,"gram.mcp.skill.version_id":"` + versionID.String() + `"` +
 				`,"gram.mcp.skill.digest":"sha256:` + hex.EncodeToString(digest[:]) + `"` +
 				`,"gram.toolset.slug":"acme-support-tools"` +
-				`,"gram.mcp_server.id":"` + s.det("mcpserver-support").String() + `"` +
+				`,"gram.mcp_server.id":"` + s.toolset1().String() + `"` +
 				`,"gram.mcp_endpoint.id":"` + s.det("endpoint-hosted-acme-support-tools").String() + `"` +
 				`,"http.response.status_code":200` +
-				`,"http.response.body":` + strconv.Itoa(len(content)) +
+				`,"http.response.body":` + strconv.Itoa(skillReadResponseSize(uri, content)) +
 				`,"gram.mcp.client.name":"` + chClientNames[cidx-1] + `"` +
 				`,"gram.mcp.client.version":"` + chClientVersions[cidx-1][s.chChatByte(i, 16)%5] + `"` +
 				`,"gen_ai.conversation.id":"` + chatID + `"` +
@@ -878,6 +880,25 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 		})
 	}
 	return rows
+}
+
+// skillReadResponseSize is the size of the resources/read response a hosted
+// skill read serves for content, which is what the live row records.
+func skillReadResponseSize(uri, content string) int {
+	type resourceContent struct {
+		URI      string `json:"uri"`
+		MimeType string `json:"mimeType"`
+		Text     string `json:"text"`
+	}
+	bs, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"result":  map[string]any{"contents": []resourceContent{{URI: uri, MimeType: "text/markdown", Text: content}}},
+	})
+	if err != nil {
+		return len(content)
+	}
+	return len(bs)
 }
 
 // chBlockedRows are calls the Speakeasy hook denied before they ran

@@ -148,10 +148,12 @@ func logSkillRead(
 	telemLogger.Log(ctx, tm.LogParams{
 		Timestamp: now,
 		ToolInfo: tm.ToolInfo{
-			ID:             entry.SkillID.String(),
-			URN:            urn.NewSkill(entry.SkillID).String(),
-			Name:           skillToolName,
-			ProjectID:      payload.projectID.String(),
+			ID:   entry.SkillID.String(),
+			URN:  urn.NewSkill(entry.SkillID).String(),
+			Name: skillToolName,
+			// The skill's own project, which a gateway read can differ from
+			// the serving toolset's: skill usage is reported per project.
+			ProjectID:      entry.ProjectID.String(),
 			DeploymentID:   "",
 			OrganizationID: payload.organizationID,
 			FunctionID:     nil,
