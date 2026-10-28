@@ -110,6 +110,7 @@ github.com/speakeasy-api/gram/server/internal/httpcache 1070
 github.com/speakeasy-api/gram/server/internal/identity 1020
 github.com/speakeasy-api/gram/server/internal/identityapi 3261
 github.com/speakeasy-api/gram/server/internal/identityproviderconnections 14769
+github.com/speakeasy-api/gram/server/internal/idpmanagedresources 1018
 github.com/speakeasy-api/gram/server/internal/instances 2989
 github.com/speakeasy-api/gram/server/internal/internalsessionissuers 5950
 github.com/speakeasy-api/gram/server/internal/inv 1008
@@ -127,7 +128,6 @@ github.com/speakeasy-api/gram/server/internal/launcher 1073
 github.com/speakeasy-api/gram/server/internal/litellm 14091
 github.com/speakeasy-api/gram/server/internal/litellm/callcache 1010
 github.com/speakeasy-api/gram/server/internal/localaccounts 1129
-github.com/speakeasy-api/gram/server/internal/idpmanaged 1018
 github.com/speakeasy-api/gram/server/internal/marketplace 1110
 github.com/speakeasy-api/gram/server/internal/mcp 178118
 github.com/speakeasy-api/gram/server/internal/mcp/httpheaders 1020

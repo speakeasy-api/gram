@@ -373,12 +373,12 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
-    queries: ../internal/idpmanaged/queries.sql
+    queries: ../internal/idpmanagedresources/queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
-        out: "../internal/idpmanaged/repo"
+        out: "../internal/idpmanagedresources/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

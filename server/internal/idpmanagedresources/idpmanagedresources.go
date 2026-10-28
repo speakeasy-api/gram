@@ -1,6 +1,6 @@
-// Package idpmanaged guards resources owned by identity provider connections
+// Package idpmanagedresources guards resources owned by identity provider connections
 // against direct modification through organization-level APIs.
-package idpmanaged
+package idpmanagedresources
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/idpmanaged/repo"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
