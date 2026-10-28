@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -116,12 +116,7 @@ describe("ChatLogsTable", () => {
     vi.restoreAllMocks();
   });
 
-  it("copies the raw chat id without a label prefix", () => {
-    const writeText = vi.fn();
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
+  it("shows duration and message count under the start time, not the chat id", () => {
     const chatId = "chat_01HXQ1P84WV3S9J7Z52DKVE7NE";
 
     renderTable(
@@ -138,9 +133,13 @@ describe("ChatLogsTable", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTitle("Copy Chat ID"));
-
-    expect(writeText).toHaveBeenCalledWith(chatId);
+    // The id and its copy control live in the detail drawer, leaving the
+    // title room to wrap.
+    expect(screen.queryByTitle("Copy Chat ID")).toBeNull();
+    expect(screen.queryByText(chatId.slice(0, 8))).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /Messages/ })).toBeNull();
+    expect(screen.getByTitle("Messages").textContent).toBe("4");
+    expect(screen.getByTitle("Duration").textContent).toBe("3m");
   });
 
   it("shows created and last activity timestamps", () => {

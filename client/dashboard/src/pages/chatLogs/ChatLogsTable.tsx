@@ -31,14 +31,17 @@ import { format } from "date-fns";
 import {
   ArrowUpRight,
   CircleDashed,
+  Clock,
   GitBranch,
   History,
+  MessageSquare,
   Pin,
 } from "lucide-react";
 import {
   cloneElement,
-  useCallback,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type MouseEvent,
   type ReactElement,
@@ -76,10 +79,6 @@ interface ChatLogsTableProps {
 
 /** One table row: a session and how deeply it is nested under its parent. */
 type SessionRow = { session: ChatOverview; depth: number };
-
-function getTraceId(chatId: string): string {
-  return chatId.slice(0, 8);
-}
 
 /**
  * Who ran the session. Three shapes share the column: a conversation with
@@ -310,6 +309,90 @@ function SessionRiskMarker({ count }: { count: number }): JSX.Element {
   );
 }
 
+/**
+ * The session title and its markers. The risk count and "Subagent" marker sit
+ * on a second line under a title that fits on one, matching the two-line rows
+ * beside it; when the title already wraps they follow it inline instead of
+ * adding a third line. The decision is measured against the title's natural
+ * single-line width rather than its rendered height: moving the markers inline
+ * narrows the title, so its height would keep them inline after the column
+ * widened enough to fit it.
+ */
+function SessionTitleCell({
+  chat,
+  depth,
+  lineage,
+}: {
+  chat: ChatOverview;
+  depth: number;
+  lineage: ReactElement;
+}): JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const lineageRef = useRef<HTMLSpanElement>(null);
+  const [wraps, setWraps] = useState(false);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const measure = measureRef.current;
+    if (!container || !measure) return;
+    const update = () => {
+      const lineageWidth = lineageRef.current?.offsetWidth ?? 0;
+      setWraps(measure.offsetWidth + lineageWidth > container.clientWidth);
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [chat.title]);
+
+  const riskCount = chat.riskFindingsCount ?? 0;
+  const markers =
+    riskCount > 0 || depth > 0 ? (
+      <>
+        {riskCount > 0 && <SessionRiskMarker count={riskCount} />}
+        {depth > 0 && (
+          <span className="text-muted-foreground inline-flex shrink-0 items-center gap-1">
+            <GitBranch className="size-3" aria-hidden />
+            Subagent
+          </span>
+        )}
+      </>
+    ) : null;
+
+  return (
+    <div ref={containerRef} className="flex min-w-0 flex-1 flex-col">
+      {/* Zero-height probe holding the title on one line, for its width. */}
+      <div aria-hidden className="h-0 overflow-hidden">
+        <span
+          ref={measureRef}
+          className="inline-block text-sm font-medium whitespace-nowrap"
+        >
+          {chat.title}
+        </span>
+      </div>
+      <Cell
+        primary={
+          // Wrapping row with a floor on the title: in a narrow column the
+          // inline markers would otherwise squeeze the title to a word per
+          // line, so they drop beneath it instead.
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span className="text-foreground line-clamp-3 min-w-0 flex-[1_1_10rem] text-sm font-medium">
+              {chat.title}
+            </span>
+            {wraps && markers}
+            <span ref={lineageRef} className="inline-flex shrink-0">
+              {lineage}
+            </span>
+          </div>
+        }
+        secondary={!wraps && markers ? markers : undefined}
+      />
+    </div>
+  );
+}
+
 /** The product the session ran in, and the Slack channel when it had one. */
 function SurfaceCell({ chat }: { chat: ChatOverview }): JSX.Element | null {
   const source = chat.source;
@@ -394,7 +477,7 @@ function ActivityCell({ chat }: { chat: ChatOverview }): JSX.Element {
       className="font-mono whitespace-nowrap"
       primary={
         <span
-          className="text-muted-foreground"
+          className="text-foreground"
           title={`Created ${format(chat.createdAt, "MMM d, HH:mm")} · Last activity ${format(
             lastActivityTimestamp,
             "MMM d, HH:mm",
@@ -403,7 +486,24 @@ function ActivityCell({ chat }: { chat: ChatOverview }): JSX.Element {
           {format(chat.createdAt, "MMM d, HH:mm")}
         </span>
       }
-      secondary={<span className="tabular-nums">{formatDuration(chat)}</span>}
+      // Smaller and iconed so the start time reads as the cell's headline and
+      // these two read as facts about it.
+      secondary={
+        // `leading-none` on the text: the mono face's default line box sits
+        // its digits off the icons' centre line.
+        <span className="flex items-center gap-3 text-xs leading-none tabular-nums">
+          <span className="flex items-center gap-1" title="Duration">
+            <Clock className="size-3 shrink-0" aria-label="Duration" />
+            <span className="leading-none">{formatDuration(chat)}</span>
+          </span>
+          <span className="flex items-center gap-1" title="Messages">
+            <MessageSquare className="size-3 shrink-0" aria-label="Messages" />
+            <span className="leading-none">
+              {chat.numMessages.toLocaleString()}
+            </span>
+          </span>
+        </span>
+      }
     />
   );
 }
@@ -544,53 +644,6 @@ function SessionPinButton({
   );
 }
 
-// Subtle copy button - always visible
-function CopyButton({
-  value,
-  label,
-  className,
-}: {
-  value: string;
-  label: string;
-  className?: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation(); // Don't trigger row selection
-      void navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    },
-    [value],
-  );
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className={cn(
-        "cursor-pointer p-0.5 transition-colors",
-        "opacity-50 hover:opacity-100",
-        "hover:bg-muted/80",
-        copied && "opacity-100",
-        className,
-      )}
-      title={`Copy ${label}`}
-      aria-label={`Copy ${label}`}
-    >
-      <Icon
-        name={copied ? "check" : "copy"}
-        className={cn(
-          "size-3.5",
-          copied ? "text-foreground" : "text-muted-foreground",
-        )}
-      />
-    </button>
-  );
-}
-
 export function ChatLogsTable({
   chats,
   selectedChatId,
@@ -704,32 +757,14 @@ export function ChatLogsTable({
         // row shifted right for no reason the reader can see. The "Subagent"
         // marker beside the title says it instead, wherever the row ends up.
         <div className="flex min-w-0 items-center gap-3">
-          <Cell
-            primary={
-              <>
-                <span className="text-foreground line-clamp-3 min-w-0 text-sm font-medium">
-                  {chat.title}
-                </span>
-                {(chat.riskFindingsCount ?? 0) > 0 && (
-                  <SessionRiskMarker count={chat.riskFindingsCount!} />
-                )}
-                {depth > 0 && (
-                  <span className="text-muted-foreground inline-flex shrink-0 items-center gap-1">
-                    <GitBranch className="size-3" aria-hidden />
-                    Subagent
-                  </span>
-                )}
-                <SessionLineageIcons
-                  summary={lineageByChat.get(chat.id)}
-                  onActivate={() => onSelectChat(chat)}
-                />
-              </>
-            }
-            secondary={
-              <span className="flex items-center gap-1 font-mono">
-                {getTraceId(chat.id)}
-                <CopyButton value={chat.id} label="Chat ID" />
-              </span>
+          <SessionTitleCell
+            chat={chat}
+            depth={depth}
+            lineage={
+              <SessionLineageIcons
+                summary={lineageByChat.get(chat.id)}
+                onActivate={() => onSelectChat(chat)}
+              />
             }
           />
         </div>
@@ -771,21 +806,6 @@ export function ChatLogsTable({
         chat.lastMessageTimestamp ?? chat.createdAt,
       width: "170px",
       render: ({ session: chat }) => <ActivityCell chat={chat} />,
-    },
-    {
-      key: "numMessages",
-      id: "messageCount",
-      header: "Messages",
-      sortable: true,
-      sortValue: ({ session: chat }) => chat.numMessages,
-      // Wide enough for the header itself: at 80px the uppercase label and
-      // its sort control truncated to "MES…", which names no column.
-      width: "120px",
-      render: ({ session: chat }) => (
-        <Cell
-          primary={<span className="tabular-nums">{chat.numMessages}</span>}
-        />
-      ),
     },
     {
       key: "totalCost",

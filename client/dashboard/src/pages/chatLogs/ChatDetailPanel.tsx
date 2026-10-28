@@ -28,6 +28,7 @@ import {
 } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -459,12 +460,10 @@ function HeaderMetadataBadge({ children }: { children: ReactNode }) {
 }
 
 function ChatDetailMetadataBadges({
-  chatId,
   chat,
   messageCount,
   toolCount,
 }: {
-  chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"];
   messageCount: number;
   /** Undefined when the caller cannot read this project's tool logs. */
@@ -475,7 +474,6 @@ function ChatDetailMetadataBadges({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
       <HeaderMetadataBadge>
         {messageCount.toLocaleString()} messages
       </HeaderMetadataBadge>
@@ -765,6 +763,10 @@ function ChatDetailHeader({
     <div className="border-b px-4 py-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="text-muted-foreground -my-1 flex min-w-0 items-center gap-1 text-xs">
+            <span className="truncate font-mono">{chatId}</span>
+            <CopyButton text={chatId} size="xs" tooltip="Copy chat ID" />
+          </div>
           <SheetTitle className="truncate text-base">
             {chat.title || getTraceId(chatId)}
           </SheetTitle>
@@ -794,17 +796,13 @@ function ChatDetailHeader({
               </span>
               {compactMetadata ? (
                 <ChatDetailMetadataBadges
-                  chatId={chatId}
                   chat={chat}
                   messageCount={messageCount}
                   toolCount={toolCount}
                 />
               ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <HeaderMetadataBadge>
-                    {getTraceId(chatId)}
-                  </HeaderMetadataBadge>
-                  {chat.slackChannelId && (
+                chat.slackChannelId && (
+                  <div className="flex flex-wrap items-center gap-2">
                     <HeaderMetadataBadge>
                       <SlackChannelLink
                         channelId={chat.slackChannelId}
@@ -812,8 +810,8 @@ function ChatDetailHeader({
                         teamId={chat.slackTeamId}
                       />
                     </HeaderMetadataBadge>
-                  )}
-                </div>
+                  </div>
+                )
               )}
               <WorkUnitsHeaderMetrics chat={chat} />
             </div>
