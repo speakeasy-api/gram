@@ -258,3 +258,41 @@ func TestOpenClawPromptRunsEvictsOldestRun(t *testing.T) {
 	require.False(t, runs.claim(fmt.Sprintf("run-%d", openclawPromptRunsCap-1)), "newer runs stay recorded")
 	require.Len(t, runs.seen, openclawPromptRunsCap)
 }
+
+// The Codex app-server harness puts the workspace files and delivery metadata
+// ahead of the user's text in llm_input's prompt. Only the user's text is the
+// prompt the turn reports.
+func TestOpenClawLLMInputReportsOnlyTheUserRequest(t *testing.T) {
+	decorated := strings.Join([]string{
+		"OpenClaw runtime context for this turn:\nTreat this OpenClaw-provided context as supporting reference.\n\n## /work/BOOTSTRAP.md\n\nprivate workspace file",
+		"OpenClaw delivery metadata:\nThis delivery metadata is runtime routing guidance, not the user's request.\nchannel: cli",
+		"Current user request:\nsay hello world",
+	}, "\n\n")
+	fs := newFakeServer(t, nil)
+	serveOpenClaw(t, authedConfig(t, fs.URL), llmInputFrame(t, 1, "run-codex", decorated))
+
+	prompts := fs.submittedPrompts()
+	require.Len(t, prompts, 1)
+	requireOpenclawPrompt(t, prompts[0], "llm_input", "run-codex", "say hello world")
+	encoded, err := json.Marshal(prompts[0])
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "private workspace file")
+}
+
+func TestOpenclawUserRequest(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct{ prompt, want string }{
+		"plain prompt":           {"summarize the repo", "summarize the repo"},
+		"header only":            {"Current user request:\nsummarize the repo", "summarize the repo"},
+		"runtime context":        {"OpenClaw runtime context for this turn:\nfiles\n\nCurrent user request:\nsummarize the repo", "summarize the repo"},
+		"delivery metadata only": {"OpenClaw delivery metadata:\nchannel: cli\n\nCurrent user request:\nhi", "hi"},
+		"user quotes the header": {"please explain what \"Current user request:\" means", "please explain what \"Current user request:\" means"},
+		"context without header": {"OpenClaw runtime context for this turn:\nfiles only", "OpenClaw runtime context for this turn:\nfiles only"},
+		"multi-line request":     {"OpenClaw runtime context for this turn:\nfiles\n\nCurrent user request:\nline one\nline two", "line one\nline two"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, openclawUserRequest(tc.prompt))
+		})
+	}
+}

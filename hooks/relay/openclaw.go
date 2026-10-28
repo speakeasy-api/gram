@@ -13,6 +13,49 @@ import (
 // before the model call of a run. Its event carries the run's user prompt.
 const openclawLLMInputHook = "llm_input"
 
+// openclawRequestHeader introduces the user's own text in the prompt that
+// OpenClaw's Codex app-server harness sends to the model, and so in its
+// llm_input. Runtime context (the workspace files) and delivery metadata come
+// before it.
+const openclawRequestHeader = "Current user request:\n"
+
+// openclawDecorationPrefixes open the sections the Codex app-server harness
+// places before the request header. A prompt that opens with neither was not
+// decorated, so it is the user's text as written.
+var openclawDecorationPrefixes = []string{
+	"OpenClaw runtime context for this turn:",
+	"OpenClaw delivery metadata:",
+}
+
+// openclawUserRequest returns the user's text from an llm_input prompt. The
+// Codex app-server harness prepends workspace context, often several
+// kilobytes of it, which is OpenClaw's input to the model rather than what the
+// user asked.
+//
+// The request is the last section, so the last header marks it. A request
+// that itself contains the header keeps only its final part, which beats
+// reporting the workspace files as the prompt.
+func openclawUserRequest(prompt string) string {
+	if request, ok := strings.CutPrefix(prompt, openclawRequestHeader); ok {
+		return request
+	}
+	decorated := false
+	for _, prefix := range openclawDecorationPrefixes {
+		if strings.HasPrefix(prompt, prefix) {
+			decorated = true
+			break
+		}
+	}
+	if !decorated {
+		return prompt
+	}
+	i := strings.LastIndex(prompt, "\n\n"+openclawRequestHeader)
+	if i < 0 {
+		return prompt
+	}
+	return prompt[i+len("\n\n"+openclawRequestHeader):]
+}
+
 // openclawPromptRunsCap bounds how many OpenClaw runs the relay remembers as
 // having reported their user prompt. The serve daemon lives as long as the
 // Gateway, so the record must not grow with every run. 1024 is far more runs
@@ -110,7 +153,11 @@ func (r *Relay) onModelRequest(ctx context.Context, e *agenthooks.ModelEvent) er
 		return nil
 	}
 	var prompt string
-	if raw := e.RawField("event.prompt"); len(raw) == 0 || json.Unmarshal(raw, &prompt) != nil || strings.TrimSpace(prompt) == "" {
+	if raw := e.RawField("event.prompt"); len(raw) == 0 || json.Unmarshal(raw, &prompt) != nil {
+		return nil
+	}
+	prompt = openclawUserRequest(prompt)
+	if strings.TrimSpace(prompt) == "" {
 		return nil
 	}
 	if !r.openclawPrompts.claim(runID) {
