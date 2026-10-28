@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -581,11 +582,17 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if adapter == "" {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is required")
 	}
-	// The assistant surface is derived from the observation provider, and only
-	// server-side assistant runs may claim it. Reserve those values so a client
-	// hook cannot forge assistant-attributed skill activity.
-	if isReservedAssistantAdapter(adapter) {
+	// The assistant and MCP surfaces are derived from the observation provider,
+	// and only server-side assistant runs and hosted MCP reads may claim them.
+	// Reserve those values so a client hook cannot forge assistant-attributed
+	// skill activity or an MCP load.
+	if isReservedServerAdapter(adapter) {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is reserved")
+	}
+	// Hosted MCP reads dedupe on keys with this prefix. A hook claiming one
+	// first would make the real read a silent duplicate.
+	if strings.HasPrefix(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, "")), mcpskills.IdempotencyKeyPrefix) {
+		return oops.E(oops.CodeInvalid, nil, "idempotency_key prefix is reserved")
 	}
 	if strings.TrimSpace(payload.Event.Type) == "" {
 		return oops.E(oops.CodeInvalid, nil, "event.type is required")
@@ -596,9 +603,9 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	return validateDeliveryFailurePayload(payload)
 }
 
-func isReservedAssistantAdapter(adapter string) bool {
+func isReservedServerAdapter(adapter string) bool {
 	switch strings.ToLower(strings.Join(strings.Fields(adapter), "")) {
-	case "assistant", "assistants":
+	case "assistant", "assistants", mcpskills.ObservationProvider:
 		return true
 	default:
 		return false

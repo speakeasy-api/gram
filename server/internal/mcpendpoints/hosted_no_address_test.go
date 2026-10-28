@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -61,10 +62,9 @@ func TestHostedServerRecoversAddressAfterDomainDelete(t *testing.T) {
 
 	f.deleteDomain(t, ctx)
 	require.Empty(t, f.endpoints(t, ctx))
-	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
 	require.NoError(t, err)
-	require.Equal(t, f.toolset.McpSlug, toolset.McpSlug, "the frozen toolset alias is not written")
-	require.Equal(t, f.toolset.CustomDomainID, toolset.CustomDomainID)
+	require.Equal(t, legacyalias.None(), alias, "the frozen toolset alias is not written")
 
 	recovered := f.authCtx.OrganizationSlug + "-recovered"
 	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(recovered)})

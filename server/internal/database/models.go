@@ -3789,8 +3789,6 @@ type OktaIdentityProviderConnection struct {
 	OrgUrl string
 	// @access: restricted
 	IssuerUrl string
-	// @access: opaque-restricted
-	IssuerUrlOverrideReason pgtype.Text
 	// @access: confidential
 	OwnershipClaimed bool
 	// @access: confidential
@@ -7408,19 +7406,9 @@ type Toolset struct {
 	// @access: confidential
 	DefaultEnvironmentSlug pgtype.Text
 	// @access: confidential
-	McpSlug pgtype.Text
-	// @access: confidential
-	McpIsPublic bool
-	// @access: confidential
-	McpEnabled bool
-	// @access: confidential
 	ToolSelectionMode string
 	// @access: confidential
-	CustomDomainID uuid.NullUUID
-	// @access: confidential
 	ExternalOauthServerID uuid.NullUUID
-	// @access: confidential
-	UserSessionIssuerID uuid.NullUUID
 	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
 	// @access: confidential

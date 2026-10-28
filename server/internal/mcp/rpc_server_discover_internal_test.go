@@ -123,12 +123,6 @@ func TestHostedServerDiscoverStoredInstructionsAndCachePrivacy(t *testing.T) {
 			toolsets := toolsetsrepo.New(conn)
 			toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 				Name: "Discovery", Slug: "discovery", OrganizationID: project.OrganizationID, ProjectID: project.ID,
-				McpSlug: conv.ToPGText("discovery"), McpEnabled: true,
-			})
-			require.NoError(t, err)
-			_, err = toolsets.UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
-				Name: toolset.Name, Slug: toolset.Slug, ProjectID: project.ID,
-				McpSlug: toolset.McpSlug, McpEnabled: true, McpIsPublic: tc.public,
 			})
 			require.NoError(t, err)
 			metadata := metadatarepo.New(conn)

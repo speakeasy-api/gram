@@ -11,7 +11,6 @@ github.com/speakeasy-api/gram/server/cmd/gram 4453
 github.com/speakeasy-api/gram/server/cmd/risk-pi-report 1295
 github.com/speakeasy-api/gram/server/cmd/skillefficacybench 1085
 github.com/speakeasy-api/gram/server/cmd/tools/migrations 1081
-github.com/speakeasy-api/gram/server/cmd/tools/migrations/hostedmcpbackfill 6009
 github.com/speakeasy-api/gram/server/cmd/tools/migrations/openrouterdisablecauses 5554
 github.com/speakeasy-api/gram/server/cmd/tools/migrations/pipeline 1010
 github.com/speakeasy-api/gram/server/cmd/tools/migrations/riskfindings 15076
