@@ -39,6 +39,7 @@ var registry = []Product{
 			URL:         "https://claude.ai/oauth/claude-code-client-metadata",
 			DisplayName: "Anthropic (Claude Code)",
 			Enabled:     true,
+			IDJAG:       true,
 		}},
 	},
 	{
@@ -53,6 +54,7 @@ var registry = []Product{
 			URL:         "https://claude.ai/oauth/mcp-oauth-client-metadata",
 			DisplayName: "Anthropic (Claude)",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -72,11 +74,13 @@ var registry = []Product{
 				URL:         "https://vscode.dev/oauth/client-metadata.json",
 				DisplayName: "Visual Studio Code",
 				Enabled:     true,
+				IDJAG:       false,
 			},
 			{
 				URL:         "https://insiders.vscode.dev/oauth/client-metadata.json",
 				DisplayName: "Visual Studio Code (Insiders)",
 				Enabled:     true,
+				IDJAG:       false,
 			},
 		},
 	},
@@ -103,6 +107,7 @@ var registry = []Product{
 			URL:         "https://zed.dev/oauth/client-metadata.json",
 			DisplayName: "Zed",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -132,6 +137,7 @@ var registry = []Product{
 			URL:         "https://goose-docs.ai/oauth/client-metadata.json",
 			DisplayName: "Goose",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -191,6 +197,7 @@ var registry = []Product{
 				URL:         "https://chatgpt.com/oauth/*/client.json",
 				DisplayName: "ChatGPT (connectors)",
 				Enabled:     true,
+				IDJAG:       false,
 			},
 			{
 				// The connector platform's stable shared document. The
@@ -200,6 +207,7 @@ var registry = []Product{
 				URL:         "https://chatgpt.com/oauth/client.json",
 				DisplayName: "ChatGPT",
 				Enabled:     true,
+				IDJAG:       false,
 			},
 		},
 	},
@@ -277,6 +285,7 @@ var registry = []Product{
 				URL:         "https://chatgpt.com/oauth/codex/*/client.json",
 				DisplayName: "Codex CLI",
 				Enabled:     true,
+				IDJAG:       false,
 			},
 			{
 				// The stable shared Codex document. Verified 2026-09: Codex
@@ -295,6 +304,7 @@ var registry = []Product{
 				URL:         "https://chatgpt.com/oauth/codex/client.json",
 				DisplayName: "Codex CLI (stable document)",
 				Enabled:     true,
+				IDJAG:       true,
 			},
 		},
 	},
@@ -317,11 +327,13 @@ var registry = []Product{
 				URL:         "https://www.notion.so/oauth/mcp-client-metadata.json",
 				DisplayName: "Notion",
 				Enabled:     true,
+				IDJAG:       false,
 			},
 			{
 				URL:         "https://app.notion.com/oauth/mcp-client-metadata.json",
 				DisplayName: "Notion (app.notion.com)",
 				Enabled:     true,
+				IDJAG:       false,
 			},
 		},
 	},
@@ -339,6 +351,7 @@ var registry = []Product{
 			URL:         "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
 			DisplayName: "MCPJam Inspector",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -355,6 +368,7 @@ var registry = []Product{
 			URL:         "https://api.factory.ai/mcp/oauth-client",
 			DisplayName: "Factory Droid",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -371,6 +385,7 @@ var registry = []Product{
 			URL:         "https://toolhive.dev/oauth/client-metadata.json",
 			DisplayName: "ToolHive",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -400,6 +415,7 @@ var registry = []Product{
 			URL:         "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
 			DisplayName: "Hermes Agent",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -418,6 +434,7 @@ var registry = []Product{
 			URL:         "https://www.skydive.com/api/v1/external-oauth/client-metadata",
 			DisplayName: "Skydive",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -442,6 +459,7 @@ var registry = []Product{
 			URL:         "https://opencode.ai/oauth/opencode/client.json",
 			DisplayName: "opencode",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -460,6 +478,7 @@ var registry = []Product{
 			URL:         "https://github.com/copilot/cli/client-metadata.json",
 			DisplayName: "GitHub Copilot CLI",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -491,6 +510,7 @@ var registry = []Product{
 			URL:         "https://api.conductor.build/oauth/client-metadata.json",
 			DisplayName: "Conductor",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -516,6 +536,7 @@ var registry = []Product{
 			URL:         "https://connect.vercel.com/connectors/*",
 			DisplayName: "Vercel Connect (connectors)",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -536,6 +557,7 @@ var registry = []Product{
 			URL:         "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
 			DisplayName: "Linear",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -557,6 +579,7 @@ var registry = []Product{
 			URL:         "https://api.lovable.dev/.well-known/oauth-client",
 			DisplayName: "Lovable",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 
@@ -595,6 +618,7 @@ var registry = []Product{
 			URL:         "https://antigravity.google/oauth/client-metadata.json",
 			DisplayName: "Google Antigravity",
 			Enabled:     true,
+			IDJAG:       false,
 		}},
 	},
 

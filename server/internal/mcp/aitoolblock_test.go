@@ -24,6 +24,9 @@ import (
 // only through the catalog entry that admitted the caller.
 const claudeCodeCIMDClientID = "https://claude.ai/oauth/claude-code-client-metadata"
 
+// codexCIMDClientID is Codex's stable CIMD document, which the ID-JAG grant accepts.
+const codexCIMDClientID = "https://chatgpt.com/oauth/codex/client.json"
+
 const cimdLoopbackRedirect = "http://127.0.0.1:9876/callback"
 
 // seedCIMDClient persists a CIMD-resolved client row with a fresh cache

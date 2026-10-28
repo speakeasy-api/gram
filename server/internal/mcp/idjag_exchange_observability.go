@@ -3,12 +3,16 @@ package mcp
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // idJAGExchange records one ID-JAG exchange on oauth.id_jag.exchange when the
@@ -63,13 +67,33 @@ func (e *idJAGExchange) record(ctx context.Context) {
 	e.metrics.RecordIDJAGExchange(ctx, e.issuerID, e.outcome, e.reason)
 }
 
-// recordSharedIDJAGResourceMissing records an ID-JAG exchange the shared
-// token endpoint refused before the grant handler because the request named
-// no resource: one rejection log line, counted as an ID-JAG exchange. logger
+// recordSharedIDJAGResourceRejection records an ID-JAG exchange the shared
+// token endpoint refused before the grant handler because of its resource:
+// one rejection log line, counted as an ID-JAG exchange under reason. logger
 // already carries the issuer.
-func (s *Service) recordSharedIDJAGResourceMissing(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, resources []string) {
+func (s *Service) recordSharedIDJAGResourceRejection(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, rejection sharedResourceRejection, resources []string, reason mcpmetrics.IDJAGRejectionReason) {
 	exchange := &idJAGExchange{metrics: s.metrics, logger: logger, issuerID: issuerID.String(), outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}
-	attrs := exchange.reject(mcpmetrics.IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated), nil)
-	s.recordSharedResourceRejectionAs(ctx, logger, "oauth ID-JAG token request rejected", issuerID, mcpmetrics.OAuthFlowStageToken, sharedResourceMissing, resources, attrs...)
+	attrs := exchange.reject(reason, nil)
+	s.recordSharedResourceRejectionAs(ctx, logger, "oauth ID-JAG token request rejected", issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources, attrs...)
 	exchange.record(ctx)
+}
+
+// refuseIDJAGClient refuses a client that may not exchange an ID-JAG, with one
+// rejection line and count. exchange is nil when the grant handler has not
+// started one.
+func (s *Service) refuseIDJAGClient(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, logger *slog.Logger, exchange *idJAGExchange, clientID, authMethod string) error {
+	if exchange == nil {
+		exchange, logger = s.startIDJAGExchange(endpoint, logger)
+		defer exchange.record(ctx)
+	}
+	reason := mcpmetrics.IDJAGRejectionClientNotAllowed
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientID, authMethod, oauthwire.GrantTypeJWTBearer, string(reason), exchange.reject(reason, nil)...)
+	description := "this client is not allowed to use the ID-JAG grant"
+	// Pattern documents are deliberately not accepted; their app has a current stable document.
+	if preset, ok := admission.CatalogPreset(clientID); ok {
+		if product, ok := aivendors.IDJAGProductForDocument(preset.URL); ok {
+			description += "; use a current version of " + product.DisplayName
+		}
+	}
+	return writeTokenPolicyError(ctx, w, logger, oauthwire.GrantTypeJWTBearer, description)
 }

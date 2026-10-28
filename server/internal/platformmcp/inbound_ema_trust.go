@@ -18,13 +18,14 @@ import (
 	orgremotegen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	orgusergen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // InboundEMAUserIssuerManagement is the organization user session issuer
@@ -136,6 +137,10 @@ type InboundEMAIssuer struct {
 	// FederatedBrowserSignIn reports that interactive sign-in also goes
 	// through the trusted identity provider, so the trust cannot be removed here.
 	FederatedBrowserSignIn bool `json:"federated_browser_sign_in"`
+
+	// ClientIDMetadataAdmissionMode is the issuer's effective client ID
+	// metadata document admission mode: disabled, presets, or open.
+	ClientIDMetadataAdmissionMode string `json:"client_id_metadata_admission_mode" jsonschema:"disabled refuses every client ID metadata document, so no accepted client can exchange an ID-JAG; presets and open admit them"`
 
 	// OrganizationGatewayURL is the organization gateway, set when it signs
 	// users in through this issuer.
@@ -603,10 +608,11 @@ func (s *InboundEMATrustService) organizationGateway(ctx context.Context, princi
 
 func (s *InboundEMATrustService) issuerState(ctx context.Context, issuer *types.UserSessionIssuer, gateway organizationGatewayIssuer) (InboundEMAIssuer, error) {
 	state := InboundEMAIssuer{
-		UserSessionIssuerID:     issuer.ID,
-		Slug:                    issuer.Slug,
-		AuthorizationServerMode: issuer.AuthorizationServerMode,
-		FederatedBrowserSignIn:  issuer.TrustedRemoteSessionClientID != nil,
+		UserSessionIssuerID:           issuer.ID,
+		Slug:                          issuer.Slug,
+		AuthorizationServerMode:       issuer.AuthorizationServerMode,
+		FederatedBrowserSignIn:        issuer.TrustedRemoteSessionClientID != nil,
+		ClientIDMetadataAdmissionMode: issuer.ClientIDMetadataAdmissionMode,
 	}
 	switch {
 	case authserver.Mode(issuer.AuthorizationServerMode) != authserver.ModeShared:
@@ -735,6 +741,9 @@ func inboundEMAReadNextStep(output GetInboundEMATrustOutput) string {
 			if issuer.Audience == "" {
 				step = "Issuer " + issuer.Slug + ": " + issuer.AudienceNote
 			}
+			if note := inboundEMAAdmissionNote(issuer); note != "" {
+				step = "Issuer " + issuer.Slug + ": " + note
+			}
 			return step + " Users resolve only through an active synced directory user, with the ID-JAG's email, who is a live member."
 		}
 	}
@@ -746,6 +755,9 @@ func inboundEMATrustNextStep(issuer InboundEMAIssuer, directory InboundEMADirect
 	if issuer.Audience == "" {
 		step = issuer.AudienceNote
 	}
+	if note := inboundEMAAdmissionNote(issuer); note != "" {
+		step += " " + note
+	}
 	if !directory.Synced {
 		step += " No directory users are synced yet, so every exchange is refused until directory sync is set up."
 	}
@@ -753,10 +765,19 @@ func inboundEMATrustNextStep(issuer InboundEMAIssuer, directory InboundEMADirect
 }
 
 func inboundEMAAcceptedClients() []InboundEMAClient {
-	allowed := idjag.AllowedClients()
-	clients := make([]InboundEMAClient, 0, len(allowed))
-	for _, client := range allowed {
-		clients = append(clients, InboundEMAClient{Name: client.DisplayName, ClientID: client.ClientID})
+	documents := aivendors.IDJAGDocuments()
+	clients := make([]InboundEMAClient, 0, len(documents))
+	for _, entry := range documents {
+		clients = append(clients, InboundEMAClient{Name: entry.Product.DisplayName, ClientID: entry.Document.URL})
 	}
 	return clients
+}
+
+// inboundEMAAdmissionNote explains an admission mode that refuses every
+// accepted client, or is empty.
+func inboundEMAAdmissionNote(issuer InboundEMAIssuer) string {
+	if admission.Mode(issuer.ClientIDMetadataAdmissionMode) != admission.ModeDisabled {
+		return ""
+	}
+	return "Client ID metadata documents are disabled for this issuer, so ID-JAG sign-in cannot work until admission is set to presets or open to allow the accepted clients."
 }

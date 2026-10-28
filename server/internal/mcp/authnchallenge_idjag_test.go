@@ -18,6 +18,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -62,16 +63,18 @@ func newIDJAGTestAssertion(t *testing.T) idJAGTestAssertion {
 
 func (a idJAGTestAssertion) sign(t *testing.T, issuer, audience, resource, clientID, email, assertionID string) string {
 	t.Helper()
+	return a.signWithResourceClaim(t, issuer, audience, resource, clientID, email, assertionID)
+}
+
+// signWithResourceClaim signs an ID-JAG whose resource claim may be any JSON value.
+func (a idJAGTestAssertion) signWithResourceClaim(t *testing.T, issuer, audience string, resource any, clientID, email, assertionID string) string {
+	t.Helper()
 	now := time.Now()
 	claims := jwt.Claims{
 		Issuer: issuer, Subject: "external-user", Audience: jwt.Audience{audience},
 		Expiry: jwt.NewNumericDate(now.Add(2 * time.Minute)), IssuedAt: jwt.NewNumericDate(now.Add(-time.Minute)), ID: assertionID,
 	}
-	extra := struct {
-		Resource string `json:"resource"`
-		ClientID string `json:"client_id"`
-		Email    string `json:"email"`
-	}{Resource: resource, ClientID: clientID, Email: email}
+	extra := map[string]any{"resource": resource, "client_id": clientID, "email": email}
 	raw, err := jwt.Signed(a.signer).Claims(claims).Claims(extra).Serialize()
 	require.NoError(t, err)
 	return raw
@@ -170,9 +173,6 @@ func createTrustedIDJAGIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 	require.NoError(t, err)
 	return issuer
 }
-
-// codexCIMDClientID is a client the ID-JAG grant accepts.
-const codexCIMDClientID = "https://chatgpt.com/oauth/codex/client.json"
 
 // createDCRClient registers a public client through DCR, which the ID-JAG
 // grant refuses.
@@ -325,17 +325,17 @@ func TestTokenIDJAGExchangeRefusesClientsBeforeConsumingAssertion(t *testing.T) 
 	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, listed.ClientID, mockidp.MockUserEmail, uuid.NewString())
 	const notAllowed = `{"error":"unauthorized_client","error_description":"this client is not allowed to use the ID-JAG grant"}`
 
-	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModePresets)
+	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeOpen)
 	rejected := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, ds.clientID, assertion, resource)
 	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
-	require.JSONEq(t, `{"error":"invalid_client","error_description":"this client ID metadata document URL is not permitted by the server's client policy; the server operator must allow it"}`, rejected.Body.String())
-	require.Zero(t, ds.requests.Load(), "admission must reject before fetching client metadata")
-
-	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeOpen)
-	rejected = postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, ds.clientID, assertion, resource)
-	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
 	require.JSONEq(t, notAllowed, rejected.Body.String())
-	require.EqualValues(t, 1, ds.requests.Load())
+	require.Zero(t, ds.requests.Load(), "an unlisted client must be refused before its metadata is fetched")
+	_, err = usersessionsrepo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessionsrepo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: issuer.ID, ClientID: ds.clientID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	rejected = postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, "https://chatgpt.com/oauth/codex/abc123/client.json", assertion, resource)
+	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
+	require.JSONEq(t, `{"error":"unauthorized_client","error_description":"this client is not allowed to use the ID-JAG grant; use a current version of Codex"}`, rejected.Body.String())
 
 	rejected = postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, dcr.ClientID, assertion, resource)
 	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())

@@ -553,3 +553,23 @@ func TestInboundEMATrustGetNextStepExplainsEndpointModeHasNoAudience(t *testing.
 	require.Contains(t, output.NextStep, "no single audience")
 	require.Contains(t, output.NextStep, "shared authorization server")
 }
+
+func TestInboundEMATrustGetNextStepExplainsDisabledAdmissionBlocksIDJAG(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	providerID := uuid.NewString()
+	f.remote.records[providerID] = &types.RemoteSessionIssuer{ID: providerID, Issuer: inboundEMATestIDP, JwksURI: new(inboundEMATestIDP + "/keys")}
+	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
+	f.users.issuers[f.issuerID].ClientIDMetadataAdmissionMode = "disabled"
+
+	output, err := f.service.Get(t.Context(), f.principal)
+	require.NoError(t, err)
+	require.Len(t, output.Issuers, 1)
+	require.Equal(t, "disabled", output.Issuers[0].ClientIDMetadataAdmissionMode)
+	require.Contains(t, output.NextStep, "ID-JAG sign-in cannot work until admission")
+
+	f.users.issuers[f.issuerID].ClientIDMetadataAdmissionMode = "presets"
+	output, err = f.service.Get(t.Context(), f.principal)
+	require.NoError(t, err)
+	require.NotContains(t, output.NextStep, "cannot work until admission")
+}

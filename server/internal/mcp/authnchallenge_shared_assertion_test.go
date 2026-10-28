@@ -383,20 +383,20 @@ func TestSharedAuthorizationServer_IDJAGResourceClaimRefusalDoesNotConsumeIDJAG(
 	ctx, ti, signer, f := sharedIDJAGFixture(t)
 	foreign := seedSharedIssuer(t, ctx, ti)
 	assertionID := uuid.NewString()
-	for _, tc := range []struct {
-		claim string
-		code  string
-	}{
-		{foreign.resource(ti, foreign.slugA), "invalid_target"},
-		{"not-a-resource", "invalid_target"},
-		{ti.serverURL.String() + "/mcp/unknown", "invalid_target"},
+	for _, claim := range []any{
+		foreign.resource(ti, foreign.slugA),
+		"not-a-resource",
+		ti.serverURL.String() + "/mcp/unknown",
+		"",
+		[]string{f.resource(ti, f.slugA)},
+		42,
 	} {
 		w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
 			oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},
-			oauthwire.ParamAssertion: {signer.sign(t, sharedTestUpstreamIssuer, f.issuerURL, tc.claim, f.client.ClientID, mockidp.MockUserEmail, assertionID)},
+			oauthwire.ParamAssertion: {signer.signWithResourceClaim(t, sharedTestUpstreamIssuer, f.issuerURL, claim, f.client.ClientID, mockidp.MockUserEmail, assertionID)},
 		})
 		require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-		require.Equal(t, tc.code, decodeSharedTokenResponse(t, w).Error)
+		require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error, claim)
 	}
 	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
 		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},

@@ -346,10 +346,11 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
 		}
 		var rejection sharedResourceRejection
+		claimed := false
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 {
 			// Unverified: it only picks the server whose ID-JAG checks then verify it.
 			if resource, ok, claimErr := idjag.UnverifiedResource(r.PostForm.Get(oauthwire.ParamAssertion)); ok {
-				resources = []string{resource}
+				resources, claimed = []string{resource}, true
 				if claimErr != nil {
 					rejection = sharedResourceMalformed
 				}
@@ -362,9 +363,12 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 			}
 		}
 		if rejection != sharedResourceAccepted {
-			if grantType == oauthwire.GrantTypeJWTBearer && rejection == sharedResourceMissing {
-				s.recordSharedIDJAGResourceMissing(ctx, logger, issuer.authorizationServer.issuerID, resources)
-			} else {
+			switch {
+			case grantType == oauthwire.GrantTypeJWTBearer && rejection == sharedResourceMissing:
+				s.recordSharedIDJAGResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, rejection, resources, mcpmetrics.IDJAGRejectionFromValidator(idjag.ReasonResourceNotIndicated))
+			case claimed:
+				s.recordSharedIDJAGResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, rejection, resources, mcpmetrics.IDJAGRejectionResourceMismatch)
+			default:
 				s.recordSharedResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources)
 			}
 			code := oautherr.CodeInvalidTarget

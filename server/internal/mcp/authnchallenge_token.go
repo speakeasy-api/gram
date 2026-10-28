@@ -27,6 +27,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -49,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -446,6 +448,12 @@ func (s *Service) authenticateTokenClient(
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientIDNamesEndpointDescription)
 		}
 	}
+	// An unlisted metadata document URL is refused before it is fetched or stored.
+	if grantType == oauthwire.GrantTypeJWTBearer && cimd.IsClientIDURL(clientID) {
+		if _, ok := aivendors.IDJAGDocument(clientID); !ok {
+			return nil, s.refuseIDJAGClient(ctx, w, r, endpoint, logger, nil, clientID, presentedAuthMethod)
+		}
+	}
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
@@ -556,9 +564,9 @@ func (s *Service) handleTokenJWTBearerGrant(
 ) error {
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
 	defer exchange.record(ctx)
-	if !clientRow.ClientIDMetadataUri.Valid || !idjag.ClientAllowed(clientRow.ClientID) {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, string(mcpmetrics.IDJAGRejectionClientNotAllowed), exchange.reject(mcpmetrics.IDJAGRejectionClientNotAllowed, nil)...)
-		return writeTokenPolicyError(ctx, w, logger, oauthwire.GrantTypeJWTBearer, "this client is not allowed to use the ID-JAG grant")
+	// Registered clients land here; a listed URL on a non-CIMD row is defense in depth.
+	if _, listed := aivendors.IDJAGDocument(clientRow.ClientID); !listed || !clientRow.ClientIDMetadataUri.Valid {
+		return s.refuseIDJAGClient(ctx, w, r, endpoint, logger, exchange, clientRow.ClientID, presentedAuthMethod)
 	}
 	req := usersessions.JWTBearerTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()

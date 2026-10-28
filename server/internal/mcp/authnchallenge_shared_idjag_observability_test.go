@@ -65,3 +65,49 @@ func TestSharedAuthorizationServer_IDJAGWithoutRequestResourceIsRecorded(t *test
 
 	require.Equal(t, map[string]int64{string(mcpmetrics.IDJAGExchangeRejected) + "/" + reason: 1}, idJAGExchangeCounts(t, reader, issuer.ID))
 }
+
+// A resource claim naming a server outside the issuer is one ID-JAG rejection.
+func TestSharedAuthorizationServer_IDJAGResourceClaimRefusalIsRecorded(t *testing.T) {
+	t.Parallel()
+	var logs syncBuffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: false, ReplaceAttr: nil}))
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	}, nil)
+	authCtx := requireProjectAuthContext(t, ctx)
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, sharedTestUpstreamIssuer, "https://identity.example.test/keys")
+	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
+	issuerURL := ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String()
+	assertion := newIDJAGTestAssertion(t).sign(t, sharedTestUpstreamIssuer, issuerURL, ti.serverURL.String()+"/mcp/unknown", client.ClientID, "user@example.test", "id-jag-claim-refusal")
+
+	w := sharedToken(t, ctx, ti, issuer.ID.String(), url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {client.ClientID},
+		oauthwire.ParamAssertion: {assertion},
+	})
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+
+	reason := string(mcpmetrics.IDJAGRejectionResourceMismatch)
+	var idJAGLines []map[string]any
+	scanner := bufio.NewScanner(strings.NewReader(logs.String()))
+	for scanner.Scan() {
+		var line map[string]any
+		require.NoError(t, json.Unmarshal(scanner.Bytes(), &line))
+		require.NotEqual(t, "shared authorization server refused resource indicator", line["msg"], "no second, generic line")
+		if line["msg"] == "oauth ID-JAG token request rejected" {
+			idJAGLines = append(idJAGLines, line)
+		}
+	}
+	require.Len(t, idJAGLines, 1)
+	require.Equal(t, string(mcpmetrics.IDJAGExchangeRejected), idJAGLines[0][string(attr.OAuthIDJAGOutcomeKey)])
+	require.Equal(t, reason, idJAGLines[0][string(attr.OAuthIDJAGRejectionReasonKey)])
+	require.Equal(t, issuer.ID.String(), idJAGLines[0][string(attr.UserSessionIssuerIDKey)])
+
+	require.Equal(t, map[string]int64{string(mcpmetrics.IDJAGExchangeRejected) + "/" + reason: 1}, idJAGExchangeCounts(t, reader, issuer.ID))
+}
