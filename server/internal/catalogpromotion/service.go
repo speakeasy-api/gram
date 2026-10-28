@@ -675,8 +675,19 @@ func (s *Service) candidate(row repo.RegistryPromotionCandidate) Candidate {
 			out.DocsStatus = "needs_attention"
 		}
 		out.DocsRetryAllowed = row.DocsAttempts > 0 && !row.DocsQueuedAt.Valid && (!row.DocsLeaseUntil.Valid || !row.DocsLeaseUntil.Time.After(s.now())) && (!row.DocsNextAttemptAt.Valid || !row.DocsNextAttemptAt.Time.After(s.now()))
+		inReview := row.DocsOutcome.String == string(delivery.OutcomeGuideInReview)
+		if inReview {
+			// A stalled review keeps its pull request link for staff.
+			out.DocsURL = row.DocsUrl.String
+			if !row.DocsNeedsAttention && !row.DeliveryError.Valid {
+				out.DocsStatus = "guide_in_review"
+			}
+		}
 		if row.DocsQueuedAt.Valid {
 			out.DocsStatus = "queued"
+			if row.DocsOutcome.String == string(delivery.OutcomeExistingGuide) {
+				out.DocsStatus = "existing_guide"
+			}
 			out.DocsURL = row.DocsUrl.String
 			out.DocsQueuedAt = row.DocsQueuedAt.Time.UTC().Format(time.RFC3339)
 		}

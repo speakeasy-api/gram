@@ -132,6 +132,7 @@ UPDATE registry_promotion_candidates SET docs_url=sqlc.narg(docs_url)::text,
  docs_queued_at=sqlc.narg(docs_queued_at)::timestamptz,delivery_error=sqlc.narg(delivery_error)::text,
  docs_needs_attention= @needs_attention::boolean,docs_failures= @failures::integer,
  docs_next_attempt_at=sqlc.narg(next_attempt_at)::timestamptz,
+ docs_outcome=sqlc.narg(docs_outcome)::text,docs_review_since=sqlc.narg(docs_review_since)::timestamptz,
  docs_lease_until=NULL,docs_lease_token=NULL,docs_revision=generate_uuidv7(),updated_at=clock_timestamp()
 WHERE id= @id AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid AND docs_lease_token= @lease_token::uuid;
 
@@ -163,15 +164,16 @@ SELECT * FROM registry_promotion_candidates WHERE organization_id= @organization
 
 -- name: RetryDocs :one
 UPDATE registry_promotion_candidates SET docs_needs_attention=false,docs_failures=0,
- docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,
+ docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,docs_review_since=NULL,
  docs_retry_key= @retry_key,docs_retry_revision= @retry_revision,docs_retry_by= @actor,
  docs_revision=generate_uuidv7(),updated_at=clock_timestamp()
 WHERE id= @id AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid AND organization_id= @organization_id RETURNING *;
 
 -- name: JobStatus :one
-SELECT count(*) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE)::bigint AS pending_docs,
+SELECT count(*) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE AND docs_outcome IS DISTINCT FROM 'guide_in_review')::bigint AS pending_docs,
  count(*) FILTER (WHERE docs_needs_attention)::bigint AS needs_attention,
- min(promoted_at) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE)::timestamptz AS oldest_pending_at,
+ min(promoted_at) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE AND docs_outcome IS DISTINCT FROM 'guide_in_review')::timestamptz AS oldest_pending_at,
+ count(*) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE AND docs_outcome='guide_in_review')::bigint AS guide_in_review,
  max(discovery_last_attempt_at)::timestamptz AS last_discovery_at,
  count(*) FILTER (WHERE discovery_failures>0 AND promoted_at IS NULL AND curation_status='active')::bigint AS discovery_failures
 FROM registry_promotion_candidates;
