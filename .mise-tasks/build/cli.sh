@@ -5,6 +5,7 @@
 #MISE depends=["go:tidy"]
 
 #USAGE flag "--readonly" help="Build with -mod=readonly"
+#USAGE flag "--commit <sha>" help="Commit stamped into the binary (defaults to HEAD)"
 
 set -e
 
@@ -13,7 +14,7 @@ if [ "${usage_readonly:-false}" = "true" ]; then
     args+=("-mod=readonly")
 fi
 
-git_sha=$(git rev-parse HEAD)
+git_sha=${usage_commit:-$(git rev-parse HEAD)}
 version=$(node -p "require('./package.json').version")
 
 CGO_ENABLED=0 go \

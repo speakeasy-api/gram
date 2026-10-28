@@ -5,6 +5,7 @@
 #MISE depends=["go:tidy"]
 
 #USAGE flag "--readonly" help="Build with -mod=readonly"
+#USAGE flag "--commit <sha>" help="Commit stamped into the binary (defaults to HEAD)"
 
 set -e
 
@@ -13,7 +14,7 @@ if [ "${usage_readonly:-false}" = "true" ]; then
     args+=("-mod=readonly")
 fi
 
-git_sha=$(git rev-parse HEAD)
+git_sha=${usage_commit:-$(git rev-parse HEAD)}
 runtime_image_hash=${GRAM_ASSISTANT_RUNTIME_IMAGE_HASH:-dev}
 
 CGO_ENABLED=0 go \

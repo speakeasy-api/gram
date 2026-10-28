@@ -16,6 +16,9 @@ flags.local.csv
 node_modules
 bin
 junit-report.xml
+test-timings.json
+test-exit-code
+test-output.txt
 rerun-report.txt
 report.md
 .mise-tasks/local

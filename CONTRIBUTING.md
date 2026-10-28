@@ -169,6 +169,13 @@ cd cli
 go run . --help
 ```
 
+### Local Go workflows with Dagger
+
+Go builds, lint, tests, and runtime images can be run locally through the
+mise-pinned Dagger pipeline. With Docker running, use `mise run dagger:go-test --component server` or
+`mise run dagger:go lint --component cli`. Commands, sharding, image builds, and cache
+behavior are documented in [the pipeline README](.dagger/README.md).
+
 # Contribution guidelines
 
 Above anything else in this document: we do not perfectly hold to the guidelines below but we do our best to work towards them. Active codebases will readily deteriorate with time unless explicit efforts are made to reverse deterioration.

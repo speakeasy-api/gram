@@ -9,6 +9,8 @@
 #USAGE flag "--melange-private-key <path>" help="Path to melange signing key"
 #USAGE flag "--apk-cache-dir <path>" required=#true help="Path to apko cache directory" default="../local/cache/apk"
 #USAGE flag "--dev" help="Mark as development build" default="false"
+#USAGE flag "--commit <sha>" help="Commit stamped into the package (defaults to HEAD)"
+#USAGE flag "--build-date <date>" help="RFC3339 build date (defaults to now)"
 
 set -euo pipefail
 
@@ -30,9 +32,9 @@ if [ "${usage_dev:-false}" = "true" ]; then
   suffix="-dev"
 fi
 
-sha="$(git rev-parse --short HEAD)"
+sha="${usage_commit:-$(git rev-parse --short HEAD)}"
 {
-  echo "date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  echo "date: ${usage_build_date:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
   echo "commit: $sha"
   echo "version: $sha$suffix"
 } >> "$vars_file"

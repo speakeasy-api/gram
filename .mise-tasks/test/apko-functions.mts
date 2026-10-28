@@ -5,6 +5,7 @@
 
 //USAGE flag "--image <image>" required=#true help="The name of the OCI image, including tag."
 //USAGE flag "--tarball <tarball>" required=#true help="The path to the OCI tarball"
+//USAGE flag "--arch <arch>" help="Image architecture (defaults to the host)" { choices "amd64" "arm64" }
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -41,7 +42,7 @@ async function main() {
     throw new Error("--image must include a tag");
   }
 
-  let arch: string = process.arch;
+  let arch: string = process.env["usage_arch"] || process.arch;
   if (arch === "x64") {
     arch = "amd64";
   }
@@ -77,7 +78,7 @@ async function main() {
 
   const zipPath = await createTempZip();
   const codeBind = `${zipPath}:/data/code.zip`;
-  const runScript = containerTester({ image, codeBind });
+  const runScript = containerTester({ image, codeBind, arch });
 
   let fail = false;
   console.log(chalk.yellowBright(`⏳ Running safety tests on image ${image}`));
@@ -124,9 +125,13 @@ async function main() {
   }
 }
 
-function containerTester(opts: { image: string; codeBind: string }) {
+function containerTester(opts: {
+  image: string;
+  codeBind: string;
+  arch: string;
+}) {
   return async (script: string) => {
-    const { image, codeBind } = opts;
+    const { image, codeBind, arch } = opts;
     const wrapped = String.raw`
 set -e
 export GRAM_FUNCTION_AUTH_SECRET="dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM="
@@ -139,7 +144,7 @@ echo ==START==
 ${script}
 `.trim();
     const proc =
-      await $`docker run --entrypoint "" -v ${codeBind} --rm ${image} sh -c ${wrapped}`;
+      await $`docker run --platform ${`linux/${arch}`} --entrypoint "" -v ${codeBind} --rm ${image} sh -c ${wrapped}`;
     const output = proc.stdout.split("==START==\n")[1].trim();
     return output;
   };

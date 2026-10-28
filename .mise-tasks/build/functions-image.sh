@@ -12,6 +12,7 @@
 #USAGE flag "--image <image>" required=#true help="Set the OCI image name including tag"
 #USAGE flag "--melange-public-key <path>" help="Path to melange signing key"
 #USAGE flag "--out <path>" help="Path to output the OCI image tarball" default="./oci"
+#USAGE flag "--build-date <date>" help="RFC3339 build date (defaults to now)"
 
 set -euo pipefail
 
@@ -24,7 +25,7 @@ apko_cache_dir="${usage_apko_cache_dir:?Error: apko cache dir not provided}"
 archs="${usage_arch:?Error: arch not provided}"
 tarball="$out/${usage_tarball_name:?Error: tarball name not provided}"
 log_level="${usage_level:-info}"
-date=$(date --utc +"%Y-%m-%dT%H:%M:%SZ")
+date=${usage_build_date:-$(date --utc +"%Y-%m-%dT%H:%M:%SZ")}
 
 melange_pub_key=${usage_melange_public_key:-$MELANGE_PUBLIC_KEY}
 if [ ! -f "$melange_pub_key" ]; then
