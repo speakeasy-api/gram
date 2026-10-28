@@ -85,3 +85,49 @@ func TestCatalogIconsSchema(t *testing.T) {
 		require.NotEmpty(t, v.Validate(json.RawMessage(raw)), value)
 	}
 }
+
+func TestCatalogIconsPersistedLifecycleDiscoveryParity(t *testing.T) {
+	ctx, s, db := newTestService(t)
+	base, err := url.Parse("https://assets.example")
+	require.NoError(t, err)
+	s.WithAssetBaseURL(base)
+	icons := make([]*CatalogIcon, 2)
+	for i := range icons {
+		asset, err := assetrepo.New(db).CreatePlatformAsset(ctx, assetrepo.CreatePlatformAssetParams{Name: "icon.svg", Url: uuid.NewString(), Sha256: uuid.NewString(), Kind: "image", ContentType: "image/svg+xml", ContentLength: 10})
+		require.NoError(t, err)
+		icons[i] = &CatalogIcon{Src: assets.ServeImageURL(base, asset.ID), MimeType: "image/svg+xml", Sizes: []string{"any"}}
+	}
+	raw := strings.Replace(basicRecord, `"version":"1.0.0"`, `"version":"1.0.0","icons":[{"src":"https://upstream.example/icon.png"}]`, 1)
+	raw = strings.TrimSuffix(raw, "}") + `,"_meta":{"example.test/data":{"n":9007199254740993}}}`
+	entry, err := s.Create(ctx, json.RawMessage(raw))
+	require.NoError(t, err)
+	for _, want := range []CatalogIcons{{Default: icons[0], Dark: icons[0]}, {Default: icons[1], Dark: icons[0]}, {Default: icons[1], Dark: icons[1]}, {Dark: icons[1]}, {}} {
+		updated, err := WithCatalogIcons(entry.Data, want)
+		require.NoError(t, err)
+		if want.Default == nil && want.Dark == nil {
+			updated = json.RawMessage(strings.Replace(string(updated), `"_meta":{`, `"_meta":{"com.speakeasy.ai/icons":{},`, 1))
+		}
+		entry, err = s.Save(ctx, entry.ID, Token(entry), updated)
+		require.NoError(t, err)
+		persisted, err := s.Get(ctx, entry.ID)
+		require.NoError(t, err)
+		page, err := s.Discover(ctx, DiscoveryOptions{})
+		require.NoError(t, err)
+		require.Len(t, page.Records, 1)
+		detail, err := s.LookupDiscoveryVersion(ctx, "example.test/demo", "1.0.0", false)
+		require.NoError(t, err)
+		for _, record := range []json.RawMessage{persisted.Data, page.Records[0], detail.Data} {
+			got, err := ParseCatalogIcons(record)
+			require.NoError(t, err)
+			require.Equal(t, want, got)
+			require.Contains(t, string(record), "9007199254740993")
+			require.Contains(t, string(record), "https://upstream.example/icon.png")
+			var envelope map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(record, &envelope))
+			require.NotContains(t, string(envelope["server"]), IconsNamespace)
+			if want.Default == nil && want.Dark == nil {
+				require.NotContains(t, string(record), IconsNamespace)
+			}
+		}
+	}
+}

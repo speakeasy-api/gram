@@ -128,10 +128,18 @@ it("preserves prior draft on rejection and ignores late completion after close",
   );
   select();
   next.unmount();
+  render(<Harness initial="{}" />);
   await act(async () =>
-    resolve({ asset: { id: "late", contentType: "image/svg+xml" } }),
+    resolve({
+      url: "https://public.example.test/rpc/assets.serveImage?id=late",
+      asset: { id: "late", contentType: "image/svg+xml" },
+    }),
   );
   expect(onChange).not.toHaveBeenCalled();
+  expect((screen.getByLabelText("draft") as HTMLTextAreaElement).value).toBe(
+    "{}",
+  );
+  expect(screen.queryAllByRole("img")).toHaveLength(0);
 });
 it("disables writes for invalid JSON or parent busy state", () => {
   const view = render(<Harness disabled />);
