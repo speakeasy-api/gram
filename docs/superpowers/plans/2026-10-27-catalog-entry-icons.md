@@ -324,3 +324,45 @@ mise run lint:brand
 - Constructor/configuration changes are confined to providing a canonical asset base URL. No database migration, new CDN, new worker, or customer-dashboard rendering task.
 - All cross-task interfaces are declared above. Existing generated clients are regenerated rather than hand-edited.
 - No unresolved product questions. Unsupported SVGs are rejected with export guidance; dark-only metadata is tolerated after independent removal rather than silently deleting another slot.
+
+## Execution record — 2026-10-28
+
+Implementation is committed on `walker/catalog-logos`. All six task implementation/automated-review gates passed. Live browser acceptance remains blocked; this is not an end-to-end or deployment sign-off. The checklists above preserve the original execution instructions; this section records actual outcomes.
+
+### Implemented
+
+- Strict, bounded static-SVG policy; canonical platform uploads; CSP and nosniff on both public and Admin image responses.
+- Curated `default`/`dark` namespace with canonical public URL and platform-SVG ownership validation; upstream icons unchanged.
+- Compact Admin controls, lossless shared JSON draft, protected upload lifecycle, and server-returned public URLs for distinct Admin/public origins.
+- Approved staff MCP icon updates with atomic proposal execution; read projection revalidates historical icon URLs/asset ownership and fails closed.
+- Local-only fictional catalog fixture, CLI site URL wiring, reseed and persistence/discovery regressions. No production tenant demo mutation or customer-dashboard rendering change.
+
+### Verification evidence
+
+All server test commands used command-scoped `DOCKER_HOST` from the active Docker context; no persistent Docker configuration was changed.
+
+| Check                                                                         | Result                                                               |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Assets, registry and nested packages, external catalog, staff MCP, Admin API  | 2,609 tests passed                                                   |
+| Final legacy-projection fix: staff MCP, registry, Admin API (`-p 1 -count=1`) | 1,971 tests passed; independently rerun by controller                |
+| Admin registry, issuer editor and API-client frontend suites                  | 179 tests passed                                                     |
+| Tagged local-fixture tests                                                    | 2 tests passed                                                       |
+| Demo/startup seed CLI tests                                                   | 6 tests passed                                                       |
+| Admin type-check and type-aware lint                                          | Passed; zero lint warnings/errors                                    |
+| Product naming and diff whitespace                                            | Passed                                                               |
+| Whole-branch independent review                                               | Important legacy-projection finding fixed; scoped re-review approved |
+
+The affected Go suites include mounted HTTP upload/create/read/serve checks with distinct origins, CSP/nosniff assertions, and public/raster regression coverage. These are automated HTTP tests, not live deployment verification.
+
+### Remaining acceptance / environment blocker
+
+A local live walkthrough could not start: the Admin service reported an invalid base64 encryption key, and the public server reported a missing JWT signing key. No keys were regenerated or replaced. Dependencies started for the attempt were stopped afterward.
+
+Still required after local setup is repaired: actual Admin upload/save/reopen/reseed walkthrough, browser direct-SVG behavior, actual-product screenshot, and inspection of headers on the deployed/proxied public asset path. The saved Option C screenshot remains a mockup reference only. No push, pull request, merge or deployment was performed.
+
+### Review-driven corrections
+
+- Reject BOM/encoded XML disguised as raster uploads before storage.
+- Return canonical public URLs from the Admin upload endpoint rather than deriving them from the Admin browser origin.
+- Forward security headers through the Admin serving adapter as well as the public route.
+- Verify legacy metadata against trusted origin and live platform assets before exposing it through the restricted staff MCP projection.
