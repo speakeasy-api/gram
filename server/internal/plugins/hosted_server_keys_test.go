@@ -126,9 +126,7 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryLeftOut(t *testing
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	raw, ok := mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]
-	if !ok {
-		return
-	}
+	require.True(t, ok, "publish must push .mcp.json")
 	var config struct {
 		MCPServers map[string]json.RawMessage `json:"mcpServers"`
 	}
