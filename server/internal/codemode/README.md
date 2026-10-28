@@ -438,8 +438,13 @@ capability or admin workflow, so Admin MCP requires no change.
 
 ## Connection recovery
 
-`await tools.connection_status(server="")` reports visible members, including
-ones needing new consent, without invoking their tools.
+`await tools.servers()` reports visible members, including ones needing new
+consent. Each item includes `connection.consent` (`approved`, `required`,
+`not_required`, `unknown`), `connection.authentication` (`unknown`, `verified_at_consent`,
+`not_required`) and instructions. This reads known metadata without probing
+upstreams or resolving/refreshing their credentials. `unknown` does not mean
+disconnected; try permitted tools first. Consent-time verification is not proof
+of current access. Status changes do not invalidate inventory pagination.
 `await tools.connect(server="tracker")` returns a short-lived browser sign-in
 URL, instructions, and `client_reconnect_required`. The link is bound to the
 requesting user, gateway and member; the browser must authenticate that user.

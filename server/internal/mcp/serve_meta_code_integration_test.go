@@ -437,9 +437,9 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 		require.Nil(t, response.Result.StructuredContent.Error, w.Body.String())
 		return response.Result.StructuredContent
 	}
-	status := execute(`await tools.connection_status(server="tracker")`, true)
-	require.Contains(t, string(status.Value), `"not_connected"`)
-	t.Log("BEFORE: Python reports the upstream is not connected; no business tool has run.")
+	status := execute(`await tools.servers()`, true)
+	require.Contains(t, string(status.Value), `"authentication":"unknown"`)
+	t.Log("BEFORE: Python lists connection metadata without probing the upstream; no business tool has run.")
 	handoff := execute(`await tools.connect(server="tracker")`, true)
 	var action codemode.ConnectionAction
 	require.NoError(t, json.Unmarshal(handoff.Value, &action))
@@ -478,8 +478,8 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, completed.Code)
 	require.NotNil(t, exchanged.Load(), "real token POST reached owned OAuth provider")
 	t.Log("HANDOFF: original user identified; member-scoped OAuth callback exchanges a code and stores the upstream grant.")
-	after := execute(`await tools.connection_status(server="tracker")`, false)
-	require.Contains(t, string(after.Value), `"connected"`)
+	after := execute(`await tools.servers()`, false)
+	require.Contains(t, string(after.Value), `"authentication":"unknown"`)
 	result := execute(`page = await tools.search("", server="tracker")
 path = page["items"][0]["path"]
 details = await tools.describe(path)

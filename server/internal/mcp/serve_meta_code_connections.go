@@ -1,17 +1,15 @@
 package mcp
 
 import (
-	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
-	"slices"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
-	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -23,42 +21,49 @@ func (b *metaCodeBackend) connectionMembers(ctx context.Context) (context.Contex
 	return b.currentState(ctx, false, true)
 }
 
-func (b *metaCodeBackend) ConnectionStatus(ctx context.Context, server string) (*codemode.ConnectionStatus, error) {
+// DiscoveryServers exposes only admission-bound visible members. It reads known
+// consent metadata, never resolves/refreshes upstream credentials or lists tools.
+func (b *metaCodeBackend) DiscoveryServers(ctx context.Context) ([]codemode.Server, error) {
 	ctx, gate, members, err := b.connectionMembers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result := &codemode.ConnectionStatus{Servers: []codemode.ConnectionState{}}
-	found := server == ""
-	slices.SortFunc(members, func(a, b metaMember) int { return cmp.Compare(a.slug, b.slug) })
+	result := make([]codemode.Server, 0, len(members))
 	for _, member := range members {
-		if server != "" && server != member.slug {
-			continue
-		}
-		found = true
-		status, detail := b.connectionSignInStatus(ctx, gate, member)
-		if gate.catalogRecoveryOnly {
-			status, detail = metamcp.SignInNeedsConsent, "The approved catalogue expired. Reconnect this gateway in your MCP client and approve this server."
-		}
-		result.Servers = append(result.Servers, codemode.ConnectionState{Server: member.slug, Name: member.name, Status: status, Reason: detail, Instructions: connectionInstructions(status)})
-	}
-	if !found {
-		return nil, codemode.ErrToolUnavailable
+		state := b.knownConnectionState(ctx, gate, member)
+		result = append(result, codemode.Server{Slug: member.slug, Name: member.name, Connection: state})
 	}
 	return result, nil
 }
 
-func connectionInstructions(status string) string {
-	switch status {
-	case metamcp.SignInNeedsConsent:
-		return "Call tools.connect(server=...) for the browser sign-in link. Then reconnect this gateway in your MCP client and approve the server; browser sign-in alone does not renew catalogue consent."
-	case metamcp.SignInNotConnected:
-		return "Call tools.connect(server=...) and show its authorization_url and instructions to the user."
-	case metamcp.SignInVerifiedAtConsent:
-		return "This records consent-time verification, not current upstream access. If a call requires sign-in, use tools.connect(server=...)."
-	default:
-		return "If the upstream requests a new sign-in, call tools.connect(server=...). Start a fresh execution after the user finishes."
+func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGateContext, member metaMember) *codemode.ConnectionState {
+	state := &codemode.ConnectionState{Consent: "not_required", Authentication: "unknown", Instructions: "Search and call permitted tools. If sign-in is required, call tools.connect(server=...) and show its URL and instructions. Unknown authentication is not a reason to reconnect."}
+	if !member.remoteSessionIssuerID.Valid {
+		state.Authentication = "not_required"
 	}
+	if gate.catalog != nil {
+		state.Consent = "approved"
+		if err := b.service.validateCatalogMember(ctx, gate, member); err != nil {
+			state.Consent = "unknown"
+			if _, consent := errors.AsType[catalogConsentError](err); consent {
+				state.Consent = "required"
+			}
+		} else {
+			for _, outcome := range gate.catalog.MemberOutcomes {
+				if outcome.Slug == member.slug {
+					state.Authentication = "verified_at_consent"
+					break
+				}
+			}
+		}
+	}
+	if gate.catalogRecoveryOnly || (member.authClient != nil && member.authClient.outcome == authClientGap) {
+		state.Consent = "required"
+	}
+	if state.Consent == "required" {
+		state.Instructions = "Call tools.connect(server=...) and show its URL and instructions. The user must also reconnect this gateway in their MCP client and approve the server; browser sign-in alone does not renew catalogue consent."
+	}
+	return state
 }
 
 func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode.ConnectionAction, error) {
@@ -74,8 +79,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	if gate.authentication == nil || gate.authentication.subject.Kind != urn.SessionSubjectKindUser || gate.authentication.subject.ID == "" || gate.connectRoot == "" {
 		return nil, codemode.ErrToolUnavailable
 	}
-	status, _ := b.connectionSignInStatus(ctx, gate, member)
-	needsConsent := gate.catalogRecoveryOnly || status == metamcp.SignInNeedsConsent
+	needsConsent := b.knownConnectionState(ctx, gate, member).Consent == "required"
 	b.connections.mu.Lock()
 	defer b.connections.mu.Unlock()
 	if previous := b.connections.actions[server]; previous != nil && previous.ExpiresAt != nil && time.Now().Before(*previous.ExpiresAt) {
@@ -125,11 +129,4 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 type codeConnections struct {
 	mu      sync.Mutex
 	actions map[string]*codemode.ConnectionAction
-}
-
-func (b *metaCodeBackend) connectionSignInStatus(ctx context.Context, gate *metaGateContext, member metaMember) (string, string) {
-	if member.authClient != nil && member.authClient.outcome == authClientGap {
-		return metamcp.SignInNeedsConsent, "Reconnect this gateway in your MCP client to choose its upstream connection."
-	}
-	return b.service.memberSignInStatus(ctx, b.service.logger, gate, member)
 }

@@ -91,7 +91,12 @@ func Rank(scope string, args SearchArgs, documents []Document, failed []FailedMe
 func PaginateServers(scope string, args PageArgs, servers []Server) (*ServerPage, error) {
 	servers = slices.Clone(servers)
 	slices.SortFunc(servers, func(a, b Server) int { return strings.Compare(a.Slug, b.Slug) })
-	raw, err := json.Marshal(servers)
+	// Transient connection state must not invalidate inventory cursors.
+	identity := slices.Clone(servers)
+	for i := range identity {
+		identity[i].Connection = nil
+	}
+	raw, err := json.Marshal(identity)
 	if err != nil || len(raw) > MaxCatalogBytes {
 		return nil, fmt.Errorf("server inventory exceeds limit")
 	}

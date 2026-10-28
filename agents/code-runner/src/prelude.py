@@ -20,9 +20,6 @@ class _GramTools:
     async def call(self, path, arguments):
         return await _gram_host("call", {"path": path, "arguments": arguments})
 
-    async def connection_status(self, server=""):
-        return await _gram_host("connection_status", {"server": server})
-
     async def connect(self, server):
         return await _gram_host("connect", {"server": server})
 

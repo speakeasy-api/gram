@@ -171,12 +171,7 @@ pub async fn execute(
                     ensure!(
                         matches!(
                             method.as_str(),
-                            "search"
-                                | "describe"
-                                | "call"
-                                | "servers"
-                                | "connection_status"
-                                | "connect"
+                            "search" | "describe" | "call" | "servers" | "connect"
                         ),
                         "unknown host method"
                     );

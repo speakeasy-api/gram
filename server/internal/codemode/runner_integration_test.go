@@ -279,9 +279,6 @@ len(response["data"])`, func(context.Context) (Host, error) { return host, nil }
 	require.Equal(t, []CallOutcome{{Path: "remote--ping", Outcome: "completed"}}, result.ToolCalls)
 }
 
-func (*runnerHost) ConnectionStatus(context.Context, string) (*ConnectionStatus, error) {
-	return &ConnectionStatus{Servers: []ConnectionState{{Server: "tracker", Status: "not_connected"}}}, nil
-}
 func (*runnerHost) Connect(context.Context, string) (*ConnectionAction, error) {
 	return &ConnectionAction{Server: "tracker", Status: "authorization_required", AuthorizationURL: "https://gateway.example.test/connect", Instructions: "Open the URL"}, nil
 }
@@ -289,10 +286,10 @@ func (*runnerHost) Connect(context.Context, string) (*ConnectionAction, error) {
 func TestCodeRunnerConnectionHelpers(t *testing.T) {
 	t.Parallel()
 	host := &runnerHost{}
-	result := realRunnerClient(t).Run(t.Context(), uuid.New(), `[await tools.connection_status(server="tracker"), await tools.connect(server="tracker")]`, func(context.Context) (Host, error) { return host, nil })
+	result := realRunnerClient(t).Run(t.Context(), uuid.New(), `[await tools.servers(), await tools.connect(server="tracker")]`, func(context.Context) (Host, error) { return host, nil })
 	require.Nil(t, result.Error, "%+v", result.Error)
 	require.Contains(t, string(result.Value), "authorization_url")
-	require.Contains(t, string(result.Value), "not_connected")
+	require.Contains(t, string(result.Value), "remote")
 	require.Empty(t, result.ToolCalls)
 	require.Zero(t, host.called.Load())
 }

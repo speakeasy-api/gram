@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -33,9 +34,9 @@ func TestCodeConnectionsWorkWithoutToolPermission(t *testing.T) {
 	token := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
 	var action *codemode.ConnectionAction
 	executor := &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
-		status, err := host.ConnectionStatus(runCtx, "tracker")
+		status, err := host.Servers(runCtx, codemode.PageArgs{})
 		require.NoError(t, err)
-		require.Len(t, status.Servers, 1)
+		require.Len(t, status.Items, 1)
 		action, err = host.Connect(runCtx, "tracker")
 		require.NoError(t, err)
 		again, err := host.Connect(runCtx, "tracker")
@@ -51,7 +52,7 @@ func TestCodeConnectionsWorkWithoutToolPermission(t *testing.T) {
 	enableCodeMode(t, ctx, ti)
 	listing, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), token, nil)
 	require.NoError(t, err)
-	require.Contains(t, listing.Body.String(), "tools.connection_status")
+	require.Contains(t, listing.Body.String(), "tools.servers")
 	require.Contains(t, listing.Body.String(), "tools.connect")
 	response, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "recovery", "tools": []string{}}}), token, nil)
 	require.NoError(t, err)
@@ -108,9 +109,9 @@ func TestCodeConnectionsRecoverExpiredCatalogue(t *testing.T) {
 	ran := false
 	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
 		ran = true
-		status, err := host.ConnectionStatus(runCtx, "tracker")
+		status, err := host.Servers(runCtx, codemode.PageArgs{})
 		require.NoError(t, err)
-		require.Equal(t, metamcp.SignInNeedsConsent, status.Servers[0].Status)
+		require.Equal(t, "required", status.Items[0].Connection.Consent)
 		action, err := host.Connect(runCtx, "tracker")
 		require.NoError(t, err)
 		require.True(t, action.ClientReconnectRequired)
@@ -144,4 +145,45 @@ func TestCodeReconnectExpiry(t *testing.T) {
 	response := httptest.NewRecorder()
 	require.Error(t, ti.service.ServeFirstPartyConnect(response, request, endpoint))
 	require.Empty(t, response.Header().Get("Location"))
+}
+
+func TestCodeServersExposeConsentWithoutGrantingTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "code-inventory-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	upstream := newCatalogUpstream(t, 1)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Approved", "approved", 1, upstream.url)
+	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{})
+	enableCodeMode(t, ctx, ti)
+	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode, nil)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Unapproved", "unapproved", 2, upstream.url)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Hidden", "hidden", 3, upstream.url)
+	require.NoError(t, hiddenmcpservers.Hide(ctx, ti.conn, auth.ActiveOrganizationID, auth.UserID, mcpServerBySlug(t, ctx, ti, *auth.ProjectID, "hidden")))
+	before := upstream.requests.Load()
+	ran := false
+	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+		ran = true
+		page, err := host.Servers(runCtx, codemode.PageArgs{})
+		require.NoError(t, err)
+		require.Len(t, page.Items, 2)
+		require.Equal(t, "approved", page.Items[0].Slug)
+		require.Equal(t, "approved", page.Items[0].Connection.Consent)
+		require.Equal(t, "verified_at_consent", page.Items[0].Connection.Authentication)
+		require.Equal(t, "unapproved", page.Items[1].Slug)
+		require.Equal(t, "required", page.Items[1].Connection.Consent)
+		require.Equal(t, before, upstream.requests.Load(), "inventory must not probe upstream")
+		_, err = host.Call(runCtx, "unapproved--tool_000", json.RawMessage(`{}`))
+		require.Error(t, err)
+		_, err = host.Connect(runCtx, "hidden")
+		require.Error(t, err)
+		return &codemode.ExecutionResult{}, nil
+	}})
+	response, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "inventory", "tools": []string{}}}), connection.token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.True(t, ran, response.Body.String())
+	require.Equal(t, before, upstream.requests.Load())
 }
