@@ -187,9 +187,11 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	if codeReconnect != nil {
 		claimed, err := s.codeReconnectTicket(r, endpoint, true)
 		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return err
 		}
 		if claimed == nil || *claimed != *codeReconnect {
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeBadRequest, nil, "connection request changed; request a new link")
 		}
 	}

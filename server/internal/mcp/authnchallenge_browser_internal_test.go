@@ -157,3 +157,19 @@ func TestCodeReconnectBrowserProofPrecedesMemberLookup(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkloadReconnectBrowserFailureIsSessionChanged(t *testing.T) {
+	t.Parallel()
+	s := browserTestService(t)
+	parent := browserTestState()
+	parent.WorkloadReconnect = &WorkloadReconnectBinding{OwnerUserID: parent.Subject.ID, ExpiresAt: time.Now().Add(-time.Minute)}
+	require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))
+	remote := remotesessions.RemoteLoginState{ID: uuid.NewString(), ParentChallengeID: parent.ID, Subject: parent.Subject, UserSessionIssuerID: parent.UserSessionIssuerID}
+	require.NoError(t, s.remoteLoginCache.Store(t.Context(), remote))
+	req := httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/remote_login_callback?state="+remote.ID, nil)
+	req.AddCookie(federatedBrowserCookie(parent.Browser.CookieID, "callback-browser", 600))
+	response := httptest.NewRecorder()
+	oops.BrowserErrHandle(s.logger, func(_ http.ResponseWriter, r *http.Request) error { return s.validateRemoteLoginBrowser(r) }).ServeHTTP(response, req)
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Contains(t, response.Body.String(), "current browser or sign-in session")
+}
