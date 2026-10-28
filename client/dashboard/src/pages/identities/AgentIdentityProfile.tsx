@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
+import { AgentOwnership } from "@/pages/agents/AgentOwnership";
 import {
   AgentIdentityFacts,
   AgentLifecycle,
@@ -122,6 +123,7 @@ export function AgentIdentityProfile({
           title="Controls & Safety"
           meta="Stop this agent acting, for a while or for good"
         >
+          <AgentOwnership agent={agent} refresh={refresh} />
           <AgentLifecycle
             agent={agent}
             refresh={refresh}
