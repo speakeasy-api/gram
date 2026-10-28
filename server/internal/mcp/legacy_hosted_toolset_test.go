@@ -15,9 +15,17 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+// hostedToolset is a toolset with the hosting state its test fixture gave it.
+type hostedToolset struct {
+	toolsets_repo.Toolset
+	McpSlug             pgtype.Text
+	CustomDomainID      uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
 // hostLegacyToolset gives a toolset its legacy alias at slug and a canonical MCP server without endpoints, so it is
 // served through the legacy slug fallback. The server gets no slug of its own, so tests can reuse slug for other servers.
-func hostLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, slug, visibility string, issuerID uuid.NullUUID) toolsets_repo.Toolset {
+func hostLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, slug, visibility string, issuerID uuid.NullUUID) hostedToolset {
 	t.Helper()
 
 	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -40,8 +48,7 @@ func hostLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, tool
 
 	toolset, err = toolsets_repo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	require.NoError(t, err)
-	toolset.UserSessionIssuerID = issuerID
-	return toolset
+	return hostedToolset{Toolset: toolset, McpSlug: pgtype.Text{String: slug, Valid: true}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, UserSessionIssuerID: issuerID}
 }
 
 // createUnhostedToolset creates a toolset with no canonical MCP server, which only internal callers reach.
@@ -81,9 +88,8 @@ func exposeCanonicalWrapper(t *testing.T, ctx context.Context, ti *testInstance,
 	return server
 }
 
-// setToolsetIssuer gates the toolset's canonical MCP server with issuerID; the returned copy carries the issuer for
-// tests that read it off the toolset.
-func setToolsetIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, toolset toolsets_repo.Toolset, issuerID uuid.UUID) toolsets_repo.Toolset {
+// setToolsetIssuer gates the toolset's canonical MCP server with issuerID and returns the toolset carrying it.
+func setToolsetIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, toolset hostedToolset, issuerID uuid.UUID) hostedToolset {
 	t.Helper()
 
 	issuer := uuid.NullUUID{UUID: issuerID, Valid: true}

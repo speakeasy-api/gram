@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -184,7 +185,7 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 		}
 	}
 
-	if err := hostingstate.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
+	if err := legacyalias.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
 		return nil, err //nolint:wrapcheck // oops errors pass through.
 	}
 

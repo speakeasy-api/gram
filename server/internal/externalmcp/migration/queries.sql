@@ -26,10 +26,8 @@ scoped_toolsets AS (
     t.project_id,
     t.name,
     t.slug,
-    t.mcp_slug,
     -- The canonical wrapper owns hosting state; a toolset without one is not hosted.
     (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::boolean AS mcp_enabled,
-    t.custom_domain_id,
     -- The issuer of the server fronting the toolset: its canonical wrapper, else the server that holds it.
     (
       SELECT ms.user_session_issuer_id
@@ -109,8 +107,6 @@ SELECT
   p.slug AS project_slug,
   t.name AS toolset_name,
   t.slug AS toolset_slug,
-  t.mcp_slug,
-  t.custom_domain_id,
   t.user_session_issuer_id,
   t.external_oauth_server_id,
   (t.tool_variations_group_id IS NOT NULL)::boolean AS toolset_has_variations,
@@ -153,21 +149,8 @@ SELECT
     JOIN mcp_servers AS ms ON ms.id = me.mcp_server_id AND ms.project_id = me.project_id
     WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE AND me.deleted IS FALSE
   )::bigint AS endpoint_count,
-  -- The legacy /mcp/<mcp_slug> route stops answering once the toolset is
-  -- disabled, so the address must also be an endpoint of the server.
-  (
-    t.mcp_slug IS NULL
-    OR t.mcp_slug = ''
-    OR EXISTS (
-      SELECT 1
-      FROM mcp_endpoints AS me
-      WHERE me.mcp_server_id = wrapper.id
-        AND me.project_id = t.project_id
-        AND me.deleted IS FALSE
-        AND me.slug = t.mcp_slug
-        AND me.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id
-    )
-  )::boolean AS mcp_slug_is_endpoint,
+  -- The caller checks the legacy alias (legacyalias) is one of this server's endpoints.
+  COALESCE(wrapper.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS wrapper_id,
   EXISTS (SELECT 1 FROM toolset_prompts AS tp WHERE tp.toolset_id = t.id)::boolean AS has_prompts,
   EXISTS (SELECT 1 FROM slack_app_toolsets AS sat WHERE sat.toolset_id = t.id)::boolean AS has_slack_apps,
   EXISTS (SELECT 1 FROM user_oauth_tokens AS uot WHERE uot.toolset_id = t.id AND uot.deleted IS FALSE)::boolean AS has_user_oauth_tokens,
