@@ -122,19 +122,23 @@ func TestServerCardNextStep(t *testing.T) {
 	for _, tc := range []struct {
 		nextAction string
 		setupURL   string
+		status     *cardStatus
 		nextStep   string
 		action     *cardAction
 	}{
-		{nextActionStartSetup, "", "Next: check that it is ready to use.", nil},
-		{"ready", "", "Next: check that it is ready to use.", nil},
-		{nextActionContinueDashboardSetup, setupURL, "Next: finish sign-in in the dashboard.", &cardAction{Label: "Finish sign-in", URL: setupURL}},
-		{nextActionSecureDashboardSetup, setupURL, "Next: enter its credentials in the dashboard.", &cardAction{Label: "Open dashboard setup", URL: setupURL}},
-		{nextActionContinueDashboardSetup, "", "Next: finish setup from the MCP server's page in the dashboard.", nil},
+		{nextActionStartSetup, "", &cardStatus{Label: "Added", Tone: cardToneDone}, "Next: check that it is ready to use.", nil},
+		{"ready", "", &cardStatus{Label: "Added", Tone: cardToneDone}, "Next: check that it is ready to use.", nil},
+		{nextActionContinueDashboardSetup, setupURL, &cardStatus{Label: "Sign-in needed", Tone: cardToneAction}, "Next: finish sign-in in the dashboard.", &cardAction{Label: "Finish sign-in", URL: setupURL}},
+		{nextActionSecureDashboardSetup, setupURL, &cardStatus{Label: "Setup needed", Tone: cardToneAction}, "Next: enter its credentials in the dashboard.", &cardAction{Label: "Open dashboard setup", URL: setupURL}},
+		{nextActionConnectSignIn, setupURL, &cardStatus{Label: "Connect sign-in", Tone: cardToneAction}, "Next: connect its sign-in here in chat.", &cardAction{Label: "Set up in dashboard", URL: setupURL, Secondary: true}},
+		{nextActionConnectSignIn, "", &cardStatus{Label: "Connect sign-in", Tone: cardToneAction}, "Next: connect its sign-in here in chat.", nil},
+		{nextActionContinueDashboardSetup, "", &cardStatus{Label: "Sign-in needed", Tone: cardToneAction}, "Next: finish setup from the MCP server's page in the dashboard.", nil},
 	} {
 		card := serverCard("Example", project, tc.nextAction, tc.setupURL)
 		require.Equal(t, "Example", card.Title)
 		require.Equal(t, "Added to project Support", card.Subtitle)
 		require.Equal(t, "Private until added to a plugin", card.Note)
+		require.Equal(t, tc.status, card.Status, tc.nextAction)
 		require.Equal(t, tc.nextStep, card.NextStep, tc.nextAction)
 		require.Equal(t, tc.action, card.Action, tc.nextAction)
 	}
@@ -153,5 +157,9 @@ func TestSignInCardOpensTheAuthorizationURL(t *testing.T) {
 	require.Contains(t, rendered, ">Sign in to Example</a>")
 	require.Equal(t, 1, strings.Count(rendered, "<a "), "the card offers one link")
 
+	require.Contains(t, rendered, `<span class="status status-action">Sign-in needed</span>`)
 	require.Equal(t, &cardAction{Label: "Sign in", URL: authorizationURL}, signInCard("", authorizationURL).Action)
+
+	fallback := renderCard(t, serverCard("Example", ResolvedProject{Name: "Support", Slug: "support"}, nextActionConnectSignIn, authorizationURL))
+	require.Contains(t, fallback, `<a class="action secondary" href="`+authorizationURL+`"`)
 }

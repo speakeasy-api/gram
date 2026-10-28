@@ -5,49 +5,75 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Speakeasy</title>
 <style>
+/* Neutrals follow the host's MCP Apps style variables when it sends them.
+   Speakeasy brand colours mark only the primary action, the badge and the
+   status, as the ChatGPT Apps guidelines ask. */
 :root {
   color-scheme: light dark;
-  --bg: light-dark(#ffffff, #18181b);
-  --fg: light-dark(#18181b, #fafafa);
-  --muted: light-dark(#52525b, #a1a1aa);
-  --line: light-dark(#e4e4e7, #3f3f46);
-  --mark-bg: light-dark(#f4f4f5, #27272a);
-  --accent: light-dark(#18181b, #fafafa);
-  --accent-fg: light-dark(#ffffff, #18181b);
+  --bg: var(--color-background-primary, light-dark(hsl(0 0% 100%), hsl(0 0% 13%)));
+  --surface: var(--color-background-secondary, light-dark(hsl(0 0% 98%), hsl(0 0% 18%)));
+  --fg: var(--color-text-primary, light-dark(hsl(0 0% 7%), hsl(0 0% 98%)));
+  --muted: var(--color-text-secondary, light-dark(hsl(0 0% 33%), hsl(0 0% 73%)));
+  --line: var(--color-border-primary, light-dark(hsl(0 0% 86%), hsl(0 0% 27%)));
+  --accent: light-dark(hsl(214 69% 50%), hsl(215 77% 65%));
+  --accent-fg: light-dark(hsl(0 0% 100%), hsl(220 100% 12%));
+  --accent-text: light-dark(hsl(215 75% 31%), hsl(215 77% 72%));
+  --done: light-dark(hsl(108 24% 41%), hsl(84 28% 56%));
+  --action: light-dark(hsl(9 67% 51%), hsl(23 96% 62%));
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.45 var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
 }
-.card { padding: 16px; display: grid; gap: 10px; }
+p { margin: 0; overflow-wrap: anywhere; }
+.card { padding: 16px 16px 14px; display: grid; gap: 10px; }
 .card header { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .mark {
-  flex: none; width: 40px; height: 40px; border-radius: 8px;
+  flex: none; width: 40px; height: 40px; border-radius: var(--border-radius-md, 10px);
   display: grid; place-items: center;
-  background: var(--mark-bg); border: 1px solid var(--line);
+  background: var(--surface); border: 1px solid var(--line);
   font-weight: 600; font-size: 16px;
 }
-.heading { min-width: 0; }
-h1 { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
-p { margin: 0; overflow-wrap: anywhere; }
-.sub, .note { color: var(--muted); }
-.note {
-  justify-self: start; font-size: 12px; padding: 2px 8px;
-  border: 1px solid var(--line); border-radius: 999px;
+.heading { min-width: 0; flex: 1; }
+h1 { margin: 0; font-size: 15px; line-height: 1.3; font-weight: 600; overflow-wrap: anywhere; }
+.sub { color: var(--muted); font-size: 13px; }
+.status {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap;
 }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--done); }
+.status-action::before { background: var(--action); }
+.note {
+  justify-self: start; font-size: 12px; font-weight: 500; padding: 2px 10px;
+  color: var(--accent-text);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--border-radius-full, 999px);
+}
+.next { color: var(--fg); }
 .action {
-  justify-self: start; padding: 8px 14px; border-radius: 8px;
+  justify-self: start; margin-top: 2px; padding: 8px 16px;
+  border: 1px solid var(--accent); border-radius: var(--border-radius-full, 999px);
   background: var(--accent); color: var(--accent-fg);
   font-weight: 600; text-decoration: none;
 }
-.action:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.action.secondary { background: transparent; color: var(--fg); border-color: var(--line); }
+.action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.brand {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-top: 1px solid var(--line);
+  color: var(--muted); font-size: 12px;
+}
+.brand svg { height: 13px; width: auto; margin-top: 2px; color: var(--fg); }
 </style>
 </head>
 <body>
+<div id="frame" hidden>
 <main id="card"></main>
+<footer class="brand">via <svg viewBox="0 0 543.8 111.12" width="64" height="13" role="img" aria-label="Speakeasy"><path fill="currentColor" d="M10.1 65.7C10.3 69.5 11.9 72.6 15.1 74.9C18.3 77.3 22.4 78.5 27.4 78.5C31.9 78.5 35.4 77.7 38.2 75.9C41 74.1 42.3 71.8 42.3 68.9C42.3 66.4 41.7 64.5 40.4 63.2C39.1 61.9 37.3 61 35.2 60.5C33.1 60 30.2 59.5 26.3 59C20.9 58.4 16.4 57.5 13 56.4C9.5 55.4 6.7 53.7 4.6 51.4C2.4 49 1.4 45.7 1.4 41.6C1.4 37.9 2.4 34.6 4.4 31.7C6.6 28.9 9.5 26.6 13.1 25.1C16.7 23.4 20.8 22.6 25.3 22.6C32.7 22.6 38.7 24.3 43.3 27.8C48 31.2 50.6 36.2 51.1 42.6L41 42.6C40.6 39.3 39 36.6 36.2 34.4C33.4 32.3 29.9 31.2 25.7 31.2C21.4 31.2 17.9 32.1 15.3 34C12.7 35.7 11.4 38 11.4 40.9C11.4 43 12 44.7 13.2 45.8C14.4 47 16 47.7 17.9 48.2C19.9 48.6 22.8 49 26.8 49.5C32.3 50.2 36.8 51.1 40.4 52.2C44 53.4 46.9 55.2 49 57.8C51.2 60.3 52.4 63.8 52.4 68.2C52.4 71.9 51.2 75.3 49 78.2C46.8 81 43.8 83.3 40 84.8C36.2 86.4 32 87.2 27.4 87.2C19.2 87.2 12.6 85.3 7.5 81.5C2.6 77.7 0.1 72.4 0 65.7L10.1 65.7ZM90.6 22.7C96.5 22.7 101.7 24 106.2 26.5C110.8 29.1 114.4 32.8 116.9 37.7C119.6 42.5 120.9 48.3 120.9 54.9C120.9 61.3 119.6 66.9 116.9 71.7C114.4 76.6 110.8 80.4 106.2 83.1C101.6 85.8 96.4 87.2 90.6 87.2C85.5 87.2 81.2 86.3 77.5 84.5C73.9 82.6 71.1 80 69 76.8L69 111.1L58.9 111.1L58.9 23.5L67.7 23.5L69 33.6C74.3 26.3 81.5 22.7 90.6 22.7ZM89.6 78.2C95.9 78.2 100.9 76 104.7 71.7C108.6 67.4 110.5 61.8 110.5 54.9C110.5 48.1 108.6 42.6 104.7 38.3C100.9 33.9 95.9 31.7 89.6 31.7C85.6 31.7 82 32.7 78.8 34.7C75.6 36.6 73.2 39.3 71.5 42.8C69.8 46.3 68.9 50.3 68.9 54.7C68.9 59.2 69.8 63.3 71.5 66.9C73.2 70.5 75.6 73.2 78.8 75.2C82 77.2 85.6 78.2 89.6 78.2ZM125.3 54.9C125.3 48.5 126.5 42.9 129 38C131.5 33.2 135.1 29.4 139.6 26.8C144.1 24.1 149.3 22.7 155.2 22.7C160.9 22.7 166 23.9 170.5 26.3C174.9 28.7 178.4 32.1 181 36.7C183.5 41.2 184.9 46.5 185 52.6C185 53.5 185 54.9 184.8 56.9L135.9 56.9L135.9 57.8C136.1 64 138 68.9 141.6 72.6C145.2 76.3 149.9 78.2 155.8 78.2C160.3 78.2 164.1 77 167.3 74.8C170.5 72.5 172.6 69.3 173.7 65.3L183.9 65.3C182.7 71.7 179.6 77 174.7 81.1C169.7 85.2 163.7 87.2 156.5 87.2C150.3 87.2 144.8 85.8 140.1 83.2C135.4 80.5 131.7 76.7 129.1 71.9C126.6 66.9 125.3 61.3 125.3 54.9ZM174.5 48.5C174.1 43.2 172 39 168.5 36.1C165 33.1 160.6 31.6 155.3 31.6C150.5 31.6 146.3 33.2 142.7 36.3C139.1 39.4 137 43.5 136.5 48.5L174.5 48.5ZM259.2 77.2L259.2 86.4L245 86.4C241 86.4 238.1 85.6 236.4 84C234.6 82.3 233.7 79.9 233.6 76.7C228.8 83.7 221.7 87.2 212.5 87.2C205.5 87.2 199.9 85.5 195.6 82.2C191.4 78.9 189.3 74.5 189.3 68.8C189.3 62.4 191.5 57.6 195.7 54.2C200.1 50.8 206.4 49.1 214.6 49.1L233.1 49.1L233.1 44.8C233.1 40.7 231.7 37.5 228.9 35.2C226.2 32.9 222.4 31.7 217.5 31.7C213.1 31.7 209.5 32.7 206.6 34.7C203.8 36.6 202.1 39.1 201.4 42.3L191.3 42.3C192 36.2 194.7 31.4 199.4 27.9C204.2 24.4 210.4 22.7 218 22.7C226 22.7 232.2 24.7 236.6 28.6C241 32.5 243.3 38.1 243.3 45.4L243.3 72.6C243.3 75.6 244.7 77.2 247.5 77.2L259.2 77.2ZM233.1 57.7L213.6 57.7C204.2 57.7 199.6 61.2 199.6 68.2C199.6 71.3 200.8 73.8 203.3 75.7C205.7 77.6 209.1 78.5 213.3 78.5C219.4 78.5 224.3 76.9 227.8 73.7C231.4 70.4 233.1 66.1 233.1 60.7L233.1 57.7ZM254.1 0L264.2 0L264.2 57.3L296.2 23.5L308.3 23.5L284.1 49.3L310 86.4L297.8 86.4L276.8 56.5L264.2 69.8L264.2 86.4L254.1 86.4L254.1 0ZM307.1 54.9C307.1 48.5 308.4 42.9 310.8 38C313.4 33.2 316.9 29.4 321.4 26.8C326 24.1 331.2 22.7 337 22.7C342.8 22.7 347.9 23.9 352.3 26.3C356.8 28.7 360.3 32.1 362.8 36.7C365.4 41.2 366.7 46.5 366.9 52.6C366.9 53.5 366.8 54.9 366.6 56.9L317.7 56.9L317.7 57.8C317.9 64 319.8 68.9 323.4 72.6C327 76.3 331.8 78.2 337.6 78.2C342.1 78.2 346 77 349.1 74.8C352.3 72.5 354.5 69.3 355.5 65.3L365.8 65.3C364.5 71.7 361.4 77 356.5 81.1C351.6 85.2 345.5 87.2 338.4 87.2C332.1 87.2 326.6 85.8 321.9 83.2C317.2 80.5 313.6 76.7 311 71.9C308.4 66.9 307.1 61.3 307.1 54.9ZM356.4 48.5C355.9 43.2 353.9 39 350.3 36.1C346.9 33.1 342.5 31.6 337.1 31.6C332.4 31.6 328.2 33.2 324.5 36.3C320.9 39.4 318.9 43.5 318.4 48.5L356.4 48.5ZM432.4 77.2L432.4 86.4L426.8 86.4C422.8 86.4 419.9 85.6 418.2 84C416.5 82.3 415.6 79.9 415.5 76.7C410.6 83.7 403.6 87.2 394.4 87.2C387.4 87.2 381.7 85.5 377.4 82.2C373.2 78.9 371.1 74.5 371.1 68.8C371.1 62.4 373.3 57.6 377.6 54.2C381.9 50.8 388.2 49.1 396.5 49.1L415 49.1L415 44.8C415 40.7 413.6 37.5 410.8 35.2C408.1 32.9 404.2 31.7 399.3 31.7C394.9 31.7 391.3 32.7 388.4 34.7C385.6 36.6 383.9 39.1 383.2 42.3L373.1 42.3C373.9 36.2 376.6 31.4 381.3 27.9C386 24.4 392.2 22.7 399.8 22.7C407.9 22.7 414.1 24.7 418.4 28.6C422.9 32.5 425.1 38.1 425.1 45.4L425.1 72.6C425.1 75.6 426.5 77.2 429.3 77.2L432.4 77.2ZM415 57.7L395.5 57.7C386.1 57.7 381.4 61.2 381.4 68.2C381.4 71.3 382.6 73.8 385.1 75.7C387.6 77.6 390.9 78.5 395.1 78.5C401.3 78.5 406.1 76.9 409.7 73.7C413.2 70.4 415 66.1 415 60.7L415 57.7ZM443.1 65.7C443.3 69.5 444.9 72.6 448.1 74.9C451.3 77.3 455.4 78.5 460.4 78.5C464.9 78.5 468.4 77.7 471.2 75.9C474 74.1 475.4 71.8 475.4 68.9C475.4 66.4 474.7 64.5 473.4 63.2C472.1 61.9 470.3 61 468.2 60.5C466.1 60 463.2 59.5 459.3 59C453.9 58.4 449.4 57.5 446 56.4C442.5 55.4 439.7 53.7 437.6 51.4C435.4 49 434.4 45.7 434.4 41.6C434.4 37.9 435.4 34.6 437.5 31.7C439.6 28.9 442.5 26.6 446.1 25.1C449.7 23.4 453.8 22.6 458.3 22.6C465.7 22.6 471.7 24.3 476.3 27.8C481 31.2 483.6 36.2 484.1 42.6L474 42.6C473.6 39.3 472 36.6 469.2 34.4C466.4 32.3 462.9 31.2 458.7 31.2C454.4 31.2 451 32.1 448.3 34C445.7 35.7 444.4 38 444.4 40.9C444.4 43 445 44.7 446.2 45.8C447.5 47 449 47.7 450.9 48.2C452.9 48.6 455.9 49 459.8 49.5C465.3 50.2 469.8 51.1 473.4 52.2C477 53.4 479.9 55.2 482 57.8C484.2 60.3 485.4 63.8 485.4 68.2C485.4 71.9 484.2 75.3 482 78.2C479.8 81 476.8 83.3 473 84.8C469.2 86.4 465 87.2 460.4 87.2C452.2 87.2 445.6 85.3 440.5 81.5C435.6 77.7 433.1 72.4 433 65.7L443.1 65.7ZM494.9 23.5L514.3 74.8L533.1 23.5L543.8 23.5L514.8 97C513.3 100.8 512 103.7 510.8 105.6C509.7 107.5 508.2 108.9 506.5 109.8C504.8 110.7 502.5 111.1 499.6 111.1L487.5 111.1L487.5 101.9L496.5 101.9C498.5 101.9 500 101.7 501 101.2C501.9 100.8 502.7 100.1 503.3 99.1C504 98.2 504.7 96.7 505.6 94.5L508.9 86.9L484.2 23.5L494.9 23.5Z"/></svg></footer>
+</div>
 <script>
 (function () {
   "use strict";
@@ -55,6 +81,7 @@ p { margin: 0; overflow-wrap: anywhere; }
   // result's _meta. This shell only places it, follows the host theme, and
   // opens the card's one link through the host.
   var CARD_KEY = "com.speakeasy/card";
+  var frame = document.getElementById("frame");
   var root = document.getElementById("card");
   var nextId = 1;
   var initializeId = 0;
@@ -76,14 +103,29 @@ p { margin: 0; overflow-wrap: anywhere; }
       document.documentElement.style.colorScheme = theme;
     }
   }
-  // A result without a card, such as a refusal, leaves the view empty and
-  // clears any earlier card and reports zero height so the host can collapse it.
+  // MCP Apps hosts may send their own style variables; the card's neutrals
+  // read them, so it matches the host's surfaces.
+  function applyHostContext(context) {
+    if (!context) {
+      return;
+    }
+    setTheme(context.theme);
+    var variables = context.styles && context.styles.variables;
+    for (var name in variables || {}) {
+      if (/^--[a-z0-9-]+$/.test(name) && typeof variables[name] === "string") {
+        document.documentElement.style.setProperty(name, variables[name]);
+      }
+    }
+  }
+  // A result without a card, such as a refusal, clears any earlier card,
+  // hides the frame and reports zero height so the host can collapse it.
   function render(meta) {
     var card = meta && meta[CARD_KEY];
     root.innerHTML = typeof card === "string" ? card : "";
+    frame.hidden = root.innerHTML === "";
     notify("ui/notifications/size-changed", {
       width: document.documentElement.scrollWidth,
-      height: root.offsetHeight
+      height: frame.offsetHeight
     });
   }
 
@@ -93,12 +135,12 @@ p { margin: 0; overflow-wrap: anywhere; }
       return;
     }
     if (message.id === initializeId && message.result) {
-      setTheme(message.result.hostContext && message.result.hostContext.theme);
+      applyHostContext(message.result.hostContext);
       notify("ui/notifications/initialized", {});
     } else if (message.method === "ui/notifications/tool-result") {
       render(message.params && message.params._meta);
     } else if (message.method === "ui/notifications/host-context-changed") {
-      setTheme(message.params && message.params.theme);
+      applyHostContext(message.params);
     }
   });
 

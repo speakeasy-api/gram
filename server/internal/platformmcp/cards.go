@@ -31,10 +31,11 @@ var cardShellHTML string
 // cardTemplate is the markup shared by every card. html/template escapes each
 // value for its context and replaces any URL that is not http(s) or mailto.
 var cardTemplate = template.Must(template.New("card").Parse(`<article class="card">` +
-	`<header><span class="mark" aria-hidden="true">{{.Initial}}</span><div class="heading"><h1>{{.Title}}</h1>{{with .Subtitle}}<p class="sub">{{.}}</p>{{end}}</div></header>` +
+	`<header><span class="mark" aria-hidden="true">{{.Initial}}</span><div class="heading"><h1>{{.Title}}</h1>{{with .Subtitle}}<p class="sub">{{.}}</p>{{end}}</div>` +
+	`{{with .Status}}<span class="status status-{{.Tone}}">{{.Label}}</span>{{end}}</header>` +
 	`{{with .Note}}<p class="note">{{.}}</p>{{end}}` +
 	`{{with .NextStep}}<p class="next">{{.}}</p>{{end}}` +
-	`{{with .Action}}<a class="action" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{end}}` +
+	`{{with .Action}}<a class="action{{if .Secondary}} secondary{{end}}" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{end}}` +
 	`</article>`))
 
 // resultCard is what one card shows. Every value is plain text; the template
@@ -42,9 +43,26 @@ var cardTemplate = template.Must(template.New("card").Parse(`<article class="car
 type resultCard struct {
 	Title    string
 	Subtitle string
+	Status   *cardStatus
 	Note     string
 	NextStep string
 	Action   *cardAction
+}
+
+// cardTone colours a card's status.
+type cardTone string
+
+const (
+	// cardToneDone marks a step that has finished.
+	cardToneDone cardTone = "done"
+	// cardToneAction marks a step that waits for the user.
+	cardToneAction cardTone = "action"
+)
+
+// cardStatus is the short state shown next to a card's title.
+type cardStatus struct {
+	Label string
+	Tone  cardTone
 }
 
 // cardAction is the card's one link. Its URL must come from the tool result
@@ -52,6 +70,10 @@ type resultCard struct {
 type cardAction struct {
 	Label string
 	URL   string
+
+	// Secondary marks a fallback link, drawn less prominently than a primary
+	// action.
+	Secondary bool
 }
 
 // Initial is the letter shown in place of a logo.
@@ -113,6 +135,9 @@ const (
 	// nextActionSecureDashboardSetup sends the user to the dashboard to enter
 	// secrets that must never pass through chat.
 	nextActionSecureDashboardSetup = "secure_dashboard_setup_required"
+	// nextActionConnectSignIn says the server's sign-in can be connected in
+	// chat, with the dashboard setup link as the fallback.
+	nextActionConnectSignIn = "connect_sign_in"
 )
 
 // serverCard describes an MCP server just added to a project and its next step.
@@ -124,23 +149,32 @@ func serverCard(serverName string, project ResolvedProject, nextAction, dashboar
 	card := resultCard{
 		Title:    cardTitle(serverName),
 		Subtitle: "Added to project " + projectName,
+		Status:   &cardStatus{Label: "Added", Tone: cardToneDone},
 		Note:     "Private until added to a plugin",
 		NextStep: "Next: check that it is ready to use.",
 		Action:   nil,
 	}
-	if nextAction != nextActionContinueDashboardSetup && nextAction != nextActionSecureDashboardSetup {
-		return card
-	}
-	if dashboardSetupURL == "" {
-		card.NextStep = "Next: finish setup from the MCP server's page in the dashboard."
-		return card
-	}
-	if nextAction == nextActionContinueDashboardSetup {
+	var action *cardAction
+	switch nextAction {
+	case nextActionConnectSignIn:
+		card.Status = &cardStatus{Label: "Connect sign-in", Tone: cardToneAction}
+		card.NextStep = "Next: connect its sign-in here in chat."
+		action = &cardAction{Label: "Set up in dashboard", URL: dashboardSetupURL, Secondary: true}
+	case nextActionContinueDashboardSetup:
+		card.Status = &cardStatus{Label: "Sign-in needed", Tone: cardToneAction}
 		card.NextStep = "Next: finish sign-in in the dashboard."
-		card.Action = &cardAction{Label: "Finish sign-in", URL: dashboardSetupURL}
-	} else {
+		action = &cardAction{Label: "Finish sign-in", URL: dashboardSetupURL, Secondary: false}
+	case nextActionSecureDashboardSetup:
+		card.Status = &cardStatus{Label: "Setup needed", Tone: cardToneAction}
 		card.NextStep = "Next: enter its credentials in the dashboard."
-		card.Action = &cardAction{Label: "Open dashboard setup", URL: dashboardSetupURL}
+		action = &cardAction{Label: "Open dashboard setup", URL: dashboardSetupURL, Secondary: false}
+	default:
+		return card
+	}
+	if dashboardSetupURL != "" {
+		card.Action = action
+	} else if nextAction != nextActionConnectSignIn {
+		card.NextStep = "Next: finish setup from the MCP server's page in the dashboard."
 	}
 	return card
 }
@@ -154,9 +188,10 @@ func signInCard(serverName, authorizationURL string) resultCard {
 	return resultCard{
 		Title:    cardTitle(serverName),
 		Subtitle: "Connected to its sign-in provider",
+		Status:   &cardStatus{Label: "Sign-in needed", Tone: cardToneAction},
 		Note:     "",
 		NextStep: "Sign in to finish connecting it, then check that it is ready to use.",
-		Action:   &cardAction{Label: label, URL: authorizationURL},
+		Action:   &cardAction{Label: label, URL: authorizationURL, Secondary: false},
 	}
 }
 
