@@ -3,6 +3,7 @@ package plugins
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -2379,13 +2380,16 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 		"speakeasy.json",
 		"bootstrap.sh",
 		"bootstrap.ps1",
-		// gate deadline on the frame + fail-closed blocks reported to the daemon
+		// gate deadline on the frame
 		"frame.timeoutMs = timeoutMs",
-		`call("gate_timeout"`,
 		// gateway ctx reduced to the allowlist (raw carries auth secrets)
 		"{ port: ctx?.port, workspaceDir: ctx?.workspaceDir }",
-		// daemon-reported errors fail closed; output-less replies stay allows
-		"(reply?.timedOut || reply?.error) && FAIL_CLOSED",
+		// a missing verdict follows the generated install policy
+		"if (reply?.timedOut || reply?.error) {",
+		"const FAIL_CLOSED = true",
+		"Calls are allowed and not checked.",
+		// verdicts the relay returns, including policy blocks, pass through
+		"return reply?.output",
 	} {
 		require.Contains(t, string(shim), want)
 	}
@@ -2396,12 +2400,9 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	}
 	// The gate budget chain (5s relay < ~9s daemon < 10s shim) collapses if
 	// this drifts: a slower shim wall would let gates stall the agent, a
-	// faster one would race the relay's fail-closed verdict.
+	// faster one would race the relay's own verdict.
 	if !strings.Contains(string(shim), "const GATE_TIMEOUT_MS = { before_tool_call: 10000, before_agent_run: 10000 }") {
 		t.Error("gate timeout must stay at the 10s budget")
-	}
-	if !strings.Contains(string(shim), "const FAIL_CLOSED = true") {
-		t.Error("gates must fail closed when the daemon is unreachable")
 	}
 	if !strings.Contains(string(shim), `if (hook === "agent_end" || hook === "before_agent_run") {`) {
 		t.Error("slimEvent must target the history-bearing hooks")
@@ -2426,6 +2427,204 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 		out, err := exec.Command(nodePath, "--check", path).CombinedOutput()
 		require.NoError(t, err, "index.js failed node --check: %s", out)
 	}
+}
+
+// openclawShimRunTimeout bounds one Node run of the OpenClaw shim harness. A
+// gate that falls back to its 10s deadline instead of resolving when the relay
+// exits pushes a two-gate run past this, so the timeout also catches that.
+const openclawShimRunTimeout = 15 * time.Second
+
+// openclawShimHarnessPrelude loads the generated shim with a stub OpenClaw api
+// that records each registered handler. show keeps an undefined handler result
+// (an allow) distinguishable from null once the results are JSON-encoded.
+const openclawShimHarnessPrelude = `import plugin from "./index.js"
+
+const handlers = {}
+plugin.register({ on: (hook, fn) => (handlers[hook] = fn) })
+const show = (result) => (result === undefined ? "undefined" : result)
+`
+
+// runOpenClawShim writes the generated OpenClaw package with bootstrap as the
+// hooks/bootstrap.sh the shim spawns, runs harness after the prelude in Node,
+// and returns the harness's stdout and stderr.
+func runOpenClawShim(t *testing.T, failOpen bool, bootstrap, harness string, env ...string) (string, string) {
+	t.Helper()
+
+	node, err := exec.LookPath("node")
+	require.NoError(t, err, "node is required to exercise the OpenClaw shim")
+
+	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
+		OrgName:         "Example Org",
+		ServerURL:       "https://example.com",
+		HooksAPIKey:     "test-hooks-key",
+		InstallFailOpen: failOpen,
+	}, "openclaw")
+	require.NoError(t, err)
+	require.NotEmpty(t, files["index.js"])
+
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o755))
+	for name, content := range map[string][]byte{
+		"index.js":           files["index.js"],
+		"package.json":       files["package.json"],
+		"hooks/bootstrap.sh": []byte(bootstrap),
+		"harness.mjs":        []byte(openclawShimHarnessPrelude + harness),
+	} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), content, 0o644))
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), openclawShimRunTimeout)
+	defer cancel()
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, node, filepath.Join(dir, "harness.mjs"))
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	cmd.Env = append(os.Environ(), env...)
+	require.NoError(t, cmd.Run(), "openclaw shim harness: %s", stderr.String())
+
+	return stdout.String(), stderr.String()
+}
+
+// A host where the hooks binary cannot install never starts the relay. Gates
+// must allow the call rather than lock the agent out of its own tools.
+func TestOpenClawShimAllowsGatesWhenRelayExits(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr := runOpenClawShim(t, true, "exit 1\n", `
+const results = {
+  before_tool_call: show(await handlers.before_tool_call({ toolName: "exec", toolCallId: "call-1", params: {} }, { sessionId: "session-1" })),
+  before_agent_run: show(await handlers.before_agent_run({ runId: "run-1" }, { sessionId: "session-1" })),
+}
+console.log(JSON.stringify(results))
+`)
+
+	var results map[string]any
+	require.NoError(t, json.Unmarshal([]byte(stdout), &results), "harness stdout: %s", stdout)
+	require.Equal(t, map[string]any{"before_tool_call": "undefined", "before_agent_run": "undefined"}, results)
+	require.Equal(t, 1, strings.Count(stderr, "Calls are allowed and not checked."), "warn once per process: %s", stderr)
+}
+
+func TestOpenClawShimBlocksWithBootstrapDiagnostic(t *testing.T) {
+	t.Parallel()
+	stdout, _ := runOpenClawShim(t, false, "echo 'archive checksum mismatch' >&2\nexit 1\n", `
+const result = await handlers.before_tool_call({ toolName: "exec", toolCallId: "call-1" }, {})
+console.log(JSON.stringify(result))
+handlers.gateway_stop()
+`)
+	var result struct {
+		Block       bool   `json:"block"`
+		BlockReason string `json:"blockReason"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &result))
+	require.True(t, result.Block)
+	require.Contains(t, result.BlockReason, "archive checksum mismatch")
+	require.Contains(t, result.BlockReason, "preinstall the hooks binary")
+}
+
+func TestOpenClawShimHandlesMissingLaunchCommand(t *testing.T) {
+	t.Parallel()
+	for _, failOpen := range []bool{false, true} {
+		t.Run(fmt.Sprint(failOpen), func(t *testing.T) {
+			t.Parallel()
+			stdout, _ := runOpenClawShim(t, failOpen, "exit 1\n", `
+const result = show(await handlers.before_agent_run({ runId: "run-1" }, {}))
+console.log(JSON.stringify(result))
+handlers.gateway_stop()
+`, "PATH="+t.TempDir())
+			if failOpen {
+				require.JSONEq(t, `"undefined"`, stdout)
+				return
+			}
+			var result map[string]string
+			require.NoError(t, json.Unmarshal([]byte(stdout), &result))
+			require.Equal(t, "block", result["outcome"])
+			require.Contains(t, result["reason"], "ENOENT")
+		})
+	}
+}
+
+func TestOpenClawShimRestartsRelayAfterFailure(t *testing.T) {
+	t.Parallel()
+	bootstrap := `if [ ! -f "$0.attempted" ]; then
+  echo attempted > "$0.attempted"
+  echo 'first startup failed' >&2
+  exit 1
+fi
+re='"seq":([0-9]+)'
+while IFS= read -r frame; do
+  [[ $frame =~ $re ]] || exit 1
+  printf '{"seq":%s,"output":{"block":true,"blockReason":"policy after restart"}}\n' "${BASH_REMATCH[1]}"
+done
+`
+	stdout, _ := runOpenClawShim(t, true, bootstrap, `
+let result
+for (let attempt = 0; attempt < 50; attempt++) {
+  result = await handlers.before_tool_call({ toolName: "exec" }, {})
+  if (result?.blockReason === "policy after restart") break
+  await new Promise((resolve) => setTimeout(resolve, 100))
+}
+handlers.gateway_stop()
+console.log(JSON.stringify(show(result)))
+`)
+	require.JSONEq(t, `{"block":true,"blockReason":"policy after restart"}`, stdout)
+}
+
+func TestOpenClawShimAppliesInstallPolicyToMissingVerdicts(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		bootstrap string
+		cause     string
+		failOpen  bool
+	}{
+		{"error closed", `re='"seq":([0-9]+)'; IFS= read -r frame; [[ $frame =~ $re ]]; printf '{"seq":%s,"error":"relay unavailable"}\n' "${BASH_REMATCH[1]}"; cat >/dev/null`, "relay unavailable", false},
+		{"error open", `re='"seq":([0-9]+)'; IFS= read -r frame; [[ $frame =~ $re ]]; printf '{"seq":%s,"error":"relay unavailable"}\n' "${BASH_REMATCH[1]}"; cat >/dev/null`, "relay unavailable", true},
+		{"timeout closed", "cat >/dev/null", "hook deadline", false},
+		{"timeout open", "cat >/dev/null", "hook deadline", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			stdout, _ := runOpenClawShim(t, tc.failOpen, tc.bootstrap, `
+const result = show(await handlers.before_tool_call({ toolName: "exec" }, {}))
+handlers.gateway_stop()
+console.log(JSON.stringify(result))
+`)
+			if tc.failOpen {
+				require.JSONEq(t, `"undefined"`, stdout)
+				return
+			}
+			var result struct {
+				Block       bool   `json:"block"`
+				BlockReason string `json:"blockReason"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(stdout), &result))
+			require.True(t, result.Block)
+			require.Contains(t, result.BlockReason, tc.cause)
+		})
+	}
+}
+
+// Failing open covers only a missing verdict: a block the relay returns must
+// still reach OpenClaw verbatim.
+func TestOpenClawShimReturnsRelayBlock(t *testing.T) {
+	t.Parallel()
+
+	relay := `re='"seq":([0-9]+)'
+IFS= read -r frame
+[[ $frame =~ $re ]] || exit 1
+printf '{"seq":%s,"output":{"block":true,"blockReason":"denied by policy"}}\n' "${BASH_REMATCH[1]}"
+cat >/dev/null
+`
+	stdout, stderr := runOpenClawShim(t, false, relay, `
+const result = show(await handlers.before_tool_call({ toolName: "exec", toolCallId: "call-1", params: {} }, { sessionId: "session-1" }))
+handlers.gateway_stop()
+console.log(JSON.stringify(result))
+`)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal([]byte(stdout), &result), "harness stdout: %s", stdout)
+	require.Equal(t, map[string]any{"block": true, "blockReason": "denied by policy"}, result)
+	require.NotContains(t, stderr, "relay is unavailable")
 }
 
 type codexOTLPHTTPExporter struct {
