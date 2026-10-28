@@ -1,3 +1,4 @@
+import type { GitHubAppDraft } from "@/lib/remote-identity/components/GitHubAppFields";
 import {
   deleteSourceCascade,
   fetchLinkedMcpServers,
@@ -35,6 +36,7 @@ export type CreateRemoteMcpSourceVariables = {
   userSessionIssuerId?: string | undefined;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization?: string;
+  githubApp?: GitHubAppDraft;
 };
 
 export type CreateRemoteMcpSourceData = {
@@ -58,6 +60,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
       url,
       identityMode,
       agentAuthorization,
+      githubApp,
       userSessionIssuerId,
     }) => {
       const { remoteMcpServer, mcpServer } =
@@ -76,6 +79,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         mcpServer,
         identityMode,
         agentAuthorization,
+        githubApp,
       });
       const configuredMcpServer =
         identityConfiguration.status === "configured"

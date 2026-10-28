@@ -45,13 +45,15 @@ const (
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
-	enc    *encryption.Client
+	tracerProvider trace.TracerProvider
+	enc            *encryption.Client
+	githubApps     githubAppVerifier
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	db             *pgxpool.Pool
+	auth           *auth.Auth
+	authz          *authz.Engine
+	audit          *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -65,18 +67,24 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	enc *encryption.Client,
+	options ...func(*Service),
 ) *Service {
 	logger = logger.With(attr.SlogComponent("authclients"))
 
-	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/authclients"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
-		enc:    enc,
+	s := &Service{
+		tracerProvider: tracerProvider,
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/authclients"),
+		logger:         logger,
+		db:             db,
+		auth:           auth.New(logger, db, sessions, authzEngine),
+		authz:          authzEngine,
+		audit:          auditLogger,
+		enc:            enc,
 	}
+	for _, option := range options {
+		option(s)
+	}
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -470,7 +478,14 @@ func clientViews(ctx context.Context, queries *repo.Queries, organizationID stri
 
 	views := make([]*types.AuthClient, 0, len(clients))
 	for _, c := range clients {
-		views = append(views, buildAuthClientView(c, headersByClient[c.ID], serversByClient[c.ID]))
+		view := buildAuthClientView(c, headersByClient[c.ID], serversByClient[c.ID])
+		if c.ClientType == "service_account" && !c.RemoteSessionClientID.Valid {
+			view.GithubApp, err = githubAppView(ctx, queries, organizationID, c.ID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		views = append(views, view)
 	}
 	return views, nil
 }

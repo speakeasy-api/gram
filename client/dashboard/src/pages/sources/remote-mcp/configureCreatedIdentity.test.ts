@@ -7,6 +7,7 @@ import { configureCreatedRemoteMcpIdentity } from "./configureCreatedIdentity";
 
 const mocks = vi.hoisted(() => ({
   createHeader: vi.fn(),
+  configureGitHub: vi.fn(),
   discover: vi.fn(),
   fetchIssuer: vi.fn(),
   getIssuer: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const client = {
+  authClients: { configureGitHubApp: mocks.configureGitHub },
   remoteMcp: {
     createServerHeader: mocks.createHeader,
     discoverProtectedResourceMetadata: mocks.discover,
@@ -65,6 +67,66 @@ beforeEach(() => {
 });
 
 describe("configureCreatedRemoteMcpIdentity", () => {
+  it("configures a renewable GitHub App without a static header or OAuth issuer", async () => {
+    mocks.configureGitHub.mockResolvedValue({ id: "app-client" });
+    const githubApp = {
+      instanceUrl: "https://git.example.com",
+      appId: "123",
+      installationId: "456",
+      privateKey: "TEST_PRIVATE_KEY",
+    };
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "agent",
+      githubApp,
+      // The hidden OAuth draft must not override the GitHub choice.
+      serviceAccountClient: {
+        format: "signing-key",
+        issuerId: "issuer-1",
+        issuerName: "Example",
+        clientRowId: "client-1",
+      },
+    });
+    expect(result.status).toBe("configured");
+    expect(mocks.configureGitHub).toHaveBeenCalledWith(
+      {
+        configureGitHubAppAuthClientRequestBody: expect.objectContaining({
+          ...githubApp,
+          mcpServerId: mcpServer().id,
+          upstreamOrigin: new URL(remoteServer().url).origin,
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(mocks.createHeader).not.toHaveBeenCalled();
+    expect(mocks.discover).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed GitHub App setup disabled and reports setup required", async () => {
+    mocks.configureGitHub.mockRejectedValueOnce(
+      new Error("invalid installation"),
+    );
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "agent",
+      githubApp: {
+        instanceUrl: "https://github.com",
+        appId: "123",
+        installationId: "456",
+        privateKey: "TEST_PRIVATE_KEY",
+      },
+    });
+    expect(result.status).toBe("setup-required");
+    expect(mocks.updateServer).not.toHaveBeenCalled();
+    expect(mocks.createHeader).not.toHaveBeenCalled();
+  });
+
   it("enables No Identity without creating credentials", async () => {
     const result = await configureCreatedRemoteMcpIdentity({
       client,

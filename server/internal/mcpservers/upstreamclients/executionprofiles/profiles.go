@@ -162,6 +162,12 @@ func decide(row ListProfileServersRow, execCtx Context, typedOnly bool) (decisio
 			switch row.AuthClientTypes[i] {
 			case typeStaticCredential, typePassThrough:
 				headers = append(headers, id)
+			case typeServiceAccount:
+				if row.AuthClientRegistrationIds[i] == uuid.Nil {
+					headers = append(headers, id)
+				} else {
+					oauth = true
+				}
 			default:
 				oauth = true
 			}

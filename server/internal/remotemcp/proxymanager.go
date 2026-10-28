@@ -44,6 +44,8 @@ import (
 // [ProxyManager.Build] so the closure over the per-server correlation ids
 // stays request-scoped.
 type proxyBuildOptions struct {
+	credentialOrigin       string
+	renewCredential        func(context.Context) (string, bool, error)
 	recordIdentityCoverage bool
 	metaMCPServerID        string
 	headerPolicy           proxy.HeaderPolicy
@@ -97,6 +99,12 @@ func WithAuthClientHeaders(headers []proxy.ConfiguredHeader) BuildOption {
 		options.authClientHeaders = headers
 		options.authClientSelected = true
 	}}
+}
+
+// WithRenewableCredential binds a shared credential to its destination and
+// lets the proxy replace a rejected token once. It never follows redirects.
+func WithRenewableCredential(origin string, renew func(context.Context) (string, bool, error)) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) { options.credentialOrigin = origin; options.renewCredential = renew }}
 }
 
 // WithHeaderPolicy selects how configured and copied client headers are
@@ -505,13 +513,14 @@ func (f *ProxyManager) BuildTarget(
 		MaxBufferedBodyBytes:        proxy.DefaultMaxBufferedBodyBytes,
 		Identity:                    identity,
 		RemoteURL:                   upstreamURL,
+		CredentialOrigin:            options.credentialOrigin,
 		Headers:                     headers,
 		HeaderPolicy:                options.headerPolicy,
 		AuthorizationOverride:       upstreamAuth,
 		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,
-		DisableRedirects:            false,
+		DisableRedirects:            options.credentialOrigin != "",
 		StrictToolSelection:         selection != nil,
 		AnonymousCaller:             options.anonymousCaller && visibility == mcpservers.VisibilityPublic,
 		WWWAuthenticate:             wwwAuthenticate,
@@ -547,6 +556,21 @@ func (f *ProxyManager) BuildTarget(
 	}
 	if catalog != nil {
 		catalog.listUpstream = built.ListUpstreamTools
+	}
+	if options.renewCredential != nil {
+		built.UpstreamResponseRetryer = func(ctx context.Context, response *http.Response) (*proxy.UpstreamResponseRetry, error) {
+			if response.StatusCode != http.StatusUnauthorized {
+				return nil, nil
+			}
+			token, renewed, err := options.renewCredential(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("renew upstream service account credential: %w", err)
+			}
+			if !renewed {
+				return nil, nil
+			}
+			return &proxy.UpstreamResponseRetry{AuthorizationOverride: token}, nil
+		}
 	}
 	return built
 }

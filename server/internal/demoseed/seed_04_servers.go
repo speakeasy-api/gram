@@ -658,11 +658,15 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Linear", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own GitHub token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
+		{ID: s.det("auth-client-github-app"), OrgID: org, ProjectID: proj, ClientType: "service_account", Source: "admin", Name: "GitHub App (demo — disabled)"},
 	}
 	for _, client := range clients {
 		if err := s.q.ServersInsertAuthClient(ctx, client); err != nil {
 			return fmt.Errorf("insert demo auth client %s: %w", client.Name, err)
 		}
+	}
+	if err := s.q.ServersInsertGitHubApp(ctx, repo.ServersInsertGitHubAppParams{AuthClientID: s.det("auth-client-github-app"), OrgID: org}); err != nil {
+		return fmt.Errorf("insert demo GitHub App: %w", err)
 	}
 	if err := s.q.ServersInsertAuthClientHeader(ctx, repo.ServersInsertAuthClientHeaderParams{
 		ID: s.det("auth-client-github-token-header"), AuthClientID: s.det("auth-client-github-token"), OrgID: org,
@@ -678,6 +682,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 	}
 
 	associations := []struct{ key, server, client string }{
+		{"auth-client-assoc-github-app", "mcpserver-github", "auth-client-github-app"},
 		{"auth-client-assoc-linear", "mcpserver-linear", "auth-client-linear"},
 		{"auth-client-assoc-github", "mcpserver-github", "auth-client-github-token"},
 		{"auth-client-assoc-linear-token", "mcpserver-linear", "auth-client-github-token"},

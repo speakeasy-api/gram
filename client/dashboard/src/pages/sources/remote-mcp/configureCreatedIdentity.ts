@@ -1,3 +1,4 @@
+import type { GitHubAppDraft } from "@/lib/remote-identity/components/GitHubAppFields";
 import { requireKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { isForbiddenError, isNotFoundError } from "@/lib/errors";
@@ -32,6 +33,7 @@ type ConfigureCreatedIdentityInput = {
    * Takes precedence over agentAuthorization.
    */
   serviceAccountClient?: ServiceAccountClientSpec;
+  githubApp?: GitHubAppDraft;
   options?: RequestOptions;
 };
 
@@ -57,6 +59,7 @@ export async function configureCreatedRemoteMcpIdentity({
   identityMode,
   agentAuthorization,
   serviceAccountClient,
+  githubApp,
   options,
 }: ConfigureCreatedIdentityInput): Promise<ConfigureCreatedIdentityResult> {
   if (identityMode === "none") {
@@ -74,7 +77,7 @@ export async function configureCreatedRemoteMcpIdentity({
     }
   }
 
-  if (identityMode === "agent" && serviceAccountClient) {
+  if (identityMode === "agent" && serviceAccountClient && !githubApp) {
     try {
       await bindServiceAccountClient(
         client,
@@ -105,6 +108,32 @@ export async function configureCreatedRemoteMcpIdentity({
   }
 
   if (identityMode === "agent") {
+    if (githubApp) {
+      try {
+        await client.authClients.configureGitHubApp(
+          {
+            configureGitHubAppAuthClientRequestBody: {
+              ...githubApp,
+              mcpServerId: mcpServer.id,
+              name: `${mcpServer.name ?? "GitHub"} service account`,
+              upstreamOrigin: new URL(remoteMcpServer.url).origin,
+            },
+          },
+          undefined,
+          options,
+        );
+        return configured(
+          await setMcpServerVisibility(client, mcpServer, "private", options),
+          identityMode,
+        );
+      } catch {
+        return setupRequired(
+          mcpServer,
+          identityMode,
+          "GitHub App setup failed. Check the app credentials and installation in Settings > Identity.",
+        );
+      }
+    }
     const authorization = agentAuthorization?.trim();
     if (!authorization) {
       return setupRequired(

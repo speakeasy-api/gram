@@ -1,3 +1,7 @@
+import {
+  gitHubAppReady,
+  type GitHubAppDraft,
+} from "@/lib/remote-identity/components/GitHubAppFields";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
@@ -65,6 +69,7 @@ export interface ServerConfig {
   headerValues: Record<string, string>;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization: string;
+  githubApp?: GitHubAppDraft;
   /** An OAuth service account client to bind instead of agentAuthorization. */
   serviceAccountClient: ServiceAccountClientSpec | null;
 }
@@ -142,7 +147,11 @@ export interface ConfigurePhase extends WorkflowBase {
     updates: Partial<
       Pick<
         ServerConfig,
-        "name" | "identityMode" | "agentAuthorization" | "serviceAccountClient"
+        | "name"
+        | "identityMode"
+        | "agentAuthorization"
+        | "githubApp"
+        | "serviceAccountClient"
       >
     >,
   ) => void;
@@ -283,6 +292,7 @@ interface InstallTarget {
   headers: Array<{ header: ExternalMCPRemoteHeader; value: string }>;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization: string;
+  githubApp?: GitHubAppDraft;
   serviceAccountClient: ServiceAccountClientSpec | null;
 }
 
@@ -301,7 +311,8 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
     }),
     identityMode: config.identityMode,
     agentAuthorization: config.agentAuthorization,
-    serviceAccountClient: config.serviceAccountClient,
+    githubApp: config.githubApp,
+    serviceAccountClient: config.githubApp ? null : config.serviceAccountClient,
   }));
 }
 
@@ -485,6 +496,7 @@ export function useRemoteMcpInstallWorkflow({
           | "name"
           | "identityMode"
           | "agentAuthorization"
+          | "githubApp"
           | "serviceAccountClient"
         >
       >,
@@ -607,8 +619,10 @@ export function useRemoteMcpInstallWorkflow({
       serverConfigs.every(
         (c) =>
           c.identityMode !== "agent" ||
-          c.agentAuthorization.trim() !== "" ||
-          c.serviceAccountClient !== null,
+          (c.githubApp
+            ? gitHubAppReady(c.githubApp)
+            : c.agentAuthorization.trim() !== "" ||
+              c.serviceAccountClient !== null),
       ) &&
       serverConfigs.some((c) => c.remotes.length > 0)
     );
@@ -747,6 +761,8 @@ export function useRemoteMcpInstallWorkflow({
         remoteMcpServer,
         mcpServer,
         identityMode: target.identityMode,
+        githubApp:
+          target.identityMode === "agent" ? target.githubApp : undefined,
         // Already the whole header value: the credential form assembles the
         // Bearer/Basic prefix so the operator can see exactly what is sent.
         agentAuthorization:

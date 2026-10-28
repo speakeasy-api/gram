@@ -594,3 +594,6 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- name: PostflightCountSecurityAuditLogs :one
 SELECT count(*) FROM security_audit_logs
 WHERE organization_id = @org_id::text;
+
+-- name: PostflightCountGitHubApps :one
+SELECT count(*)::bigint FROM mcp_auth_client_github_apps WHERE organization_id = @org_id;

@@ -896,6 +896,7 @@ function ConfigurePhaseContent({
 }) {
   const project = useProject();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canConfigureGitHub = !rbacLoading && hasScope("org:admin");
   const canCreateIdentity =
     !rbacLoading && hasScope("project:write", project.id);
   // Multi-remote servers were already named in the selectRemotes phase; only
@@ -930,7 +931,11 @@ function ConfigurePhaseContent({
   const canSubmit =
     releaseState.canInstall &&
     missingRequiredHeaders === 0 &&
-    !userIdentityPermissionBlocked;
+    !userIdentityPermissionBlocked &&
+    (canConfigureGitHub ||
+      !releaseState.serverConfigs.some(
+        (config) => config.identityMode === "agent" && config.githubApp,
+      ));
 
   // With guardrails on offer, finishing Configure moves to that step; the
   // install itself starts from there.
@@ -990,6 +995,7 @@ function ConfigurePhaseContent({
         <IdentityConfigurations
           releaseState={releaseState}
           canCreateIdentity={canCreateIdentity}
+          canConfigureGitHub={canConfigureGitHub}
           rbacLoading={rbacLoading}
         />
         {!bulk && <HeaderValueSections releaseState={releaseState} />}
@@ -1038,10 +1044,12 @@ function ConfigurePhaseContent({
 function IdentityConfigurations({
   releaseState,
   canCreateIdentity,
+  canConfigureGitHub,
   rbacLoading,
 }: {
   releaseState: ConfigurePhase;
   canCreateIdentity: boolean;
+  canConfigureGitHub: boolean;
   rbacLoading: boolean;
 }) {
   const configs = releaseState.serverConfigs.filter(
@@ -1059,6 +1067,7 @@ function IdentityConfigurations({
           index={configIndexOf(releaseState, config)}
           releaseState={releaseState}
           canCreateIdentity={canCreateIdentity}
+          canConfigureGitHub={canConfigureGitHub}
           rbacLoading={rbacLoading}
         />
       ))}
@@ -1076,6 +1085,7 @@ function CatalogServerIdentity({
   index,
   releaseState,
   canCreateIdentity,
+  canConfigureGitHub,
   rbacLoading,
 }: {
   config: ServerConfig;
@@ -1083,6 +1093,7 @@ function CatalogServerIdentity({
   index: number;
   releaseState: ConfigurePhase;
   canCreateIdentity: boolean;
+  canConfigureGitHub: boolean;
   rbacLoading: boolean;
 }) {
   const credential = useAgentCredentialFields();
@@ -1122,10 +1133,15 @@ function CatalogServerIdentity({
           releaseState.updateServerConfig(index, { identityMode })
         }
         credential={credential}
+        githubApp={config.githubApp}
+        onGitHubAppChange={(githubApp) =>
+          updateServerConfig(index, { githubApp })
+        }
         upstreamName={config.name || "this server"}
         advertisesOAuth={supportsAutomaticOAuth(config.server)}
         authenticationRequired={false}
         canCreateIdentity={canCreateIdentity}
+        canConfigureGitHub={canConfigureGitHub}
         rbacLoading={rbacLoading}
         serviceAccountPanel={
           config.identityMode === "agent" ? (

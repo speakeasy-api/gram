@@ -326,6 +326,9 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 		return none, false, oops.E(oops.CodeUnexpected, err, "load upstream client choice").LogError(ctx, s.logger)
 	}
 	mode, err := s.authClientMode(ctx, endpoint.OrganizationID)
+	if err == nil {
+		mode, err = s.githubAppMode(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID, mode)
+	}
 	if err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, s.logger)
 	}
@@ -817,6 +820,16 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	var resolved map[uuid.UUID]authClientResolution
 	memberErrors := make(map[uuid.UUID]error)
 	var err error
+	if !typed && !c.unchosen {
+		candidates, readErr := c.selector.resolveAuthClients(ctx, ids)
+		err = readErr
+		resolved = make(map[uuid.UUID]authClientResolution)
+		for id, res := range candidates {
+			if res.githubApp {
+				resolved[id] = res
+			}
+		}
+	}
 	switch {
 	case c.unchosen:
 		resolved, memberErrors, err = c.resolveUnchosenMembers(ctx, ids, projects)
@@ -863,7 +876,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		logger.ErrorContext(ctx, "load gateway member upstream client choices", attr.SlogError(err))
 	}
 	var headerIDs []uuid.UUID
-	if typed && err == nil {
+	if err == nil {
 		for id, res := range resolved {
 			if memberErrors[id] != nil {
 				continue
@@ -908,7 +921,8 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		res := gapResolution(authClientReasonMissingChoice)
 		memberErr := err
 		if memberErr == nil {
-			if typed {
+			_, hasProvider := resolved[member.serverID]
+			if typed || hasProvider {
 				if choice, ok := resolved[member.serverID]; ok {
 					res = choice
 				}
@@ -919,7 +933,11 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 						clientHeaders := headers[res.clientID]
 						memberErr = clientHeaders.err
 						if memberErr == nil {
-							res = applyAuthClientHeaders(res, clientHeaders.headers)
+							if res.githubApp {
+								res, memberErr = c.selector.service.prepareGitHubApp(ctx, c.selector.organizationID, member.serverID, res, clientHeaders.headers)
+							} else {
+								res = applyAuthClientHeaders(res, clientHeaders.headers)
+							}
 						}
 					}
 				}

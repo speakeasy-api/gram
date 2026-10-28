@@ -17,6 +17,10 @@ import {
   AuthClientServer,
   AuthClientServer$inboundSchema,
 } from "./authclientserver.js";
+import {
+  GitHubAppConfiguration,
+  GitHubAppConfiguration$inboundSchema,
+} from "./githubappconfiguration.js";
 
 /**
  * How the client authenticates upstream.
@@ -55,6 +59,7 @@ export type AuthClient = {
    * Whether the client is enabled. Where typed auth client resolution is enforced, a disabled client is never selected or resolved. Disabling revokes no upstream credentials, and elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving.
    */
   enabled: boolean;
+  githubApp?: GitHubAppConfiguration | undefined;
   /**
    * The headers the client sends upstream.
    */
@@ -112,6 +117,7 @@ export const AuthClient$inboundSchema: z.ZodMiniType<AuthClient, unknown> = z
         z.transform(v => new Date(v)),
       ),
       enabled: z.boolean(),
+      github_app: z.optional(GitHubAppConfiguration$inboundSchema),
       headers: z.array(AuthClientHeader$inboundSchema),
       id: z.string(),
       name: z.string(),
@@ -129,6 +135,7 @@ export const AuthClient$inboundSchema: z.ZodMiniType<AuthClient, unknown> = z
       return remap$(v, {
         "client_type": "clientType",
         "created_at": "createdAt",
+        "github_app": "githubApp",
         "project_id": "projectId",
         "remote_session_client_id": "remoteSessionClientId",
         "source": "authClientSource",

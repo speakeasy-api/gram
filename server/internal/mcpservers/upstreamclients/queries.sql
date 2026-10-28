@@ -84,6 +84,11 @@ WHERE s.project_id = @project_id::uuid
            AND offered.remote_session_client_id IS DISTINCT FROM c.id
        ))
   AND NOT EXISTS (
+    SELECT 1 FROM mcp_server_auth_clients a
+    JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+    WHERE a.mcp_server_id = s.id AND a.organization_id = p.organization_id AND NOT a.deleted
+  )
+  AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS other
     JOIN projects AS other_project
@@ -586,7 +591,7 @@ WITH selected AS (
                   AND c.remote_session_client_id = sqlc.narg('proposed_registration_id')::uuid
                   AND c.client_type IN ('remote_session', 'service_account'))
                  OR (sqlc.narg('proposed_registration_id')::uuid IS NULL
-                     AND c.client_type IN ('static_credential', 'pass_through'))))
+                     AND (c.client_type IN ('static_credential', 'pass_through') OR EXISTS (SELECT 1 FROM mcp_auth_client_github_apps g WHERE g.auth_client_id = c.id AND g.organization_id = c.organization_id)))))
       )
   ) AS candidates
   WHERE @proposed::boolean AND NOT @propose_all_clients::boolean
@@ -617,6 +622,7 @@ SELECT sel.mcp_server_id,
        (m.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled,
        ac.id AS client_id,
        ac.client_type,
+       EXISTS (SELECT 1 FROM mcp_auth_client_github_apps g WHERE g.auth_client_id = ac.id AND g.organization_id = ac.organization_id)::boolean AS github_app,
        ac.enabled AS client_enabled,
        ac.deleted AS client_deleted,
        reg.id AS registration_id,

@@ -438,6 +438,9 @@ func (s *Service) routeMetaMember(
 		if clientSelected {
 			clientHeaders = member.authClient.headers
 			options = append(options, remotemcp.WithAuthClientHeaders(clientHeaders))
+			if credential := member.authClient.githubCredential; credential != nil {
+				options = append(options, remotemcp.WithRenewableCredential(credential.Origin, member.authClient.githubRenew))
+			}
 		}
 		var authHeaders []proxy.ConfiguredHeader
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
