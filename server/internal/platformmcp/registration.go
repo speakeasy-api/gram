@@ -816,21 +816,22 @@ func platformMCPEndpointSlug(organizationSlug, suffix string) string {
 // that row. A busy address counts as taken.
 func claimReadableRegistrationSlug(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, organizationID, organizationSlug, displayName string) (string, bool, error) {
 	prefix := organizationSlug + "-"
-	// The base keeps room for a suffix, so every candidate fits the address limit.
+	bare := gatewayAddressSlug(displayName, len(prefix))
+	// A suffixed candidate cuts the name shorter so it still fits the address limit.
 	base := gatewayAddressSlug(displayName, len(prefix)+len("-")+readableSlugSuffixLength)
-	if base == "" {
-		return "", false, nil
-	}
 	for attempt := range readableSlugAttempts {
-		candidate := base
+		candidate := bare
 		if attempt > 0 {
+			if base == "" {
+				break
+			}
 			suffix, err := conv.GenerateRandomSlug(readableSlugSuffixLength)
 			if err != nil {
 				return "", false, fmt.Errorf("generate platform mcp slug suffix: %w", err)
 			}
 			candidate = base + "-" + suffix
-		}
-		if mcpservers.DashboardRouteParam(candidate, uuid.Nil) != candidate {
+		} else if bare == "" || mcpservers.DashboardRouteParam(bare, uuid.Nil) != bare {
+			// The dashboard cannot route to an empty or reserved slug such as "catalog".
 			continue
 		}
 		free, err := readableRegistrationSlugFree(ctx, tx, projectID, organizationID, candidate, prefix+candidate)
@@ -846,7 +847,9 @@ func claimReadableRegistrationSlug(ctx context.Context, tx pgx.Tx, projectID uui
 
 func readableRegistrationSlugFree(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, organizationID, serverSlug, endpointSlug string) (bool, error) {
 	// The project's server slugs need no address lock: the caller holds the
-	// project row lock, which serialises registrations in the project.
+	// project row lock, which serialises Platform MCP registrations in the
+	// project. A dashboard write of the same slug at the same moment makes the
+	// server create fail, and a retry with the same key picks another slug.
 	_, err := mcpserversrepo.New(tx).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(serverSlug), ProjectID: projectID})
 	switch {
 	case err == nil:

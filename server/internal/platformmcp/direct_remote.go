@@ -71,8 +71,9 @@ type DirectRemoteInspection struct {
 
 	// ServerName is the upstream's own serverInfo.name from initialize, as the
 	// upstream sent it. It is empty when initialize did not succeed. It is
-	// untrusted: registration passes it through directRemoteServerName before
-	// using it as a default display name, and it is never shown to callers.
+	// untrusted and left out of inspection results. Registration passes it
+	// through directRemoteServerName before using it as the default display
+	// name, which is then shown like any name the caller could have chosen.
 	ServerName string `json:"-"`
 }
 

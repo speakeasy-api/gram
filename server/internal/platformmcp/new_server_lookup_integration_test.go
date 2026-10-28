@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -119,6 +120,34 @@ func TestRemoteRegistrationUsesTheServerNameForItsAddress(t *testing.T) {
 	require.Equal(t, "Linear", name)
 	require.Equal(t, "linear", serverSlug)
 	require.Equal(t, organizationSlug(t, ctx, conn, principal)+"-linear", endpointSlug)
+}
+
+// A name that fits the address limit keeps its full length. Only a suffixed
+// slug is cut shorter to make room for the suffix.
+func TestRemoteRegistrationKeepsTheWholeNameWhenItFits(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_remote_readable_full_name")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	orgSlug := organizationSlug(t, ctx, conn, principal)
+	name := strings.Repeat("a", maxPlatformEndpointSlugLength-len(orgSlug)-len("-"))
+	reg := newInspectedRemoteRegistrar(store, &testRegistrationGate{enabled: true}, namedRemoteInspector("https://remote.example.test/mcp", name))
+
+	remote, err := invokeTool[RegisterRemoteMCPToolOutput](t, ContextWithPrincipal(ctx, principal), reg, "register_remote_mcp", map[string]any{
+		"project_slug":    project.Slug,
+		"remote_url":      "https://remote.example.test/mcp",
+		"idempotency_key": "readable-full-name",
+	})
+	require.NoError(t, err)
+
+	_, serverSlug, endpointSlug := registeredServerAddress(t, ctx, conn, principal, project, remote.RegistrationID)
+	require.Equal(t, name, serverSlug)
+	require.Equal(t, orgSlug+"-"+name, endpointSlug)
 }
 
 // A second server whose name gives the same slug gets a short random suffix

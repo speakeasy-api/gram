@@ -546,9 +546,6 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	if requestedName == "" {
 		requestedName = inspection.CanonicalURL
 	}
-	if len(requestedName) > directRemoteDisplayNameMaxBytes || strings.IndexFunc(requestedName, isDirectRemoteDisplayNameBreak) >= 0 {
-		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
-	}
 	if displayName == "" {
 		displayName = defaultDirectRemoteDisplayName(inspection)
 	}

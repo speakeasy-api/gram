@@ -152,6 +152,29 @@ func TestRegistrationServiceDefaultsDirectRemoteDisplayName(t *testing.T) {
 	}
 }
 
+// A URL longer than the display name limit is accepted when no display name
+// is given, because the stored name is the server's own name or host name.
+func TestRegistrationServiceAcceptsLongDirectRemoteURLWithoutDisplayName(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
+	registrationID := uuid.New()
+	store := &recordingRegistrationStore{
+		project:   project,
+		begin:     OperationReceipt{ID: uuid.New()},
+		converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+		completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+	}
+	longURL := "https://remote.example.test/mcp?workspace=" + strings.Repeat("a", directRemoteDisplayNameMaxBytes)
+	inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: longURL, Transport: "streamable-http", Trust: "user_supplied_unreviewed", ServerName: "Linear"}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: longURL, IdempotencyKey: "request-key"})
+
+	require.NoError(t, err)
+	require.Equal(t, "Linear", store.configuration.displayName)
+}
+
 func TestDirectRemoteServerNameIsBoundedOnACharacterBoundary(t *testing.T) {
 	t.Parallel()
 

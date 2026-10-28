@@ -34,7 +34,7 @@ type RegisterCatalogMCPToolOutput struct {
 type RegisterRemoteMCPToolInput struct {
 	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that will own the user-supplied MCP; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	RemoteURL      string `json:"remote_url" jsonschema:"HTTPS Streamable HTTP MCP URL; safe endpoint query parameters are supported, but fragments, userinfo, headers, credentials, and credential-like query parameters are not accepted"`
-	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional project-local display name for the MCP; maximum 256 bytes"`
+	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional project-local display name for the MCP; maximum 256 bytes; when omitted, the name the server reports for itself is used, or else the URL's host name; a new server's slug and address are derived from this name"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project and canonical remote URL"`
 }
 
