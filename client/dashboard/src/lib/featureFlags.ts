@@ -1,4 +1,5 @@
 export const FEATURE_FLAGS = {
+  inferenceWorkloadSetup: "inference-workload-setup",
   // UI-only visibility; saved runtime selection and backend authorization are independent.
   assistantKitRuntime: "assistant-kit-runtime",
   budgets: "gram-budgets",

@@ -25,11 +25,11 @@
     "build:storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "2.0.74",
+    "@ai-sdk/mcp": "2.0.81",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
-    "@assistant-ui/react-ai-sdk": "~1.4.17",
-    "@assistant-ui/react-markdown": "^0.14.21",
+    "@assistant-ui/react-ai-sdk": "~1.4.19",
+    "@assistant-ui/react-markdown": "^0.14.23",
     "@calcom/embed-react": "^1.5.3",
     "@cfworker/json-schema": "catalog:",
     "@datadog/browser-rum": "^7.7.0",

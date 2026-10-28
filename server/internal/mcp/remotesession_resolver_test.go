@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -127,7 +126,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionAnonymousSubjectResolves(t *t
 }
 
 type remoteSessionResolverFixture struct {
-	Toolset             toolsets_repo.Toolset
+	Toolset             hostedToolset
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer
 	RemoteSessionClient remotesessions_repo.RemoteSessionClient
 }
@@ -235,7 +234,7 @@ func insertRemoteSessionAccessToken(
 func mintUserSessionBearerForSubject(
 	t *testing.T,
 	ti *testInstance,
-	toolset toolsets_repo.Toolset,
+	toolset hostedToolset,
 	subject urn.SessionSubject,
 ) string {
 	t.Helper()

@@ -26,7 +26,7 @@ import (
 func createCanonicalWrapper(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsetsrepo.Toolset, visibility string, domainID uuid.NullUUID, slugs ...string) {
 	t.Helper()
 	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: toolset.ProjectID, Name: conv.ToPGText(toolset.Name), Slug: toolset.McpSlug,
+		ID: toolset.ID, ProjectID: toolset.ProjectID, Name: conv.ToPGText(toolset.Name), Slug: conv.ToPGText(toolset.Slug),
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: visibility,
 	})
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesDomainAndUserHeaders(
 	//nolint:glint // notestingrawsql: an addressable domain without exercising domain provisioning.
 	_, err = ti.conn.Exec(ctx, `UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = $1`, domain.ID)
 	require.NoError(t, err)
-	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true}, toolset.McpSlug.String)
+	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true}, toolset.Slug)
 
 	metadata, err := mcpmetarepo.New(ti.conn).UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
 		McpServerID: toolset.ID, ProjectID: *ac.ProjectID,
@@ -81,7 +81,7 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesDomainAndUserHeaders(
 		} `json:"mcpServers"`
 	}
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
-	require.Equal(t, "https://"+domain.Domain+"/mcp/"+toolset.McpSlug.String, config.MCPServers["Hosted"].URL)
+	require.Equal(t, "https://"+domain.Domain+"/mcp/"+toolset.Slug, config.MCPServers["Hosted"].URL)
 	require.Contains(t, string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), "${user_config.HOSTED_API_KEY}")
 }
 
@@ -91,7 +91,7 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesPrimaryEndpoint(t *te
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 
 	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "primary")
-	createCanonicalWrapper(t, ctx, ti, toolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolset.McpSlug.String, toolset.McpSlug.String+"-second")
+	createCanonicalWrapper(t, ctx, ti, toolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolset.Slug, toolset.Slug+"-second")
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Primary"})
 	require.NoError(t, err)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(toolset.ID.String()), DisplayName: conv.PtrEmpty("Hosted"), Policy: "required"})
@@ -105,7 +105,7 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesPrimaryEndpoint(t *te
 		} `json:"mcpServers"`
 	}
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
-	require.Equal(t, "https://app.getgram.ai/mcp/"+toolset.McpSlug.String, config.MCPServers["Hosted"].URL)
+	require.Equal(t, "https://app.getgram.ai/mcp/"+toolset.Slug, config.MCPServers["Hosted"].URL)
 }
 
 // A canonical wrapper that lost its endpoint keeps the toolset's address.
@@ -125,7 +125,7 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryKeepsToolsetAddres
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
-	require.Contains(t, string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), "https://app.getgram.ai/mcp/"+toolset.McpSlug.String)
+	require.Contains(t, string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), "https://app.getgram.ai/mcp/"+toolset.Slug)
 }
 
 func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testing.T) {
@@ -142,7 +142,7 @@ func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testin
 	}
 
 	byToolset := createUnwrappedTestToolset(t, ctx, ti.conn, "by-toolset")
-	createCanonicalWrapper(t, ctx, ti, byToolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byToolset.McpSlug.String)
+	createCanonicalWrapper(t, ctx, ti, byToolset, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byToolset.Slug)
 	added, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byToolset.ID.String()), Policy: "required"})
 	require.NoError(t, err)
 	stored, err := pluginsrepo.New(ti.conn).ListPluginServers(ctx, uuid.MustParse(plugin.ID))
@@ -155,7 +155,7 @@ func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testin
 	requireConflict(err)
 
 	byServer := createUnwrappedTestToolset(t, ctx, ti.conn, "by-server")
-	createCanonicalWrapper(t, ctx, ti, byServer, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byServer.McpSlug.String)
+	createCanonicalWrapper(t, ctx, ti, byServer, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, byServer.Slug)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(byServer.ID.String()), Policy: "required"})
 	require.NoError(t, err)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byServer.ID.String()), DisplayName: conv.PtrEmpty("Twin 2"), Policy: "required"})

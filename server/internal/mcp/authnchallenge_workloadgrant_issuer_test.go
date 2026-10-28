@@ -64,7 +64,7 @@ func (f workloadGrantFixture) seedToolsetOnUserSessionIssuer(t *testing.T, issue
 
 	ctx := f.fixtureContext(t)
 	slug := "issuer-workload-" + uuid.NewString()[:8]
-	toolset, err := toolsets_repo.New(f.ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsets_repo.New(f.ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         f.fx.orgID,
 		ProjectID:              f.fx.target.ProjectID,
 		Name:                   "Issuer workload MCP " + slug,
@@ -73,7 +73,7 @@ func (f workloadGrantFixture) seedToolsetOnUserSessionIssuer(t *testing.T, issue
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, f.ti, toolset, slug, "private", uuid.NullUUID{UUID: issuerID, Valid: true})
+	toolset := hostLegacyToolset(t, ctx, f.ti, toolsetRow, slug, "private", uuid.NullUUID{UUID: issuerID, Valid: true})
 
 	return &mcp.ResolvedMcpEndpoint{
 		AudienceURN:         urn.NewToolset(toolset.ID).String(),

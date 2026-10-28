@@ -2251,14 +2251,6 @@ VALUES (
     'backfill'
 );
 
--- name: SetToolsetCustomDomain :exec
--- Points a toolset's legacy alias at a custom domain; the canonical wrapper's endpoints are left as they are.
-UPDATE toolsets
-SET
-    custom_domain_id = @custom_domain_id
-  , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id;
-
 -- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
 -- Test-only fixture for an issuer policy change while admission waits on its lock.
 UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
@@ -2300,12 +2292,6 @@ INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
 SELECT s.project_id, s.id, sqlc.narg('custom_domain_id')::uuid, @slug
 FROM mcp_servers s
 WHERE s.id = @id AND s.toolset_id = @id AND s.project_id = @project_id AND s.deleted IS FALSE;
-
--- name: SetToolsetLegacyAliasFixture :exec
--- Sets the legacy /mcp/<slug> alias a toolset created before hosted servers owned their endpoints still carries.
-UPDATE toolsets
-SET mcp_slug = sqlc.narg('mcp_slug')::text, custom_domain_id = sqlc.narg('custom_domain_id')::uuid, updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id;
 
 -- name: SetRemoteSessionListFixture :exec
 -- Test fixture for effective expiry and timestamp pagination.

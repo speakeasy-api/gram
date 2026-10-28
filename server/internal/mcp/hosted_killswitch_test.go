@@ -17,7 +17,6 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
@@ -121,7 +120,7 @@ func TestServePublic_LegacyFallbackHostedToolsCallKillswitch(t *testing.T) {
 
 // createIssuerGatedLegacyToolset creates a public issuer-gated toolset with no
 // mcp_endpoints row and a user-session bearer for the in-toolset gate.
-func createIssuerGatedLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, slugPrefix string) (toolsetsrepo.Toolset, string) {
+func createIssuerGatedLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, slugPrefix string) (hostedToolset, string) {
 	t.Helper()
 
 	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slugPrefix+uuid.NewString()[:8])
