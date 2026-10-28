@@ -806,6 +806,67 @@ func TestAuditService_List_ShowsOnlyConfigurationEntries(t *testing.T) {
 	require.Empty(t, result.Logs)
 }
 
+// Security entries are listed when asked for, and every entry says which
+// category it is in.
+func TestAuditService_List_ListsSecurityEntriesWhenAsked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	projectID := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+
+	security := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        "agent:" + uuid.NewString(),
+		actorType:      "agent",
+		action:         string(audit.ActionWorkloadAdmissionAdmit),
+		subjectID:      uuid.NewString(),
+		subjectType:    "workload_admission",
+		category:       audit.CategorySecurity,
+	})
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        "user:first",
+		actorType:      "user",
+		action:         "project:update",
+		subjectID:      uuid.NewString(),
+		subjectType:    "project",
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
+		Category:     string(audit.CategorySecurity),
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, security.String(), result.Logs[0].ID)
+	require.Equal(t, string(audit.CategorySecurity), conv.PtrValOrEmpty(result.Logs[0].Category, ""))
+
+	result, err = ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
+		Category:     string(audit.CategoryConfiguration),
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, string(audit.CategoryConfiguration), conv.PtrValOrEmpty(result.Logs[0].Category, ""))
+}
+
 func TestAuditService_List_FilterBySubjectTypeAndSubjectID(t *testing.T) {
 	t.Parallel()
 

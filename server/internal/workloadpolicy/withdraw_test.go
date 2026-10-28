@@ -135,11 +135,12 @@ func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreSecurityEntries(t *testing.T
 	require.Len(t, ids, 2)
 
 	// The fleet rule stands in for a runtime-created admission: the Kit runtime
-	// records its own admit entry when it creates one.
+	// records its own admit entry, as a security entry attributed to the
+	// assistant's agent, when it creates one.
 	err = audit.NewLogger().LogWorkloadAdmissionAdmit(ctx, ti.conn, audit.LogWorkloadAdmissionAdmitEvent{
 		OrganizationID:         ti.orgID,
 		ProjectID:              uuid.NullUUID{},
-		Actor:                  urn.NewSystemPrincipal(audit.KitRuntimeActorID),
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
 		ActorDisplayName:       nil,
 		ActorSlug:              nil,
 		AdmissionURN:           urn.NewWorkloadAdmission(uuid.MustParse(ids[fleetRule])),

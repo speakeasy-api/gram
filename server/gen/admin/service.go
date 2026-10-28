@@ -1926,7 +1926,13 @@ type AuditLog struct {
 	ActingSurface string
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string
+	ActingClientID *string
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string
 	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName *string

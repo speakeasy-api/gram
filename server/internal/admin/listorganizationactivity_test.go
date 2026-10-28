@@ -17,6 +17,7 @@ import (
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -421,11 +422,11 @@ func TestListOrganizationActivityFiltered_IncludesEveryCategory(t *testing.T) {
 
 	result, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: "org_activity_categories"})
 	require.NoError(t, err)
-	ids := make([]string, 0, len(result.Logs))
+	categories := make(map[string]string, len(result.Logs))
 	for _, log := range result.Logs {
-		ids = append(ids, log.ID)
+		categories[log.ID] = conv.PtrValOrEmpty(log.Category, "")
 	}
-	require.ElementsMatch(t, []string{security.String(), configuration.String()}, ids)
+	require.Equal(t, map[string]string{security.String(): "security", configuration.String(): "configuration"}, categories)
 }
 
 func TestListOrganizationActivityFiltered_ProjectIsolation(t *testing.T) {

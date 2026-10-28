@@ -105,7 +105,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		SubjectIds:             normalizeSubjectIDs(payload.SubjectIds),
 		ActingSurface:          conv.PtrToPGTextEmpty(payload.ActingSurface),
 		IncludeAssistantEvents: false,
-		Categories:             []string{string(audit.CategoryConfiguration)},
+		Categories:             []string{categoryOrDefault(payload.Category)},
 		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 	}
@@ -223,6 +223,7 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	actorRows, err := queries.ListAuditActorFacets(ctx, repo.ListAuditActorFacetsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      projectID,
+		Category:       categoryOrDefault(payload.Category),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit actor facets").LogError(ctx, s.logger)
@@ -231,6 +232,7 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	actionRows, err := queries.ListAuditActionFacets(ctx, repo.ListAuditActionFacetsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      projectID,
+		Category:       categoryOrDefault(payload.Category),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
@@ -239,6 +241,7 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	surfaceRows, err := queries.ListAuditSurfaceFacets(ctx, repo.ListAuditSurfaceFacetsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      projectID,
+		Category:       categoryOrDefault(payload.Category),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
@@ -328,8 +331,19 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		Metadata:           metadata,
 		ActingSurface:      actingSurfaceOrUnknown(row.ActingSurface),
 		ActingClientID:     customerFacingActingClientID(row.ActingSurface, row.ActingClientID),
+		Category:           &row.Category,
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
+}
+
+// categoryOrDefault returns the category a request asked for. Goa validates the
+// value against the enum and fills the default over HTTP; in-process callers
+// that leave it blank get the audit log page's category.
+func categoryOrDefault(category string) string {
+	if category == "" {
+		return string(audit.CategoryConfiguration)
+	}
+	return category
 }
 
 // customerFacingActingClientID omits the registered OAuth client identifier

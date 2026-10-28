@@ -527,3 +527,7 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- used, denied and expired.
 SELECT count(*) FROM risk_policy_approvals
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- name: PostflightCountSecurityAuditLogs :one
+SELECT count(*) FROM audit_logs
+WHERE organization_id = @org_id::text AND category = 'security';

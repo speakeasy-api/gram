@@ -200,12 +200,16 @@ func TestKitWorkloadDBAuditCategoryAndAttribution(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, binding.Subject, admit.SubjectDisplay)
 	require.Equal(t, audit.CategorySecurity, admit.Category)
+	require.Equal(t, string(urn.PrincipalTypeAgent), admit.ActorType)
+	require.Equal(t, identity.AgentID.String(), admit.ActorID)
 
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
 	withdraw, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
 	require.NoError(t, err)
 	require.Equal(t, binding.Subject, withdraw.SubjectDisplay)
 	require.Equal(t, audit.CategorySecurity, withdraw.Category)
+	require.Equal(t, string(urn.PrincipalTypeAgent), withdraw.ActorType)
+	require.Equal(t, identity.AgentID.String(), withdraw.ActorID)
 }
 
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {

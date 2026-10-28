@@ -20,7 +20,7 @@ func TestMarkKitRuntimeWorkloadAdmissionsSecurity(t *testing.T) {
 	q := repo.New(conn)
 
 	orgID := uuid.NewString()
-	insert := func(actorType, actorID string, action audit.Action, subjectID string) {
+	insertCategory := func(actorType, actorID string, action audit.Action, subjectID string, category audit.Category) {
 		t.Helper()
 		_, err := q.InsertAuditLog(ctx, repo.InsertAuditLogParams{
 			OrganizationID: orgID,
@@ -29,19 +29,31 @@ func TestMarkKitRuntimeWorkloadAdmissionsSecurity(t *testing.T) {
 			Action:         string(action),
 			SubjectID:      subjectID,
 			SubjectType:    "workload_admission",
+			Category:       string(category),
 		})
 		require.NoError(t, err)
+	}
+	insert := func(actorType, actorID string, action audit.Action, subjectID string) {
+		t.Helper()
+		insertCategory(actorType, actorID, action, subjectID, "")
 	}
 
 	// Three runtime-created admissions: two admitted and withdrawn by the
 	// runtime, one withdrawn by a person who withdrew the issuer.
 	runtimeSubjects := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	for _, subject := range runtimeSubjects {
-		insert("system", audit.KitRuntimeActorID, audit.ActionWorkloadAdmissionAdmit, subject)
+		insert("system", audit.LegacyKitRuntimeActorID, audit.ActionWorkloadAdmissionAdmit, subject)
 	}
-	insert("system", audit.KitRuntimeActorID, audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[0])
-	insert("system", audit.KitRuntimeActorID, audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[1])
+	insert("system", audit.LegacyKitRuntimeActorID, audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[0])
+	insert("system", audit.LegacyKitRuntimeActorID, audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[1])
 	insert("user", "user-1", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[2])
+
+	// An admission recorded as a security entry by the agent: its admit entry
+	// is already in the right category, and the person-attributed withdrawal
+	// moves.
+	agentSubject := uuid.NewString()
+	insertCategory("agent", uuid.NewString(), audit.ActionWorkloadAdmissionAdmit, agentSubject, audit.CategorySecurity)
+	insert("user", "user-1", audit.ActionWorkloadAdmissionWithdraw, agentSubject)
 
 	// A person's own admission stays a configuration entry, as does the same subject
 	// id in another organization.
@@ -60,25 +72,25 @@ func TestMarkKitRuntimeWorkloadAdmissionsSecurity(t *testing.T) {
 
 	pending, err := q.CountConfigurationKitRuntimeWorkloadAdmissions(ctx)
 	require.NoError(t, err)
-	require.EqualValues(t, 6, pending)
+	require.EqualValues(t, 7, pending)
 
 	n, err := q.MarkKitRuntimeWorkloadAdmissionsSecurity(ctx, 4)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, n, "one statement changes at most batch_size rows")
 	n, err = q.MarkKitRuntimeWorkloadAdmissionsSecurity(ctx, 4)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, n)
+	require.EqualValues(t, 3, n)
 	n, err = q.MarkKitRuntimeWorkloadAdmissionsSecurity(ctx, 4)
 	require.NoError(t, err)
 	require.EqualValues(t, 0, n, "a finished backfill changes nothing on rerun")
 
-	admitted, err := audit.KitRuntimeAdmittedSubjects(ctx, conn, orgID, []uuid.UUID{uuid.MustParse(runtimeSubjects[2]), uuid.MustParse(human)})
+	admitted, err := audit.SecurityAdmittedSubjects(ctx, conn, orgID, []uuid.UUID{uuid.MustParse(runtimeSubjects[2]), uuid.MustParse(agentSubject), uuid.MustParse(human)})
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]bool{uuid.MustParse(runtimeSubjects[2]): true}, admitted)
+	require.Equal(t, map[uuid.UUID]bool{uuid.MustParse(runtimeSubjects[2]): true, uuid.MustParse(agentSubject): true}, admitted)
 
 	security, err := audittest.AuditLogCountByCategory(ctx, conn, audit.CategorySecurity)
 	require.NoError(t, err)
-	require.EqualValues(t, 6, security)
+	require.EqualValues(t, 8, security)
 	configuration, err := audittest.AuditLogCountByCategory(ctx, conn, audit.CategoryConfiguration)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, configuration)

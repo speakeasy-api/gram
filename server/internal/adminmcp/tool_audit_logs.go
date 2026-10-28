@@ -102,6 +102,9 @@ type AuditLogEntry struct {
 	// ActingClientID identifies the optional OAuth client.
 	ActingClientID *string `json:"acting_client_id,omitempty"`
 
+	// Category is what kind of event this is: configuration or security.
+	Category *string `json:"category,omitempty"`
+
 	// SubjectID identifies the affected resource.
 	SubjectID string `json:"subject_id"`
 
@@ -185,7 +188,7 @@ func registerAuditLogTools(server *mcp.Server, organizations OrganizationReader,
 			output.Entries = append(output.Entries, AuditLogEntry{
 				ID: log.ID, ProjectID: log.ProjectID, ProjectSlug: log.ProjectSlug,
 				ActorID: log.ActorID, ActorType: log.ActorType, ActorDisplayName: log.ActorDisplayName, ActorSlug: log.ActorSlug,
-				Action: log.Action, ActingSurface: log.ActingSurface, ActingClientID: log.ActingClientID,
+				Action: log.Action, ActingSurface: log.ActingSurface, ActingClientID: log.ActingClientID, Category: log.Category,
 				SubjectID: log.SubjectID, SubjectType: log.SubjectType, SubjectDisplayName: log.SubjectDisplayName, SubjectSlug: log.SubjectSlug,
 				BeforeSnapshot: log.BeforeSnapshot, AfterSnapshot: log.AfterSnapshot, Metadata: log.Metadata, CreatedAt: log.CreatedAt,
 			})

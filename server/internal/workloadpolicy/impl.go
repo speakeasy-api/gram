@@ -800,7 +800,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	for _, admission := range admissions {
 		admissionIDs = append(admissionIDs, admission.ID)
 	}
-	runtimeAdmitted, err := audit.KitRuntimeAdmittedSubjects(ctx, dbtx, t.organizationID, admissionIDs)
+	runtimeAdmitted, err := audit.SecurityAdmittedSubjects(ctx, dbtx, t.organizationID, admissionIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error classifying cascaded workload withdrawals").LogError(ctx, s.logger)
 	}

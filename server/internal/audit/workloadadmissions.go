@@ -21,14 +21,16 @@ const (
 	ActionWorkloadAdmissionWithdraw Action = "workload-admission:withdraw"
 )
 
-// KitRuntimeActorID is the system principal a Kit assistant runtime records
-// when it admits and withdraws its own workload identity.
-const KitRuntimeActorID = "kit-runtime"
+// LegacyKitRuntimeActorID is the system principal Kit runtime admission
+// entries recorded before they were attributed to the assistant's agent. Older
+// rows still carry it, so readers that recognize runtime admissions match it.
+const LegacyKitRuntimeActorID = "kit-runtime"
 
-// KitRuntimeAdmittedSubjects reports which of the given admissions the Kit
-// runtime admitted for itself, according to the audit trail. Entries about
-// those admissions are security entries, not configuration changes.
-func KitRuntimeAdmittedSubjects(ctx context.Context, dbtx repo.DBTX, organizationID string, admissionIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+// SecurityAdmittedSubjects reports which of the given admissions were admitted
+// as security entries, as a Kit runtime admits its own workload, according to
+// the audit trail. Later entries about those admissions are security entries
+// too.
+func SecurityAdmittedSubjects(ctx context.Context, dbtx repo.DBTX, organizationID string, admissionIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
 	if len(admissionIDs) == 0 {
 		return map[uuid.UUID]bool{}, nil
 	}
@@ -36,15 +38,15 @@ func KitRuntimeAdmittedSubjects(ctx context.Context, dbtx repo.DBTX, organizatio
 	for _, id := range admissionIDs {
 		ids = append(ids, id.String())
 	}
-	rows, err := repo.New(dbtx).ListKitRuntimeAdmittedSubjects(ctx, repo.ListKitRuntimeAdmittedSubjectsParams{OrganizationID: organizationID, SubjectIds: ids})
+	rows, err := repo.New(dbtx).ListSecurityAdmittedSubjects(ctx, repo.ListSecurityAdmittedSubjectsParams{OrganizationID: organizationID, SubjectIds: ids})
 	if err != nil {
-		return nil, fmt.Errorf("list kit runtime admitted subjects: %w", err)
+		return nil, fmt.Errorf("list security admitted subjects: %w", err)
 	}
 	admitted := make(map[uuid.UUID]bool, len(rows))
 	for _, row := range rows {
 		id, err := uuid.Parse(row)
 		if err != nil {
-			return nil, fmt.Errorf("parse kit runtime admitted subject: %w", err)
+			return nil, fmt.Errorf("parse security admitted subject: %w", err)
 		}
 		admitted[id] = true
 	}

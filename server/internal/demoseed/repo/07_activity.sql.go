@@ -401,6 +401,43 @@ func (q *Queries) ActivityInsertQuarantineAuditLog(ctx context.Context, arg Acti
 	return err
 }
 
+const activityInsertSecurityAuditLog = `-- name: ActivityInsertSecurityAuditLog :exec
+INSERT INTO audit_logs (id, organization_id, project_id, actor_id, actor_type,
+                        action, subject_id, subject_type, subject_display_name,
+                        acting_surface, category, created_at)
+VALUES ($1, $2, $3::uuid, $4, 'agent',
+        $5, $6, 'workload_admission', $7::text,
+        'system', 'security', now() - $8::interval)
+`
+
+type ActivityInsertSecurityAuditLogParams struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	ProjectID          uuid.UUID
+	ActorID            string
+	Action             string
+	SubjectID          string
+	SubjectDisplayName string
+	Age                pgtype.Interval
+}
+
+// Security entries: an agent's runtime admitting and withdrawing its own
+// workload identity on each start and teardown. They show under Security
+// activity on the audit log page rather than among configuration changes.
+func (q *Queries) ActivityInsertSecurityAuditLog(ctx context.Context, arg ActivityInsertSecurityAuditLogParams) error {
+	_, err := q.db.Exec(ctx, activityInsertSecurityAuditLog,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ActorID,
+		arg.Action,
+		arg.SubjectID,
+		arg.SubjectDisplayName,
+		arg.Age,
+	)
+	return err
+}
+
 const activityInsertSignalMessage = `-- name: ActivityInsertSignalMessage :one
 INSERT INTO chat_messages (id, chat_id, project_id, role, content, source, model, capture_kind, created_at, risk_analyzed_at)
 VALUES ($1, $2, $3::uuid, $4, $5, 'claude-code', 'demo-model', 'original', $6, now())

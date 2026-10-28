@@ -40,6 +40,7 @@ var _ = Service("auditlogs", func() {
 			Param("acting_surface")
 			Param("from")
 			Param("to")
+			Param("category")
 		})
 
 		shared.CursorPagination()
@@ -63,6 +64,7 @@ var _ = Service("auditlogs", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Param("project_slug")
+			Param("category")
 		})
 
 		Meta("openapi:operationId", "listAuditLogFacets")
@@ -90,6 +92,10 @@ var AuditLog = Type("AuditLog", func() {
 	})
 	Attribute("acting_client_id", String, func() {
 		Description("The registered OAuth client the call authenticated as, when it had one. Absent for calls that carried no OAuth client.")
+	})
+	Attribute("category", String, func() {
+		Description("What kind of event the entry records: 'configuration' for a change to the platform's configuration, 'security' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.")
+		Enum("configuration", "security")
 	})
 
 	Attribute("subject_id", String)
@@ -146,6 +152,11 @@ var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 		Description("Exclusive end of the window to list changes from. Omit for the whole history.")
 		Format(FormatDateTime)
 	})
+	Attribute("category", String, func() {
+		Description("Category of entries to list: 'configuration' (the default) for changes to the platform's configuration, or 'security' for machine access and other security-relevant activity such as workloads admitting themselves.")
+		Enum("configuration", "security")
+		Default("configuration")
+	})
 })
 
 var ListAuditLogsResult = Type("ListAuditLogsResult", func() {
@@ -167,6 +178,11 @@ var AuditLogFacetOption = Type("AuditLogFacetOption", func() {
 var ListAuditLogFacetsForm = Type("ListAuditLogFacetsForm", func() {
 	Attribute("project_slug", String, func() {
 		Description("Project slug to filter facet values to a specific project.")
+	})
+	Attribute("category", String, func() {
+		Description("Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.")
+		Enum("configuration", "security")
+		Default("configuration")
 	})
 })
 

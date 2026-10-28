@@ -9439,6 +9439,9 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listAuditLogFacets:
     speakeasy-default-list-audit-log-facets:
+      parameters:
+        query:
+          category: "configuration"
       responses:
         "200":
           application/json: {"actions": [], "actors": [], "surfaces": []}
@@ -9448,9 +9451,12 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAuditLogs:
     speakeasy-default-list-audit-logs:
+      parameters:
+        query:
+          category: "configuration"
       responses:
         "200":
-          application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "created_at": "2025-08-26T01:50:02.217Z", "id": "<id>", "subject_id": "<id>", "subject_type": "<value>"}]}
+          application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "category": "security", "created_at": "2025-08-26T01:50:02.217Z", "id": "<id>", "subject_id": "<id>", "subject_type": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

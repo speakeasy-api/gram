@@ -1315,7 +1315,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "created_at": "2025-07-02T03:58:14.417Z", "id": "<id>", "subject_id": "<id>", "subject_type": "<value>"}]}
+          application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "category": "security", "created_at": "2025-07-02T03:58:14.417Z", "id": "<id>", "subject_id": "<id>", "subject_type": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

@@ -55,7 +55,7 @@ func TestLogger_Category(t *testing.T) {
 			err = audit.NewLogger().LogWorkloadAdmissionAdmit(ctx, conn, audit.LogWorkloadAdmissionAdmitEvent{
 				OrganizationID:         orgID,
 				ProjectID:              uuid.NullUUID{},
-				Actor:                  urn.NewSystemPrincipal(audit.KitRuntimeActorID),
+				Actor:                  urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()),
 				ActorDisplayName:       nil,
 				ActorSlug:              nil,
 				AdmissionURN:           urn.NewWorkloadAdmission(uuid.New()),
@@ -93,7 +93,7 @@ func TestLogger_RejectsUnknownCategory(t *testing.T) {
 	err = audit.NewLogger().LogWorkloadAdmissionAdmit(ctx, conn, audit.LogWorkloadAdmissionAdmitEvent{
 		OrganizationID:         uuid.New().String(),
 		ProjectID:              uuid.NullUUID{},
-		Actor:                  urn.NewSystemPrincipal(audit.KitRuntimeActorID),
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()),
 		ActorDisplayName:       nil,
 		ActorSlug:              nil,
 		AdmissionURN:           urn.NewWorkloadAdmission(uuid.New()),

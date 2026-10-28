@@ -25,8 +25,7 @@ WHERE a.subject_type = 'workload_admission'
       AND admit.subject_type = 'workload_admission'
       AND admit.subject_id = a.subject_id
       AND admit.action = 'workload-admission:admit'
-      AND admit.actor_type = 'system'
-      AND admit.actor_id = 'kit-runtime'
+      AND (admit.category = 'security' OR (admit.actor_type = 'system' AND admit.actor_id = 'kit-runtime'))
   )
 `
 
@@ -200,10 +199,10 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
-  AND category = 'configuration'
+  AND category = $2
   AND (
-    $2::uuid IS NULL
-    OR project_id = $2::uuid
+    $3::uuid IS NULL
+    OR project_id = $3::uuid
   )
 GROUP BY action
 ORDER BY count DESC, action ASC
@@ -211,6 +210,7 @@ ORDER BY count DESC, action ASC
 
 type ListAuditActionFacetsParams struct {
 	OrganizationID string
+	Category       string
 	ProjectID      uuid.NullUUID
 }
 
@@ -220,10 +220,11 @@ type ListAuditActionFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity and non-configuration entries are excluded: facets power
-// the platform audit feed, which hides them (see ListAuditLogs).
+// Assistant activity events are excluded: facets power the platform audit
+// feed, which hides them (see ListAuditLogs). Facets cover one category, the
+// one the feed beside them is showing.
 func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditActionFacetsParams) ([]ListAuditActionFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.Category, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -248,10 +249,10 @@ WITH filtered_logs AS (
   FROM audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
-    AND category = 'configuration'
+    AND category = $2
     AND (
-      $2::uuid IS NULL
-      OR project_id = $2::uuid
+      $3::uuid IS NULL
+      OR project_id = $3::uuid
     )
 ), actor_counts AS (
   SELECT
@@ -297,6 +298,7 @@ ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
 
 type ListAuditActorFacetsParams struct {
 	OrganizationID string
+	Category       string
 	ProjectID      uuid.NullUUID
 }
 
@@ -308,13 +310,14 @@ type ListAuditActorFacetsRow struct {
 	IsAdminActor bool
 }
 
-// Assistant activity and non-configuration entries are excluded: facets power
-// the platform audit feed, which hides them (see ListAuditLogs).
+// Assistant activity events are excluded: facets power the platform audit
+// feed, which hides them (see ListAuditLogs). Facets cover one category, the
+// one the feed beside them is showing.
 // Scoped through this organization's memberships for the same reason
 // ListAuditLogs is: the directory spans every tenant, and a facet label is
 // read by whoever can read the feed.
 func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFacetsParams) ([]ListAuditActorFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.Category, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +375,12 @@ WHERE a.organization_id = $1
     )
     OR a.subject_type = $6::text
   )
-  AND a.category = ANY($8::text[])
+  -- An empty or absent list is every category. The customer audit log always
+  -- names the category it shows.
+  AND (
+    coalesce(cardinality($8::text[]), 0) = 0
+    OR a.category = ANY($8::text[])
+  )
   AND (
     $9::text IS NULL
     OR a.subject_id = $9::text
@@ -448,7 +456,7 @@ type ListAuditLogsRow struct {
 // When no subject_type filter is given, assistant activity events (one per
 // assistant tool call) are excluded so they don't drown out the platform
 // audit feed. Only entries in the requested categories are returned, whatever
-// the other filters: the customer audit log asks for configuration entries and
+// the other filters: the customer audit log asks for one category at a time and
 // the private admin caller for every category. The private admin caller also
 // includes assistant events.
 // The actor name is resolved at read time rather than trusted from the row.
@@ -530,10 +538,10 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
-  AND category = 'configuration'
+  AND category = $2
   AND (
-    $2::uuid IS NULL
-    OR project_id = $2::uuid
+    $3::uuid IS NULL
+    OR project_id = $3::uuid
   )
 GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
@@ -541,6 +549,7 @@ ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
 
 type ListAuditSurfaceFacetsParams struct {
 	OrganizationID string
+	Category       string
 	ProjectID      uuid.NullUUID
 }
 
@@ -550,8 +559,9 @@ type ListAuditSurfaceFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity and non-configuration entries are excluded: facets power
-// the platform audit feed, which hides them (see ListAuditLogs).
+// Assistant activity events are excluded: facets power the platform audit
+// feed, which hides them (see ListAuditLogs). Facets cover one category, the
+// one the feed beside them is showing.
 // Rows predating attribution have no surface and are counted as 'unknown',
 // so the facet totals reconcile with the unfiltered feed rather than silently
 // omitting an organization's older history.
@@ -559,7 +569,7 @@ type ListAuditSurfaceFacetsRow struct {
 // nulls from before attribution and rows the application wrote as 'unknown',
 // and grouping on the raw column would return two facets with the same label.
 func (q *Queries) ListAuditSurfaceFacets(ctx context.Context, arg ListAuditSurfaceFacetsParams) ([]ListAuditSurfaceFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditSurfaceFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditSurfaceFacets, arg.OrganizationID, arg.Category, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -578,27 +588,29 @@ func (q *Queries) ListAuditSurfaceFacets(ctx context.Context, arg ListAuditSurfa
 	return items, nil
 }
 
-const listKitRuntimeAdmittedSubjects = `-- name: ListKitRuntimeAdmittedSubjects :many
+const listSecurityAdmittedSubjects = `-- name: ListSecurityAdmittedSubjects :many
 SELECT DISTINCT subject_id
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type = 'workload_admission'
   AND action = 'workload-admission:admit'
-  AND actor_type = 'system'
-  AND actor_id = 'kit-runtime'
+  AND (category = 'security' OR (actor_type = 'system' AND actor_id = 'kit-runtime'))
   AND subject_id = ANY($2::text[])
 `
 
-type ListKitRuntimeAdmittedSubjectsParams struct {
+type ListSecurityAdmittedSubjectsParams struct {
 	OrganizationID string
 	SubjectIds     []string
 }
 
-// Returns which of the given workload admissions the Kit runtime admitted for
-// itself. The audit trail is the signal because no customer can write it: an
-// admission's tags and name are customer-editable.
-func (q *Queries) ListKitRuntimeAdmittedSubjects(ctx context.Context, arg ListKitRuntimeAdmittedSubjectsParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listKitRuntimeAdmittedSubjects, arg.OrganizationID, arg.SubjectIds)
+// Returns which of the given workload admissions were admitted as a security
+// entry rather than a configuration change, as a Kit runtime admits its own
+// workload. The audit trail is the signal because no customer can write it: an
+// admission's tags and name are customer-editable. Entries written before
+// categories existed are recognized by the system:kit-runtime actor they
+// recorded.
+func (q *Queries) ListSecurityAdmittedSubjects(ctx context.Context, arg ListSecurityAdmittedSubjectsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listSecurityAdmittedSubjects, arg.OrganizationID, arg.SubjectIds)
 	if err != nil {
 		return nil, err
 	}
@@ -631,8 +643,7 @@ WITH batch AS (
         AND admit.subject_type = 'workload_admission'
         AND admit.subject_id = a.subject_id
         AND admit.action = 'workload-admission:admit'
-        AND admit.actor_type = 'system'
-        AND admit.actor_id = 'kit-runtime'
+        AND (admit.category = 'security' OR (admit.actor_type = 'system' AND admit.actor_id = 'kit-runtime'))
     )
   LIMIT $1
 )

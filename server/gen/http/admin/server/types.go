@@ -22655,7 +22655,13 @@ type AuditLogResponseBody struct {
 	ActingSurface string `form:"acting_surface" json:"acting_surface" xml:"acting_surface"`
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string         `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	ActingClientID *string `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string         `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	SubjectID          string          `form:"subject_id" json:"subject_id" xml:"subject_id"`
 	SubjectType        string          `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`

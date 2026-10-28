@@ -877,6 +877,18 @@ func (q *Queries) PostflightCountRemovedGatewayMembers(ctx context.Context, proj
 	return count, err
 }
 
+const postflightCountSecurityAuditLogs = `-- name: PostflightCountSecurityAuditLogs :one
+SELECT count(*) FROM audit_logs
+WHERE organization_id = $1::text AND category = 'security'
+`
+
+func (q *Queries) PostflightCountSecurityAuditLogs(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountSecurityAuditLogs, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountSetupTasks = `-- name: PostflightCountSetupTasks :one
 SELECT count(*) FROM organization_setup_tasks
 WHERE organization_id = $1::text

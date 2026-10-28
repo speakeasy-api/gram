@@ -22195,6 +22195,7 @@ func marshalAdminAuditLogToAuditLogResponseBody(v *admin.AuditLog) *AuditLogResp
 		Action:             v.Action,
 		ActingSurface:      v.ActingSurface,
 		ActingClientID:     v.ActingClientID,
+		Category:           v.Category,
 		SubjectID:          v.SubjectID,
 		SubjectType:        v.SubjectType,
 		SubjectDisplayName: v.SubjectDisplayName,

@@ -120,6 +120,7 @@ async function $do(
     "acting_surface": payload?.acting_surface,
     "action": payload?.action,
     "actor_id": payload?.actor_id,
+    "category": payload?.category,
     "cursor": payload?.cursor,
     "from": payload?.from,
     "project_slug": payload?.project_slug,

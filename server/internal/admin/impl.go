@@ -1189,7 +1189,7 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	return &gen.AuditLog{
 		ID: row.ID.String(), ProjectID: conv.FromNullableUUID(row.ProjectID), ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
 		ActorID: row.ActorID, ActorType: row.ActorType, ActorDisplayName: actorDisplayName, ActorSlug: conv.FromPGText[string](row.ActorSlug),
-		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID),
+		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID), Category: &row.Category,
 		SubjectID: row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
 		BeforeSnapshot: row.BeforeSnapshot, AfterSnapshot: row.AfterSnapshot, Metadata: metadata, CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
