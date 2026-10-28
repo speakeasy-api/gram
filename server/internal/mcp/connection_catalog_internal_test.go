@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -77,7 +78,7 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 				chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, authClient: &authClientResolution{clientID: uuid.New()},
 			}
 			gate := &metaGateContext{
-				projectID: uuid.New(), metaServerID: uuid.New(), execute: true, userID: "private user", sessionID: "private session",
+				projectID: uuid.New(), metaServerID: uuid.New(), discoveryMode: metamcp.DiscoveryModeCode, execute: true, userID: "private user", sessionID: "private session",
 				catalogRef: &toolfilter.CatalogReference{Mode: toolfilter.CatalogModeCached},
 				catalog: &connectionCatalog{ID: uuid.New(), ClientID: "private OAuth client", Subject: urn.NewUserSubject("private subject"), Members: map[string]connectionCatalogMember{
 					"source": {ServerID: member.serverID, ProjectID: member.projectID, BackendHash: member.configurationHash, Auth: &connectionCatalogAuth{ClientID: member.authClient.clientID, RegistrationID: member.chosenClientID}},
@@ -106,10 +107,11 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 			require.Equal(t, gate.projectID.String(), entry[string(attr.ProjectIDKey)])
 			require.Equal(t, member.projectID.String(), entry[string(attr.McpConsentMemberProjectIDKey)])
 			require.Equal(t, gate.catalog.ID.String(), entry[string(attr.McpConsentCatalogIDKey)])
-			require.Equal(t, string(gate.catalogRef.Mode), entry[string(attr.McpConsentModeKey)])
+			require.Equal(t, string(gate.catalogRef.Mode), entry[string(attr.McpConsentCatalogModeKey)])
+			require.Equal(t, string(gate.discoveryMode), entry[string(attr.McpConsentDiscoveryModeKey)])
 			require.Equal(t, gate.execute, entry[string(attr.McpConsentExecuteKey)])
 			require.Equal(t, tt.comparisons, entry[string(attr.McpConsentComparisonsKey)])
-			require.Len(t, entry, 12, "only bounded diagnostic fields may be logged")
+			require.Len(t, entry, 13, "only bounded diagnostic fields may be logged")
 			require.NotContains(t, logs.String(), "private", "never log configuration, user/session data, or upstream errors")
 		})
 	}

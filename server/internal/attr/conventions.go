@@ -533,7 +533,8 @@ const (
 	// never credentials, configuration hashes, or captured tool definitions.
 	McpConsentMemberProjectIDKey = attribute.Key("gram.mcp.consent.member_project_id")
 	McpConsentCatalogIDKey       = attribute.Key("gram.mcp.consent.catalog_id")
-	McpConsentModeKey            = attribute.Key("gram.mcp.consent.mode")
+	McpConsentDiscoveryModeKey   = attribute.Key("gram.mcp.consent.discovery_mode")
+	McpConsentCatalogModeKey     = attribute.Key("gram.mcp.consent.catalog_mode")
 	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
 	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
 
@@ -3367,7 +3368,12 @@ func SlogMcpConsentMemberProjectID(v string) slog.Attr {
 func SlogMcpConsentCatalogID(v string) slog.Attr {
 	return slog.String(string(McpConsentCatalogIDKey), v)
 }
-func SlogMcpConsentMode(v string) slog.Attr  { return slog.String(string(McpConsentModeKey), v) }
+func SlogMcpConsentDiscoveryMode(v string) slog.Attr {
+	return slog.String(string(McpConsentDiscoveryModeKey), v)
+}
+func SlogMcpConsentCatalogMode(v string) slog.Attr {
+	return slog.String(string(McpConsentCatalogModeKey), v)
+}
 func SlogMcpConsentExecute(v bool) slog.Attr { return slog.Bool(string(McpConsentExecuteKey), v) }
 func SlogMcpConsentComparisons(v map[string]bool) slog.Attr {
 	return slog.Any(string(McpConsentComparisonsKey), v)

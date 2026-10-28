@@ -348,9 +348,9 @@ func (s *Service) rejectCatalogMember(ctx context.Context, gate *metaGateContext
 			return err
 		}
 	}
-	mode := ""
+	catalogMode := ""
 	if gate.catalogRef != nil {
-		mode = string(gate.catalogRef.Mode)
+		catalogMode = string(gate.catalogRef.Mode)
 	}
 	s.logger.LogAttrs(ctx, slog.LevelInfo, "gateway consent validation failed",
 		attr.SlogMetaMcpServerID(gate.metaServerID.String()),
@@ -359,7 +359,8 @@ func (s *Service) rejectCatalogMember(ctx context.Context, gate *metaGateContext
 		attr.SlogMcpConsentMemberProjectID(member.projectID.String()),
 		attr.SlogReason(reason),
 		attr.SlogMcpConsentCatalogID(gate.catalog.ID.String()),
-		attr.SlogMcpConsentMode(mode),
+		attr.SlogMcpConsentCatalogMode(catalogMode),
+		attr.SlogMcpConsentDiscoveryMode(string(gate.discoveryMode)),
 		attr.SlogMcpConsentExecute(gate.execute),
 		attr.SlogMcpConsentComparisons(comparisons))
 	return err
