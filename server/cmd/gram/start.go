@@ -1513,6 +1513,7 @@ func newStartCommand() *cli.Command {
 			agentService := agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens).
 				WithWorkloadTokenTargets(mcpService)
 			agentService.SetAgentVersions(deviceagentversions.NewStore(redisClient))
+			agentService.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state", agent.StateReportRate, ratelimit.WithMetrics(meterProvider)))
 			agent.Attach(mux, agentService)
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
 			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, chatSessionsManager, upstreamRevoker))

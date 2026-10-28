@@ -115,6 +115,7 @@ trackedFiles:
   src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/agentReportAIScan.ts: {}
   src/funcs/agentReportSessionMoved.ts: {}
+  src/funcs/agentReportState.ts: {}
   src/funcs/agentUnhideMcpServer.ts: {}
   src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/agentUpsertAiScanTarget.ts: {}
@@ -930,6 +931,12 @@ trackedFiles:
   src/models/components/agentserverconnection.ts: {}
   src/models/components/agentsession.ts: {}
   src/models/components/agentsessionmeta.ts: {}
+  src/models/components/agentstatepolicy.ts: {}
+  src/models/components/agentstaterollback.ts: {}
+  src/models/components/agentstatetool.ts: {}
+  src/models/components/agentstateupdate.ts: {}
+  src/models/components/agentstateversions.ts: {}
+  src/models/components/agentstatewithheldplugin.ts: {}
   src/models/components/agentusage.ts: {}
   src/models/components/aidetection.ts: {}
   src/models/components/aidetectionuser.ts: {}
@@ -1742,6 +1749,8 @@ trackedFiles:
   src/models/components/replaceidentityproviderconnectionclientsecretrequestbody.ts: {}
   src/models/components/reportaiscanrequestbody.ts: {}
   src/models/components/reportsessionmovedrequestbody.ts: {}
+  src/models/components/reportstaterequestbody.ts: {}
+  src/models/components/reportstateresult.ts: {}
   src/models/components/requestaccessform.ts: {}
   src/models/components/requestaccessresult.ts: {}
   src/models/components/researchpagefetchcall.ts: {}
@@ -2824,6 +2833,7 @@ trackedFiles:
   src/models/operations/replaceidentityproviderconnectionclientsecret.ts: {}
   src/models/operations/reportagentaiscan.ts: {}
   src/models/operations/reportagentsessionmoved.ts: {}
+  src/models/operations/reportagentstate.ts: {}
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resetoktaresourceconnection.ts: {}
   src/models/operations/resolvechallenge.ts: {}
@@ -3832,6 +3842,7 @@ trackedFiles:
   src/react-query/replaceIdentityProviderConnectionClientSecret.ts: {}
   src/react-query/reportAgentAIScan.ts: {}
   src/react-query/reportAgentSessionMoved.ts: {}
+  src/react-query/reportAgentState.ts: {}
   src/react-query/requestAccess.ts: {}
   src/react-query/resetOktaResourceConnection.ts: {}
   src/react-query/resolveChallenge.ts: {}
@@ -11994,6 +12005,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  reportAgentState:
+    speakeasy-default-report-agent-state:
+      requestBody:
+        application/json: {"agent": {"speakeasyd": "<value>"}, "enforcement_halted": false, "generated_at": "2026-02-24T22:25:40.361Z", "policy": {"withheld_plugins": []}, "schema_version": 382171, "tools": [{"layer": "<value>", "outcome": "<value>", "tool": "<value>"}]}
+      responses:
+        "200":
+          application/json: {"received_at": "2026-01-29T08:49:11.472Z", "stored": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   requestAccess:
     speakeasy-default-request-access:
       requestBody:

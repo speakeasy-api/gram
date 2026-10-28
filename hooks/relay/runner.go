@@ -341,9 +341,10 @@ func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenth
 	// fails the prompt open on every provider: blocking each turn on a
 	// credential the machine does not hold would brick the session, and the
 	// turn's tool events stay gated regardless. Only Claude can carry the
-	// context note that routes the user to sign-in.
+	// context note that routes the user to sign-in. An agent's plugin skips
+	// it: a personal sign-in would record the agent's events under that person.
 	if v.nudge {
-		if e.Provider == agenthooks.ProviderClaudeCode {
+		if e.Provider == agenthooks.ProviderClaudeCode && !r.cfg.AgentKey {
 			if note := r.loginNudge(e.Session.ID); note != "" {
 				return agenthooks.AcceptPrompt().WithContext(note), nil
 			}
@@ -425,10 +426,11 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 // holds no usable credential — never authenticated, key lost or rejected, or a
 // shared cache minted for a different server or org — then relays the
 // session.started telemetry. Viability guards and the attempt cooldown keep
-// the browser from nagging.
+// the browser from nagging. An agent's plugin never opens one: its key
+// outranks any cache a sign-in would write.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
 	_, cached := readCachedAuth(r.cfg)
-	if r.cfg.BrowserLogin && Env("HOOKS_API_KEY") == "" && !cached {
+	if r.cfg.BrowserLogin && !r.cfg.AgentKey && Env("HOOKS_API_KEY") == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)

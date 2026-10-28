@@ -124,7 +124,7 @@ func UsageCommands() []string {
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
-		"agent (get-plugins|get-my-connections|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
+		"agent (get-plugins|get-my-connections|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
@@ -563,6 +563,14 @@ func ParseEndpoint(
 		agentReportAIScanEmailFlag        = agentReportAIScanFlags.String("email", "", "")
 		agentReportAIScanSerialNumberFlag = agentReportAIScanFlags.String("serial-number", "", "")
 		agentReportAIScanHostnameFlag     = agentReportAIScanFlags.String("hostname", "", "")
+
+		agentReportStateFlags            = flag.NewFlagSet("report-state", flag.ExitOnError)
+		agentReportStateBodyFlag         = agentReportStateFlags.String("body", "REQUIRED", "")
+		agentReportStateApikeyTokenFlag  = agentReportStateFlags.String("apikey-token", "", "")
+		agentReportStateEmailFlag        = agentReportStateFlags.String("email", "", "")
+		agentReportStateSerialNumberFlag = agentReportStateFlags.String("serial-number", "", "")
+		agentReportStateHostnameFlag     = agentReportStateFlags.String("hostname", "", "")
+		agentReportStateEnvironmentFlag  = agentReportStateFlags.String("environment", "", "")
 
 		agentCreateSessionHandoffFlags            = flag.NewFlagSet("create-session-handoff", flag.ExitOnError)
 		agentCreateSessionHandoffBodyFlag         = agentCreateSessionHandoffFlags.String("body", "REQUIRED", "")
@@ -5455,6 +5463,7 @@ func ParseEndpoint(
 	agentGetSessionMetaFlags.Usage = agentGetSessionMetaUsage
 	agentReportSessionMovedFlags.Usage = agentReportSessionMovedUsage
 	agentReportAIScanFlags.Usage = agentReportAIScanUsage
+	agentReportStateFlags.Usage = agentReportStateUsage
 	agentCreateSessionHandoffFlags.Usage = agentCreateSessionHandoffUsage
 
 	agentsFlags.Usage = agentsUsage
@@ -6956,6 +6965,9 @@ func ParseEndpoint(
 
 			case "report-ai-scan":
 				epf = agentReportAIScanFlags
+
+			case "report-state":
+				epf = agentReportStateFlags
 
 			case "create-session-handoff":
 				epf = agentCreateSessionHandoffFlags
@@ -10201,6 +10213,9 @@ func ParseEndpoint(
 			case "report-ai-scan":
 				endpoint = c.ReportAIScan()
 				data, err = agentc.BuildReportAIScanPayload(*agentReportAIScanBodyFlag, *agentReportAIScanApikeyTokenFlag, *agentReportAIScanEmailFlag, *agentReportAIScanSerialNumberFlag, *agentReportAIScanHostnameFlag)
+			case "report-state":
+				endpoint = c.ReportState()
+				data, err = agentc.BuildReportStatePayload(*agentReportStateBodyFlag, *agentReportStateApikeyTokenFlag, *agentReportStateEmailFlag, *agentReportStateSerialNumberFlag, *agentReportStateHostnameFlag, *agentReportStateEnvironmentFlag)
 			case "create-session-handoff":
 				endpoint = c.CreateSessionHandoff()
 				data, err = agentc.BuildCreateSessionHandoffPayload(*agentCreateSessionHandoffBodyFlag, *agentCreateSessionHandoffApikeyTokenFlag, *agentCreateSessionHandoffSerialNumberFlag, *agentCreateSessionHandoffHostnameFlag)
@@ -14471,6 +14486,7 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `    get-session-meta: Resolve display metadata (Speakeasy chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.`)
 	fmt.Fprintln(os.Stderr, `    report-session-moved: Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
 	fmt.Fprintln(os.Stderr, `    report-ai-scan: Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.`)
+	fmt.Fprintln(os.Stderr, `    report-state: Record the device agent's applied state: the policy etag it enforces, each tool's enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.`)
 	fmt.Fprintln(os.Stderr, `    create-session-handoff: Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -14752,6 +14768,34 @@ func agentReportAIScanUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-ai-scan --body '{\n      \"matches\": [\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         }\n      ],\n      \"scan_completed_at\": \"1970-01-01T00:00:01Z\",\n      \"scan_started_at\": \"1970-01-01T00:00:01Z\",\n      \"target_list_version\": 1\n   }' --apikey-token \"abc123\" --email \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
+}
+
+func agentReportStateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent report-state", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -email STRING")
+	fmt.Fprint(os.Stderr, " -serial-number STRING")
+	fmt.Fprint(os.Stderr, " -hostname STRING")
+	fmt.Fprint(os.Stderr, " -environment STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record the device agent's applied state: the policy etag it enforces, each tool's enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -serial-number STRING: `)
+	fmt.Fprintln(os.Stderr, `    -hostname STRING: `)
+	fmt.Fprintln(os.Stderr, `    -environment STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-state --body '{\n      \"agent\": {\n         \"arch\": \"aaa\",\n         \"os\": \"aaa\",\n         \"speakeasy\": \"aaa\",\n         \"speakeasy_ui\": \"aaa\",\n         \"speakeasyd\": \"aaa\"\n      },\n      \"drift_counting_since\": \"1970-01-01T00:00:01Z\",\n      \"enforcement_halted\": false,\n      \"generated_at\": \"1970-01-01T00:00:01Z\",\n      \"policy\": {\n         \"applied_at\": \"1970-01-01T00:00:01Z\",\n         \"applied_etag\": \"aaa\",\n         \"remote_config_etag\": \"aaa\",\n         \"remote_config_failed\": false,\n         \"withheld_plugins\": [\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            },\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            },\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            }\n         ]\n      },\n      \"schema_version\": 2,\n      \"tools\": [\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         },\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         },\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         }\n      ],\n      \"update\": {\n         \"auto_update\": \"aaa\",\n         \"channel\": \"aaa\",\n         \"current_blocked\": false,\n         \"last_rollback\": {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"from\": \"aaa\",\n            \"to\": \"aaa\"\n         },\n         \"pinned_target\": \"aaa\"\n      }\n   }' --apikey-token \"abc123\" --email \"abc123\" --serial-number \"abc123\" --hostname \"abc123\" --environment \"abc123\"")
 }
 
 func agentCreateSessionHandoffUsage() {
