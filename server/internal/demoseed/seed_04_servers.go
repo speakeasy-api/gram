@@ -658,7 +658,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Linear", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own GitHub token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
-		{ID: s.det("auth-client-github-app"), OrgID: org, ProjectID: proj, ClientType: "service_account", Source: "admin", Name: "GitHub App (demo — disabled)"},
+		{ID: s.det("auth-client-github-app"), OrgID: org, ProjectID: proj, ClientType: "service_account", Source: "admin", Name: "GitHub App (demo — disabled)", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 	}
 	for _, client := range clients {
 		if err := s.q.ServersInsertAuthClient(ctx, client); err != nil {

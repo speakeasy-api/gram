@@ -81,7 +81,7 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("begin GitHub App configuration: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	queries := repo.New(tx)
@@ -90,7 +90,10 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
 	}
 	lockedTarget, err := queries.LockGitHubAppServerURL(ctx, repo.LockGitHubAppServerURLParams{McpServerID: serverID, OrganizationID: authCtx.ActiveOrganizationID})
-	if err != nil || lockedTarget != target {
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock GitHub App MCP destination").LogError(ctx, logger)
+	}
+	if lockedTarget != target {
 		return nil, oops.E(oops.CodeBadRequest, nil, "MCP destination changed during verification; retry configuration")
 	}
 	var client repo.McpAuthClient
@@ -120,31 +123,31 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 		}
 		client, err = queries.UpdateAuthClient(ctx, repo.UpdateAuthClientParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID, Name: name, Enabled: client.Enabled})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("update GitHub App client: %w", err)
 		}
 	} else {
 		client, err = queries.CreateGitHubAppAuthClient(ctx, repo.CreateGitHubAppAuthClientParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: server.ProjectID, Valid: true}, Name: name})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create GitHub App client: %w", err)
 		}
 	}
 	if err := queries.SetGitHubAppCredential(ctx, repo.SetGitHubAppCredentialParams{AuthClientID: client.ID, OrganizationID: authCtx.ActiveOrganizationID, InstanceUrl: instance, AppID: appID, InstallationID: installationID, PrivateKeyEncrypted: encrypted, UpstreamOrigin: origin}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store GitHub App credential: %w", err)
 	}
 	if err := queries.AttachGitHubAppAuthClient(ctx, repo.AttachGitHubAppAuthClientParams{AuthClientID: client.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, McpServerID: server.ID}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("attach GitHub App client: %w", err)
 	}
 	if err := queries.ReplaceServerAuthWithGitHubApp(ctx, repo.ReplaceServerAuthWithGitHubAppParams{McpServerID: server.ID, OrganizationID: authCtx.ActiveOrganizationID, AuthClientID: client.ID}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("replace upstream identity: %w", err)
 	}
 	after, err := s.view(ctx, queries, authCtx.ActiveOrganizationID, client, logger)
 	if err != nil {
 		return nil, err
 	}
 	if s.audit != nil {
-		err = s.audit.LogAuthClientUpdate(ctx, tx, audit.LogAuthClientUpdateEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, AuthClientURN: urn.NewAuthClient(client.ID), AuthClientName: client.Name, AuthClientSnapshotBefore: before, AuthClientSnapshotAfter: after})
+		err = s.audit.LogAuthClientUpdate(ctx, tx, audit.LogAuthClientUpdateEvent{ActorSlug: nil, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, AuthClientURN: urn.NewAuthClient(client.ID), AuthClientName: client.Name, AuthClientSnapshotBefore: before, AuthClientSnapshotAfter: after})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("audit GitHub App configuration: %w", err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

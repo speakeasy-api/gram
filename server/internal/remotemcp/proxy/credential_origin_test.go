@@ -16,7 +16,10 @@ func TestCredentialOriginRejectsChangedDestinationBeforeDial(t *testing.T) {
 			p := &Proxy{Logger: testenv.NewLogger(t), RemoteURL: target, CredentialOrigin: "https://mcp.example.com", NonStreamingTimeout: time.Second, AuthorizationOverride: "TEST_SECRET"}
 			request, err := http.NewRequest(http.MethodPost, "https://localhost/mcp", nil)
 			require.NoError(t, err)
-			_, _, err = p.forwardRequest(t.Context(), request, nil, nil)
+			_, response, err := p.forwardRequest(t.Context(), request, nil, nil)
+			if response != nil {
+				require.NoError(t, response.Body.Close())
+			}
 			require.ErrorContains(t, err, "upstream request")
 			require.NotContains(t, err.Error(), "TEST_SECRET")
 		})

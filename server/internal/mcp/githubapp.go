@@ -18,7 +18,7 @@ import (
 func (s *Service) githubAppMode(ctx context.Context, organizationID string, serverID uuid.UUID, mode feature.AuthClientResolverMode) (feature.AuthClientResolverMode, error) {
 	present, err := authclientsrepo.New(s.db).ServerHasGitHubAppAuthClient(ctx, authclientsrepo.ServerHasGitHubAppAuthClientParams{OrganizationID: organizationID, McpServerID: serverID})
 	if err != nil {
-		return mode, err
+		return mode, fmt.Errorf("check GitHub App requirement: %w", err)
 	}
 	if present {
 		return feature.AuthClientResolverEnforced, nil
@@ -32,17 +32,20 @@ func (s *Service) prepareGitHubApp(ctx context.Context, organizationID string, s
 	}
 	token, err := s.githubApps.Credential(ctx, organizationID, res.clientID, serverID)
 	if err != nil {
-		return res, err
+		return res, fmt.Errorf("resolve GitHub App credential: %w", err)
 	}
 	res.githubCredential = &token
 	res.githubRenew = func(ctx context.Context) (string, bool, error) {
 		forgotten, err := token.Forget(ctx)
-		if err != nil || !forgotten {
-			return "", false, err
+		if err != nil {
+			return "", false, fmt.Errorf("invalidate GitHub App credential: %w", err)
+		}
+		if !forgotten {
+			return "", false, nil
 		}
 		next, err := s.githubApps.Credential(ctx, organizationID, res.clientID, serverID)
 		if err != nil {
-			return "", false, err
+			return "", false, fmt.Errorf("renew GitHub App credential: %w", err)
 		}
 		if next.Origin != token.Origin {
 			return "", false, fmt.Errorf("GitHub App credential origin changed; reconnect")
@@ -55,7 +58,7 @@ func (s *Service) prepareGitHubApp(ctx context.Context, organizationID string, s
 			own = append(own, header)
 		}
 	}
-	own = append(own, proxy.ConfiguredHeader{Name: "Authorization", IsRequired: true, StaticValue: "Bearer " + token.Value()})
+	own = append(own, proxy.ConfiguredHeader{ValueFromRequestHeader: "", Name: "Authorization", IsRequired: true, StaticValue: "Bearer " + token.Value()})
 	return applyAuthClientHeaders(res, own), nil
 }
 

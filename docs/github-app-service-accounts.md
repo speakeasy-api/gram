@@ -28,6 +28,6 @@ Do not paste a generated installation token into the static credential form. It 
 
 - Auth-client category: `service_account`; provider storage: `mcp_auth_client_github_apps`. No synthetic OAuth registration or issuer.
 - Setup and settings share the GitHub App fields. Provider credentials are never returned by read APIs or audit snapshots.
-- Platform MCP's `get_mcp_connection_settings` reports `credential_provider`. Existing shared-auth-client access tools remain applicable. Private-key provisioning stays in the authenticated dashboard/API rather than adding a tool that puts the PEM in agent conversations.
+- Platform MCP's `get_mcp_connection_settings` reports `credential_provider`. Its `configured` status means an enabled choice is offered, as for other providers; it is not a live token, header-freshness, or connectivity check. Runtime checks can still require setup or reconnection. Existing shared-auth-client access tools remain applicable. Private-key provisioning stays in the authenticated dashboard/API rather than adding a tool that puts the PEM in agent conversations.
 - Command K searches service-account display names across all result pages for authorized organization readers. Results are project-scoped and open the attached server’s identity settings. Credential names remain local to fuzzy search and are not sent to the intent service.
 - The demo contains a disabled GitHub App with an unusable placeholder key. It must never mint tokens. Replace credentials and explicitly enable the client to test an actual installation.

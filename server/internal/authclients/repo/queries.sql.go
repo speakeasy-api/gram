@@ -1575,6 +1575,55 @@ func (q *Queries) LockIssuanceProfileForCaller(ctx context.Context, arg LockIssu
 	return i, err
 }
 
+const lockOrganizationMCPServer = `-- name: LockOrganizationMCPServer :one
+SELECT
+  ms.id,
+  ms.project_id,
+  ms.name,
+  ms.slug,
+  ms.visibility,
+  ms.requires_upstream_auth,
+  ms.toolset_id
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE ms.id = $2
+  AND ms.deleted IS FALSE
+FOR UPDATE OF ms
+`
+
+type LockOrganizationMCPServerParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type LockOrganizationMCPServerRow struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	Name                 pgtype.Text
+	Slug                 pgtype.Text
+	Visibility           string
+	RequiresUpstreamAuth pgtype.Bool
+	ToolsetID            uuid.NullUUID
+}
+
+func (q *Queries) LockOrganizationMCPServer(ctx context.Context, arg LockOrganizationMCPServerParams) (LockOrganizationMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationMCPServer, arg.OrganizationID, arg.ID)
+	var i LockOrganizationMCPServerRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Visibility,
+		&i.RequiresUpstreamAuth,
+		&i.ToolsetID,
+	)
+	return i, err
+}
+
 const renameIssuanceProfile = `-- name: RenameIssuanceProfile :one
 UPDATE issuance_selection_profiles
 SET name = $1,

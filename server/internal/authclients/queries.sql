@@ -140,6 +140,24 @@ WHERE msac.auth_client_id = @auth_client_id
   AND ms.project_id = msac.project_id
 RETURNING msac.id, msac.project_id, ms.name AS mcp_server_name;
 
+-- name: LockOrganizationMCPServer :one
+SELECT
+  ms.id,
+  ms.project_id,
+  ms.name,
+  ms.slug,
+  ms.visibility,
+  ms.requires_upstream_auth,
+  ms.toolset_id
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE ms.id = @id
+  AND ms.deleted IS FALSE
+FOR UPDATE OF ms;
+
 -- name: GetOrganizationMCPServer :one
 SELECT
   ms.id,
