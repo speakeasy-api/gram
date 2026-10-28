@@ -15,6 +15,10 @@ on:
       - ".mise-tasks/**/code-runner*.sh"
       - ".mise-tasks/build/monty.sh"
       - ".github/workflows/code-runner.yaml"
+      - "mise.toml"
+      - "go.mod"
+      - "go.sum"
+      - ".dockerignore"
   push:
     branches: [main]
     paths:
@@ -31,6 +35,10 @@ on:
       - ".mise-tasks/**/code-runner*.sh"
       - ".mise-tasks/build/monty.sh"
       - ".github/workflows/code-runner.yaml"
+      - "mise.toml"
+      - "go.mod"
+      - "go.sum"
+      - ".dockerignore"
   workflow_dispatch:
 
 concurrency:
@@ -45,10 +53,34 @@ jobs:
     name: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lists the pull request files
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Go integration changes still need the runtime binaries, but do not
+      # require rerunning Rust checks or rebuilding the restricted Linux image.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: changes
+        with:
+          filters: |
+            runner:
+              - 'agents/code-runner/**'
+              - '.mise-tasks/build/code-runner.sh'
+              - '.mise-tasks/build/monty.sh'
+              - '.mise-tasks/test/code-runner.sh'
+              - '.mise-tasks/lint/code-runner.sh'
+              - 'mise.toml'
+              - '.github/workflows/code-runner.yaml'
+            image:
+              - 'agents/code-runner/**'
+              - '.mise-tasks/build/code-runner-image.sh'
+              - '.mise-tasks/test/code-runner-image.sh'
+              - '.dockerignore'
+              - 'mise.toml'
+              - '.github/workflows/code-runner.yaml'
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
           minimum_release_age: 1d
@@ -61,7 +93,10 @@ jobs:
           rustflags: ""
       - run: mise run build:monty
       - run: mise run build:code-runner
-      - run: mise run test:code-runner
-      - run: mise run lint:code-runner
-      - run: mise run test:code-runner-image
+      - if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.runner == 'true'
+        run: mise run test:code-runner
+      - if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.runner == 'true'
+        run: mise run lint:code-runner
+      - if: github.event_name == 'workflow_dispatch' || steps.changes.outputs.image == 'true'
+        run: mise run test:code-runner-image
       - run: mise run test:code-mode
