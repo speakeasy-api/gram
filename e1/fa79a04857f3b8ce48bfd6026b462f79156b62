@@ -1,0 +1,16 @@
+.cursor/install.sh
+  h_9630b74bdac540 21-23
+.cursor/start.sh
+  h_9630b74bdac540 4-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e1fa79a04857f3b8ce48bfd6026b462f79156b62",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

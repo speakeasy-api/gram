@@ -1,0 +1,91 @@
+server/internal/catalogpromotion/service.go
+  h_9630b74bdac540 33,140-144
+client/admin/src/pages/registry/RegistryPromotionSheet.test.tsx
+  h_9630b74bdac540 1,10,12,595-663
+server/internal/platformmcp/setupcorpus/corpus_test.go
+  h_9630b74bdac540 12,54
+server/internal/catalogpromotion/suggestions_test.go
+  h_9630b74bdac540 25-39
+server/internal/admin/registry_promotion_test.go
+  h_9630b74bdac540 5-6,9,32-47
+  s_4bc45ce4e6339a::t_3846543d7ee65c 48-49
+client/admin/src/pages/registry/registryPromotionGuides.test.ts
+  h_9630b74bdac540 1-36
+server/internal/setupguides/setupguides_test.go
+  h_9630b74bdac540 1-87
+server/internal/adminmcp/tool_write_catalog_promotion.go
+  h_9630b74bdac540 18,229,234,238-248,282
+server/internal/catalogpromotion/types.go
+  h_9630b74bdac540 11,99-112
+server/internal/adminmcp/tool_write_catalog_promotion_test.go
+  h_9630b74bdac540 16,89,115-123
+  h_9630b74bdac540 124-125
+client/admin/src/pages/registry/registryPromotionGuides.ts
+  h_9630b74bdac540 1-33
+server/internal/setupguides/setupguides.go
+  h_9630b74bdac540 1-74
+docs/runbooks/catalogue-promotions.md
+  h_9630b74bdac540 66-74,148-149
+.changeset/catalogue-promotion-slug-warning.md
+  h_9630b74bdac540 1-6
+client/admin/src/pages/registry/PromotionSlugGuideHint.tsx
+  h_9630b74bdac540 1-59
+server/internal/catalogpromotion/curation_test.go
+  h_9630b74bdac540 70-72
+server/internal/catalogpromotion/suggestions.go
+  h_9630b74bdac540 8,52-56
+  s_4bc45ce4e6339a::t_90fe5d297e4032 57
+server/design/admin/registry_promotion.go
+  h_9630b74bdac540 19-25,45-47
+server/internal/platformmcp/setupcorpus/corpus.go
+  h_9630b74bdac540 22,27-28,138
+server/internal/catalogpromotion/setup_guides_test.go
+  h_9630b74bdac540 1-39
+client/admin/src/pages/registry/RegistryPromotionSheet.tsx
+  h_9630b74bdac540 30-31,377-379,400-404
+  h_9630b74bdac540 405
+server/internal/admin/registry_promotion.go
+  h_9630b74bdac540 30-33,39
+  s_4bc45ce4e6339a::t_cacf4b49557118 38
+.speakeasy/out.admin.openapi.yaml
+  h_9630b74bdac540 10506-10508,10537-10544,10583-10593
+client/admin/src/sdk/.speakeasy/gen.lock
+  h_9630b74bdac540 231
+client/admin/src/sdk/src/models/components/adminregistrypromotioncandidate.ts
+  h_9630b74bdac540 14-17,45-48,61-68,112,127-130,154,165-166
+client/admin/src/sdk/src/models/components/adminregistrypromotionsetupguide.ts
+  h_9630b74bdac540 1-35
+server/gen/admin/service.go
+  h_9630b74bdac540 1456-1463,1496-1501
+server/gen/http/admin/client/encode_decode.go
+  h_9630b74bdac540 25999-26000,26026-26035,26063-26077
+server/gen/http/admin/client/types.go
+  h_9630b74bdac540 2204-2220,2249-2265,2294-2310,2339-2355,23599-23615,23653-23659,36765-36766,36792-36801,36972-36973,36999-37008,37179-37180,37206-37215,37386-37387,37413-37422,45323-45329,45421-45427,45519-45525,45617-45623,73802-73808,73843-73854
+server/gen/http/admin/server/encode_decode.go
+  h_9630b74bdac540 23393-23394,23420-23429,23457-23471
+server/gen/http/admin/server/types.go
+  h_9630b74bdac540 2212-2228,2257-2273,2302-2318,2347-2363,23580-23596,23634-23640,25822-25823,25849-25858,25877-25878,25904-25913,25933-25934,25960-25969,25989-25990,26016-26025
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 95010-95012,95041-95048,95087-95097
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8a47e67a67ae1dc18032667e9842a2b54128c555",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_4bc45ce4e6339a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "70aba2f6-9172-45c0-99ae-6f960686a2e1",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
