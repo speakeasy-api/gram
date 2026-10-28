@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"maps"
 	"net"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -67,7 +66,7 @@ type KitGKEProvisionInput struct {
 	WorkloadServiceAccount, WorkloadAudience string
 	Identity                                 KitGKEIdentity
 	Model                                    string
-	Name, Image, MetadataImage, IngressCIDR  string
+	Name, Image, IngressCIDR                 string
 	GuestPort                                int32
 	Command, Args                            []string
 	AgentsMD, MCPJSON, GatewayToken          []byte
@@ -120,9 +119,6 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	}
 	if !kitGKEExplicitImage(in.Image) {
 		return out, fmt.Errorf("kit image requires an explicit non-latest version tag or digest")
-	}
-	if !regexp.MustCompile(`^[^@\s]+@sha256:[a-f0-9]{64}$`).MatchString(in.MetadataImage) {
-		return out, fmt.Errorf("kit metadata image requires an immutable sha256 digest")
 	}
 	if err := validateKitResources(in.Resources); err != nil {
 		return out, err
@@ -256,20 +252,18 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		return out, err
 	}
 	pod.Spec.Volumes = append(pod.Spec.Volumes, workload)
-	metadataEnv := []corev1.EnvVar{
-		{Name: "WORKLOAD_TOKEN_AUDIENCE", Value: in.WorkloadAudience},
-		{Name: "WORKLOAD_TOKEN_PATH", Value: KitWorkloadAssertionPath},
-		{Name: "WORKLOAD_TOKEN_ISSUER", Value: in.issuer()},
-		{Name: "WORKLOAD_TOKEN_SUBJECT", Value: in.subject(in.Identity.Namespace, in.WorkloadServiceAccount)},
-	}
 	// A native sidecar's startup probe gates the Kit process on fresh authority.
 	pod.Spec.InitContainers = []corev1.Container{{
-		Name: "workload-token", Image: in.MetadataImage,
-		Command: []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs"},
-		Env:     metadataEnv, RestartPolicy: new(corev1.ContainerRestartPolicyAlways),
-		StartupProbe:    &corev1.Probe{ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs", "--ready"}}}, PeriodSeconds: 2, TimeoutSeconds: 5, FailureThreshold: 60},
+		Name: "workload-token", Image: kitGKEIdentitySidecarImage,
+		Command: []string{"/bin/sh", "-c", kitGKEIdentitySidecarScript},
+		Env: []corev1.EnvVar{
+			{Name: "WORKLOAD_TOKEN_AUDIENCE", Value: in.WorkloadAudience},
+			{Name: "WORKLOAD_TOKEN_PATH", Value: KitWorkloadAssertionPath},
+		},
+		RestartPolicy:   new(corev1.ContainerRestartPolicyAlways),
+		StartupProbe:    &corev1.Probe{ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"test", "-s", KitWorkloadAssertionPath}}}, PeriodSeconds: 2, TimeoutSeconds: 5, FailureThreshold: 60},
 		SecurityContext: security,
-		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("256Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("64Mi")}},
+		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("8Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("64Mi")}},
 		VolumeMounts:    []corev1.VolumeMount{{Name: "workload", MountPath: "/var/run/secrets/speakeasy/workload"}},
 	}}
 	if in.SnapshotsEnabled {

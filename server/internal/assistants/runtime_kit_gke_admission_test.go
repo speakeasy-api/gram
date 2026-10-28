@@ -39,10 +39,11 @@ func TestKitGKERenderMetadataRefreshSidecar(t *testing.T) {
 	pod := kitPodTemplate(t, objects)
 	require.Len(t, pod.Spec.InitContainers, 1)
 	sidecar := pod.Spec.InitContainers[0]
-	require.Equal(t, input.MetadataImage, sidecar.Image)
+	require.Equal(t, kitGKEIdentitySidecarImage, sidecar.Image)
+	require.Regexp(t, `@sha256:[a-f0-9]{64}$`, sidecar.Image)
 	require.Equal(t, "Always", string(*sidecar.RestartPolicy))
-	require.Equal(t, []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs"}, sidecar.Command)
-	require.Equal(t, []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs", "--ready"}, sidecar.StartupProbe.Exec.Command)
+	require.Equal(t, []string{"/bin/sh", "-c", kitGKEIdentitySidecarScript}, sidecar.Command)
+	require.Equal(t, []string{"test", "-s", KitWorkloadAssertionPath}, sidecar.StartupProbe.Exec.Command)
 	require.Equal(t, int64(1000), *pod.Spec.SecurityContext.RunAsUser)
 	require.False(t, *sidecar.SecurityContext.AllowPrivilegeEscalation)
 	require.Equal(t, pod.Spec.Containers[0].SecurityContext, sidecar.SecurityContext)
@@ -52,8 +53,8 @@ func TestKitGKERenderMetadataRefreshSidecar(t *testing.T) {
 	}
 	require.Equal(t, input.WorkloadAudience, env["WORKLOAD_TOKEN_AUDIENCE"])
 	require.Equal(t, KitWorkloadAssertionPath, env["WORKLOAD_TOKEN_PATH"])
-	require.Equal(t, input.Workload.Subject, env["WORKLOAD_TOKEN_SUBJECT"])
-	require.Equal(t, "256Mi", sidecar.Resources.Limits.Memory().String())
+	require.Len(t, env, 2)
+	require.Equal(t, "32Mi", sidecar.Resources.Limits.Memory().String())
 	require.Equal(t, "16Mi", sidecar.Resources.Requests.StorageEphemeral().String())
 	require.Equal(t, "64Mi", sidecar.Resources.Limits.StorageEphemeral().String())
 	require.Len(t, sidecar.VolumeMounts, 1)
@@ -68,11 +69,6 @@ func TestKitGKERenderMetadataRefreshSidecar(t *testing.T) {
 	require.Empty(t, mount.SubPath)
 	require.Empty(t, mount.SubPathExpr)
 	require.Equal(t, sidecar.VolumeMounts[0].MountPath, mount.MountPath)
-	for _, image := range []string{"", "registry.example/assistant:latest", "registry.example/assistant:v1", "registry.example/assistant@sha256:bad"} {
-		input.MetadataImage = image
-		_, err := RenderKitGKEProvision(input)
-		require.ErrorContains(t, err, "immutable sha256 digest")
-	}
 }
 
 func TestKitGKERenderExplicitZeroReplicaPool(t *testing.T) {

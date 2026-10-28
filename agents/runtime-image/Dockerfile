@@ -30,14 +30,13 @@ RUN apt-get update \
 
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 COPY agents/runtime-image/ca-bundle.mjs /usr/local/share/gram/ca-bundle.mjs
-COPY agents/runtime-image/kit-workload-token.mjs /usr/local/share/gram/kit-workload-token.mjs
 # Fail closed if distro certificate filenames change. Bun needs explicit
 # OpenSSL rejection entries in addition to the filtered system store.
 RUN bun /usr/local/share/gram/ca-bundle.mjs \
     /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs /usr/local/share/gram/bun-ca-certificates.pem
 ENV SSL_CERT_FILE=/usr/local/share/gram/bun-ca-certificates.pem
 RUN --mount=type=bind,source=agents/runtime-image,target=/ca-tests \
-    bun test /ca-tests/ca-bundle.test.mjs /ca-tests/kit-workload-token.test.mjs
+    bun test /ca-tests/ca-bundle.test.mjs
 
 FROM runtime-base AS sandbox-deps
 WORKDIR /sandbox

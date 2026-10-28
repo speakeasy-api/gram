@@ -36,9 +36,10 @@ short-lived workload token rotation.
 Infrastructure contract (review/apply separately):
 
 - Permit pulling the configured released Kit image, the nginx image above,
-  and the digest-pinned metadata sidecar image. The sandbox has two ordinary containers (`kit`, `acp-tls`) and a native
-  restartable init sidecar (`workload-token`), UID/GID
-  1000, no capabilities, and automatic service-account token mounting disabled.
+  and the digest-pinned `docker.io/curlimages/curl` image used by the identity
+  sidecar. The sandbox has two ordinary containers (`kit`, `acp-tls`) and a
+  native restartable init sidecar (`workload-token`), UID/GID 1000, no
+  capabilities, and automatic service-account token mounting disabled.
 - Keep server/worker ingress limited to the configured guest TCP port and
   source CIDR. The guest port now speaks TLS, not HTTP. Do not expose port
   17766; it is loopback-only and excluded from ingress policy.
@@ -46,8 +47,8 @@ Infrastructure contract (review/apply separately):
   projection and 32 MiB memory-backed `tls-tmp` volume. No extra RBAC, external
   CA, DNS record, shared private key, or load balancer is needed.
 - Budget the proxy's 10m CPU/16 MiB requests and 100m CPU/64 MiB limits in
-  addition to Kit resources. The metadata sidecar adds 10m CPU/32 MiB requests
-  and 100m CPU/128 MiB limits. Rootfs-only snapshot policy must cover this
+  addition to Kit resources. The identity sidecar adds 10m CPU/8 MiB requests
+  and 100m CPU/32 MiB limits. Rootfs-only snapshot policy must cover this
   Pod, including its native sidecar; Secret and memory volumes are supplied
   fresh on restore.
 - The TLS transport/image participate in the runtime compatibility fingerprint.
@@ -88,12 +89,12 @@ Configure the server and worker consistently:
 - `GRAM_ASSISTANT_RUNTIME_PROVIDER=gke`.
 - `GRAM_ASSISTANT_KIT_IMAGE=<REGISTRY>/<IMAGE>:<VERSION>` (Kit v0.2.19 or later;
   each workload exchange must reopen the assertion file after atomic rotation).
-- `GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT=<IAM_PROJECT_ID>`.
-- `GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE=<REGISTRY>/gram-assistant-runtime@sha256:<DIGEST>`.
-  Use the image built from this change, not an older runtime image. The existing
-  `assistant-runtime-image` CI job builds and publishes it; local builds use
-  `mise run build:assistants-runtime-image`. The script and its tests are part
-  of that Dockerfile. No separate, unpublished sidecar image is assumed.
+- `GRAM_ASSISTANT_KIT_GKE_PROJECT_NUMBER`, `GRAM_ASSISTANT_KIT_GKE_ORGANIZATION_ID`,
+  `GRAM_ASSISTANT_KIT_GKE_CLUSTER_LOCATION` and `GRAM_ASSISTANT_KIT_GKE_CLUSTER_NAME`:
+  the numeric project number and organization ID owning the assistant cluster,
+  and its exact location and name. The server derives the Agent Identity issuer,
+  JWKS and each workload's SPIFFE subject from these values, never from token
+  claims. Missing or non-numeric values are a startup validation error.
 - Existing assistant GKE cluster endpoint, CA, namespace and runner CIDR settings.
 - `GRAM_ASSISTANT_KIT_GKE_INGRESS_CIDR=<SERVER_SOURCE_CIDR>`. This is the
   server source network permitted to reach gateway pods, not an unrestricted
@@ -103,79 +104,77 @@ Configure the server and worker consistently:
 - `GRAM_ASSISTANT_KIT_MCP_RESOURCE=https://<RESOURCE_HOST>/mcp/<SLUG>`.
 - `GRAM_ASSISTANT_KIT_MCP_ISSUER=https://<EXPECTED_ISSUER>` and
   `GRAM_ASSISTANT_KIT_MCP_ISSUER_ID=<PERSISTED_ISSUER_UUID>`.
-- `GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT=<CLUSTER_PROJECT_ID>`
-  (`--assistant-kit-gke-workload-pool-project`). Required Google Cloud project
-  ID owning the cluster workload pool, independently of the IAM project; no
-  project-number, issuer-URL, or IAM-project fallback is supported.
-- Remove `GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER` and
-  `GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL` from GKE deployments. These remain
-  supported only for local external assertions and are rejected in GKE mode.
-  GKE verifies metadata tokens using `https://accounts.google.com` and
-  `https://www.googleapis.com/oauth2/v3/certs`.
+- `GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER` and `GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL`
+  are used only by local Kit. GKE mode ignores them, so they can stay set while
+  older application images are still deployed and be removed afterwards.
+
+## Workload identity
+
+Kit authenticates with GKE Agent Identity, which requires GKE
+`1.37.0-gke.3503000` or later and the Agent Registry API. Each bootstrap
+generation gets its own Kubernetes service account (KSA) with no Google IAM
+service-account link. The Pod is annotated with
+`iam.gke.io/identity: "spiffe://<TRUST_DOMAIN>/*"`, where the trust domain is
+`agents.global.org-<ORG_ID>.system.id.goog`. No Pod certificates are injected and
+`automountServiceAccountToken` stays false.
+
+Google signs ID tokens for the Pod with:
+
+- issuer `https://sts.googleapis.com/v1/organizations/<ORG_ID>/locations/global/workloadIdentityPools/<TRUST_DOMAIN>`;
+- JWKS `<ISSUER>/openid/jwks`;
+- subject `spiffe://<TRUST_DOMAIN>/resources/container/projects/<PROJECT_NUMBER>/locations/<LOCATION>/clusters/<CLUSTER>/ns/<NAMESPACE>/sa/<KSA>`.
+
+The subject identifies a KSA, not a Pod. Bootstrap registers the issuer and
+assigns the generation's exact subject to the assistant's existing agent.
+Project-scoped inference authority must already be available to the owner;
+existing agent policies are not silently expanded. A retired subject is never
+admitted again, including after the issuer is deleted and recreated.
+
+Kit reads its assertion from a file and exchanges it at the Speakeasy token
+endpoint (RFC 7523). Kit has no Google-specific code. The `workload-token`
+native sidecar adapts the metadata server to that file contract. It runs a
+short POSIX shell script in a pinned `curlimages/curl` image:
+
+1. `GET http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience=<AUDIENCE>&format=full`
+   with `Metadata-Flavor: Google`, a 10-second timeout and a 16 KiB limit.
+2. Write the response to a temporary file with mode `0600` and rename it over
+   the assertion in a memory-backed `emptyDir`. Refresh every 5 minutes.
+3. On failure, retry every 5 seconds and delete an assertion that has not been
+   refreshed for 50 minutes, because Google ID tokens live for one hour.
+
+Kit mounts the directory read-only at `/var/run/secrets/speakeasy/workload`,
+without `subPath`. The sidecar startup probe holds Kit until an assertion
+exists. Bootstrap Secrets, the root filesystem and snapshots never contain
+assertions. The sidecar never logs tokens.
+
+The sidecar does not inspect the token. The Speakeasy verifier is the single
+authority: it checks the signature against the derived JWKS, the exact issuer,
+subject and audience, expiry and lifetime, and it refuses key-bound tokens
+(any `cnf` claim) and non-bearer `typ` values.
+
+Security properties to keep in mind:
+
+- NetworkPolicy applies to the whole Pod, so Kit and the sidecar can both
+  request metadata tokens, including for other audiences. The sidecar is a file
+  adapter, not an isolation boundary. Do not configure other services to trust
+  these identities.
+- Tokens are bearer credentials. Revocation happens at Speakeasy: retiring a
+  generation's subject rejects further exchanges and existing sessions.
+- The managed sandbox policy allows only TCP/80 to `169.254.169.254` as
+  link-local egress.
 
 Failed projected-token admissions are not v1beta1 warm-pool authority. On
 retry (or retirement), the application recognizes only the old, pre-pool
 projected subject with `provisioning=true`, no recorded pod, and no checkpoint.
 It verifies the persisted runtime/project/assistant binding and each object's
 UID, ownership labels, and compatibility annotation, refuses assigned claims
-or claim-owned pods, fences credentials, then
-deletes only the recorded v1alpha1 claim/template, Secret, and Kubernetes
-service account. That projected subject never had a Google IAM account.
-The authority is cleared only after cleanup succeeds; readmission provisions a
-fresh metadata-identity generation. Cleanup failures retain evidence for retry.
-Live pods, snapshots, mismatched resources, and unrecorded orphans are not swept
-or automatically reinterpreted as current authority. No manual database reset
-or bulk cluster deletion is part of this rollout.
-
-The MCP resource must be an enabled attachment of the assistant. Bootstrap
-registers a project-scoped Google issuer and a generation-specific numeric IAM
-service-account `uniqueId` subject assigned to the assistant's existing agent.
-Project-scoped inference authority must already be available to the owner;
-existing agent policies are not silently expanded. The issuer permits cached
-assertion reuse for Google's one-hour ID tokens. An email is not the subject.
-
-Each bootstrap uses a separate IAM service account with the `kit-wl-` prefix
-and a separate Kubernetes service account (KSA). The IAM account grants only
-`roles/iam.workloadIdentityUser` to that exact namespace/KSA principal; the KSA
-annotation links to its email. This implementation grants it no generic Google API roles. A
-retired numeric subject must never be admitted again: rotate identity on cold
-boot/restore and retain failed cleanup evidence for retry.
-
-Set `GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT` to the existing application project
-for the environment. It may equal `GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT`;
-a separate identity project is not required. The runtime provisioner requires
-`iam.serviceAccounts.create`, `iam.serviceAccounts.get`,
-`iam.serviceAccounts.delete`, `iam.serviceAccounts.getIamPolicy`, and
-`iam.serviceAccounts.setIamPolicy` in the selected IAM project. This custom
-role has project-wide service-account scope; the `kit-wl-` naming prefix and
-application ownership checks do not restrict the principal's IAM permissions
-to generated accounts.
-
-Enable Workload Identity Federation for the assistant cluster. The exact member
-is `serviceAccount:<CLUSTER_PROJECT_ID>.svc.id.goog[<NAMESPACE>/<KSA>]`, using the
-cluster workload-pool project whether or not it equals the IAM project. The
-implementation grants no project roles to generated workload accounts. Their
-effective Google API access can nevertheless include grants from project,
-folder, organization, or resource policies, including broad principal sets;
-account-level IAM policy checks do not establish an isolated project boundary.
-
-The managed GKE metadata server uses its documented link-local HTTP endpoint,
-not an external plaintext credential service. NetworkPolicy applies to the whole
-Pod: both Kit and its token sidecar can request metadata tokens, including for
-other audiences. The sidecar is a token-file adapter, not an isolation boundary.
-Do not configure other services to trust these workload identities. The gateway
-still verifies its exact audience and generation-specific subject.
-
-The metadata refresh sidecar requests the exact exchange audience from the
-link-local metadata server with `Metadata-Flavor: Google`, a bounded response,
-no redirects, and a timeout. It writes a mode-0600 temporary file and atomically
-renames it in a memory-backed `emptyDir`. Kit mounts the whole directory
-read-only at `/var/run/secrets/speakeasy/workload`, without `subPath`; bootstrap
-Secrets, rootfs and snapshots never contain assertions. A native sidecar
-startup probe checks valid token expiry before Kit starts. Refresh retries
-before expiry, and removes expired assertions on failure without logging tokens.
-`automountServiceAccountToken` stays false, with no explicit service-account
-token or trust-bundle projections (managed sandbox core policy rejects those).
+or claim-owned pods, fences credentials, then deletes only the recorded
+v1alpha1 claim/template, Secret, and KSA. The authority is cleared only after
+cleanup succeeds; readmission provisions a fresh generation. Cleanup failures
+retain evidence for retry. Live pods, snapshots, mismatched resources, and
+unrecorded orphans are not swept or automatically reinterpreted as current
+authority. No manual database reset or bulk cluster deletion is part of this
+rollout.
 
 The Kit path uses `extensions.agents.x-k8s.io/v1beta1` SandboxTemplate,
 SandboxWarmPool, and SandboxClaim objects with explicit `warmPoolRef`. The
@@ -199,50 +198,29 @@ Confirm the managed GKE controller implements this contract before rollout.
 Do not change replicas to one as a workaround: replenishment can duplicate
 credential-bearing pods even in a per-generation pool.
 
-IAM recovery uses namespace-scoped ConfigMaps as a non-secret pending-operation
-journal, written before account creation. Grant `get`, `create`, `update`, and
-`delete` on ConfigMaps. Keep these records until UID-fenced cleanup completes;
-do not delete them merely because an IAM request timed out. A definitive create
-rejection can be cleared, but an uncertain result stays fenced until reconciled.
+### Rollout order
 
-### Artifact-first rollout order
-
-1. Open the application PR without promoting the server. The existing
-   `.github/workflows/pr.yaml` `assistant-runtime-image` job runs for server
-   changes on non-Dependabot PRs and uses `docker/build-push-action` with
-   `push: true`. It publishes `pr-<NUMBER>`, content-hash and SHA tags.
-2. Wait for that image build (including metadata-script tests) to succeed;
-   resolve its registry digest. No image digest is invented in this change.
-3. Configure the five-permission provisioner role in the existing application
-   project and the ConfigMap/WarmPool RBAC.
-   Do not remove the existing issuer/JWKS configuration while old application
-   images are still selected.
-4. In **one infrastructure revision**, pin the published metadata-sidecar digest
-   in `GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE`, select the new server and worker
-   application image digests, set `GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT` and
-   `GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT`,
-   and remove the local issuer/JWKS configuration. Apply these paired images and
-   settings together; do not deploy the configuration cleanup with old application
-   images or the new application with old issuer/JWKS settings. Include all
-   environments and preview defaults that enable Kit. Missing/invalid metadata
-   image, IAM project, or workload-pool project is a deliberate startup validation error.
-   Main's release-dispatch job waits for the assistant runtime image build, but
-   that alone does not populate infrastructure image pins or configuration.
-5. Validate authorized managed-sandbox startup/rotation/cleanup before enabling
-   new Kit sessions. No fallback to a shared IAM identity or mutable image tag
-   is permitted.
-
-Quota is a rollout gate: every simultaneously live generation consumes an IAM
-service account; failed deletions also consume quota until reconciled. Size
-project service-account quota for concurrency and recycle overlap before
-opting in. Do not work around quota exhaustion with a shared identity.
+1. Infrastructure first: upgrade the assistant cluster to a GKE version with
+   Agent Identity, enable the Agent Registry API, and add the four
+   `GRAM_ASSISTANT_KIT_GKE_*` identity values. Keep the existing issuer/JWKS
+   values; the currently deployed application still needs them.
+2. Deploy the application. It ignores the issuer/JWKS values in GKE mode.
+3. Validate a fresh Kit claim end to end (sidecar startup, exchange, inference,
+   MCP, a reply in a real conversation, and refresh past one hour) before
+   enabling new Kit sessions in the next environment.
+4. Remove the issuer/JWKS values from GKE deployments.
 
 MCP and inference use Kit's generic workload exchange configuration, not native
 API keys or confidential OAuth clients. Gateway authentication remains separate
-from these outbound credentials. No live reset or deployment is implied by
-configuring the replacement. Never place workload assertions or exchanged tokens
-in CLI arguments or logs. Never substitute human credentials or inference
+from these outbound credentials. Never place workload assertions or exchanged
+tokens in CLI arguments or logs. Never substitute human credentials or inference
 bearers for MCP authentication.
+
+References:
+
+- [About Agent Identity for GKE](https://cloud.google.com/kubernetes-engine/security/about-agent-identity)
+- [Request Agent Identity](https://cloud.google.com/kubernetes-engine/security/request-agent-identity)
+- [Authenticate with Agent Identity](https://cloud.google.com/kubernetes-engine/security/authenticate-agent-identity)
 
 ## Snapshot deployment gate
 
@@ -275,14 +253,13 @@ Grant the runtime Kubernetes principal these namespace-scoped permissions in
 addition to Secret, NetworkPolicy, SandboxTemplate, and SandboxClaim resource
 management:
 
-| API group            | Resource                    | Required verbs                      | Purpose                                                                |
-| -------------------- | --------------------------- | ----------------------------------- | ---------------------------------------------------------------------- |
-| Core (`""`)          | `serviceaccounts`           | `get`, `create`, `delete`           | Provision and retire generation-specific linked identities             |
-| Core (`""`)          | `configmaps`                | `get`, `create`, `update`, `delete` | Persist and retire IAM recovery intents                                |
-| Core (`""`)          | `pods`                      | `get`, `list`, `delete`             | Discover claim Pods, verify source/restore identity, and reap runtimes |
-| `podsnapshot.gke.io` | `podsnapshotpolicies`       | `get`, `list`                       | Select and validate the manual rootfs-only policy                      |
-| `podsnapshot.gke.io` | `podsnapshotmanualtriggers` | `create`, `get`, `delete`           | Request, observe, and clean up checkpoints                             |
-| `podsnapshot.gke.io` | `podsnapshots`              | `get`, `delete`                     | Validate selected snapshots and clean up backing checkpoint resources  |
+| API group            | Resource                    | Required verbs            | Purpose                                                                |
+| -------------------- | --------------------------- | ------------------------- | ---------------------------------------------------------------------- |
+| Core (`""`)          | `serviceaccounts`           | `get`, `create`, `delete` | Provision and retire generation-specific identities                    |
+| Core (`""`)          | `pods`                      | `get`, `list`, `delete`   | Discover claim Pods, verify source/restore identity, and reap runtimes |
+| `podsnapshot.gke.io` | `podsnapshotpolicies`       | `get`, `list`             | Select and validate the manual rootfs-only policy                      |
+| `podsnapshot.gke.io` | `podsnapshotmanualtriggers` | `create`, `get`, `delete` | Request, observe, and clean up checkpoints                             |
+| `podsnapshot.gke.io` | `podsnapshots`              | `get`, `delete`           | Validate selected snapshots and clean up backing checkpoint resources  |
 
 The managed snapshot controller creates `PodSnapshot` objects; the runtime
 principal does not need `create` on `podsnapshots`. Observation-only snapshot
@@ -310,16 +287,15 @@ Platform MCP parity: no new tool or schema is needed. These are internal
 provisioning, credential refresh, and lifecycle-fencing changes; existing
 assistant operations and caller authorization remain unchanged. Demo seed:
 no dashboard data model, new visible resource, or telemetry dimension changes;
-no new seed rows are needed, and live IAM accounts must not be seeded.
+no new seed rows are needed.
 
 ```sh
-mise exec -- bun test agents/runtime-image/kit-workload-token.test.mjs
 mise run test:server ./internal/assistants -run '^TestKitGKE' -count=1
 mise run test:server ./cmd/gram -run '^TestKit' -count=1
 mise run test:server ./internal/usersessions/assertion/workload -count=1
 ```
 
-Fake Kubernetes/IAM and local refresh tests do not establish managed-controller
+Fake Kubernetes tests do not establish managed-controller
 compatibility. Validate pool creation, metadata startup, rotation, exact-subject
 rejection, checkpoint/restore and eventual cleanup in an authorized deployment
 before production opt-in; this change does not itself perform a live rollout.

@@ -30,8 +30,7 @@ func kitGKEInput() KitGKEProvisionInput {
 	return KitGKEProvisionInput{
 		KitGKEIdentityConfig: KitGKEIdentityConfig{ProjectNumber: "123456789", OrganizationID: "987654321", ClusterLocation: "us-central1", ClusterName: "test-cluster"},
 		TLSCertificate:       cert, TLSPrivateKey: key,
-		MetadataImage: "registry.example/assistant@sha256:" + strings.Repeat("a", 64),
-		Model:         "test-model", InferenceEndpoint: "https://example.invalid/inference",
+		Model: "test-model", InferenceEndpoint: "https://example.invalid/inference",
 		Workload:               &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "spiffe://agents.global.org-987654321.system.id.goog/resources/container/projects/123456789/locations/us-central1/clusters/test-cluster/ns/kit-test/sa/kit-workload-test", ServiceAccount: "kit-workload-test", Audience: "https://example.invalid/oauth"},
 		WorkloadServiceAccount: "kit-workload-test", WorkloadAudience: "https://example.invalid/oauth",
 		CheckpointMarker: []byte("11111111-1111-4111-8111-111111111111"),
@@ -92,10 +91,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.Len(t, pod.Spec.Tolerations, 2)
 	require.Len(t, pod.Spec.InitContainers, 1)
 	sidecar := pod.Spec.InitContainers[0]
-	require.Equal(t, in.MetadataImage, sidecar.Image)
-	require.Equal(t, []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs"}, sidecar.Command)
-	require.Contains(t, sidecar.Env, corev1.EnvVar{Name: "WORKLOAD_TOKEN_ISSUER", Value: in.issuer()})
-	require.Contains(t, sidecar.Env, corev1.EnvVar{Name: "WORKLOAD_TOKEN_SUBJECT", Value: in.Workload.Subject})
+	require.Equal(t, kitGKEIdentitySidecarImage, sidecar.Image)
 	serviceAccount := kitWorkloadServiceAccount(in)
 	require.Empty(t, serviceAccount.GetAnnotations())
 	require.Equal(t, false, serviceAccount.Object["automountServiceAccountToken"])

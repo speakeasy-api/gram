@@ -12,7 +12,6 @@ import (
 	"maps"
 	"net"
 	"net/url"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -107,9 +106,6 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	if p.Identity.CompatibilityGeneration == "" || !kitGKEExplicitImage(p.Image) {
 		return nil, fmt.Errorf("kit GKE requires explicit compatibility generation and tagged or digest-pinned image")
 	}
-	if !regexp.MustCompile(`^[^@\s]+@sha256:[a-f0-9]{64}$`).MatchString(p.MetadataImage) {
-		return nil, fmt.Errorf("kit metadata image requires an immutable sha256 digest")
-	}
 	if p.GuestPort < 1 || p.GuestPort > 65535 || p.GuestPort == kitGKEPlaintextPort {
 		return nil, fmt.Errorf("invalid Kit GKE port")
 	}
@@ -130,7 +126,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	p.GatewayToken = nil
 	p.TLSCertificate, p.TLSPrivateKey = nil, nil
 	raw, err := json.Marshal(map[string]any{
-		"metadata_image": p.MetadataImage, "agent_identity": config.KitGKEIdentityConfig, "tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
+		"workload_token_image": kitGKEIdentitySidecarImage, "agent_identity": config.KitGKEIdentityConfig, "tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
 		"identity": p.Identity.labels(), "namespace": p.Identity.Namespace, "image": p.Image,
 		"ingress_cidr": p.IngressCIDR, "guest_port": p.GuestPort, "command": p.Command, "args": p.Args,
 		"allow_insecure_http": p.AllowInsecureHTTP, "resources": p.Resources, "work_size_limit": p.WorkSizeLimit,
