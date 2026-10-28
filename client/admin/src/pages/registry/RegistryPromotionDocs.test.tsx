@@ -102,6 +102,65 @@ it("does not offer retry during a provider delay or after the guide request was 
     screen.getByText(/publication happens after the guide is merged/),
   ).toBeTruthy();
 });
+it("links to an existing guide without offering a retry", async () => {
+  await renderWithApp(
+    <RegistryPromotionDocs
+      candidate={{
+        ...candidate,
+        docsRetryAllowed: false,
+        docsStatus: "existing_guide",
+        docsUrl:
+          "https://github.com/example/docs/tree/HEAD/guides/example-public-mcp",
+        docsQueuedAt: new Date("2026-10-22T12:00:00Z"),
+        deliveryError: undefined,
+      }}
+    />,
+  );
+  expect(screen.getByText("Guide already exists")).toBeTruthy();
+  expect(screen.getByRole("link", { name: "View guide" })).toBeTruthy();
+  expect(screen.getByText(/no new guide was requested/)).toBeTruthy();
+  expect(screen.getByText(/Found/)).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "Retry guide request" }),
+  ).toBeNull();
+});
+it("shows the open guide pull request and its next daily check", async () => {
+  await renderWithApp(
+    <RegistryPromotionDocs
+      candidate={{
+        ...candidate,
+        docsRetryAllowed: false,
+        docsStatus: "guide_in_review",
+        docsUrl: "https://github.com/example/docs/pull/7",
+        docsNextAttemptAt: new Date("2026-10-23T12:00:00Z"),
+        deliveryError: undefined,
+      }}
+    />,
+  );
+  expect(screen.getByText("Guide in review")).toBeTruthy();
+  expect(screen.getByRole("link", { name: "View guide PR" })).toBeTruthy();
+  expect(screen.getByText(/Next check/)).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "Retry guide request" }),
+  ).toBeNull();
+});
+it("offers a retry and the pull request link for a stalled guide review", async () => {
+  await renderWithApp(
+    <RegistryPromotionDocs
+      candidate={{
+        ...candidate,
+        docsStatus: "needs_attention",
+        deliveryError: "docs_guide_pr_stalled",
+        docsUrl: "https://github.com/example/docs/pull/7",
+      }}
+    />,
+  );
+  expect(screen.getByText(/open for 14 days/)).toBeTruthy();
+  expect(screen.getByRole("link", { name: "View guide PR" })).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Retry guide request" }),
+  ).toBeTruthy();
+});
 it("keeps a retry key after an ambiguous response and masks upstream errors", async () => {
   api.retry.mockRejectedValue(
     new Error("private credentials in upstream failure"),

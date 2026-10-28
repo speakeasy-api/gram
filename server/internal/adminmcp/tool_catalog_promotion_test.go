@@ -165,6 +165,44 @@ func TestCatalogPromotionProjectionPreservesDeletedSourceHistory(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestCatalogPromotionProjectsGuideDeliveryOutcomes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, status, url, deliveryError string
+	}{
+		{name: "guide request", status: "queued", url: "https://github.com/example/guides/issues/42"},
+		{name: "existing guide", status: "existing_guide", url: "https://github.com/example/guides/tree/HEAD/guides/example-mcp"},
+		{name: "guide in review", status: "guide_in_review", url: "https://github.com/example/guides/pull/7"},
+		{name: "stalled review", status: "needs_attention", url: "https://github.com/example/guides/pull/7", deliveryError: "docs_guide_pr_stalled"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			source := catalogpromotion.Candidate{ID: testRegistryID, OrganizationID: "org-example", SourceRevision: "aabbccdd", Status: "promoted", Reason: "already_promoted", RegistryEntryID: testRegistryID, DocsStatus: tt.status, DocsURL: tt.url, DeliveryError: tt.deliveryError}
+			safe, ok := projectCatalogPromotion(source)
+			require.True(t, ok)
+			require.Equal(t, tt.status, safe.DocsStatus)
+			require.Equal(t, tt.url, safe.DocsURL)
+		})
+	}
+}
+
+func TestCatalogPromotionProjectionRejectsUnexpectedGuideLinks(t *testing.T) {
+	t.Parallel()
+	for _, link := range []string{
+		"https://example.com/guides/pull/7",
+		"https://github.com/example/guides/pull/7/files",
+		"https://github.com/example/guides/tree/main/guides/example",
+		"https://github.com/example/guides/tree/HEAD/guides/../private",
+		"https://github.com/example/guides/tree/HEAD/doctrine",
+		"https://github.com/example/guides/pull/0",
+	} {
+		source := catalogpromotion.Candidate{ID: testRegistryID, OrganizationID: "org-example", SourceRevision: "aabbccdd", Status: "promoted", Reason: "already_promoted", RegistryEntryID: testRegistryID, DocsStatus: "guide_in_review", DocsURL: link}
+		_, ok := projectCatalogPromotion(source)
+		require.False(t, ok, link)
+	}
+}
+
 func TestCatalogPromotionProjectsUnobservedCandidate(t *testing.T) {
 	t.Parallel()
 	candidate := catalogpromotion.Candidate{ID: testRegistryID, OrganizationID: "org-example", ProjectID: testRegistryID, MCPServerID: testRegistryID, RemoteMCPServerID: testRegistryID, SourceRevision: "unobserved", Status: "candidate", Reason: "telemetry_unavailable"}

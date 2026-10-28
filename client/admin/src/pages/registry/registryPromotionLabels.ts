@@ -26,6 +26,8 @@ const DELIVERY_STATUSES = new Map(
     pending: "Pending",
     retrying: "Retry scheduled",
     queued: "Guide requested",
+    existing_guide: "Guide already exists",
+    guide_in_review: "Guide in review",
     needs_attention: "Needs attention",
   }),
 );
@@ -44,6 +46,8 @@ const DELIVERY_ERRORS = new Map(
     docs_attempts_exhausted:
       "Automatic retries are exhausted. Resolve the delivery issue, then retry.",
     docs_not_configured: "Guide delivery needs configuration before retrying.",
+    docs_guide_pr_stalled:
+      "A guide pull request for this slug has been open for 14 days. Merge or close it, then retry.",
   }),
 );
 

@@ -22,24 +22,197 @@ import (
 )
 
 type recordingDelivery struct {
-	mu      sync.Mutex
-	guides  []delivery.Guide
-	err     error
+	mu     sync.Mutex
+	guides []delivery.Guide
+	err    error
+	// result overrides the default filed guide request when its outcome is set.
+	result  delivery.GuideResult
 	onGuide func(context.Context) error
 }
 
-func (r *recordingDelivery) EnsureGuide(ctx context.Context, guide delivery.Guide) (string, error) {
+func (r *recordingDelivery) EnsureGuide(ctx context.Context, guide delivery.Guide) (delivery.GuideResult, error) {
 	r.mu.Lock()
 	r.guides = append(r.guides, guide)
-	err, onGuide := r.err, r.onGuide
+	err, onGuide, result := r.err, r.onGuide, r.result
 	r.mu.Unlock()
 	if onGuide != nil {
 		err = onGuide(ctx)
 	}
 	if err != nil {
-		return "", err
+		return delivery.GuideResult{}, err
 	}
-	return "https://github.com/example/guides/issues/42", nil
+	if result.Outcome != "" {
+		return result, nil
+	}
+	return delivery.GuideResult{URL: "https://github.com/example/guides/issues/42", Outcome: delivery.OutcomeRequested}, nil
+}
+
+var (
+	existingGuide = delivery.GuideResult{URL: "https://github.com/example/guides/tree/HEAD/guides/synthetic-mcp", Outcome: delivery.OutcomeExistingGuide}
+	guideInReview = delivery.GuideResult{URL: "https://github.com/example/guides/pull/7", Outcome: delivery.OutcomeGuideInReview}
+)
+
+func promotionRow(t *testing.T, f promotionFixture, candidate Candidate) repo.RegistryPromotionCandidate {
+	t.Helper()
+	id, err := uuid.Parse(candidate.ID)
+	require.NoError(t, err)
+	row, err := repo.New(f.db).GetPromotion(t.Context(), repo.GetPromotionParams{OrganizationID: f.target.OrganizationID, ID: id})
+	require.NoError(t, err)
+	return row
+}
+
+func TestDispatchRecordsExistingGuideWithoutRequest(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	r := &recordingDelivery{result: existingGuide}
+	f.service.delivery = r
+	_, err := f.promote(t)
+	require.NoError(t, err)
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	candidate := deliveryCandidate(t, f)
+	require.Equal(t, "existing_guide", candidate.DocsStatus)
+	require.Equal(t, existingGuide.URL, candidate.DocsURL)
+	require.NotEmpty(t, candidate.DocsQueuedAt)
+	require.Empty(t, candidate.DeliveryError)
+	require.False(t, candidate.DocsRetryAllowed)
+	f.service.now = func() time.Time { return f.health.now.Add(30 * 24 * time.Hour) }
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	require.Len(t, r.guides, 1, "an existing guide is a final outcome")
+	status, err := f.service.Status(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, status.PendingDocs)
+	require.Zero(t, status.GuideInReview)
+}
+
+func TestDispatchWaitsForOpenGuidePullRequestThenRecordsMergedGuide(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	r := &recordingDelivery{result: guideInReview}
+	f.service.delivery = r
+	_, err := f.promote(t)
+	require.NoError(t, err)
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	candidate := deliveryCandidate(t, f)
+	require.Equal(t, "guide_in_review", candidate.DocsStatus)
+	require.Equal(t, guideInReview.URL, candidate.DocsURL)
+	require.Equal(t, 1, candidate.DocsAttempts)
+	require.Empty(t, candidate.DeliveryError)
+	require.Empty(t, candidate.DocsQueuedAt)
+	require.False(t, candidate.DocsRetryAllowed, "a scheduled recheck is not a failure to retry")
+	next, err := time.Parse(time.RFC3339, candidate.DocsNextAttemptAt)
+	require.NoError(t, err)
+	require.False(t, next.Before(f.health.now.Add(guideReviewRecheck).Truncate(time.Second)))
+	row := promotionRow(t, f, candidate)
+	require.True(t, row.DocsReviewSince.Valid)
+	require.Zero(t, row.DocsFailures, "waiting on a review must not count towards exhausted retries")
+
+	status, err := f.service.Status(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, status.PendingDocs, "a guide in review must not trip the delivery backlog alert")
+	require.True(t, status.OldestPendingAt.IsZero())
+	require.EqualValues(t, 1, status.GuideInReview)
+
+	f.service.now = func() time.Time { return f.health.now.Add(time.Hour) }
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	require.Len(t, r.guides, 1, "the recheck waits for its schedule")
+
+	r.result = existingGuide
+	f.service.now = func() time.Time { return next.Add(time.Second) }
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	candidate = deliveryCandidate(t, f)
+	require.Equal(t, "existing_guide", candidate.DocsStatus)
+	require.Equal(t, existingGuide.URL, candidate.DocsURL)
+	require.False(t, promotionRow(t, f, candidate).DocsReviewSince.Valid)
+}
+
+func TestDispatchRequestsGuideAfterUnmergedGuidePullRequest(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	r := &recordingDelivery{result: guideInReview}
+	f.service.delivery = r
+	_, err := f.promote(t)
+	require.NoError(t, err)
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	r.result = delivery.GuideResult{}
+	f.service.now = func() time.Time { return f.health.now.Add(guideReviewRecheck + time.Minute) }
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	candidate := deliveryCandidate(t, f)
+	require.Equal(t, "queued", candidate.DocsStatus)
+	require.Equal(t, "https://github.com/example/guides/issues/42", candidate.DocsURL)
+	require.Len(t, r.guides, 2)
+}
+
+func TestDispatchKeepsGuideReviewClockAcrossTransientFailure(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	r := &recordingDelivery{result: guideInReview}
+	f.service.delivery = r
+	_, err := f.promote(t)
+	require.NoError(t, err)
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	since := promotionRow(t, f, deliveryCandidate(t, f)).DocsReviewSince.Time
+
+	r.err = &delivery.DeliveryError{Kind: delivery.ErrorTransient, Code: "provider_unavailable"}
+	f.service.now = func() time.Time { return f.health.now.Add(guideReviewRecheck + time.Minute) }
+	require.Error(t, f.service.Dispatch(t.Context()))
+	candidate := deliveryCandidate(t, f)
+	require.Equal(t, "retrying", candidate.DocsStatus, "a failed recheck must not report the guide as in review")
+	require.True(t, promotionRow(t, f, candidate).DocsReviewSince.Time.Equal(since))
+
+	r.err = nil
+	next, err := time.Parse(time.RFC3339, candidate.DocsNextAttemptAt)
+	require.NoError(t, err)
+	f.service.now = func() time.Time { return next.Add(time.Second) }
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	candidate = deliveryCandidate(t, f)
+	require.Equal(t, "guide_in_review", candidate.DocsStatus)
+	require.True(t, promotionRow(t, f, candidate).DocsReviewSince.Time.Equal(since), "rechecks keep the first in-review time")
+}
+
+func TestDispatchParksStalledGuideReview(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	r := &recordingDelivery{result: guideInReview}
+	f.service.delivery = r
+	_, err := f.promote(t)
+	require.NoError(t, err)
+	require.NoError(t, f.service.Dispatch(t.Context()))
+
+	f.service.now = func() time.Time { return f.health.now.Add(guideReviewStallAfter + time.Hour) }
+	require.Error(t, f.service.Dispatch(t.Context()))
+	candidate := deliveryCandidate(t, f)
+	require.Equal(t, "needs_attention", candidate.DocsStatus)
+	require.Equal(t, codeGuideReviewStalled, candidate.DeliveryError)
+	require.Equal(t, guideInReview.URL, candidate.DocsURL, "staff need the stalled pull request")
+	require.Empty(t, candidate.DocsNextAttemptAt)
+	require.True(t, candidate.DocsRetryAllowed)
+	status, err := f.service.Status(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, status.NeedsAttention)
+	require.Zero(t, status.GuideInReview)
+
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	require.Len(t, r.guides, 2, "a parked request waits for staff")
+
+	retryGuide(t, f, candidate)
+	require.False(t, promotionRow(t, f, deliveryCandidate(t, f)).DocsReviewSince.Valid, "a staff retry restarts the review clock")
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	require.Equal(t, "guide_in_review", deliveryCandidate(t, f).DocsStatus)
+	require.Len(t, r.guides, 3)
+}
+
+func TestDispatchRejectsUnknownGuideOutcome(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	r := &recordingDelivery{result: delivery.GuideResult{URL: "https://github.com/example/guides/issues/42", Outcome: "unexpected"}}
+	f.service.delivery = r
+	_, err := f.promote(t)
+	require.NoError(t, err)
+	require.Error(t, f.service.Dispatch(t.Context()))
+	candidate := deliveryCandidate(t, f)
+	require.Equal(t, "needs_attention", candidate.DocsStatus)
+	require.Equal(t, "docs_permanent", candidate.DeliveryError)
+	require.Empty(t, candidate.DocsURL)
 }
 
 func deliveryCandidate(t *testing.T, f promotionFixture) Candidate {

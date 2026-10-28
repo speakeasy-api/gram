@@ -26,6 +26,16 @@ const (
 	receiptTimeout = 5 * time.Second
 	// maxDocsFailures parks repeatedly failing requests for staff review.
 	maxDocsFailures = 5
+	// guideReviewRecheck is how long delivery waits before checking an open
+	// guide pull request again. Guide reviews take days, so a daily check keeps
+	// the status current without repeatedly listing pull requests.
+	guideReviewRecheck = 24 * time.Hour
+	// guideReviewStallAfter parks a request for staff when the guide pull
+	// request it waits on has been open this long: two weeks covers a normal
+	// review, so anything longer has probably been forgotten.
+	guideReviewStallAfter = 14 * 24 * time.Hour
+	// codeGuideReviewStalled is the persisted delivery error for a stalled guide pull request.
+	codeGuideReviewStalled = "docs_guide_pr_stalled"
 )
 
 // DiscoveryBatch reports bounded progress; per-source failures have durable receipts.
@@ -147,7 +157,7 @@ func (s *Service) deliver(ctx context.Context, target repo.RegistryPromotionCand
 	}
 	effectCtx, effectCancel := context.WithTimeout(ctx, s.effectTimeout)
 	var public publicSnapshot
-	var issueURL string
+	var guide delivery.GuideResult
 	var effectErr error
 	if row.DocsFailures > maxDocsFailures {
 		effectErr = errors.New("documentation retry attempts exhausted")
@@ -156,17 +166,48 @@ func (s *Service) deliver(ctx context.Context, target repo.RegistryPromotionCand
 	} else if effectCtx.Err() != nil {
 		effectErr = effectCtx.Err()
 	} else {
-		issueURL, effectErr = s.delivery.EnsureGuide(effectCtx, delivery.Guide{Slug: public.DocsSlug, Name: public.Title, Description: public.Description, RemoteURL: public.URL, DocumentationURL: public.DocumentationURL, AuthMode: public.AuthMode, AuthDiscovery: public.AuthDiscovery})
+		guide, effectErr = s.delivery.EnsureGuide(effectCtx, delivery.Guide{Slug: public.DocsSlug, Name: public.Title, Description: public.Description, RemoteURL: public.URL, DocumentationURL: public.DocumentationURL, AuthMode: public.AuthMode, AuthDiscovery: public.AuthDiscovery})
 	}
 	effectCancel()
+	if effectErr == nil {
+		switch guide.Outcome {
+		case delivery.OutcomeRequested, delivery.OutcomeExistingGuide, delivery.OutcomeGuideInReview:
+		default:
+			effectErr = &delivery.DeliveryError{Kind: delivery.ErrorPermanent, RetryAfter: 0, Code: "invalid_outcome"}
+		}
+	}
 	var result repo.FinishDocsParams
 	result.ID = id
 	result.LeaseToken = token
 	result.ProjectID = row.ProjectID
-	if effectErr == nil {
-		result.DocsUrl = conv.ToPGText(issueURL)
+	stalled := false
+	switch {
+	case effectErr == nil && guide.Outcome == delivery.OutcomeGuideInReview:
+		// Waiting on an open guide pull request is progress, not a failure: it
+		// resets the failure count and keeps the request out of the queued state
+		// so a later check can see the pull request merge or close.
+		since := now
+		if row.DocsReviewSince.Valid {
+			since = row.DocsReviewSince.Time
+		}
+		result.DocsUrl = conv.ToPGText(guide.URL)
+		result.DocsOutcome = conv.ToPGText(string(guide.Outcome))
+		result.DocsReviewSince = conv.ToPGTimestamptz(since)
+		if s.now().Sub(since) >= guideReviewStallAfter {
+			stalled = true
+			result.NeedsAttention = true
+			result.DeliveryError = conv.ToPGText(codeGuideReviewStalled)
+		} else {
+			result.NextAttemptAt = conv.ToPGTimestamptz(s.now().Add(guideReviewRecheck))
+		}
+	case effectErr == nil:
+		result.DocsUrl = conv.ToPGText(guide.URL)
 		result.DocsQueuedAt = conv.ToPGTimestamptz(s.now())
-	} else {
+		result.DocsOutcome = conv.ToPGText(string(guide.Outcome))
+	default:
+		// A transient failure while waiting on a guide pull request must not
+		// restart the stall clock.
+		result.DocsReviewSince = row.DocsReviewSince
 		kind, retryAfter := delivery.Classify(effectErr)
 		result.Failures = min(row.DocsFailures, maxDocsFailures)
 		code := "docs_transient"
@@ -202,7 +243,7 @@ func (s *Service) deliver(ctx context.Context, target repo.RegistryPromotionCand
 	if written == 0 {
 		return ErrStale
 	}
-	if effectErr != nil {
+	if effectErr != nil || stalled {
 		return errors.New("documentation request needs retry or attention")
 	}
 	return nil
@@ -214,7 +255,7 @@ func (s *Service) Status(ctx context.Context) (JobStatus, error) {
 	if err != nil {
 		return JobStatus{}, fmt.Errorf("read catalogue promotion job status: %w", err)
 	}
-	return JobStatus{PendingDocs: row.PendingDocs, NeedsAttention: row.NeedsAttention, OldestPendingAt: row.OldestPendingAt.Time, LastDiscoveryAt: row.LastDiscoveryAt.Time, DiscoveryFailures: row.DiscoveryFailures}, nil
+	return JobStatus{PendingDocs: row.PendingDocs, NeedsAttention: row.NeedsAttention, OldestPendingAt: row.OldestPendingAt.Time, GuideInReview: row.GuideInReview, LastDiscoveryAt: row.LastDiscoveryAt.Time, DiscoveryFailures: row.DiscoveryFailures}, nil
 }
 
 // Source edits and deletion are expected races, not telemetry outages.
