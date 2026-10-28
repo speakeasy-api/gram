@@ -17,6 +17,11 @@ import (
 
 func mintInstallCode(t *testing.T, ti *testInstance, agentID, token string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
+	return mintInstallCodeFrom(t, ti, "https://app.example.test", agentID, token)
+}
+
+func mintInstallCodeFrom(t *testing.T, ti *testInstance, origin, agentID, token string) (*httptest.ResponseRecorder, error) {
+	t.Helper()
 	r := httptest.NewRequest(http.MethodPost, "/agent-mcp/"+agentID+"/install-code", nil)
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
@@ -24,7 +29,7 @@ func mintInstallCode(t *testing.T, ti *testInstance, agentID, token string) (*ht
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("agentID", agentID)
 	r = r.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
-	r = r.WithContext(requestorigin.WithContext(r.Context(), requestorigin.Origin{BaseURL: "https://app.example.test"}))
+	r = r.WithContext(requestorigin.WithContext(r.Context(), requestorigin.Origin{BaseURL: origin}))
 
 	w := httptest.NewRecorder()
 	err := ti.service.HandleAgentInstallCode(w, r)
@@ -115,4 +120,16 @@ func TestAgentInstall_MintingRequiresThatAgentsKey(t *testing.T) {
 
 	_, err = mintInstallCode(t, ti, fx.agent.ID.String(), other.token)
 	requireAgentGatewayCode(t, err, oops.CodeNotFound)
+}
+
+// The command fetches the script from the minting origin, so a plain-HTTP
+// origin would send the code, a bearer of the key, in cleartext.
+func TestAgentInstall_MintingRequiresAnHTTPSOrigin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	minted, err := mintInstallCodeFrom(t, ti, "http://app.example.test", fx.agent.ID.String(), fx.token)
+	requireAgentGatewayCode(t, err, oops.CodeBadRequest)
+	require.Empty(t, minted.Body.String(), "no code may be handed out")
 }

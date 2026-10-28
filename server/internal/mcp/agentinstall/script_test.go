@@ -611,6 +611,7 @@ func TestScriptOmitsUnsupportedPluginFlags(t *testing.T) {
 	out := h.run(t, renderScript(t, testParams()))
 	require.Contains(t, out, "Speakeasy hooks: PASS")
 	calls := h.calls(t)
+	require.Len(t, calls, 6, "openclaw calls: %v", calls)
 	require.NotContains(t, calls[4], "--force")
 	require.NotContains(t, calls[4], "--accept-capabilities")
 }

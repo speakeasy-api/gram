@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -98,6 +99,13 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 	}
 	organizationID := authCtx.ActiveOrganizationID
 
+	// The command fetches the script from this origin, and the code is a
+	// bearer of the key until spent: never hand it out for a plain-HTTP fetch.
+	serverURL := s.BaseURLForRequest(r)
+	if base, err := url.Parse(serverURL); err != nil || base.Scheme != "https" {
+		return oops.E(oops.CodeBadRequest, nil, "install commands require an HTTPS server URL")
+	}
+
 	// Resolved now, while the request is authenticated by the key: spending
 	// the code is not.
 	projectSlug, err := s.agentHooksProjectSlug(ctx, organizationID, agentID)
@@ -109,7 +117,6 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "prepare install command").LogError(ctx, s.logger)
 	}
-	serverURL := s.BaseURLForRequest(r)
 	record := agentInstallCode{
 		Code:            code,
 		AgentID:         agentID.String(),

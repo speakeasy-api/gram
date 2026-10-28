@@ -139,7 +139,7 @@ Per-user attribution on shared gateways is tracked separately in DNO-971.
 ## Install for an agent (one command)
 
 An agent's page in the dashboard issues a single-use install command,
-`curl -fsSL <server>/agent-mcp/install/<code> | sh`. Run it yourself in a
+`curl -fsSL https://<server>/agent-mcp/install/<code> | sh`. Run it yourself in a
 trusted shell on the OpenClaw machine. Until redeemed or expired after 15
 minutes, the code can retrieve the key: do not paste the command into chat.
 The separate follow-up message contains no code or credential.
