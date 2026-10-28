@@ -30,7 +30,7 @@ import {
 } from "react";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
-import { useCanReadRisk, useIdentityIsKnown } from "./useIdentityQueries";
+import { useIdentityIsKnown } from "./useIdentityQueries";
 import { withoutFindingsFilter } from "./identityFindingsLink";
 
 /** How each resolved subject kind reads in the header chip. */
@@ -94,7 +94,6 @@ function IdentityDetailContent(): JSX.Element {
   // corrupt an identifier that legitimately contains a percent escape.
   const { identityUrn: urn = "" } = useParams<{ identityUrn: string }>();
   const encodedUrn = urn ? encodeIdentityUrn(urn) : undefined;
-  const canReadRisk = useCanReadRisk();
   const routes = useRoutes();
   const location = useLocation();
 
@@ -262,8 +261,6 @@ function IdentityDetailContent(): JSX.Element {
               // The Findings filter is that page's own, not a setting to
               // carry into the other sections and back.
               withoutFindingsFilter(location.search),
-              // Agents render the agent profile, which has no Findings view.
-              canReadRisk && !identity.agent,
               identity.kind,
             )}
             // Narrow, the rail is a scrollable row above the content: hiding
