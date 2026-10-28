@@ -16,8 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func insertSkillObservation(t *testing.T, ti *testInstance, name, source, sourceLevel, rawSHA256 string, seenAt time.Time) {
@@ -150,6 +153,70 @@ func TestPendingSkillSessionVersionsAreProjectScopedAndExcludeIneligibleObservat
 	})
 	require.NoError(t, err)
 	require.Empty(t, projects)
+
+	// A read over a hosted MCP server arrives reconciled with the MCP session
+	// id. That session is neither a dev nor an assistant one, so the read is
+	// not a session mapping for the metrics sync and not an efficacy
+	// candidate, however complete the row is.
+	resolver := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn)
+	written, err := resolver.RecordRead(ctx, mcpskills.Read{
+		ProjectID: ti.projectID,
+		Entry: mcpskills.Entry{
+			SkillID: version.SkillID, VersionID: version.SkillVersionID, PluginID: uuid.Nil,
+			Name: "mapped-skill", Content: content, RawSHA256: contentSHA256(content), Frontmatter: nil, Pinned: false,
+		},
+		UserID: ti.authContext.UserID, SessionID: "mcp-session-1", SeenAt: seenAt.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	require.True(t, written)
+	rows, err = ti.repo.ListPendingSkillSessionVersions(ctx, repo.ListPendingSkillSessionVersionsParams{
+		ProjectID: ti.projectID,
+		BatchSize: 10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows, "an MCP read is not synced as a dev-surface sighting")
+	candidates, err := ti.repo.ListPendingSkillObservations(ctx, repo.ListPendingSkillObservationsParams{
+		ProjectID:   ti.projectID,
+		AfterSeenAt: pgtype.Timestamptz{},
+		AfterID:     uuid.NullUUID{},
+		BatchSize:   10,
+	})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1, "the hook-reported activation is still a candidate; the MCP read is not")
+	require.Equal(t, "session-1", candidates[0].SessionID)
+
+	// The MCP read is born complete for both pipelines, so the project finders
+	// that fan out the metrics sync and the efficacy enqueue do not keep
+	// selecting the project for work that neither batch query would drain.
+	mcpRows, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
+		ProjectID: ti.projectID, Provider: mcpskills.ObservationProvider,
+	})
+	require.NoError(t, err)
+	require.Len(t, mcpRows, 1)
+	require.True(t, mcpRows[0].MetricsSyncedAt.Valid, "an MCP read is inserted already synced")
+	require.True(t, mcpRows[0].EfficacyEnqueuedAt.Valid, "an MCP read is inserted already enqueued")
+	projects, err = ti.repo.ListProjectsWithPendingSkillObservations(ctx, repo.ListProjectsWithPendingSkillObservationsParams{
+		ProjectCursor: uuid.Nil,
+		PageLimit:     10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, projects, "the MCP read leaves nothing for the metrics sync to find")
+
+	// With the hook-reported activation enqueued, the MCP read is the only
+	// session-bearing row left, and it keeps the project out of the efficacy
+	// sweep too.
+	enqueued, err := ti.repo.MarkSkillObservationsEfficacyEnqueued(ctx, repo.MarkSkillObservationsEfficacyEnqueuedParams{
+		ProjectID: ti.projectID, ObservationIds: []uuid.UUID{candidates[0].ID},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), enqueued)
+	efficacyProjects, err := ti.repo.ListProjectsWithPendingSkillEfficacyWork(ctx, repo.ListProjectsWithPendingSkillEfficacyWorkParams{
+		StaleAfter:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+		PageLimit:     10,
+		ProjectCursor: uuid.Nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, efficacyProjects, "the MCP read leaves nothing for the efficacy sweep to find")
 }
 
 func TestReconcileSkillObservations_NormalizesAndAggregatesMetadataOnlySightings(t *testing.T) {
