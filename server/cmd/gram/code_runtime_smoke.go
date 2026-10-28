@@ -48,6 +48,13 @@ func (smokeHost) Call(_ context.Context, _ string, arguments json.RawMessage) (*
 	return &codemode.ToolResult{Outcome: "completed", Warnings: nil, OK: true, Data: arguments, Content: json.RawMessage(`[]`), Error: ""}, nil
 }
 
+func (smokeHost) ConnectionStatus(context.Context, string) (*codemode.ConnectionStatus, error) {
+	return &codemode.ConnectionStatus{Servers: []codemode.ConnectionState{}}, nil
+}
+func (smokeHost) Connect(context.Context, string) (*codemode.ConnectionAction, error) {
+	return nil, errors.New("smoke host has no upstream connections")
+}
+
 type smokeCheck struct {
 	name  string
 	code  string

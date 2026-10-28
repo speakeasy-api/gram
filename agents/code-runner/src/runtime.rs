@@ -169,7 +169,15 @@ pub async fn execute(
                         .ok_or_else(|| anyhow::anyhow!("invalid host method"))?
                         .to_owned();
                     ensure!(
-                        matches!(method.as_str(), "search" | "describe" | "call" | "servers"),
+                        matches!(
+                            method.as_str(),
+                            "search"
+                                | "describe"
+                                | "call"
+                                | "servers"
+                                | "connection_status"
+                                | "connect"
+                        ),
                         "unknown host method"
                     );
                     let arguments = to_json(args.arg(1).unwrap(), MAX_CALLBACK)?;

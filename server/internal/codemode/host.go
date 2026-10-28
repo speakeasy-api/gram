@@ -337,3 +337,45 @@ func publicDefinition(raw json.RawMessage, path string) (json.RawMessage, error)
 	}
 	return definition, nil
 }
+
+// ConnectionBackend owns recovery independently of an execution's tool allowlist.
+// Implementations must refresh identity and restrict results to visible members.
+type ConnectionBackend interface {
+	ConnectionStatus(context.Context, string) (*ConnectionStatus, error)
+	Connect(context.Context, string) (*ConnectionAction, error)
+}
+
+func validConnectionServer(server string, required bool) bool {
+	return (!required || server != "") && len(server) <= 1024 &&
+		!strings.Contains(server, "--") && strings.TrimSpace(server) == server
+}
+
+func (h *CatalogHost) ConnectionStatus(ctx context.Context, server string) (*ConnectionStatus, error) {
+	if !validConnectionServer(server, false) {
+		return nil, fmt.Errorf("invalid connection server")
+	}
+	backend, ok := h.backend.(ConnectionBackend)
+	if !ok {
+		return nil, ErrToolUnavailable
+	}
+	result, err := backend.ConnectionStatus(ctx, server)
+	if err != nil {
+		return nil, fmt.Errorf("connection status: %w", err)
+	}
+	return result, nil
+}
+
+func (h *CatalogHost) Connect(ctx context.Context, server string) (*ConnectionAction, error) {
+	if !validConnectionServer(server, true) {
+		return nil, fmt.Errorf("connect requires an exact server slug")
+	}
+	backend, ok := h.backend.(ConnectionBackend)
+	if !ok {
+		return nil, ErrToolUnavailable
+	}
+	result, err := backend.Connect(ctx, server)
+	if err != nil {
+		return nil, fmt.Errorf("connect server: %w", err)
+	}
+	return result, nil
+}

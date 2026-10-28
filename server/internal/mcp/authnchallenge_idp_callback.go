@@ -368,6 +368,17 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 
 	// Resolve identity first, then enforce the reconnect owner before recording
 	// a sign-in or handing federated credentials to any consumer.
+	if err := challengeState.CodeReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
+		return err
+	}
+	if challengeState.CodeReconnect != nil {
+		bound := challengeState
+		subject := urn.NewUserSubject(gramUserID)
+		bound.Subject = &subject
+		if _, err := s.consentSubjectMembers(ctx, endpoint, bound); err != nil {
+			return err
+		}
+	}
 	if err := challengeState.WorkloadReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		logger.WarnContext(ctx, "workload reconnect owner authorization rejected", attr.SlogError(err))
