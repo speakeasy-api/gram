@@ -11,10 +11,14 @@
 # audience (it expires in minutes). Tokens are never printed.
 set -euo pipefail
 
-TOKEN_ENDPOINT="${GRAM_TOKEN_ENDPOINT:-https://chat.speakeasy.com/mcp/notion/token}"
-AUDIENCE="${GRAM_AUDIENCE:-https://chat.speakeasy.com/mcp/notion}"
-RESOURCE="${GRAM_RESOURCE:-https://chat.speakeasy.com/mcp/notion}"
-MCP_URL="${GRAM_MCP_URL:-https://chat.speakeasy.com/mcp/notion}"
+# The shared authorization server from the agent's setup screen. No resource:
+# the session it returns is issuer-wide, valid on every MCP server attached to
+# the issuer, each of which checks the agent's access on use.
+ISSUER="https://id.speakeasy.com/oauth/usi/01a179ec-ee09-79d8-859a-a148f5cbb4bf"
+TOKEN_ENDPOINT="${GRAM_TOKEN_ENDPOINT:-$ISSUER/token}"
+AUDIENCE="${GRAM_AUDIENCE:-$ISSUER}"
+RESOURCE="${GRAM_RESOURCE:-}"
+MCP_URL="${GRAM_MCP_URL:-https://ai.speakeasy.com/mcp/clickhouse}"
 
 die() { echo "FAIL: $*" >&2; exit 1; }
 mask() { [ -n "${GITHUB_ACTIONS:-}" ] && echo "::add-mask::$1"; return 0; }
@@ -43,11 +47,13 @@ jwt_claims "$jwt" | jq -c '{iss, sub, aud, exp, jti_present: (has("jti"))}'
 
 echo "== 2. Exchange at $TOKEN_ENDPOINT"
 resp="$(mktemp)"
+resource_arg=()
+[ -n "$RESOURCE" ] && resource_arg=(--data-urlencode "resource=$RESOURCE")
 code="$(curl -sS -o "$resp" -w '%{http_code}' -X POST "$TOKEN_ENDPOINT" \
 	-H 'accept: application/json' \
 	--data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer' \
 	--data-urlencode "assertion=$jwt" \
-	--data-urlencode "resource=$RESOURCE")"
+	"${resource_arg[@]}")"
 if [ "$code" != 200 ]; then
 	echo "HTTP $code: $(jq -c '{error, error_description}' "$resp" 2>/dev/null || head -c 300 "$resp")"
 	rm -f "$resp"
