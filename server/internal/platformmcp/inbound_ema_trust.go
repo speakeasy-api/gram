@@ -134,6 +134,10 @@ type InboundEMAIssuer struct {
 	// from; absent when inbound enterprise-managed authorization is off.
 	TrustedIdentityProvider *InboundEMAIdentityProvider `json:"trusted_identity_provider,omitempty"`
 
+	// TrustedIdentityProviderUnavailable reports that the trusted identity
+	// provider could not be read after a saved change.
+	TrustedIdentityProviderUnavailable bool `json:"trusted_identity_provider_unavailable,omitempty" jsonschema:"true when the change was saved but the trusted identity provider could not be read, so trusted_identity_provider is absent but not verified; call get_inbound_ema_trust again"`
+
 	// FederatedBrowserSignIn reports that interactive sign-in also goes
 	// through the trusted identity provider, so the trust cannot be removed here.
 	FederatedBrowserSignIn bool `json:"federated_browser_sign_in"`
@@ -155,6 +159,10 @@ type InboundEMAIssuer struct {
 	// OrganizationGatewayURL is the organization gateway, set when it signs
 	// users in through this issuer.
 	OrganizationGatewayURL string `json:"organization_gateway_url,omitempty"`
+
+	// OrganizationGatewayURLUnavailable reports that the organization gateway
+	// could not be read after a saved change.
+	OrganizationGatewayURLUnavailable bool `json:"organization_gateway_url_unavailable,omitempty" jsonschema:"true when the change was saved but the organization gateway could not be read, so organization_gateway_url is absent but not verified; call get_inbound_ema_trust again"`
 }
 
 // InboundEMADirectory reports whether ID-JAG users can be resolved.
@@ -245,6 +253,10 @@ type TrustInboundEMAIdentityProviderOutput struct {
 	// Issuer is the issuer's state, read again after a committed change.
 	Issuer InboundEMAIssuer `json:"issuer"`
 
+	// IssuerUnavailable reports that the issuer could not be read again after
+	// a saved change.
+	IssuerUnavailable bool `json:"issuer_unavailable,omitempty" jsonschema:"true when the change was saved but the issuer could not be read again, so issuer and expected_trusted_remote_session_issuer_id show what the change wrote, not a fresh read; call get_inbound_ema_trust again"`
+
 	// Directory reports the directory sync users resolve through.
 	Directory InboundEMADirectory `json:"directory"`
 
@@ -283,6 +295,10 @@ type UntrustInboundEMAIdentityProviderOutput struct {
 	// Issuer is the issuer's state, read again after a committed change.
 	Issuer InboundEMAIssuer `json:"issuer"`
 
+	// IssuerUnavailable reports that the issuer could not be read again after
+	// a saved change.
+	IssuerUnavailable bool `json:"issuer_unavailable,omitempty" jsonschema:"true when the change was saved but the issuer could not be read again, so issuer and expected_trusted_remote_session_issuer_id show what the change wrote, not a fresh read; call get_inbound_ema_trust again"`
+
 	// NextStep is the next safe action.
 	NextStep string `json:"next_step"`
 }
@@ -296,7 +312,7 @@ type InboundEMATrustService struct {
 	logger *slog.Logger
 
 	// gateway reads the organization gateway; nil omits its URL.
-	gateway func() *OrganizationGatewayService
+	gateway func(ctx context.Context, organizationID string) (organizationGatewayIssuer, error)
 }
 
 // WithInboundEMATrust adds the inbound enterprise-managed authorization tools.
@@ -304,7 +320,13 @@ func (r *PostgresReader) WithInboundEMATrust(users InboundEMAUserIssuerManagemen
 	if users == nil || remote == nil {
 		return r
 	}
-	r.inboundEMATrust = &InboundEMATrustService{users: users, remote: remote, db: r.db, logger: r.logger, gateway: func() *OrganizationGatewayService { return r.organizationGateway }}
+	gateway := func(ctx context.Context, organizationID string) (organizationGatewayIssuer, error) {
+		if !r.organizationGateway.valid() {
+			return organizationGatewayIssuer{}, nil
+		}
+		return r.organizationGateway.servingIssuer(ctx, organizationID)
+	}
+	r.inboundEMATrust = &InboundEMATrustService{users: users, remote: remote, db: r.db, logger: r.logger, gateway: gateway}
 	return r
 }
 
@@ -416,6 +438,8 @@ func (s *InboundEMATrustService) Trust(ctx context.Context, principal Principal,
 		return TrustInboundEMAIdentityProviderOutput{}, err
 	}
 	output := inboundEMATrustOutput(previous, provider, reused, directory)
+	written := *current
+	written.TrustedRemoteSessionIssuerID = new(provider.RemoteSessionIssuerID)
 	if output.Changed {
 		if _, err := s.users.UpdateIssuerIfTrusting(ctx, &orgusergen.UpdateIssuerPayload{ID: current.ID, TrustedRemoteSessionIssuerID: new(provider.RemoteSessionIssuerID)}, previous); err != nil {
 			refused := inboundEMAManagementError("trust identity provider", err)
@@ -425,21 +449,17 @@ func (s *InboundEMATrustService) Trust(ctx context.Context, principal Principal,
 			return TrustInboundEMAIdentityProviderOutput{}, refused
 		}
 	}
+	// The change is saved: a failed read below marks that part unavailable.
 	output.Applied = true
-	committed, err := s.organizationIssuer(ctx, current.ID)
-	if err != nil {
-		return TrustInboundEMAIdentityProviderOutput{}, err
-	}
 	gateway, err := s.organizationGateway(ctx, principal)
 	if err != nil {
-		return TrustInboundEMAIdentityProviderOutput{}, err
+		s.logUnreadable(ctx, principal.OrganizationID, "read organization gateway", err)
 	}
-	output.Issuer, err = s.issuerState(ctx, principal.OrganizationID, committed, gateway)
-	if err != nil {
-		return TrustInboundEMAIdentityProviderOutput{}, err
-	}
+	var committed *types.UserSessionIssuer
+	output.Issuer, committed, output.IssuerUnavailable = s.committedIssuerState(ctx, principal, &written, gateway)
+	output.Issuer.OrganizationGatewayURLUnavailable = err != nil
 	output.ExpectedTrustedRemoteSessionIssuerID = conv.PtrValOr(committed.TrustedRemoteSessionIssuerID, "")
-	output.NextStep = inboundEMATrustNextStep(output.Issuer, output.Directory)
+	output.NextStep = inboundEMACommittedNextStep(output.IssuerUnavailable, output.Issuer, inboundEMATrustNextStep(output.Issuer, output.Directory))
 	return output, nil
 }
 
@@ -539,17 +559,14 @@ func (s *InboundEMATrustService) Untrust(ctx context.Context, principal Principa
 			return UntrustInboundEMAIdentityProviderOutput{}, inboundEMAManagementError("remove identity provider trust", err)
 		}
 	}
+	// The change is saved: a failed read below marks that part unavailable.
 	output.Applied = true
-	committed, err := s.organizationIssuer(ctx, current.ID)
-	if err != nil {
-		return UntrustInboundEMAIdentityProviderOutput{}, err
-	}
-	output.Issuer, err = s.issuerState(ctx, principal.OrganizationID, committed, gateway)
-	if err != nil {
-		return UntrustInboundEMAIdentityProviderOutput{}, err
-	}
+	written := *current
+	written.TrustedRemoteSessionIssuerID = nil
+	var committed *types.UserSessionIssuer
+	output.Issuer, committed, output.IssuerUnavailable = s.committedIssuerState(ctx, principal, &written, gateway)
 	output.ExpectedTrustedRemoteSessionIssuerID = conv.PtrValOr(committed.TrustedRemoteSessionIssuerID, "")
-	output.NextStep = "ID-JAGs for this issuer are now refused. The identity provider record is kept; delete it in the dashboard if nothing else uses it."
+	output.NextStep = inboundEMACommittedNextStep(output.IssuerUnavailable, output.Issuer, "ID-JAGs for this issuer are now refused. The identity provider record is kept; delete it in the dashboard if nothing else uses it.")
 	return output, nil
 }
 
@@ -609,11 +626,7 @@ func (s *InboundEMATrustService) organizationGateway(ctx context.Context, princi
 	if s.gateway == nil {
 		return organizationGatewayIssuer{}, nil
 	}
-	gateway := s.gateway()
-	if !gateway.valid() {
-		return organizationGatewayIssuer{}, nil
-	}
-	return gateway.servingIssuer(ctx, principal.OrganizationID)
+	return s.gateway(ctx, principal.OrganizationID)
 }
 
 func (s *InboundEMATrustService) issuerState(ctx context.Context, organizationID string, issuer *types.UserSessionIssuer, gateway organizationGatewayIssuer) (InboundEMAIssuer, error) {
@@ -628,13 +641,14 @@ func (s *InboundEMATrustService) issuerState(ctx context.Context, organizationID
 	if admission.Mode(issuer.ClientIDMetadataAdmissionMode) == admission.ModePresets {
 		urls, truncated, err := s.customClientURLs(ctx, organizationID, issuer.ID)
 		if err != nil {
-			if s.logger != nil {
-				s.logger.ErrorContext(ctx, "list inbound EMA issuer custom client urls", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-			}
+			s.logUnreadable(ctx, organizationID, "list issuer custom client urls", err)
 			state.CustomClientURLsUnavailable = true
 		} else {
 			state.CustomClientURLs, state.CustomClientURLsTruncated = urls, truncated
 		}
+	}
+	if gateway.IssuerID == issuer.ID {
+		state.OrganizationGatewayURL = gateway.URL
 	}
 	switch {
 	case authserver.Mode(issuer.AuthorizationServerMode) != authserver.ModeShared:
@@ -647,15 +661,37 @@ func (s *InboundEMATrustService) issuerState(ctx context.Context, organizationID
 	if trusted := conv.PtrValOr(issuer.TrustedRemoteSessionIssuerID, ""); trusted != "" {
 		record, err := s.remote.GetIssuer(ctx, &orgremotegen.GetIssuerPayload{ID: trusted})
 		if err != nil {
-			return InboundEMAIssuer{}, fmt.Errorf("read trusted identity provider: %w", err)
+			state.TrustedIdentityProviderUnavailable = true
+			return state, fmt.Errorf("read trusted identity provider: %w", err)
 		}
 		provider := inboundEMAProvider(record)
 		state.TrustedIdentityProvider = &provider
 	}
-	if gateway.IssuerID == issuer.ID {
-		state.OrganizationGatewayURL = gateway.URL
-	}
 	return state, nil
+}
+
+// committedIssuerState reads an issuer again after a saved change. A failed
+// read is logged and marked unavailable rather than failing the call, falling
+// back to written, the issuer as the change left it.
+func (s *InboundEMATrustService) committedIssuerState(ctx context.Context, principal Principal, written *types.UserSessionIssuer, gateway organizationGatewayIssuer) (InboundEMAIssuer, *types.UserSessionIssuer, bool) {
+	committed, err := s.organizationIssuer(ctx, written.ID)
+	issuerUnavailable := err != nil
+	if err != nil {
+		s.logUnreadable(ctx, principal.OrganizationID, "read user session issuer", err)
+		committed = written
+	}
+	state, err := s.issuerState(ctx, principal.OrganizationID, committed, gateway)
+	if err != nil {
+		s.logUnreadable(ctx, principal.OrganizationID, "read issuer state", err)
+	}
+	return state, committed, issuerUnavailable
+}
+
+// logUnreadable logs a read whose part of the result is marked unavailable.
+func (s *InboundEMATrustService) logUnreadable(ctx context.Context, organizationID string, what string, err error) {
+	if s.logger != nil {
+		s.logger.ErrorContext(ctx, "inbound EMA trust could not "+what, attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+	}
 }
 
 func (s *InboundEMATrustService) directory(ctx context.Context, principal Principal) (InboundEMADirectory, error) {
@@ -754,6 +790,16 @@ func inboundEMAReadNextStep(output GetInboundEMATrustOutput) string {
 	if len(output.Issuers) == 0 {
 		return "This organization has no organization-level user session issuer. Create one with a shared authorization server in the dashboard first."
 	}
+	unread := ""
+	for _, issuer := range output.Issuers {
+		if note := inboundEMAUnreadNote(issuer.unavailableParts()); note != "" {
+			unread += "Issuer " + issuer.Slug + ": " + note + " "
+		}
+	}
+	return unread + inboundEMAReadStep(output)
+}
+
+func inboundEMAReadStep(output GetInboundEMATrustOutput) string {
 	if !output.Directory.Synced {
 		return "No directory users are synced, so every ID-JAG exchange is refused. Set up directory sync on IDP and SSO first; Speakeasy never creates users from an ID-JAG."
 	}
@@ -774,6 +820,43 @@ func inboundEMAReadNextStep(output GetInboundEMATrustOutput) string {
 		}
 	}
 	return "To accept ID-JAGs, call trust_inbound_ema_identity_provider with an issuer and the identity provider's issuer URL."
+}
+
+// unavailableParts names the parts of the issuer's state that could not be read.
+func (i InboundEMAIssuer) unavailableParts() []string {
+	parts := []string{}
+	if i.TrustedIdentityProviderUnavailable {
+		parts = append(parts, "trusted_identity_provider")
+	}
+	if i.OrganizationGatewayURLUnavailable {
+		parts = append(parts, "organization_gateway_url")
+	}
+	if i.CustomClientURLsUnavailable {
+		parts = append(parts, "custom_client_urls")
+	}
+	return parts
+}
+
+// inboundEMAUnreadNote says which parts could not be read, or is empty.
+func inboundEMAUnreadNote(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, ", ") + " could not be read. Call get_inbound_ema_trust again to check the result."
+}
+
+// inboundEMACommittedNextStep prefixes step with what a saved change could
+// not read back.
+func inboundEMACommittedNextStep(issuerUnavailable bool, issuer InboundEMAIssuer, step string) string {
+	parts := issuer.unavailableParts()
+	if issuerUnavailable {
+		parts = append([]string{"issuer"}, parts...)
+	}
+	note := inboundEMAUnreadNote(parts)
+	if note == "" {
+		return step
+	}
+	return "The change was saved, but " + note + " " + step
 }
 
 func inboundEMATrustNextStep(issuer InboundEMAIssuer, directory InboundEMADirectory) string {
@@ -835,11 +918,7 @@ func inboundEMAAdmissionNote(issuer InboundEMAIssuer) string {
 	case admission.ModeDisabled:
 		return "Client ID metadata documents are disabled for this issuer, so ID-JAG sign-in cannot work until its admission mode is presets or open. Change it with the organizationUserSessionIssuers.update management API (client_id_metadata_admission_mode); set_mcp_client_admission only changes project issuers."
 	case admission.ModePresets:
-		note := "This issuer admits only listed clients: the client the identity provider issues ID-JAGs to must be in preset_clients or custom_client_urls. Speakeasy's own assistant clients are also admitted."
-		if issuer.CustomClientURLsUnavailable {
-			note += " Its custom_client_urls could not be read; read get_inbound_ema_trust again to check them."
-		}
-		return note
+		return "This issuer admits only listed clients: the client the identity provider issues ID-JAGs to must be in preset_clients or custom_client_urls. Speakeasy's own assistant clients are also admitted."
 	default:
 		return ""
 	}
