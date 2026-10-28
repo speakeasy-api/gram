@@ -1022,33 +1022,3 @@ func TestConsentTemplateOffersAttachmentReconnect(t *testing.T) {
 	require.Contains(t, html, "> Reconnect </button>")
 	require.NotContains(t, html, "data-auto-close")
 }
-
-func TestConsentTemplateDelegationOnlyInMyselfMode(t *testing.T) {
-	t.Parallel()
-	var page bytes.Buffer
-	require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
-		AgentSelectionEnabled: true, AgentOptions: []consentAgentOption{{ID: "actor-agent", Name: "Actor agent"}}, ClientName: "Example client", SubjectDisplay: "Example person", ConsentEnabled: true,
-		Delegation: &postLoginDelegationData{ActionURL: "/connect/remote-session", State: "delegation-state", CSRF: "delegation-csrf", SessionID: "exact-session", Generation: "8", HasPreviousScopes: true, PreviousScopes: []string{"tools:read"}, Scopes: []delegationScope{{Name: "tools:read"}, {Name: "tools:write", Added: true}}, Options: []delegationOption{{ID: "example-agent", Name: "Example agent", BindingID: "existing-binding", Existing: true, Selected: true, Scopes: []delegationScope{{Name: "tools:write", Added: true}}}}},
-	}))
-	html := page.String()
-	require.Contains(t, html, "Also update access for")
-	require.Contains(t, html, "tools:write")
-	require.Contains(t, html, "· Added")
-	require.Contains(t, html, `data-approve-form`)
-	require.Contains(t, html, `name="consent_actor"`)
-	require.Contains(t, html, `data-agent-self-only data-delegation-form`)
-	require.Contains(t, html, `data-delegation-form data-integrated-delegation data-action-url="/connect/remote-session"`)
-	require.Contains(t, html, `name="state" value="delegation-state"`)
-	require.Contains(t, html, `name="csrf_token" value="delegation-csrf"`)
-	require.Contains(t, html, `name="remote_session_id" value="exact-session"`)
-	require.Contains(t, html, `name="grant_generation" value="8"`)
-	require.Contains(t, html, `value="example-agent" data-binding-id="existing-binding" checked`)
-	require.Contains(t, html, `data-delegation-fallback action="/connect/remote-session" method="POST"`)
-	require.Contains(t, html, `name="action" value="finish_delegation"`)
-	require.Contains(t, html, `name="browser_redirect" value="1"`)
-	_, button, found := strings.Cut(html, `id="consent-approve-button"`)
-	require.True(t, found)
-	attributes, _, found := strings.Cut(button, ">")
-	require.True(t, found)
-	require.Contains(t, attributes, "disabled")
-}

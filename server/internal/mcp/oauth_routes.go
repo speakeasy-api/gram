@@ -45,7 +45,7 @@ func consentActionRouteHandler(logger *slog.Logger, handler func(http.ResponseWr
 			r = r.WithContext(context.WithValue(r.Context(), consentActionFormErrorKey{}, err))
 		}
 		switch r.PostForm.Get("action") {
-		case "delegate_grant", "finish_delegation", "agent_connections", "agent_attach", "agent_detach", "identity_chaining_check":
+		case "agent_connections", "agent_attach", "agent_detach", "identity_chaining_check":
 			machine.ServeHTTP(w, r)
 		default:
 			browser.ServeHTTP(w, r)

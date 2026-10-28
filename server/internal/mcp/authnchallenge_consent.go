@@ -58,7 +58,7 @@ import (
 var consentTemplateHTML string
 
 var consentTemplate = template.Must(
-	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentpage.LogoTemplate + postLoginDelegationFields),
+	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentpage.LogoTemplate),
 )
 
 // consentScriptData is the consent page's client-side script. It is served
@@ -116,7 +116,6 @@ type consentApprovalError struct {
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
-	Delegation *postLoginDelegationData
 	// GatewayDefaultMode labels the gateway default when choosing discovery.
 	GatewayDefaultMode string
 	// CodeModeUnavailable explains a stored code choice that is currently served as Progressive.
@@ -320,9 +319,6 @@ type remoteSessionCard struct {
 
 	// ConnectedAs is upstream-supplied text, rendered escaped as a secondary line.
 	ConnectedAs string
-
-	// Scopes contains permissions granted by the upstream connection.
-	Scopes []string
 	// AccountChips is upstream-supplied provider context (workspace, team, login), rendered escaped on its own line.
 	AccountChips []string
 	// IdentityCaveat qualifies ConnectedAs when it was not recorded as the grant's identity; rendered as a hover note.
@@ -383,14 +379,6 @@ type cardPanel struct {
 
 	// ShowDetails is whether the disclosure renders at all: any line above.
 	ShowDetails bool
-}
-
-// ScopeSummary keeps the connection's permissions compact while preserving exact scope names.
-func (c remoteSessionCard) ScopeSummary() string {
-	if len(c.Scopes) <= 3 {
-		return strings.Join(c.Scopes, ", ")
-	}
-	return fmt.Sprintf("%s & %d others", strings.Join(c.Scopes[:2], ", "), len(c.Scopes)-2)
 }
 
 // Panel decides the detail lines from the card's state.
@@ -601,10 +589,6 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
-	if shown, err := s.servePostLoginDelegation(w, r, endpoint, challengeState); shown || err != nil {
-		return err
-	}
-
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
 	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
@@ -701,7 +685,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
-	if challengeState.PendingDelegation == nil && len(agentOptions) == 0 && r.URL.Query().Get("consent") != "required" &&
+	if r.URL.Query().Get("consent") != "required" && len(agentOptions) == 0 &&
 		consentReuseEligible(endpoint, challengeState) && consentBrowserMatches(r, challengeState, time.Now()) &&
 		consentRemoteFingerprint(endpoint, cards) != "" {
 		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
@@ -763,7 +747,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 	autoConnect := gateway == nil || (gateway.Focus != nil && challengeState.FirstParty && challengeState.FocusServer == gateway.Focus.Slug)
-	if challengeState.PendingDelegation == nil && len(agentOptions) == 0 && autoConnect {
+	if len(agentOptions) == 0 && autoConnect {
 		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, autoConnectCards, focusServer); err != nil {
 			return err
 		} else if redirected {
@@ -895,15 +879,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			gatewayDefaultMode = "Progressive"
 		}
 	}
-	var delegation *postLoginDelegationData
-	if !challengeState.FirstParty {
-		delegation, err = s.loadPostLoginDelegation(r, endpoint, challengeState)
-	}
-	if err != nil {
-		return err
-	}
 	data := consentTemplateData{
-		Delegation:              delegation,
 		GatewayDefaultMode:      gatewayDefaultMode,
 		CodeModeUnavailable:     codeModeUnavailable,
 		ClientName:              clientName,
@@ -976,8 +952,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// Preflight on a plain Get: everything that can fail for retryable
 	// reasons (validation, inventory snapshot, client lookup, selection
 	// parsing) runs BEFORE the challenge is consumed, so a transient failure
-	// leaves the page usable. CompareAndDelete below consumes only this exact
-	// state, so a concurrent callback leaves the updated challenge retryable.
+	// leaves the page usable. The consuming GetAndDelete below re-validates
+	// against the consumed value, which stays the single-use authority.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return consentChallengeCacheError(ctx, logger, err)
@@ -1011,16 +987,6 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
 	}
 
-	if (action == "approve" || action == "reuse") && challengeState.PendingDelegation != nil {
-		delegation, err := s.loadPostLoginDelegation(r, endpoint, challengeState)
-		if err != nil {
-			return err
-		}
-		if delegation != nil {
-			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
-			return nil
-		}
-	}
 	reuse := action == "reuse"
 	if reuse {
 		if !consentReuseEligible(endpoint, challengeState) || !consentBrowserMatches(r, challengeState, time.Now()) {
@@ -1288,14 +1254,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 
-	// Claim only the preflighted state. A callback may publish renewal choices
-	// while inventory checks run; those choices must survive for review.
-	claimed, err := s.authnChallengeCache.CompareAndDelete(ctx, challengeState)
+	// Atomic GETDEL: a consent approval consumes the authn-challenge state
+	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
+	// and get "not found or expired", so only one grant is ever minted per
+	// authorization request. The consumed value is the authority — re-run
+	// the guards against it in case the preflighted copy went stale.
+	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return consentChallengeCacheError(ctx, logger, err)
-	}
-	if !claimed {
-		return oops.E(oops.CodeConflict, nil, "consent changed; reload before approving access").LogWarn(ctx, logger)
 	}
 	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)
@@ -1977,7 +1943,6 @@ func (s *Service) buildRemoteSessionCards(
 			AuthorizationExpiresIn: authorizationExpiresIn,
 			AutoRefreshChecked:     checked,
 			ConnectedAs:            state.ConnectedAs,
-			Scopes:                 state.Scopes,
 			AccountChips:           state.AccountChips,
 			IdentityCaveat:         state.IdentityCaveat,
 			TokenActive:            tokenActive,

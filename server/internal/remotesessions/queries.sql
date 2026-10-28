@@ -6281,37 +6281,59 @@ WHERE s.id = @id AND s.remote_session_client_id = @remote_session_client_id
   AND (s.access_expires_at IS NULL OR s.access_expires_at > now() OR (s.refresh_token_encrypted IS NOT NULL AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())))
 FOR UPDATE OF s;
 
--- name: ListAgentConnectionRenewals :many
--- Renewal candidates are existing assignments owned by the signing-in user.
--- Old source rows remain usable for ownership checks after reauthentication;
--- the mutation separately validates the new grant and locks the current binding.
-SELECT sqlc.embed(b), a.name AS agent_name, a.owner_user_id AS agent_owner_user_id
+-- name: ListExpiredOwnBindingRenewalCandidates :many
+-- Only exact, expired grants already delegated by this human can be renewed.
+-- Candidates are rechecked under agent, binding and source locks before writing.
+SELECT b.*
 FROM principal_remote_session_bindings b
+JOIN remote_sessions s ON s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id AND s.grant_generation = b.grant_generation AND NOT s.deleted
+JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted AND c.credential_owner <> 'self'
+JOIN remote_session_issuers ri ON ri.id = c.remote_session_issuer_id AND NOT ri.deleted
+JOIN user_session_issuers u ON u.id = b.user_session_issuer_id AND NOT u.deleted
+JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = u.id
+JOIN projects p ON p.id = b.project_id AND p.organization_id = b.organization_id AND NOT p.deleted
+JOIN organization_metadata org ON org.id = b.organization_id AND org.disabled_at IS NULL
 JOIN agents a ON a.id = b.principal_id AND a.organization_id = b.organization_id AND a.project_id = b.project_id
-JOIN users owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
-JOIN organization_user_relationships membership ON membership.organization_id = a.organization_id AND membership.user_id = owner.id AND membership.deleted_at IS NULL
-JOIN remote_sessions s ON s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
-WHERE b.project_id = @project_id AND b.organization_id = @organization_id
-  AND b.user_session_issuer_id = @user_session_issuer_id
-  AND b.remote_session_client_id = @remote_session_client_id
-  AND b.revoked_at IS NULL AND s.subject_urn = @subject_urn
-  AND b.attached_by_subject_id = @subject_urn
-  AND NOT a.deleted AND a.suspended_at IS NULL AND a.revoked_at IS NULL
-  AND a.owner_reassignment_required_at IS NULL
-ORDER BY LOWER(a.name), a.id;
-
--- name: GetOrganizationUserRemoteSessionForClient :one
--- Organization gateway callbacks have no project; only organization/global
--- registrations and consent provenance from this organization are admitted.
-SELECT s.* FROM remote_sessions s
-JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
-JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
-JOIN user_session_issuers u ON u.id = s.user_session_issuer_id
-LEFT JOIN projects up ON up.id = u.project_id
-JOIN organization_metadata org ON org.id = @organization_id AND org.disabled_at IS NULL
 JOIN users person ON s.subject_urn = 'user:' || person.id AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
-JOIN organization_user_relationships membership ON membership.organization_id = org.id AND membership.user_id = person.id AND NOT membership.deleted AND membership.deleted_at IS NULL
-WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_session_client_id AND NOT s.deleted
-  AND c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = org.id)
-  AND i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = org.id)
-  AND (up.organization_id = org.id OR (u.project_id IS NULL AND u.organization_id = org.id));
+JOIN organization_user_relationships membership ON membership.user_id = person.id AND membership.organization_id = org.id AND NOT membership.deleted AND membership.deleted_at IS NULL
+WHERE b.organization_id = @organization_id
+  AND b.user_session_issuer_id = @user_session_issuer_id
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND b.remote_session_client_id = @remote_session_client_id
+  AND s.subject_urn = @subject_urn AND b.attached_by_subject_id = @subject_urn
+  AND b.revoked_at IS NULL
+  AND NOT a.deleted AND a.suspended_at IS NULL AND a.revoked_at IS NULL AND a.owner_reassignment_required_at IS NULL
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = org.id)))
+  AND (ri.project_id = p.id OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = org.id)))
+  AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = org.id))
+  AND (
+    s.authorization_expires_at <= now()
+    OR (s.access_expires_at <= now() AND (s.refresh_token_encrypted IS NULL OR s.refresh_token_encrypted = '' OR s.refresh_expires_at <= now()))
+  )
+ORDER BY b.principal_id, b.id;
+
+-- name: LockRemoteSessionForAutomaticRenewal :one
+-- The caller holds agent and binding locks before taking this source lock.
+SELECT * FROM remote_sessions
+WHERE id = @id AND subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND grant_generation = @previous_generation AND NOT deleted
+  AND (
+    authorization_expires_at <= now()
+    OR (access_expires_at <= now() AND (refresh_token_encrypted IS NULL OR refresh_token_encrypted = '' OR refresh_expires_at <= now()))
+  )
+FOR UPDATE;
+
+-- name: UpdateExpiredBindingGrant :one
+-- Renew in place only after the caller has locked and revalidated the expired source.
+UPDATE principal_remote_session_bindings
+SET grant_generation = @new_generation, updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND attached_by_subject_id = @subject_urn
+  AND remote_session_id = @remote_session_id
+  AND grant_generation = @previous_generation
+  AND @new_generation::bigint > @previous_generation::bigint
+  AND revoked_at IS NULL
+RETURNING *;

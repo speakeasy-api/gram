@@ -9,14 +9,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // The IDP callback rotates challenge IDs. Resolve the committed grant's actual
 // parent and use its server-stamped attempt reference, never the initial ID or
 // a parameter supplied by the returning browser.
 func (s *Service) recordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
-	if grant.ParentChallengeID == "" {
+	if !grant.ConnectionPopup {
 		return nil
 	}
 	// Consent updates may race the callback; reload before retrying so those
@@ -30,32 +29,15 @@ func (s *Service) recordConnectionPopupGrant(ctx context.Context, grant remotese
 			}
 			return fmt.Errorf("load popup grant parent: %w", err)
 		}
-		if parent.Subject == nil || *parent.Subject != grant.Subject || parent.UserSessionIssuerID != grant.UserSessionIssuerID {
+		if !parent.FirstParty || parent.Subject == nil || *parent.Subject != grant.Subject || parent.UserSessionIssuerID != grant.UserSessionIssuerID {
 			return nil
 		}
-		if parent.FirstParty && grant.ConnectionPopup && parent.BindingRefreshAttemptID != "" && s.bindingRefresh != nil {
+		if parent.BindingRefreshAttemptID != "" && s.bindingRefresh != nil {
 			if err := s.bindingRefresh.Record(ctx, parent.BindingRefreshAttemptID, grant); err != nil {
 				return fmt.Errorf("record attachment popup grant: %w", err)
 			}
 		}
-		if parent.BindingRefreshAttemptID == "" && parent.ReauthenticateClientID == uuid.Nil && parent.WorkloadReconnect == nil && parent.Subject.Kind == urn.SessionSubjectKindUser && parent.AuthorizerUserID == parent.Subject.ID && parent.AuthorizerImpersonated != nil && !*parent.AuthorizerImpersonated {
-			if pending := parent.PendingDelegation; pending != nil {
-				if pending.RemoteSessionID == grant.RemoteSessionID && pending.GrantGeneration == grant.GrantGeneration && pending.RemoteSessionClientID == grant.RemoteSessionClientID {
-					return nil
-				}
-				return oops.E(oops.CodeConflict, nil, "review the pending connection before signing in again")
-			}
-			completed := parent
-			completed.PendingDelegation = &grant
-			swapped, err := s.authnChallengeCache.CompareAndSwap(ctx, parent, completed)
-			if err != nil {
-				return fmt.Errorf("offer connection delegation: %w", err)
-			}
-			if !swapped {
-				continue
-			}
-		}
-		if parent.FirstParty && grant.ConnectionPopup && parent.ReauthenticateClientID == grant.RemoteSessionClientID {
+		if parent.ReauthenticateClientID == grant.RemoteSessionClientID {
 			completed := parent
 			completed.ReauthenticateClientID = uuid.Nil
 			swapped, err := s.authnChallengeCache.CompareAndSwap(ctx, parent, completed)

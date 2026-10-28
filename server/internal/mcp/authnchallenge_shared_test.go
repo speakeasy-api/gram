@@ -815,38 +815,3 @@ func TestSharedAuthorizationServer_RemoteConnectReturnsToSharedConsent(t *testin
 	require.Empty(t, login.FinalRedirectURI, "a consent parent's login must not take the parentless shortcut")
 	require.Equal(t, stored.ID, login.ParentChallengeID)
 }
-
-func (c blockedSharedReplayCache) CompareAndSwap(ctx context.Context, key string, expected, replacement any, ttl time.Duration) (bool, error) {
-	return compareConsentTestCache(ctx, c.Cache, key, expected, replacement, ttl)
-}
-func (c blockedSharedReplayCache) CompareAndDelete(ctx context.Context, key string, expected any) (bool, error) {
-	return deleteConsentTestCache(ctx, c.Cache, key, expected)
-}
-func (c failingReplayGetCache) CompareAndSwap(ctx context.Context, key string, expected, replacement any, ttl time.Duration) (bool, error) {
-	return compareConsentTestCache(ctx, c.Cache, key, expected, replacement, ttl)
-}
-func (c failingReplayGetCache) CompareAndDelete(ctx context.Context, key string, expected any) (bool, error) {
-	return deleteConsentTestCache(ctx, c.Cache, key, expected)
-}
-func compareConsentTestCache(ctx context.Context, delegate cache.Cache, key string, expected, replacement any, ttl time.Duration) (bool, error) {
-	cas, ok := delegate.(cache.CompareAndSwapCache)
-	if !ok {
-		return false, fmt.Errorf("test cache lacks compare-and-swap")
-	}
-	swapped, err := cas.CompareAndSwap(ctx, key, expected, replacement, ttl)
-	if err != nil {
-		return false, fmt.Errorf("swap test challenge: %w", err)
-	}
-	return swapped, nil
-}
-func deleteConsentTestCache(ctx context.Context, delegate cache.Cache, key string, expected any) (bool, error) {
-	cas, ok := delegate.(cache.CompareAndSwapCache)
-	if !ok {
-		return false, fmt.Errorf("test cache lacks compare-and-delete")
-	}
-	deleted, err := cas.CompareAndDelete(ctx, key, expected)
-	if err != nil {
-		return false, fmt.Errorf("claim test challenge: %w", err)
-	}
-	return deleted, nil
-}

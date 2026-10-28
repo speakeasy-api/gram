@@ -489,17 +489,7 @@
               </form>
 
               </div>
-              {{$panel := .Panel}} {{if .Scopes}}
-                <div class="mt-1 text-xs text-muted-foreground">
-                  Permissions: {{if gt (len .Scopes) 3}}<button type="button" class="text-left underline underline-offset-4" popovertarget="connection-scopes-{{.ClientID}}" data-permission-details>{{.ScopeSummary}}</button>
-                  <div id="connection-scopes-{{.ClientID}}" popover class="bg-card text-foreground fixed m-0 max-h-64 w-80 overflow-y-auto border p-4 shadow-lg">
-                    <h3 class="text-sm font-semibold">Connection permissions</h3>
-                    <ul class="mt-2 space-y-1 text-xs">{{range .Scopes}}<li class="break-words font-mono">{{.}}</li>{{end}}</ul>
-                  </div>
-                  {{else}}{{.ScopeSummary}}{{end}}
-                </div>
-                {{end}}
-                {{if $panel.ShowDetails}}
+              {{$panel := .Panel}} {{if $panel.ShowDetails}}
                 {{/* The descriptive detail, collapsed by default; Panel decides
                 which lines a state shows. Native details keeps it
                 keyboard-reachable and working without the page script. */}}
@@ -666,19 +656,6 @@
             <noscript>To choose tools, enable JavaScript and reload this page.</noscript>
           </div>
         </div>
-        {{end}}
-
-        {{if .Delegation}}
-        <div data-agent-self-only data-delegation-form data-integrated-delegation data-action-url="{{.Delegation.ActionURL}}" class="border-b">
-          {{template "agentDelegationFields" .Delegation}}
-          <p role="alert" data-delegation-error class="px-6 pb-4 text-sm sm:px-8" hidden></p>
-        </div>
-        <form data-delegation-fallback action="{{.Delegation.ActionURL}}" method="POST" class="px-6 py-4 text-sm sm:px-8">
-          {{template "delegationGrantFields" .Delegation}}
-          <input type="hidden" name="action" value="finish_delegation"/>
-          <p data-delegation-fallback-hint>Updating agents requires JavaScript. Enable it and reload, or continue without updating agents.</p>
-          <button type="submit" name="browser_redirect" value="1" class="mt-3 underline underline-offset-4">Continue without updating agents</button>
-        </form>
         {{end}}
 
         {{/* Identity, provenance and session settings are correct-by-default and
@@ -886,7 +863,7 @@
               data-agent-label="Authorize agent"
               data-consent-self-ready="{{if and (not .ShowToolsIsland) .ConsentEnabled}}true{{else}}false{{end}}"
               class="bg-primary text-primary-foreground enabled:interact:bg-foreground disabled:bg-muted disabled:text-muted-foreground h-10 w-full px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
-              {{if or .Delegation .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
+              {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
             >
               Give access
             </button>

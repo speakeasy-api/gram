@@ -128,8 +128,6 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	subject := *challengeState.Subject
 
 	switch r.PostForm.Get("action") {
-	case "delegate_grant", "finish_delegation":
-		return s.servePostLoginDelegationAction(w, r, endpoint, challengeState)
 	case "agent_connections", "agent_attach", "agent_detach":
 		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
 	case "retry_delegation":
@@ -180,9 +178,6 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	switch r.PostForm.Get("action") {
 	case "connect":
-		if challengeState.PendingDelegation != nil {
-			return oops.E(oops.CodeConflict, nil, "review or skip the current agent updates before connecting another service").LogWarn(ctx, logger)
-		}
 		client, cerr := resolveClient()
 		if cerr != nil {
 			return cerr
@@ -399,7 +394,7 @@ func (s *Service) buildRemoteConnectURL(
 		loginProjectID = resourceMember.projectID
 	}
 	parent := remotesessions.ParentChallenge{
-		ConnectionPopup:     challengeState.FirstParty,
+		ConnectionPopup:     challengeState.FirstParty && (challengeState.BindingRefreshAttemptID != "" || challengeState.ReauthenticateClientID != uuid.Nil),
 		ID:                  challengeState.ID,
 		ProjectID:           loginProjectID,
 		OrganizationID:      endpoint.OrganizationID,

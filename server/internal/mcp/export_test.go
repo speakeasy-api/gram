@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -126,17 +125,4 @@ func (f testAuthClientPermission) Permitted(context.Context, authClientPermitReq
 // RecordConnectionPopupGrant exercises the callback's parent-state correlation.
 func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
 	return s.recordConnectionPopupGrant(ctx, grant)
-}
-
-// EligibleConsentAgents exposes backend authorization eligibility independently of presentation.
-func (s *Service) EligibleConsentAgents(ctx context.Context, state AuthnChallengeState, endpoint *ResolvedMcpEndpoint) ([]string, error) {
-	options, err := s.eligibleConsentAgents(ctx, state, endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("list eligible consent agents: %w", err)
-	}
-	names := make([]string, 0, len(options))
-	for _, option := range options {
-		names = append(names, option.Name)
-	}
-	return names, nil
 }

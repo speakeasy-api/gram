@@ -228,6 +228,9 @@ func (s RemoteLoginState) TTL() time.Duration { return 10 * time.Minute }
 
 // ChallengeManager drives the per-remote OAuth authn-challenge leg.
 type ChallengeManager struct {
+	bindingRenewalService   *Service
+	authorizeBindingRenewal func(context.Context, RemoteLoginState) (bool, error)
+
 	logger    *slog.Logger
 	db        *pgxpool.Pool
 	enc       *encryption.Client
@@ -300,37 +303,21 @@ type ChallengeManager struct {
 // RemoteGrant is a grant the remote login callback committed, keyed to the
 // consent challenge it belongs to.
 type RemoteGrant struct {
-	// ExpiresAt is the fixed deadline of the committed grant, if supplied.
-	ExpiresAt *time.Time `json:"expires_at"`
-	// PreviousExpiresAt is the previous grant's fixed deadline, if the provider supplied one.
-	PreviousExpiresAt *time.Time `json:"previous_expires_at"`
-
-	// Scopes is the effective scope set committed for this exact grant.
-	Scopes []string `json:"scopes"`
-	// PreviousScopes is the scope set immediately before this sign-in replaced it.
-	PreviousScopes []string `json:"previous_scopes"`
-	// PreviousGeneration identifies that previous grant; zero means no previous connection.
-	PreviousGeneration int64 `json:"previous_generation"`
-
-	// UpstreamDisplayName is the identity reported by the provider for this exact grant.
-	UpstreamDisplayName string `json:"upstream_display_name"`
-	// UpstreamEmail is the email reported by the provider, never inferred from the local user.
-	UpstreamEmail string `json:"upstream_email"`
 	// ConnectionPopup opts the callback into exact dashboard reconnect handling.
-	ConnectionPopup bool `json:"connection_popup"`
+	ConnectionPopup bool
 	// ParentChallengeID is the consent challenge the login was started from.
-	ParentChallengeID string `json:"parent_challenge_id"`
+	ParentChallengeID string
 	// UserSessionIssuerID is the issuer that challenge was minted for.
-	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
+	UserSessionIssuerID uuid.UUID
 	// RemoteSessionClientID is the client the grant was stored against.
-	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
+	RemoteSessionClientID uuid.UUID
 	// Subject is who holds the grant.
-	Subject urn.SessionSubject `json:"subject"`
+	Subject urn.SessionSubject
 	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact stored credential committed by the callback.
-	RemoteSessionID        uuid.UUID `json:"remote_session_id"`
-	RemoteSessionUpdatedAt time.Time `json:"remote_session_updated_at"`
+	RemoteSessionID        uuid.UUID
+	RemoteSessionUpdatedAt time.Time
 	// GrantGeneration pins the authorization decision even if the same row is reauthorized later.
-	GrantGeneration int64 `json:"grant_generation"`
+	GrantGeneration int64
 }
 
 // RemoteLoginResult is where the callback sends the browser next.
@@ -406,6 +393,9 @@ func NewChallengeManager(
 ) *ChallengeManager {
 	logger = logger.With(attr.SlogComponent("remotesessions_challenge"))
 	manager := &ChallengeManager{
+		bindingRenewalService:   nil,
+		authorizeBindingRenewal: nil,
+
 		logger:  logger,
 		db:      db,
 		enc:     enc,
@@ -1808,6 +1798,20 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txQueries := remotesessions_repo.New(dbtx)
 
+	var renewal *automaticBindingRenewal
+	if m.bindingRenewalService != nil && m.authorizeBindingRenewal != nil {
+		allowed, err := m.authorizeBindingRenewal(ctx, state)
+		if err != nil {
+			return none, fmt.Errorf("authorize automatic connection renewal: %w", err)
+		}
+		if allowed {
+			renewal, err = m.bindingRenewalService.prepareAutomaticBindingRenewal(ctx, dbtx, state)
+			if err != nil {
+				return none, err
+			}
+		}
+	}
+
 	// Issuer first, before the client row, so this transaction and an issuer
 	// migration acquire locks in the same order. A login whose issuer was
 	// retired in the meantime is rejected here rather than stored against the
@@ -1845,22 +1849,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
-	// The client lock keeps concurrent callbacks from changing the previous
-	// grant between this snapshot and the write below. Never read another
-	// organization's connection merely because it uses the same client.
-	var previous remotesessions_repo.RemoteSession
-	var previousErr error
-	if state.ProjectID == uuid.Nil {
-		previous, previousErr = txQueries.GetOrganizationUserRemoteSessionForClient(ctx, remotesessions_repo.GetOrganizationUserRemoteSessionForClientParams{
-			OrganizationID: state.OrganizationID, SubjectUrn: *state.Subject, RemoteSessionClientID: state.RemoteSessionClientID,
-		})
-	} else {
-		previous, previousErr = txQueries.GetTenantUserRemoteSessionForClient(ctx, remotesessions_repo.GetTenantUserRemoteSessionForClientParams{
-			ProjectID: state.ProjectID, OrganizationID: state.OrganizationID, SubjectUrn: *state.Subject, RemoteSessionClientID: state.RemoteSessionClientID,
-		})
-	}
-	if previousErr != nil && !errors.Is(previousErr, pgx.ErrNoRows) {
-		return none, oops.E(oops.CodeUnexpected, previousErr, "read previous connection scopes").LogError(ctx, logger)
+	renewal, err = recheckAutomaticBindingRenewal(ctx, dbtx, state, renewal)
+	if err != nil {
+		return none, err
 	}
 
 	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
@@ -1890,6 +1881,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
+	if renewal != nil {
+		if err := m.bindingRenewalService.completeAutomaticBindingRenewal(ctx, dbtx, renewal, storedSession); err != nil {
+			return none, err
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
@@ -1902,13 +1898,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	return RemoteLoginResult{
 		RedirectURL: redirect,
 		Grant: &RemoteGrant{
-			Scopes:                 slices.Clone(storedSession.Scopes),
-			PreviousScopes:         slices.Clone(previous.Scopes),
-			PreviousGeneration:     previous.GrantGeneration,
-			PreviousExpiresAt:      remoteGrantDeadline(previous),
-			ExpiresAt:              remoteGrantDeadline(storedSession),
-			UpstreamDisplayName:    storedSession.UpstreamDisplayName.String,
-			UpstreamEmail:          storedSession.UpstreamEmail.String,
 			ConnectionPopup:        state.ConnectionPopup,
 			GrantGeneration:        storedSession.GrantGeneration,
 			ParentChallengeID:      state.ParentChallengeID,
@@ -2333,18 +2322,3 @@ type tokenExchangeUnavailableError struct{ err error }
 
 func (e *tokenExchangeUnavailableError) Error() string { return e.err.Error() }
 func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }
-
-// remoteGrantDeadline excludes access-token expiry when a refresh token can renew it.
-func remoteGrantDeadline(session remotesessions_repo.RemoteSession) *time.Time {
-	var deadline *time.Time
-	candidates := []pgtype.Timestamptz{session.AuthorizationExpiresAt, session.RefreshExpiresAt}
-	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
-		candidates = append(candidates, session.AccessExpiresAt)
-	}
-	for _, candidate := range candidates {
-		if candidate.Valid && (deadline == nil || candidate.Time.Before(*deadline)) {
-			deadline = new(candidate.Time)
-		}
-	}
-	return deadline
-}

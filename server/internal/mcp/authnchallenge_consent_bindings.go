@@ -12,8 +12,10 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // ConsentBindingService is the existing attachment management API. Its
@@ -34,6 +36,9 @@ func optionalConsentCursor(cursor string) *string {
 
 func (s *Service) SetConsentBindingService(bindings ConsentBindingService) {
 	s.consentBindings = bindings
+	if service, ok := bindings.(*remotesessions.Service); ok {
+		s.remoteChallengeMgr.SetAutomaticBindingRenewal(service, s.authorizeAutomaticBindingRenewal)
+	}
 }
 
 // Runs after endpoint, browser, challenge and CSRF checks. Reuse the human
@@ -72,7 +77,10 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "load consent organization")
 	}
-	ctx = consentBindingContext(ctx, endpoint, human.userID, selected.AgentID, organization.Slug)
+	ctx = contextvalues.WithConsentBindingAuthorization(ctx, human.userID, endpoint.OrganizationID, endpoint.ProjectID, selected.AgentID, endpoint.UserSessionIssuerID)
+	// Preserve authoritative feature-flag groups for the shared binding authorizer.
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	auth.OrganizationSlug = organization.Slug
 	principal, issuer := selected.AgentID.String(), endpoint.UserSessionIssuerID.String()
 	switch action {
 	case "agent_connections":
