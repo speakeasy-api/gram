@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Automatically renew existing agent connections when their owner reauthenticates an expired upstream session, retaining ownership, permission, and exact-grant checks.
+Keep agent connections working when their assigned upstream session is reauthenticated. Assignments follow current credentials on the same session row; deleted or revoked sessions still require explicit reassignment.

@@ -2475,7 +2475,7 @@ SELECT
     )
   )::boolean AS agent_active,
   (
-    rs.id IS NOT NULL AND rs.deleted IS FALSE AND rs.grant_generation = b.grant_generation
+    rs.id IS NOT NULL AND rs.deleted IS FALSE
     AND rs.remote_session_client_id = b.remote_session_client_id
   )::boolean AS connection_live,
   EXISTS (

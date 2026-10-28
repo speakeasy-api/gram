@@ -228,9 +228,6 @@ func (s RemoteLoginState) TTL() time.Duration { return 10 * time.Minute }
 
 // ChallengeManager drives the per-remote OAuth authn-challenge leg.
 type ChallengeManager struct {
-	bindingRenewalService   *Service
-	authorizeBindingRenewal func(context.Context, RemoteLoginState) (bool, error)
-
 	logger    *slog.Logger
 	db        *pgxpool.Pool
 	enc       *encryption.Client
@@ -393,9 +390,6 @@ func NewChallengeManager(
 ) *ChallengeManager {
 	logger = logger.With(attr.SlogComponent("remotesessions_challenge"))
 	manager := &ChallengeManager{
-		bindingRenewalService:   nil,
-		authorizeBindingRenewal: nil,
-
 		logger:  logger,
 		db:      db,
 		enc:     enc,
@@ -1798,20 +1792,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txQueries := remotesessions_repo.New(dbtx)
 
-	var renewal *automaticBindingRenewal
-	if m.bindingRenewalService != nil && m.authorizeBindingRenewal != nil {
-		allowed, err := m.authorizeBindingRenewal(ctx, state)
-		if err != nil {
-			return none, fmt.Errorf("authorize automatic connection renewal: %w", err)
-		}
-		if allowed {
-			renewal, err = m.bindingRenewalService.prepareAutomaticBindingRenewal(ctx, dbtx, state)
-			if err != nil {
-				return none, err
-			}
-		}
-	}
-
 	// Issuer first, before the client row, so this transaction and an issuer
 	// migration acquire locks in the same order. A login whose issuer was
 	// retired in the meantime is rejected here rather than stored against the
@@ -1849,11 +1829,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
-	renewal, err = recheckAutomaticBindingRenewal(ctx, dbtx, state, renewal)
-	if err != nil {
-		return none, err
-	}
-
 	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
@@ -1881,11 +1856,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
-	if renewal != nil {
-		if err := m.bindingRenewalService.completeAutomaticBindingRenewal(ctx, dbtx, renewal, storedSession); err != nil {
-			return none, err
-		}
-	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}

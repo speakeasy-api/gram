@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // ConsentBindingService is the existing attachment management API. Its
@@ -36,9 +35,6 @@ func optionalConsentCursor(cursor string) *string {
 
 func (s *Service) SetConsentBindingService(bindings ConsentBindingService) {
 	s.consentBindings = bindings
-	if service, ok := bindings.(*remotesessions.Service); ok {
-		s.remoteChallengeMgr.SetAutomaticBindingRenewal(service, s.authorizeAutomaticBindingRenewal)
-	}
 }
 
 // Runs after endpoint, browser, challenge and CSRF checks. Reuse the human

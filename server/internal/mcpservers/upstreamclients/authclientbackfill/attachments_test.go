@@ -40,7 +40,7 @@ func (f *fixture) agent(ownerUserID string) uuid.UUID {
 
 // attach binds agentID to connectionOwner's new connection through
 // registration, as the session subject attachedBy made it. A nonzero
-// generationOffset leaves the attachment pinned to an earlier authorization.
+// generationOffset records the generation observed when the connection was attached.
 func (f *fixture) attach(agentID, registration uuid.UUID, attachedBy, connectionOwner string, generationOffset int64) uuid.UUID {
 	f.t.Helper()
 	id, err := f.q.SeedAgentAttachmentFixture(f.t.Context(), SeedAgentAttachmentFixtureParams{
@@ -89,18 +89,17 @@ func TestRun_AttachmentsBecomeGrantsOnTheOwnersConnection(t *testing.T) {
 	byAgent := f.agent(owner)
 	byAgentBinding := f.attach(byAgent, registration, urn.NewAgentSubject(byAgent).String(), owner, 0)
 	stale := f.agent(owner)
-	staleBinding := f.attach(stale, reauthorized, "user:"+owner, owner, -1)
+	f.attach(stale, reauthorized, "user:"+owner, owner, -1)
 	unmapped := f.agent(owner)
 	unmappedBinding := f.attach(unmapped, unrecorded, "user:"+owner, owner, 0)
 
 	dry := f.run(false)
-	require.Equal(t, 1, dry.PendingGrantsByKind[GrantAttachment])
+	require.Equal(t, 2, dry.PendingGrantsByKind[GrantAttachment])
 	require.ElementsMatch(t, []AttachmentRemediation{
 		{BindingID: transferredBinding.String(), AgentID: transferred.String(), Reason: AttachmentOwnerChanged},
 		{BindingID: inactiveTransferredBinding.String(), AgentID: inactiveTransferred.String(), Reason: AttachmentAgentInactive},
 		{BindingID: foreignBinding.String(), AgentID: foreign.String(), Reason: AttachmentForeignConnection},
 		{BindingID: byAgentBinding.String(), AgentID: byAgent.String(), Reason: AttachmentNotByUser},
-		{BindingID: staleBinding.String(), AgentID: stale.String(), Reason: AttachmentConnectionGone},
 		{BindingID: unmappedBinding.String(), AgentID: unmapped.String(), Reason: AttachmentClientUnrecorded},
 	}, dry.AttachmentRemediations, "an attachment the runtime would not serve is never carried over to anyone")
 
@@ -110,7 +109,12 @@ func TestRun_AttachmentsBecomeGrantsOnTheOwnersConnection(t *testing.T) {
 		PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth,
 		Selector: authz.ConnectionAuthClientSelector(registration.String(), owner), Inferred: true,
 	}, "the agent keeps its owner's connection, and only that one")
-	for _, other := range []uuid.UUID{transferred, inactiveTransferred, foreign, byAgent, stale, unmapped} {
+	renewedAgent := urn.NewPrincipal(urn.PrincipalTypeAgent, stale.String())
+	require.Contains(t, f.grantsOf(renewedAgent), authz.Grant{
+		PrincipalUrn: renewedAgent.String(), Scope: authz.ScopeMCPAuth,
+		Selector: authz.ConnectionAuthClientSelector(reauthorized.String(), owner), Inferred: true,
+	}, "reauthentication of the same session preserves access")
+	for _, other := range []uuid.UUID{transferred, inactiveTransferred, foreign, byAgent, unmapped} {
 		f.requireNoConnectionGrant(other)
 	}
 	require.Zero(t, f.run(false).PendingGrantsByKind[GrantAttachment])
@@ -261,8 +265,14 @@ func TestRun_AttachmentGrantWaitsOnAConcurrentConnectionChange(t *testing.T) {
 
 			report := <-done
 			require.Empty(t, report.PhaseErrors)
-			require.Equal(t, []AttachmentRemediation{{BindingID: binding.String(), AgentID: agentID.String(), Reason: AttachmentConnectionGone}}, report.AttachmentRemediations)
-			f.requireNoConnectionGrant(agentID)
+			if name == "revoked" {
+				require.Equal(t, []AttachmentRemediation{{BindingID: binding.String(), AgentID: agentID.String(), Reason: AttachmentConnectionGone}}, report.AttachmentRemediations)
+				f.requireNoConnectionGrant(agentID)
+			} else {
+				require.Empty(t, report.AttachmentRemediations)
+				agent := urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String())
+				require.Contains(t, f.grantsOf(agent), authz.Grant{PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth, Selector: authz.ConnectionAuthClientSelector(registration.String(), owner), Inferred: true})
+			}
 		})
 	}
 }
