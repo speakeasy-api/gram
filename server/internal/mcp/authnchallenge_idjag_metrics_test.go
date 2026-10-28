@@ -173,7 +173,7 @@ func TestTokenIDJAGExchangeRecordsClientRefusals(t *testing.T) {
 			t.Parallel()
 			ds := startCIMDDocServer(t)
 			if tc.failFetch {
-				ds.status = http.StatusInternalServerError
+				ds.set(t, func(ds *cimdDocServer) { ds.status = http.StatusInternalServerError })
 			}
 			var logs syncBuffer
 			logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: false, ReplaceAttr: nil}))

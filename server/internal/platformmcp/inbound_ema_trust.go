@@ -140,7 +140,7 @@ type InboundEMAIssuer struct {
 
 	// ClientIDMetadataAdmissionMode is the issuer's effective client ID
 	// metadata document admission mode: disabled, presets, or open.
-	ClientIDMetadataAdmissionMode string `json:"client_id_metadata_admission_mode" jsonschema:"the effective client ID metadata document admission mode, the client gate ID-JAG exchanges share with sign-in: open (and the legacy reporting) admits any valid client ID metadata document, presets admits preset_clients and custom_client_urls, disabled admits none"`
+	ClientIDMetadataAdmissionMode string `json:"client_id_metadata_admission_mode" jsonschema:"the effective client ID metadata document admission mode, the client gate ID-JAG exchanges share with sign-in: open (and the legacy reporting) admits any valid client ID metadata document, presets admits preset_clients, custom_client_urls, and Speakeasy's own assistant clients, disabled admits none"`
 
 	// CustomClientURLs are the client ID metadata document URLs this issuer
 	// admits beyond the presets, listed in presets mode only.
@@ -148,6 +148,9 @@ type InboundEMAIssuer struct {
 
 	// CustomClientURLsTruncated reports more custom URLs than were listed.
 	CustomClientURLsTruncated bool `json:"custom_client_urls_truncated"`
+
+	// CustomClientURLsUnavailable reports that the custom URLs could not be read.
+	CustomClientURLsUnavailable bool `json:"custom_client_urls_unavailable,omitempty" jsonschema:"true when custom_client_urls could not be read, so the list is empty but not verified; read get_inbound_ema_trust again"`
 
 	// OrganizationGatewayURL is the organization gateway, set when it signs
 	// users in through this issuer.
@@ -623,9 +626,14 @@ func (s *InboundEMATrustService) issuerState(ctx context.Context, organizationID
 		CustomClientURLs:              []string{},
 	}
 	if admission.Mode(issuer.ClientIDMetadataAdmissionMode) == admission.ModePresets {
-		var err error
-		if state.CustomClientURLs, state.CustomClientURLsTruncated, err = s.customClientURLs(ctx, organizationID, issuer.ID); err != nil {
-			return InboundEMAIssuer{}, err
+		urls, truncated, err := s.customClientURLs(ctx, organizationID, issuer.ID)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.ErrorContext(ctx, "list inbound EMA issuer custom client urls", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+			}
+			state.CustomClientURLsUnavailable = true
+		} else {
+			state.CustomClientURLs, state.CustomClientURLsTruncated = urls, truncated
 		}
 	}
 	switch {
@@ -827,7 +835,11 @@ func inboundEMAAdmissionNote(issuer InboundEMAIssuer) string {
 	case admission.ModeDisabled:
 		return "Client ID metadata documents are disabled for this issuer, so ID-JAG sign-in cannot work until its admission mode is presets or open. Change it with the organizationUserSessionIssuers.update management API (client_id_metadata_admission_mode); set_mcp_client_admission only changes project issuers."
 	case admission.ModePresets:
-		return "This issuer admits only listed clients: the client the identity provider issues ID-JAGs to must be in preset_clients or custom_client_urls."
+		note := "This issuer admits only listed clients: the client the identity provider issues ID-JAGs to must be in preset_clients or custom_client_urls. Speakeasy's own assistant clients are also admitted."
+		if issuer.CustomClientURLsUnavailable {
+			note += " Its custom_client_urls could not be read; read get_inbound_ema_trust again to check them."
+		}
+		return note
 	default:
 		return ""
 	}

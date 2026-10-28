@@ -659,3 +659,17 @@ func TestInboundEMATrustGetTruncatesCustomClientURLs(t *testing.T) {
 	require.Len(t, output.Issuers[0].CustomClientURLs, clientAdmissionCustomURLLimit)
 	require.True(t, output.Issuers[0].CustomClientURLsTruncated)
 }
+
+func TestInboundEMATrustIssuerStateReportsUnreadableCustomClientURLs(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	issuer := *f.users.issuers[f.issuerID]
+	issuer.ID = "not-a-uuid"
+	issuer.ClientIDMetadataAdmissionMode = "presets"
+
+	state, err := f.service.issuerState(t.Context(), f.principal.OrganizationID, &issuer, organizationGatewayIssuer{})
+	require.NoError(t, err)
+	require.True(t, state.CustomClientURLsUnavailable)
+	require.Empty(t, state.CustomClientURLs)
+	require.Contains(t, inboundEMAAdmissionNote(state), "custom_client_urls could not be read")
+}
