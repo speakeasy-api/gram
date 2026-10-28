@@ -102,6 +102,10 @@ func TestPluginsService_AssignmentContentChangeSignalsRepublish(t *testing.T) {
 	require.Len(t, captured, 2, "an assignment change that delivers servers should enqueue a republish")
 	require.Equal(t, *authCtx.ProjectID, captured[1].projectID)
 	require.Equal(t, authCtx.UserID, captured[1].createdByUserID)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{}})
+	require.NoError(t, err)
+	require.Len(t, ti.publisher.captured(), 3, "removing a role that delivered servers should enqueue a republish")
 }
 
 // ListPlugins lazily provisions the Default plugin for a project that predates
