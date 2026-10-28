@@ -14,7 +14,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
+
+// SetCIMDResolver replaces the client metadata document resolver.
+func (s *Service) SetCIMDResolver(resolver *cimd.Resolver) {
+	s.cimdResolver = resolver
+}
 
 // ErrWorkloadIssuerUntrusted and ErrWorkloadNotAdmitted expose the workload
 // admission sentinels, so a test can tell which stage refused an assertion.
