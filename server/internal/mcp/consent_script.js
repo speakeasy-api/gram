@@ -79,28 +79,19 @@
       ).map(function (input) {
         return input.dataset.agentName;
       });
-      var header = delegationForm.querySelector("[data-delegation-header]");
-      if (header && delegationEnabled) {
-        if (!names.length) {
-          header.hidden = true;
-          delegationEnabled.checked = false;
-          delegationForm.querySelector("#delegation-agent-choices").hidden =
-            false;
-        } else if (header.hidden) {
-          header.hidden = false;
-          delegationEnabled.checked = true;
-          delegationToggle.setAttribute("aria-expanded", "true");
-          header.classList.add("bg-accent");
-          delegationToggle.querySelector(
-            "[data-delegation-chevron]",
-          ).style.transform = "rotate(180deg)";
-        }
+      if (delegationEnabled) {
+        var available = delegationForm.querySelectorAll(
+          'input[name="agent_id"]:not(:disabled)',
+        ).length;
+        delegationEnabled.checked = available > 0 && names.length === available;
+        delegationEnabled.indeterminate =
+          names.length > 0 && names.length < available;
       }
       var summary = delegationForm.querySelector("[data-delegation-summary]");
       if (summary)
         summary.textContent =
           names.length === 0
-            ? ""
+            ? "No agents selected"
             : names.length === 1
               ? names[0]
               : names.length === 2
@@ -114,7 +105,6 @@
       if (integratedDelegation) return;
       grantButton.disabled =
         delegationBusy ||
-        (delegationEnabled && !delegationEnabled.checked) ||
         !delegationForm.querySelector(
           'input[name="agent_id"]:checked:not(:disabled)',
         );
@@ -152,7 +142,7 @@
       updateDelegationSelection();
       delegationError.hidden = true;
       try {
-        if (grant && (!delegationEnabled || delegationEnabled.checked)) {
+        if (grant) {
           var selected = Array.from(
             delegationForm.querySelectorAll(
               'input[name="agent_id"]:checked:not(:disabled)',
@@ -179,6 +169,14 @@
         updateDelegationSelection();
       }
     }
+    if (delegationEnabled)
+      delegationEnabled.addEventListener("change", function () {
+        delegationForm
+          .querySelectorAll('input[name="agent_id"]:not(:disabled)')
+          .forEach(function (input) {
+            input.checked = delegationEnabled.checked;
+          });
+      });
     delegationForm.addEventListener("change", updateDelegationSelection);
     (integratedDelegation ? approvalForm : delegationForm).addEventListener(
       "submit",

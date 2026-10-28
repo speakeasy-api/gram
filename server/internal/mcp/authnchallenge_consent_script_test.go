@@ -214,3 +214,80 @@ assert.equal(render('challenge-one').value, '');
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "consent discovery persistence: %s", out)
 }
+
+func TestConsentScriptAgentSelection(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, node, "-e", `
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const source = require('node:fs').readFileSync(0, 'utf8');
+const handlers = {};
+const master = { checked: true, addEventListener: (_, fn) => handlers.master = fn };
+const agents = ['One', 'Two', 'Three'].map(name => ({
+  checked: true, disabled: false, value: name,
+  dataset: { agentName: name, bindingId: name }
+}));
+const header = { hidden: false };
+const choices = { hidden: false };
+const summary = {};
+const error = {};
+const requests = [];
+const approval = { addEventListener: (_, fn) => handlers.submit = fn, requestSubmit: () => {} };
+const form = {
+  dataset: { actionUrl: '/delegate' },
+  hasAttribute: () => true,
+  addEventListener: (_, fn) => handlers.change = fn,
+  querySelector: selector => ({
+    '[data-delegation-enabled]': master,
+    '[data-delegation-header]': header,
+    '#delegation-agent-choices': choices,
+    '[data-delegation-summary]': summary,
+    '[data-delegation-error]': error
+  })[selector] || null,
+  querySelectorAll: selector => selector.includes('agent_id')
+    ? agents.filter(a => !a.disabled && (!selector.includes(':checked') || a.checked))
+    : []
+};
+vm.runInNewContext(source, {
+  URLSearchParams,
+  document: {
+    body: { hasAttribute: () => false },
+    querySelector: selector => ({
+      '[data-delegation-form]': form,
+      '[data-approve-form]': approval,
+      '#consent-approve-button': {}
+    })[selector] || null,
+    querySelectorAll: () => []
+  },
+  window: {},
+  fetch: async (_, options) => { requests.push(options.body); return { ok: true }; }
+});
+assert.equal(master.checked, true);
+master.checked = false;
+handlers.master(); handlers.change();
+assert.ok(agents.every(a => !a.checked));
+assert.equal(master.indeterminate, false);
+assert.equal(header.hidden, false);
+assert.equal(choices.hidden, false);
+assert.equal(summary.textContent, 'No agents selected');
+master.checked = true;
+handlers.master(); handlers.change();
+assert.ok(agents.every(a => a.checked));
+agents[0].checked = false; handlers.change();
+assert.equal(master.checked, false);
+assert.equal(master.indeterminate, true);
+handlers.submit({ preventDefault() {}, stopImmediatePropagation() {} });
+setImmediate(() => {
+  assert.deepEqual(requests.filter(b => b.get('action') === 'delegate_grant').map(b => b.get('agent_id')), ['Two', 'Three']);
+  assert.equal(requests.at(-1).get('action'), 'finish_delegation');
+  assert.equal(header.hidden, false);
+});
+`)
+	cmd.Stdin = bytes.NewReader(consentScriptData)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "consent selection: %s", out)
+}
