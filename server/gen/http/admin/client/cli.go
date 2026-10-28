@@ -1224,6 +1224,40 @@ func BuildSetStripeCustomerPayload(adminSetStripeCustomerBody string, adminSetSt
 	return v, nil
 }
 
+// BuildSetAdoptionDashboardURLPayload builds the payload for the admin
+// setAdoptionDashboardUrl endpoint from CLI flags.
+func BuildSetAdoptionDashboardURLPayload(adminSetAdoptionDashboardURLBody string, adminSetAdoptionDashboardURLAdminSessionToken string) (*admin.SetAdoptionDashboardURLPayload, error) {
+	var err error
+	var body SetAdoptionDashboardURLRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetAdoptionDashboardURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"adoption_dashboard_url\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+		if body.AdoptionDashboardURL != nil {
+			if utf8.RuneCountInString(*body.AdoptionDashboardURL) > 2048 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.adoption_dashboard_url", *body.AdoptionDashboardURL, utf8.RuneCountInString(*body.AdoptionDashboardURL), 2048, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetAdoptionDashboardURLAdminSessionToken != "" {
+			adminSessionToken = &adminSetAdoptionDashboardURLAdminSessionToken
+		}
+	}
+	v := &admin.SetAdoptionDashboardURLPayload{
+		OrganizationID:       body.OrganizationID,
+		AdoptionDashboardURL: body.AdoptionDashboardURL,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetStripeSubscriptionPayload builds the payload for the admin
 // getStripeSubscription endpoint from CLI flags.
 func BuildGetStripeSubscriptionPayload(adminGetStripeSubscriptionOrganizationID string, adminGetStripeSubscriptionAdminSessionToken string) (*admin.GetStripeSubscriptionPayload, error) {

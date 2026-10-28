@@ -101,6 +101,10 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Description("The time at which the organization was demoted after its trial, if any.")
 		Format(FormatDateTime)
 	})
+	Attribute("adoption_dashboard_url", String, func() {
+		Description("Staff-entered link to the organization's adoption dashboard. Absent when none has been set.")
+		Format(FormatURI)
+	})
 	Attribute("member_count", Int, "Number of active members in the organization.")
 	// Deliberately not an Enum. The value is whatever the creating flow
 	// recorded, so a new flow added on the server would otherwise fail response
@@ -1189,6 +1193,27 @@ var _ = Service("admin", func() {
 			declareUnavailableResponse()
 		})
 		Meta("openapi:operationId", "adminSetStripeCustomer")
+	})
+
+	Method("setAdoptionDashboardUrl", func() {
+		Description("Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+			Attribute("adoption_dashboard_url", String, func() {
+				Description("An https URL, or empty to clear the link.")
+				MaxLength(2048)
+			})
+			Meta("openapi:typename", "SetAdoptionDashboardUrlRequestBody")
+		})
+		Result(AdminOrganization)
+		HTTP(func() {
+			POST("/admin/organization.setAdoptionDashboardUrl")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminSetAdoptionDashboardUrl")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAdoptionDashboardUrl")
 	})
 
 	Method("getStripeSubscription", func() {

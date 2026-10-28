@@ -3449,6 +3449,83 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.setAdoptionDashboardUrl:
+        post:
+            description: Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.
+            operationId: adminSetAdoptionDashboardUrl
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetAdoptionDashboardURLRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setAdoptionDashboardUrl admin
+            tags:
+                - admin
+            x-speakeasy-name-override: setAdoptionDashboardUrl
     /admin/organization.setInferenceKeyMonthlyLimit:
         post:
             tags:
@@ -94424,6 +94501,10 @@ components:
                 account_type:
                     type: string
                     description: Speakeasy account type (e.g. free, pro, payg, enterprise).
+                adoption_dashboard_url:
+                    type: string
+                    description: Staff-entered link to the organization's adoption dashboard. Absent when none has been set.
+                    format: uri
                 created_at:
                     type: string
                     description: The creation date of the organization.
@@ -122134,6 +122215,17 @@ components:
             required:
                 - target_id
                 - access
+        SetAdoptionDashboardURLRequestBody:
+            type: object
+            properties:
+                adoption_dashboard_url:
+                    type: string
+                    description: An https URL, or empty to clear the link.
+                    maxLength: 2048
+                organization_id:
+                    type: string
+            required:
+                - organization_id
         SetAuthClientAudienceRequestBody:
             type: object
             properties:

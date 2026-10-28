@@ -138,6 +138,14 @@ type SetStripeCustomerRequestBody struct {
 	StripeCustomerID string `form:"stripe_customer_id" json:"stripe_customer_id" xml:"stripe_customer_id"`
 }
 
+// SetAdoptionDashboardURLRequestBody is the type of the "admin" service
+// "setAdoptionDashboardUrl" endpoint HTTP request body.
+type SetAdoptionDashboardURLRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// An https URL, or empty to clear the link.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+}
+
 // CancelStripeSubscriptionRequestBody is the type of the "admin" service
 // "cancelStripeSubscription" endpoint HTTP request body.
 type CancelStripeSubscriptionRequestBody struct {
@@ -866,6 +874,9 @@ type UpdateOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -932,6 +943,9 @@ type DisableOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -987,6 +1001,9 @@ type EnableOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1042,6 +1059,9 @@ type GetOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1156,6 +1176,9 @@ type ExtendTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1211,6 +1234,9 @@ type CreateOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1266,6 +1292,9 @@ type RearmTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1378,6 +1407,67 @@ type SetStripeCustomerResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// Number of active members in the organization.
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// The flow that created the organization (e.g. signup, assistants,
+	// platform_admin). Absent when nothing recorded one. Informational only.
+	CreationSource *string `form:"creation_source,omitempty" json:"creation_source,omitempty" xml:"creation_source,omitempty"`
+	// The creation date of the organization.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The last update date of the organization.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// SetAdoptionDashboardURLResponseBody is the type of the "admin" service
+// "setAdoptionDashboardUrl" endpoint HTTP response body.
+type SetAdoptionDashboardURLResponseBody struct {
+	// The ID of the organization
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The name of the organization
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the organization
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// WorkOS organization ID, if linked.
+	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
+	// Whether the organization is whitelisted for full access.
+	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1890,6 +1980,9 @@ type StartTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1945,6 +2038,9 @@ type ChangeTrialEndDateResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -2579,6 +2675,9 @@ type SetStripeSubscriptionResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -9087,6 +9186,196 @@ type SetStripeCustomerUnexpectedResponseBody struct {
 // "setStripeCustomer" endpoint HTTP response body for the "gateway_error"
 // error.
 type SetStripeCustomerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLUnauthorizedResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetAdoptionDashboardURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLForbiddenResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "forbidden" error.
+type SetAdoptionDashboardURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLBadRequestResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "bad_request" error.
+type SetAdoptionDashboardURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLNotFoundResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "not_found" error.
+type SetAdoptionDashboardURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLConflictResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "conflict" error.
+type SetAdoptionDashboardURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLUnsupportedMediaResponseBody is the type of the
+// "admin" service "setAdoptionDashboardUrl" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetAdoptionDashboardURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLInvalidResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "invalid" error.
+type SetAdoptionDashboardURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLInvariantViolationResponseBody is the type of the
+// "admin" service "setAdoptionDashboardUrl" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetAdoptionDashboardURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLUnexpectedResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "unexpected" error.
+type SetAdoptionDashboardURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAdoptionDashboardURLGatewayErrorResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetAdoptionDashboardURLGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -22433,6 +22722,9 @@ type AdminOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -23952,6 +24244,16 @@ func NewSetStripeCustomerRequestBody(p *admin.SetStripeCustomerPayload) *SetStri
 	body := &SetStripeCustomerRequestBody{
 		OrganizationID:   p.OrganizationID,
 		StripeCustomerID: p.StripeCustomerID,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLRequestBody builds the HTTP request body from the
+// payload of the "setAdoptionDashboardUrl" endpoint of the "admin" service.
+func NewSetAdoptionDashboardURLRequestBody(p *admin.SetAdoptionDashboardURLPayload) *SetAdoptionDashboardURLRequestBody {
+	body := &SetAdoptionDashboardURLRequestBody{
+		OrganizationID:       p.OrganizationID,
+		AdoptionDashboardURL: p.AdoptionDashboardURL,
 	}
 	return body
 }
@@ -26390,6 +26692,7 @@ func NewUpdateOrganizationAdminOrganizationOK(body *UpdateOrganizationResponseBo
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -26736,6 +27039,7 @@ func NewDisableOrganizationAdminOrganizationOK(body *DisableOrganizationResponse
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -26916,6 +27220,7 @@ func NewEnableOrganizationAdminOrganizationOK(body *EnableOrganizationResponseBo
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -27096,6 +27401,7 @@ func NewGetOrganizationAdminOrganizationOK(body *GetOrganizationResponseBody) *a
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -28453,6 +28759,7 @@ func NewExtendTrialAdminOrganizationOK(body *ExtendTrialResponseBody) *admin.Adm
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -28633,6 +28940,7 @@ func NewCreateOrganizationAdminOrganizationOK(body *CreateOrganizationResponseBo
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -28813,6 +29121,7 @@ func NewRearmTrialAdminOrganizationOK(body *RearmTrialResponseBody) *admin.Admin
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -30173,6 +30482,7 @@ func NewSetStripeCustomerAdminOrganizationOK(body *SetStripeCustomerResponseBody
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -30335,6 +30645,187 @@ func NewSetStripeCustomerUnexpected(body *SetStripeCustomerUnexpectedResponseBod
 // NewSetStripeCustomerGatewayError builds a admin service setStripeCustomer
 // endpoint gateway_error error.
 func NewSetStripeCustomerGatewayError(body *SetStripeCustomerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLAdminOrganizationOK builds a "admin" service
+// "setAdoptionDashboardUrl" endpoint result from a HTTP "OK" response.
+func NewSetAdoptionDashboardURLAdminOrganizationOK(body *SetAdoptionDashboardURLResponseBody) *admin.AdminOrganization {
+	v := &admin.AdminOrganization{
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLUnauthorized builds a admin service
+// setAdoptionDashboardUrl endpoint unauthorized error.
+func NewSetAdoptionDashboardURLUnauthorized(body *SetAdoptionDashboardURLUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLForbidden builds a admin service
+// setAdoptionDashboardUrl endpoint forbidden error.
+func NewSetAdoptionDashboardURLForbidden(body *SetAdoptionDashboardURLForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLBadRequest builds a admin service
+// setAdoptionDashboardUrl endpoint bad_request error.
+func NewSetAdoptionDashboardURLBadRequest(body *SetAdoptionDashboardURLBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLNotFound builds a admin service
+// setAdoptionDashboardUrl endpoint not_found error.
+func NewSetAdoptionDashboardURLNotFound(body *SetAdoptionDashboardURLNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLConflict builds a admin service
+// setAdoptionDashboardUrl endpoint conflict error.
+func NewSetAdoptionDashboardURLConflict(body *SetAdoptionDashboardURLConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLUnsupportedMedia builds a admin service
+// setAdoptionDashboardUrl endpoint unsupported_media error.
+func NewSetAdoptionDashboardURLUnsupportedMedia(body *SetAdoptionDashboardURLUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLInvalid builds a admin service
+// setAdoptionDashboardUrl endpoint invalid error.
+func NewSetAdoptionDashboardURLInvalid(body *SetAdoptionDashboardURLInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLInvariantViolation builds a admin service
+// setAdoptionDashboardUrl endpoint invariant_violation error.
+func NewSetAdoptionDashboardURLInvariantViolation(body *SetAdoptionDashboardURLInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLUnexpected builds a admin service
+// setAdoptionDashboardUrl endpoint unexpected error.
+func NewSetAdoptionDashboardURLUnexpected(body *SetAdoptionDashboardURLUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLGatewayError builds a admin service
+// setAdoptionDashboardUrl endpoint gateway_error error.
+func NewSetAdoptionDashboardURLGatewayError(body *SetAdoptionDashboardURLGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -33675,6 +34166,7 @@ func NewStartTrialAdminOrganizationOK(body *StartTrialResponseBody) *admin.Admin
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -33855,6 +34347,7 @@ func NewChangeTrialEndDateAdminOrganizationOK(body *ChangeTrialEndDateResponseBo
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -41424,6 +41917,7 @@ func NewSetStripeSubscriptionAdminOrganizationOK(body *SetStripeSubscriptionResp
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
@@ -42843,6 +43337,9 @@ func ValidateUpdateOrganizationResponseBody(body *UpdateOrganizationResponseBody
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -42917,6 +43414,9 @@ func ValidateDisableOrganizationResponseBody(body *DisableOrganizationResponseBo
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -42979,6 +43479,9 @@ func ValidateEnableOrganizationResponseBody(body *EnableOrganizationResponseBody
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -43040,6 +43543,9 @@ func ValidateGetOrganizationResponseBody(body *GetOrganizationResponseBody) (err
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -43236,6 +43742,9 @@ func ValidateExtendTrialResponseBody(body *ExtendTrialResponseBody) (err error) 
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -43298,6 +43807,9 @@ func ValidateCreateOrganizationResponseBody(body *CreateOrganizationResponseBody
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -43359,6 +43871,9 @@ func ValidateRearmTrialResponseBody(body *RearmTrialResponseBody) (err error) {
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -43525,6 +44040,74 @@ func ValidateSetStripeCustomerResponseBody(body *SetStripeCustomerResponseBody) 
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLResponseBody runs the validations defined on
+// SetAdoptionDashboardUrlResponseBody
+func ValidateSetAdoptionDashboardURLResponseBody(body *SetAdoptionDashboardURLResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AccountType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
+	}
+	if body.Whitelisted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
+	}
+	if body.MemberCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.WorkosDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
+	if body.DisabledAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
+	}
+	if body.TrialState != nil {
+		if !(*body.TrialState == "none" || *body.TrialState == "running" || *body.TrialState == "ending_soon" || *body.TrialState == "expired" || *body.TrialState == "demoted" || *body.TrialState == "converted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_state", *body.TrialState, []any{"none", "running", "ending_soon", "expired", "demoted", "converted"}))
+		}
+	}
+	if body.TrialEndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
+	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -44055,6 +44638,9 @@ func ValidateStartTrialResponseBody(body *StartTrialResponseBody) (err error) {
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -44116,6 +44702,9 @@ func ValidateChangeTrialEndDateResponseBody(body *ChangeTrialEndDateResponseBody
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -45581,6 +46170,9 @@ func ValidateSetStripeSubscriptionResponseBody(body *SetStripeSubscriptionRespon
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -54092,6 +54684,248 @@ func ValidateSetStripeCustomerUnexpectedResponseBody(body *SetStripeCustomerUnex
 // ValidateSetStripeCustomerGatewayErrorResponseBody runs the validations
 // defined on setStripeCustomer_gateway_error_response_body
 func ValidateSetStripeCustomerGatewayErrorResponseBody(body *SetStripeCustomerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLUnauthorizedResponseBody runs the validations
+// defined on setAdoptionDashboardUrl_unauthorized_response_body
+func ValidateSetAdoptionDashboardURLUnauthorizedResponseBody(body *SetAdoptionDashboardURLUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLForbiddenResponseBody runs the validations
+// defined on setAdoptionDashboardUrl_forbidden_response_body
+func ValidateSetAdoptionDashboardURLForbiddenResponseBody(body *SetAdoptionDashboardURLForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLBadRequestResponseBody runs the validations
+// defined on setAdoptionDashboardUrl_bad_request_response_body
+func ValidateSetAdoptionDashboardURLBadRequestResponseBody(body *SetAdoptionDashboardURLBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLNotFoundResponseBody runs the validations
+// defined on setAdoptionDashboardUrl_not_found_response_body
+func ValidateSetAdoptionDashboardURLNotFoundResponseBody(body *SetAdoptionDashboardURLNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLConflictResponseBody runs the validations
+// defined on setAdoptionDashboardUrl_conflict_response_body
+func ValidateSetAdoptionDashboardURLConflictResponseBody(body *SetAdoptionDashboardURLConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLUnsupportedMediaResponseBody runs the
+// validations defined on
+// setAdoptionDashboardUrl_unsupported_media_response_body
+func ValidateSetAdoptionDashboardURLUnsupportedMediaResponseBody(body *SetAdoptionDashboardURLUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLInvalidResponseBody runs the validations
+// defined on setAdoptionDashboardUrl_invalid_response_body
+func ValidateSetAdoptionDashboardURLInvalidResponseBody(body *SetAdoptionDashboardURLInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLInvariantViolationResponseBody runs the
+// validations defined on
+// setAdoptionDashboardUrl_invariant_violation_response_body
+func ValidateSetAdoptionDashboardURLInvariantViolationResponseBody(body *SetAdoptionDashboardURLInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLUnexpectedResponseBody runs the validations
+// defined on setAdoptionDashboardUrl_unexpected_response_body
+func ValidateSetAdoptionDashboardURLUnexpectedResponseBody(body *SetAdoptionDashboardURLUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLGatewayErrorResponseBody runs the validations
+// defined on setAdoptionDashboardUrl_gateway_error_response_body
+func ValidateSetAdoptionDashboardURLGatewayErrorResponseBody(body *SetAdoptionDashboardURLGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -71424,6 +72258,9 @@ func ValidateAdminOrganizationResponseBody(body *AdminOrganizationResponseBody) 
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.AdoptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

@@ -207,7 +207,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4685,6 +4685,10 @@ func ParseEndpoint(
 		adminSetStripeCustomerBodyFlag              = adminSetStripeCustomerFlags.String("body", "REQUIRED", "")
 		adminSetStripeCustomerAdminSessionTokenFlag = adminSetStripeCustomerFlags.String("admin-session-token", "", "")
 
+		adminSetAdoptionDashboardURLFlags                 = flag.NewFlagSet("set-adoption-dashboard-url", flag.ExitOnError)
+		adminSetAdoptionDashboardURLBodyFlag              = adminSetAdoptionDashboardURLFlags.String("body", "REQUIRED", "")
+		adminSetAdoptionDashboardURLAdminSessionTokenFlag = adminSetAdoptionDashboardURLFlags.String("admin-session-token", "", "")
+
 		adminGetStripeSubscriptionFlags                 = flag.NewFlagSet("get-stripe-subscription", flag.ExitOnError)
 		adminGetStripeSubscriptionOrganizationIDFlag    = adminGetStripeSubscriptionFlags.String("organization-id", "REQUIRED", "")
 		adminGetStripeSubscriptionAdminSessionTokenFlag = adminGetStripeSubscriptionFlags.String("admin-session-token", "", "")
@@ -6334,6 +6338,7 @@ func ParseEndpoint(
 	adminGetPaygBillingSummaryFlags.Usage = adminGetPaygBillingSummaryUsage
 	adminGetStripeCustomerFlags.Usage = adminGetStripeCustomerUsage
 	adminSetStripeCustomerFlags.Usage = adminSetStripeCustomerUsage
+	adminSetAdoptionDashboardURLFlags.Usage = adminSetAdoptionDashboardURLUsage
 	adminGetStripeSubscriptionFlags.Usage = adminGetStripeSubscriptionUsage
 	adminCancelStripeSubscriptionFlags.Usage = adminCancelStripeSubscriptionUsage
 	adminResumeStripeSubscriptionFlags.Usage = adminResumeStripeSubscriptionUsage
@@ -9482,6 +9487,9 @@ func ParseEndpoint(
 
 			case "set-stripe-customer":
 				epf = adminSetStripeCustomerFlags
+
+			case "set-adoption-dashboard-url":
+				epf = adminSetAdoptionDashboardURLFlags
 
 			case "get-stripe-subscription":
 				epf = adminGetStripeSubscriptionFlags
@@ -12738,6 +12746,9 @@ func ParseEndpoint(
 			case "set-stripe-customer":
 				endpoint = c.SetStripeCustomer()
 				data, err = adminc.BuildSetStripeCustomerPayload(*adminSetStripeCustomerBodyFlag, *adminSetStripeCustomerAdminSessionTokenFlag)
+			case "set-adoption-dashboard-url":
+				endpoint = c.SetAdoptionDashboardURL()
+				data, err = adminc.BuildSetAdoptionDashboardURLPayload(*adminSetAdoptionDashboardURLBodyFlag, *adminSetAdoptionDashboardURLAdminSessionTokenFlag)
 			case "get-stripe-subscription":
 				endpoint = c.GetStripeSubscription()
 				data, err = adminc.BuildGetStripeSubscriptionPayload(*adminGetStripeSubscriptionOrganizationIDFlag, *adminGetStripeSubscriptionAdminSessionTokenFlag)
@@ -32376,6 +32387,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-payg-billing-summary: Returns current PAYG usage and estimated cost for an organization.`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-customer: Returns Stripe customer details for confirmation before assigning the customer to an organization.`)
 	fmt.Fprintln(os.Stderr, `    set-stripe-customer: Sets an organization's Stripe customer ID when it has no existing Stripe customer or subscription.`)
+	fmt.Fprintln(os.Stderr, `    set-adoption-dashboard-url: Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Returns the live Stripe subscription and payment state for an organization.`)
 	fmt.Fprintln(os.Stderr, `    cancel-stripe-subscription: Schedules an organization's PAYG subscription to cancel at period end.`)
 	fmt.Fprintln(os.Stderr, `    resume-stripe-subscription: Removes a scheduled period-end cancellation from an organization's PAYG subscription.`)
@@ -33172,6 +33184,26 @@ func adminSetStripeCustomerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-stripe-customer --body '{\n      \"organization_id\": \"abc123\",\n      \"stripe_customer_id\": \"aaa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminSetAdoptionDashboardURLUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-adoption-dashboard-url", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-adoption-dashboard-url --body '{\n      \"adoption_dashboard_url\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetStripeSubscriptionUsage() {
