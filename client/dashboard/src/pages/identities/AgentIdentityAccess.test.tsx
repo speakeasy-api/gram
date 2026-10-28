@@ -153,6 +153,28 @@ describe("Agent profile permissions", () => {
     expect(screen.getByText("All resources")).toBeTruthy();
     expect(screen.getByText("Project: Example project")).toBeTruthy();
   });
+  // A wildcard project constrains nothing; an empty one still narrows.
+  it.each([
+    ["*", "Whole organization", "All resources", 0],
+    ["", "All resources", "Whole organization", 1],
+  ])(
+    "labels an org permission on project %j as %s",
+    async (projectId, shown, hidden, projectConstraints) => {
+      mocks.list.mockResolvedValue([
+        {
+          id: "grant_hooks",
+          scope: "org:hooks_ingest",
+          selector: { resourceKind: "org", resourceId: "*", projectId },
+        },
+      ]);
+      setup();
+      expect(await screen.findByText(shown)).toBeTruthy();
+      expect(screen.queryByText(hidden)).toBeNull();
+      expect(screen.queryAllByText(/^Project:/)).toHaveLength(
+        projectConstraints,
+      );
+    },
+  );
   it("updates after saving permissions in Agent Identity", async () => {
     const client = setup();
     await screen.findByText("No permissions configured for this agent.");

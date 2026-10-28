@@ -170,7 +170,7 @@ export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
 /**
  * What a permission on every resource of its kind applies to, as the editor and
  * the agent's profile show it. An org grant narrowed to a project is not whole,
- * so a caller passes no kind for it.
+ * so a caller passes no kind unless `isAgentPolicySelectorUnrestricted` holds.
  */
 export function agentPolicyUnrestrictedLabel(kind: string | undefined): string {
   return kind === "org" ? "Whole organization" : "All resources";
@@ -283,20 +283,36 @@ const DRAFT_DIMENSIONS: Record<string, readonly string[]> = {
 };
 
 /**
- * The dimensions a selector actually constrains. A wildcard constrains nothing,
- * so it reads the same as an absent key — which is how `Selector.Matches` in
+ * Whether a selector value constrains its dimension. Presence, not truthiness:
+ * an empty value still does. A wildcard constrains nothing, so it reads the
+ * same as an absent key — which is how `Selector.Matches` in
  * server/internal/authz/selector.go treats it.
  */
+export function isAgentPolicyConstraint(value: unknown): value is string {
+  return typeof value === "string" && value !== ANY_RESOURCE;
+}
+
+/** The dimensions a selector actually constrains. */
 function constrainedDimensions(
   selector: AgentPolicySelector,
 ): Record<string, string> {
   const constrained: Record<string, string> = {};
   for (const [key, value] of Object.entries(selector)) {
     if (key === "resourceKind" || key === "resourceId") continue;
-    if (typeof value !== "string" || value === ANY_RESOURCE) continue;
+    if (!isAgentPolicyConstraint(value)) continue;
     constrained[key] = value;
   }
   return constrained;
+}
+
+/** Whether a selector reaches every resource of its kind, with nothing narrowing it. */
+export function isAgentPolicySelectorUnrestricted(
+  selector: AgentPolicySelector,
+): boolean {
+  return (
+    selector.resourceId === ANY_RESOURCE &&
+    Object.keys(constrainedDimensions(selector)).length === 0
+  );
 }
 
 /**
@@ -328,10 +344,7 @@ export function agentPolicyDraftFromGrants(
   const draft: AgentPolicyDraft = {};
   for (const grant of grants) {
     const { selector } = grant;
-    if (
-      selector.resourceId === ANY_RESOURCE &&
-      Object.keys(constrainedDimensions(selector)).length === 0
-    ) {
+    if (isAgentPolicySelectorUnrestricted(selector)) {
       draft[grant.scope] = null;
       continue;
     }
