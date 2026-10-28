@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // skillsFixture is one public hosted toolset in the test user's project,
@@ -53,7 +52,7 @@ func newSkillsFixture(t *testing.T, ctx context.Context, ti *testInstance) *skil
 	require.NotNil(t, authCtx.ProjectSlug)
 
 	slug := "skills-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 	ti.features.SetFlag(feature.FlagSkillsOverMCP, authCtx.ActiveOrganizationID, true)
 
 	return &skillsFixture{
@@ -266,7 +265,7 @@ func TestServePublic_Skills_ListServesLinkedSkills(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
 	_, linkedContent := servedSkill(t, ctx, ti, f, "linked-skill")
-	otherToolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), f.authCtx, "other-"+f.mcpSlug)
+	otherToolset := createPublicMCPToolset(t, ctx, ti, f.authCtx, "other-"+f.mcpSlug)
 	otherServer := createToolsetWrapper(t, ctx, ti, f.projectID, otherToolset.ID, "other-"+f.mcpSlug)
 	servedSkillOn(t, ctx, ti, f, "elsewhere-skill", otherServer)
 
@@ -289,7 +288,7 @@ func TestServePublic_Skills_ToolsetWithoutServerServesNothing(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
 	servedSkill(t, ctx, ti, f, "unreachable-skill")
-	bare := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), f.authCtx, "bare-"+f.mcpSlug)
+	bare := createPublicMCPToolset(t, ctx, ti, f.authCtx, "bare-"+f.mcpSlug)
 
 	w, err := servePublicHTTP(t, ctx, ti, bare.McpSlug.String, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
 	require.NoError(t, err)
