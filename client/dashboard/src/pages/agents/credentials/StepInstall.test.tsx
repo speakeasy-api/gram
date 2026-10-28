@@ -2,10 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { StepInstall } from "./StepInstall";
 
-afterEach(() => {
-  cleanup();
-  vi.unstubAllGlobals();
-});
+afterEach(cleanup);
 
 const gatewayURL = "https://app.example.test/agent-mcp/agent_1";
 
@@ -13,7 +10,10 @@ it("adds the gateway to OpenClaw by hand with the key the shell expands", () => 
   const writeText = vi.fn<(text: string) => Promise<void>>(() =>
     Promise.resolve(),
   );
-  vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
   render(
     <StepInstall
       command={null}
