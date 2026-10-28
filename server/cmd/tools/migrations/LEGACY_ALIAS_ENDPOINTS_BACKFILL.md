@@ -76,7 +76,7 @@ After applying:
 
 ## Rollback
 
-Use the journal. Group entries by `mcp_server_id`. A `pending` entry followed by `committed` landed; one followed by `rolled_back` did not. A `pending` entry with no outcome (the run crashed) or followed by `commit_outcome_unknown` must be reconciled against the database: its writes landed if the endpoint ids exist in `mcp_endpoints` and audit rows by `system:legacy-alias-endpoint-backfill` name them (`mcp-endpoint:create` with that endpoint id as subject, `toolset:move_legacy_alias` with the server id as subject). The audit rows alone also reconstruct every write, including an alias's old address.
+Use the journal. Group entries by `mcp_server_id`. A `pending` entry followed by `committed` landed; one followed by `rolled_back` did not. A `pending` entry with no outcome (the run crashed) or followed by `commit_outcome_unknown` must be reconciled against the database: its writes landed if the endpoint ids exist in `mcp_endpoints` and audit rows by `system:legacy-alias-endpoint-backfill` name them (`mcp-endpoint:create` with that endpoint id as subject, `toolset:move_legacy_alias` with the server id as subject). The journal reconstructs endpoint addresses; alias-move audit rows also preserve the alias's old address.
 
 Before removing anything, check that no later `mcp-endpoint:update` or `mcp-endpoint:delete` audit event names a journaled endpoint; leave any that a user has changed since.
 

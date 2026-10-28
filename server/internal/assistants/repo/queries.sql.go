@@ -3158,6 +3158,7 @@ SELECT
   -- legacyalias: drop with AIM-670.
   (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
+  (ep.domain IS NOT NULL AND ep.is_domain_root IS TRUE)::bool AS endpoint_is_domain_root,
   t.default_environment_slug,
   ams.environment_id,
   e.slug AS environment_slug
@@ -3173,7 +3174,7 @@ LEFT JOIN toolsets t
   AND t.project_id = $1
   AND t.deleted IS FALSE
 LEFT JOIN LATERAL (
-  SELECT me.slug, cd.domain
+  SELECT me.slug, cd.domain, me.is_domain_root
   FROM mcp_endpoints me
   LEFT JOIN custom_domains cd
     ON cd.id = me.custom_domain_id
@@ -3187,7 +3188,7 @@ LEFT JOIN LATERAL (
     AND (me.custom_domain_id IS NULL OR cd.id IS NOT NULL)
   ORDER BY
     CASE
-      WHEN ms.toolset_id IS DISTINCT FROM ms.id THEN (me.custom_domain_id IS NOT NULL)::int
+      WHEN t.id IS NULL THEN (me.custom_domain_id IS NOT NULL)::int
       WHEN me.custom_domain_id IS NOT NULL AND me.is_domain_root IS TRUE THEN 0
       WHEN me.custom_domain_id IS NOT NULL THEN 1
       ELSE 2
@@ -3216,6 +3217,7 @@ type LoadAssistantMcpServersRow struct {
 	EndpointSlug           string
 	HostedToolset          bool
 	EndpointDomain         string
+	EndpointIsDomainRoot   bool
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -3225,8 +3227,8 @@ type LoadAssistantMcpServersRow struct {
 // default environment, and sort first so they win runtime id
 // collisions. The address is the server's own endpoint on the platform or a verified, activated custom domain
 // (ListAddressableMCPEndpointsByMCPServerIDs): for a hosted row in endpointaddr.PrimaryEndpoint's order (domain
-// root, then another custom-domain endpoint, then platform), as its toolset view and plugins advertise; for any
-// other row platform first, whose slug the assistant view reports.
+// root, then another custom-domain endpoint, then platform), as its toolset view and plugins advertise, a domain
+// root at the bare domain; for any other row platform first, whose slug the assistant view reports.
 // A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
 // caller fills in from legacyalias until the toolset slug fallback is removed.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
@@ -3247,6 +3249,7 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 			&i.EndpointSlug,
 			&i.HostedToolset,
 			&i.EndpointDomain,
+			&i.EndpointIsDomainRoot,
 			&i.DefaultEnvironmentSlug,
 			&i.EnvironmentID,
 			&i.EnvironmentSlug,

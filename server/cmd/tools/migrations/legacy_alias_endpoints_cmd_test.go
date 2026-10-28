@@ -219,3 +219,32 @@ func TestLegacyAliasEndpointsDryRunWritesNoJournalAndExitsZero(t *testing.T) {
 	require.Equal(t, legacyAliasEndpointsTotals{"would_create": 1}, totals)
 	require.Equal(t, 0, legacyAliasEndpointsReport(&out, legacyAliasEndpointsConfig{environment: "dev"}, totals, nil))
 }
+
+func TestLegacyAliasEndpointsRunPagesFromLastID(t *testing.T) {
+	t.Parallel()
+	first, second, third := uuid.New(), uuid.New(), uuid.New()
+	pages := map[uuid.UUID][]mcpendpoints.AliasBackfillCandidate{
+		uuid.Nil: {{ToolsetID: first, ProjectID: uuid.New(), OrganizationID: "org"}, {ToolsetID: second, ProjectID: uuid.New(), OrganizationID: "org"}},
+		second:   {{ToolsetID: third, ProjectID: uuid.New(), OrganizationID: "org"}},
+	}
+	var cursors []uuid.UUID
+	var seen []uuid.UUID
+	var out bytes.Buffer
+	run := legacyAliasEndpointsRun{
+		list: func(after uuid.UUID) ([]mcpendpoints.AliasBackfillCandidate, error) {
+			cursors = append(cursors, after)
+			return pages[after], nil
+		},
+		backfill: func(candidate mcpendpoints.AliasBackfillCandidate, _ func(mcpendpoints.AliasBackfillResult) error) (mcpendpoints.AliasBackfillResult, error) {
+			seen = append(seen, candidate.ToolsetID)
+			return mcpendpoints.AliasBackfillResult{}, nil
+		},
+		apply:   false,
+		stdout:  &out,
+		journal: nil,
+	}
+	_, err := run.execute()
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{uuid.Nil, second, third}, cursors)
+	require.Equal(t, []uuid.UUID{first, second, third}, seen)
+}

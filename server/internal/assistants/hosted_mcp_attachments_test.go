@@ -502,7 +502,8 @@ func TestHostedAttachmentPrefersLiveCustomDomainEndpoint(t *testing.T) {
 		ID: domain.ID, Verified: true, Activated: true, IngressName: pgtype.Text{String: "ingress", Valid: true}, CertSecretName: pgtype.Text{String: "cert", Valid: true},
 	})
 	require.NoError(t, err)
-	_, err = mcpendpointsrepo.New(f.db).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+	endpoints := mcpendpointsrepo.New(f.db)
+	endpoint, err := endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: f.projectID, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 		McpServerID: uuid.NullUUID{UUID: f.hosted.ID, Valid: true}, Slug: "billing-domain",
 	})
@@ -512,4 +513,13 @@ func TestHostedAttachmentPrefersLiveCustomDomainEndpoint(t *testing.T) {
 	runtime := f.runtime(t)
 	require.Len(t, runtime, 1)
 	require.Equal(t, "https://assistants.example.com/mcp/billing-domain", runtime[0].URL)
+
+	_, err = endpoints.UpdateMCPEndpointAddress(ctx, mcpendpointsrepo.UpdateMCPEndpointAddressParams{
+		ID: endpoint.ID, ProjectID: f.projectID, CustomDomainID: endpoint.CustomDomainID, Slug: endpoint.Slug,
+		IsDomainRoot: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	runtime = f.runtime(t)
+	require.Len(t, runtime, 1)
+	require.Equal(t, "https://assistants.example.com", runtime[0].URL)
 }

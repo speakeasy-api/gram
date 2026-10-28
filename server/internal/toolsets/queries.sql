@@ -368,6 +368,7 @@ SELECT
   , (address.slug IS NOT NULL)::boolean AS has_endpoint
   , COALESCE(address.slug, '')::text AS endpoint_slug
   , address.custom_domain_id AS endpoint_custom_domain_id
+  , (address.custom_domain_id IS NOT NULL AND address.is_domain_root IS TRUE)::boolean AS endpoint_is_domain_root
   , COALESCE((
       SELECT array_agg(e.slug ORDER BY e.slug)
       FROM mcp_endpoints e
@@ -383,7 +384,7 @@ JOIN toolsets t
  AND t.organization_id = @organization_id
  AND t.deleted IS FALSE
 LEFT JOIN LATERAL (
-  SELECT e.slug, e.custom_domain_id
+  SELECT e.slug, e.custom_domain_id, e.is_domain_root
   FROM mcp_endpoints e
   LEFT JOIN custom_domains cd
     ON cd.id = e.custom_domain_id

@@ -2099,15 +2099,17 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 
 // resolveMCPURLFromContext builds a toolset's MCP URL. The canonical server's primary endpoint wins, a live custom
 // domain before the platform as endpointaddr.PrimaryEndpoint picks; the toolset's frozen alias stands only when it
-// has no addressable endpoint.
+// has no addressable endpoint. A domain-root endpoint is the bare domain, as endpointaddr.EndpointURL renders it.
 func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, alias legacyalias.Alias, serverUrl string) (string, error) {
 	hosting, err := hostingstate.Load(ctx, s.db, toolset.OrganizationID, []uuid.UUID{toolset.ID})
 	if err != nil {
 		return "", fmt.Errorf("load hosted MCP address: %w", err)
 	}
 	address := hostingstate.Address{Slug: alias.Slug, CustomDomainID: alias.CustomDomainID}
+	domainRoot := false
 	if row := hostingstate.For(hosting, toolset.ID); row != nil && row.Canonical && row.HasEndpoint {
 		address = hostingstate.Address{Slug: pgtype.Text{String: row.EndpointSlug, Valid: true}, CustomDomainID: row.EndpointCustomDomainID}
+		domainRoot = row.EndpointIsDomainRoot
 	}
 
 	baseURL := serverUrl + "/mcp"
@@ -2118,6 +2120,9 @@ func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets
 			return "", fmt.Errorf("failed to get custom domain: %w", err)
 		}
 
+		if domainRoot {
+			return "https://" + customDomain.Domain, nil
+		}
 		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
 	}
 

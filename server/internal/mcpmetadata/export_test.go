@@ -195,7 +195,8 @@ func TestService_ExportMcpMetadata_PrefersLiveCustomDomainEndpoint(t *testing.T)
 	require.NoError(t, err)
 
 	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{name: "Primary", slug: "primary", mcpSlug: "primary-platform"})
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+	endpoints := mcpendpointsrepo.New(ti.conn)
+	endpoint, err := endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: toolset.ProjectID, CustomDomainID: uuid.NullUUID{UUID: customDomain.ID, Valid: true},
 		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: "primary-domain",
 	})
@@ -204,4 +205,13 @@ func TestService_ExportMcpMetadata_PrefersLiveCustomDomainEndpoint(t *testing.T)
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpSlug: new(types.Slug("primary-platform"))})
 	require.NoError(t, err)
 	require.Equal(t, "https://primary.example.com/mcp/primary-domain", result.ServerURL)
+
+	_, err = endpoints.UpdateMCPEndpointAddress(ctx, mcpendpointsrepo.UpdateMCPEndpointAddressParams{
+		ID: endpoint.ID, ProjectID: toolset.ProjectID, CustomDomainID: endpoint.CustomDomainID, Slug: endpoint.Slug,
+		IsDomainRoot: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	result, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpSlug: new(types.Slug("primary-platform"))})
+	require.NoError(t, err)
+	require.Equal(t, "https://primary.example.com", result.ServerURL)
 }
