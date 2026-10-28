@@ -1,10 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  GitHubAppFields,
-  gitHubAppReady,
-  newGitHubAppDraft,
-} from "./GitHubAppFields";
+import { GitHubAppFields } from "./GitHubAppFields";
+import { gitHubAppReady, newGitHubAppDraft } from "../model/githubApp";
 
 describe("GitHub App configuration", () => {
   it("defaults to GitHub.com and requires all credentials", () => {
@@ -21,7 +18,8 @@ describe("GitHub App configuration", () => {
     ).toBe(true);
   });
   it("has accessible enterprise and private key fields", () => {
-    const onChange = vi.fn();
+    const onChange =
+      vi.fn<(value: import("../model/githubApp").GitHubAppDraft) => void>();
     render(<GitHubAppFields value={newGitHubAppDraft()} onChange={onChange} />);
     fireEvent.change(screen.getByLabelText("GitHub instance URL"), {
       target: { value: "https://git.example.com" },

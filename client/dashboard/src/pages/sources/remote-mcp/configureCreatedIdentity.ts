@@ -1,4 +1,4 @@
-import type { GitHubAppDraft } from "@/lib/remote-identity/components/GitHubAppFields";
+import type { GitHubAppDraft } from "@/lib/remote-identity/model/githubApp";
 import { requireKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { isNotFoundError } from "@/lib/errors";

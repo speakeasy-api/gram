@@ -1,7 +1,7 @@
 import {
   gitHubAppReady,
   type GitHubAppDraft,
-} from "@/lib/remote-identity/components/GitHubAppFields";
+} from "@/lib/remote-identity/model/githubApp";
 import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
 import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";

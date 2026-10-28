@@ -1,4 +1,4 @@
-import type { GitHubAppDraft } from "@/lib/remote-identity/components/GitHubAppFields";
+import type { GitHubAppDraft } from "@/lib/remote-identity/model/githubApp";
 import {
   deleteSourceCascade,
   fetchLinkedMcpServers,
