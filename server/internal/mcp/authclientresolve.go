@@ -624,6 +624,9 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 	if err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 	}
+	// The connection the permit was decided for binds every token path,
+	// including a handback to the upstream client choice.
+	authentication.attachedSession = res.attachedSession
 	switch res.outcome {
 	case authClientLegacy:
 		return none, false, nil

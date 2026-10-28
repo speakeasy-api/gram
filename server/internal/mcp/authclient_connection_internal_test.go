@@ -3,10 +3,12 @@ package mcp
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -16,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -197,21 +200,17 @@ func TestPinAttachedSessionServesOnlyThePermittedConnection(t *testing.T) {
 		issuerA: {Token: "permitted", RemoteSessionID: permitted},
 		issuerB: {Token: "moved", RemoteSessionID: moved},
 	}
-	res := &authClientResolution{attachedSession: permitted}
 
-	pinned, err := pinAttachedSession(tokens, res, true)
+	pinned, err := pinAttachedSession(tokens, permitted, true)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{issuerA: tokens[issuerA]}, pinned)
 
-	_, err = pinAttachedSession(tokens, res, false)
+	_, err = pinAttachedSession(tokens, permitted, false)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "a binding that moved after the check is a missing token, never an anonymous call")
 
-	unpinned, err := pinAttachedSession(tokens, &authClientResolution{}, false)
+	unpinned, err := pinAttachedSession(tokens, uuid.Nil, false)
 	require.NoError(t, err)
 	require.Equal(t, tokens, unpinned, "a user's own connection is not pinned")
-	unpinned, err = pinAttachedSession(tokens, nil, false)
-	require.NoError(t, err)
-	require.Equal(t, tokens, unpinned)
 }
 
 // A permit request built without resolving its owner, as a direct caller of
@@ -322,5 +321,157 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 			}
 			require.Equal(t, map[string]int64{tc.shadow: 1}, outcomes, "the shadow decides the same check")
 		})
+	}
+}
+
+// fakeUpstreamTokens serves the chosen client's token from whichever
+// connection its binding names when tokens are read.
+type fakeUpstreamTokens struct {
+	issuerID uuid.UUID
+	bound    uuid.UUID
+}
+
+func (f *fakeUpstreamTokens) tokens() map[uuid.UUID]remotesessions.UpstreamToken {
+	return map[uuid.UUID]remotesessions.UpstreamToken{f.issuerID: {Token: "token-" + f.bound.String(), RemoteSessionID: f.bound, Resource: "https://mcp.example.com"}}
+}
+
+func (f *fakeUpstreamTokens) ResolveAuthClientAccessTokens(context.Context, remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	return f.tokens(), nil
+}
+
+func (f *fakeUpstreamTokens) ResolveClientAccessTokens(context.Context, uuid.UUID, string, uuid.UUID, urn.SessionSubject, uuid.UUID, bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	return f.tokens(), nil
+}
+
+// unusedChainer fails a test that reaches identity chaining.
+type unusedChainer struct{ identityChainer }
+
+// A personal client handed back to the upstream client choice, for stale
+// header copies or a registration that may chain, was checked against the
+// agent's attached connection. If the binding moves to another lender's
+// connection between that check and the token read, neither the direct nor
+// the gateway path serves it; the checked connection still serves.
+func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_legacy_pin")
+	require.NoError(t, err)
+
+	handbacks := []struct {
+		name   string
+		reason string
+		setup  func(t *testing.T, f *authClientFixture) uuid.UUID
+	}{
+		{"stale header copies", authClientReasonHeadersStale, func(t *testing.T, f *authClientFixture) uuid.UUID {
+			t.Helper()
+			headerID := f.sourceHeader("X-Upstream", false, pgtype.Text{}, text("X-Caller"))
+			client := f.oauthClient(authClientTypeRemoteSession)
+			f.copyHeader(client, "X-Upstream", false, false, pgtype.Text{}, text("X-Caller"))
+			f.requireSourceHeader(headerID)
+			return client
+		}},
+		{"identity chaining", authClientReasonLegacyMayChain, func(t *testing.T, f *authClientFixture) uuid.UUID {
+			t.Helper()
+			client := f.oauthClient(authClientTypeRemoteSession)
+			ema := f.client("ema", validUUID(f.registration), true)
+			require.NoError(t, f.q.SeedAuthClientEMAFixture(t.Context(), authclientbackfill.SeedAuthClientEMAFixtureParams{Resource: "https://api.example.com", AuthClientID: ema}))
+			return client
+		}},
+	}
+
+	setup := func(t *testing.T, handback func(t *testing.T, f *authClientFixture) uuid.UUID) (*authClientFixture, *upstreamSelector, *fakeUpstreamTokens, uuid.UUID, urn.SessionSubject, context.Context) {
+		t.Helper()
+		f := newAuthClientFixture(t, pool)
+		client := handback(t, f)
+		// The credential chose both the client and its registration, which
+		// stays bound to the sign-in, so the upstream client choice remains
+		// usable for the handback.
+		selector := &upstreamSelector{service: f.service, organizationID: f.orgID, userSessionIssuerID: uuid.New(), credentialID: uuid.New()}
+		require.NoError(t, f.q.SeedUserSessionIssuerFixture(t.Context(), authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: selector.userSessionIssuerID, ProjectID: validUUID(f.projectID), Slug: "usi-" + selector.userSessionIssuerID.String()[:8]}))
+		require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: selector.userSessionIssuerID}))
+		require.NoError(t, f.q.SeedOAuthSelectionFixture(t.Context(), authclientbackfill.SeedOAuthSelectionFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, CredentialID: selector.credentialID, McpServerID: f.serverID, RemoteSessionClientID: f.registration}))
+		require.NoError(t, f.q.SwapUpstreamAuthClientFixture(t.Context(), authclientbackfill.SwapUpstreamAuthClientFixtureParams{AuthClientID: validUUID(client), CredentialID: selector.credentialID, McpServerID: f.serverID}))
+		enforcedShadowService(t, f)
+		checked := uuid.New()
+		f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: checked, OwnerUserID: "user_1"}, attached: true, err: nil, asked: nil}
+		tokens := &fakeUpstreamTokens{issuerID: f.issuerID, bound: checked}
+		f.service.upstreamTokens = tokens
+		f.service.identityChainer = unusedChainer{}
+		return f, selector, tokens, checked, urn.NewAgentSubject(uuid.New()), sessionContext(t, f.orgID, personalAuthGrant())
+	}
+
+	for _, hb := range handbacks {
+		for _, replaced := range []bool{false, true} {
+			name := hb.name + "/same connection"
+			if replaced {
+				name = hb.name + "/replaced connection"
+			}
+
+			t.Run("direct/"+name, func(t *testing.T) {
+				t.Parallel()
+				f, selector, tokens, checked, agent, ctx := setup(t, hb.setup)
+				endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID, McpServerID: validUUID(f.serverID)}
+				authentication := &issuerGateAuthentication{endpoint: endpoint, subject: agent}
+				_, handled, err := f.service.enforceAuthClient(ctx, httptest.NewRecorder(), authentication, selector)
+				require.NoError(t, err)
+				require.False(t, handled, "the request is handed back to the upstream client choice")
+				require.Nil(t, authentication.authClient, "a handback is not served as a typed client")
+				require.Equal(t, checked, authentication.attachedSession, "the checked connection is carried apart from the typed selection")
+				choice, err := selector.forServer(ctx, f.serverID)
+				require.NoError(t, err)
+				authentication.chosenClient = choice.clientID
+
+				if replaced {
+					tokens.bound = uuid.New()
+				}
+				served, err := f.service.resolveAccessTokens(ctx, authentication, false)
+				partial, partialErr := f.service.resolveAccessTokens(ctx, authentication, true)
+				require.NoError(t, partialErr)
+				// The direct serving path, with identity chaining unused.
+				endpoint.McpServerID = uuid.NullUUID{}
+				direct, directErr := f.service.resolveDirectUpstreamToken(ctx, httptest.NewRecorder(), testenv.NewLogger(t), authentication, "https://mcp.example.com/", false, validUUID(f.issuerID))
+				if replaced {
+					require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "another lender's connection is a missing token")
+					require.Empty(t, partial)
+					require.Error(t, directErr)
+					require.Empty(t, direct.Token, "the replacement never reaches the upstream")
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, checked, served[f.issuerID].RemoteSessionID)
+				require.Equal(t, served, partial)
+				require.NoError(t, directErr)
+				require.Equal(t, "token-"+checked.String(), direct.Token)
+			})
+
+			t.Run("gateway/"+name, func(t *testing.T) {
+				t.Parallel()
+				f, selector, tokens, checked, agent, ctx := setup(t, hb.setup)
+				endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID}
+				choices := &memberChoices{selector: selector, enforced: true, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
+				choices.resolve = func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+					return f.service.resolveChosenMemberTokens(ctx, endpoint, agent, true, member)
+				}
+				members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
+				choices.apply(ctx, testenv.NewLogger(t), members, true)
+				member := members[0]
+				require.NoError(t, member.upstreamUnavailable)
+				require.Equal(t, authClientLegacy, member.authClient.outcome)
+				require.Equal(t, hb.reason, member.authClient.reason)
+				require.False(t, member.typedAuthClient, "a handback is not served as a typed client")
+				require.Equal(t, checked, member.authClient.attachedSession)
+
+				if replaced {
+					tokens.bound = uuid.New()
+				}
+				served, err := choices.tokens(ctx, member)
+				require.NoError(t, err)
+				if replaced {
+					require.Empty(t, served, "the replacement never reaches the upstream")
+					return
+				}
+				require.Equal(t, "token-"+checked.String(), served[f.issuerID].Token)
+			})
+		}
 	}
 }
