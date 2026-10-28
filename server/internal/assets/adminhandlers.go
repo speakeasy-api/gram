@@ -186,7 +186,18 @@ func canonicalPlatformImage(data []byte, contentType string) ([]byte, string, er
 	if err != nil {
 		return nil, "", oops.E(oops.CodeBadRequest, err, "error parsing content type")
 	}
-	if mediaType == "image/svg+xml" || strings.HasPrefix(strings.TrimSpace(string(data)), "<") {
+	// NUL padding can precede '<' in UTF-16/32 XML, including encoded
+	// leading whitespace. Recognize it as XML without decoding or accepting
+	// those encodings. The sanitizer still validates the original bytes.
+	candidate := strings.TrimLeft(strings.TrimSpace(string(data)), "\x00 \t\r\n")
+	// Reject BOMs outright; stripping leading NUL padding also exposes the
+	// UTF-32 BOMs as their UTF-16 counterparts. Raster signatures are unaffected.
+	for _, bom := range []string{"\xef\xbb\xbf", "\xff\xfe", "\xfe\xff"} {
+		if strings.HasPrefix(candidate, bom) {
+			return nil, "", oops.E(oops.CodeUnsupportedMedia, nil, "image encoding is unsupported")
+		}
+	}
+	if mediaType == "image/svg+xml" || strings.HasPrefix(candidate, "<") {
 		clean, err := sanitizeSVG(data)
 		if err != nil {
 			return nil, "", oops.E(oops.CodeUnsupportedMedia, err, "invalid SVG image")

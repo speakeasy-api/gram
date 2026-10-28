@@ -50,7 +50,7 @@ paths:
               schema:
                 type: string
                 format: binary
-                description: PNG, JPEG, GIF or WebP image bytes; Content-Type preserves the stored image MIME type.
+                description: PNG, JPEG, GIF, WebP or validated static SVG image bytes; Content-Type preserves the stored image MIME type.
         "400":
           content:
             application/json:
