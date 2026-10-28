@@ -35,7 +35,7 @@ function Harness({
         value={value}
         onChange={onChange}
         disabled={disabled}
-        onBusyChange={vi.fn()}
+        onBusyChange={vi.fn<(busy: boolean) => void>()}
       />
       <textarea
         aria-label="draft"
@@ -117,13 +117,13 @@ it("preserves prior draft on rejection and ignores late completion after close",
         resolve = r;
       }),
   );
-  const onChange = vi.fn();
+  const onChange = vi.fn<(value: string) => void>();
   const next = render(
     <RegistryIcons
       value="{}"
       disabled={false}
       onChange={onChange}
-      onBusyChange={vi.fn()}
+      onBusyChange={vi.fn<(busy: boolean) => void>()}
     />,
   );
   select();
