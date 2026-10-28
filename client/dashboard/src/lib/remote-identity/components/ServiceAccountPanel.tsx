@@ -151,7 +151,11 @@ export function ServiceAccountPanel({
       <div
         className={cn(
           "flex min-w-0 flex-col gap-4",
-          !compact && "flex-[999_1_480px]",
+          // Compact stacks the fields under the format tiles, so they sit in
+          // their own inset panel to read as a separate step.
+          compact
+            ? "border-border bg-muted/40 border p-4"
+            : "flex-[999_1_480px]",
         )}
       >
         {isOAuthFormat(format) ? (
@@ -192,10 +196,7 @@ function FormatGroup({
     description: string;
     unavailable?: string;
   }[];
-  /**
-   * Tiles in a row, titled only until selected: the selected tile expands to
-   * show its description, and the others keep it as a tooltip.
-   */
+  /** Title-only tiles in a row; the description moves to a tooltip. */
   compact: boolean;
 }): JSX.Element {
   // Both groups are one choice, so each shows nothing selected while the
@@ -211,9 +212,7 @@ function FormatGroup({
         className={
           compact
             ? cn(
-                // items-start: the selected tile grows to show its
-                // description while the others keep their height.
-                "grid items-start gap-2",
+                "grid gap-2",
                 options.length >= 3 ? "grid-cols-3" : "grid-cols-2",
               )
             : undefined
@@ -230,11 +229,7 @@ function FormatGroup({
             title={
               <span
                 className="flex flex-wrap items-center gap-2"
-                title={
-                  compact && option.value !== value
-                    ? option.description
-                    : undefined
-                }
+                title={compact ? option.description : undefined}
               >
                 {option.title}
                 {option.unavailable ? (
@@ -243,7 +238,7 @@ function FormatGroup({
               </span>
             }
           >
-            {compact && option.value !== value ? null : option.description}
+            {compact ? null : option.description}
           </RadioCard>
         ))}
       </RadioCardGroup>
