@@ -32,7 +32,7 @@ func TestServePublic_AllowsUnauthenticatedAccessToPublicMCP(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Create a public toolset
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Public Unauthenticated MCP",
@@ -41,7 +41,7 @@ func TestServePublic_AllowsUnauthenticatedAccessToPublicMCP(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "public-unauth-mcp", "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "public-unauth-mcp", "private", noIssuer())
 
 	// Make the toolset public
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
@@ -98,7 +98,7 @@ func TestServePublic_AllowsCrossOrgAccessToPublicMCP(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Create toolset in the original org
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Public Cross-Org MCP",
@@ -107,7 +107,7 @@ func TestServePublic_AllowsCrossOrgAccessToPublicMCP(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "public-cross-org-mcp", "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "public-cross-org-mcp", "private", noIssuer())
 
 	// Make the toolset public
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
@@ -175,7 +175,7 @@ func TestServePublic_DeniesCrossOrgAccessToPrivateMCP(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Create a PRIVATE toolset in the original org
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Cross-Org MCP",
@@ -185,7 +185,7 @@ func TestServePublic_DeniesCrossOrgAccessToPrivateMCP(t *testing.T) {
 		// McpIsPublic defaults to false
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "private-cross-org-mcp", "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-cross-org-mcp", "private", noIssuer())
 
 	// Create a different organization
 	differentOrgID := uuid.New().String()
@@ -236,7 +236,7 @@ func TestServePublic_SameOrgAuthenticatedUserGetsFullAccess(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Create a public toolset with a default environment
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Public Same-Org MCP",
@@ -245,7 +245,7 @@ func TestServePublic_SameOrgAuthenticatedUserGetsFullAccess(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "public-same-org-mcp", "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "public-same-org-mcp", "private", noIssuer())
 
 	// Make the toolset public
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})

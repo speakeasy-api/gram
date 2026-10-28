@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -561,11 +562,17 @@ func TestCreateMCPFromFunctionsMatchesTheDashboardSequence(t *testing.T) {
 	require.NoError(t, err)
 	dashboardToolset, err := toolsetRows.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: dashboardToolsetID, ProjectID: fixture.project.ID})
 	require.NoError(t, err)
-	require.Equal(t, dashboardToolset.McpEnabled, toolToolset.McpEnabled)
+	toolCanonical, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolToolset.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+	dashboardCanonical, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: dashboardToolset.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+	require.Equal(t, dashboardCanonical.Visibility, toolCanonical.Visibility, "the toolsets' canonical servers are hosted alike")
 	require.Equal(t, dashboardToolset.DefaultEnvironmentSlug, toolToolset.DefaultEnvironmentSlug)
 	require.Equal(t, dashboardToolset.Description, toolToolset.Description)
 	require.Equal(t, dashboardToolset.ToolSelectionMode, toolToolset.ToolSelectionMode)
-	require.False(t, toolToolset.McpSlug.Valid, "the toolset hosting columns stay unset")
+	toolAlias, err := legacyalias.Get(ctx, fixture.conn, fixture.project.ID, toolToolset.ID)
+	require.NoError(t, err)
+	require.Equal(t, legacyalias.None(), toolAlias, "the toolset has no legacy alias")
 	toolEndpoints, err := mcpendpointsrepo.New(fixture.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: fixture.project.ID, McpServerID: toolToolset.ID})
 	require.NoError(t, err)
 	require.Len(t, toolEndpoints, 1, "the canonical server gets one platform endpoint")

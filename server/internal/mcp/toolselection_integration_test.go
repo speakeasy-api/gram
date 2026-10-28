@@ -30,7 +30,7 @@ import (
 // tools: reader (readOnlyHint true), writer and eraser (unannotated). Public
 // keeps RBAC out of the way and exercises the anonymous-subject path — the
 // one that early-returns before AuthContext is stamped.
-func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer) {
+func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (hostedToolset, usersessions_repo.UserSessionIssuer) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -110,7 +110,7 @@ func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (
 
 // mintSelectionSession signs a session JWT with the test signer and persists
 // its user_sessions row carrying the given raw tool_selection (nil = NULL).
-func mintSelectionSession(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, issuer usersessions_repo.UserSessionIssuer, selection []byte) string {
+func mintSelectionSession(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, issuer usersessions_repo.UserSessionIssuer, selection []byte) string {
 	t.Helper()
 
 	signer := usersessions.NewSigner("test-jwt-secret")

@@ -337,11 +337,11 @@ func orgObservabilitySlugs(t *testing.T, ctx context.Context, ti *testInstance) 
 	return plugins.ClaudeObservabilitySlug(cfg), plugins.CursorObservabilitySlug(cfg)
 }
 
-// createTestToolset creates a toolset with its canonical server and endpoint, as toolset creation does; McpSlug carries the endpoint slug.
+// createTestToolset creates a toolset with its canonical server and endpoint, as toolset creation does; its endpoint is at the toolset slug.
 func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
 	ts := createEndpointlessTestToolset(t, ctx, conn, name)
-	testenv.SetHostedMCP(t, ctx, conn, ts.ProjectID, ts.ID, testenv.HostedMCP{Visibility: "", UserSessionIssuerID: nil, Slug: ts.McpSlug.String, CustomDomainID: uuid.NullUUID{}})
+	testenv.SetHostedMCP(t, ctx, conn, ts.ProjectID, ts.ID, testenv.HostedMCP{Visibility: "", UserSessionIssuerID: nil, Slug: ts.Slug, CustomDomainID: uuid.NullUUID{}})
 	return ts
 }
 
@@ -350,7 +350,7 @@ func createEndpointlessTestToolset(t *testing.T, ctx context.Context, conn *pgxp
 	t.Helper()
 	ts := createRawTestToolset(t, ctx, conn, name)
 	_, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: ts.ID, ProjectID: ts.ProjectID, Name: pgtype.Text{String: ts.Name, Valid: true}, Slug: ts.McpSlug,
+		ID: ts.ID, ProjectID: ts.ProjectID, Name: pgtype.Text{String: ts.Name, Valid: true}, Slug: pgtype.Text{String: ts.Slug, Valid: true},
 		ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, ToolVariationsGroupID: ts.ToolVariationsGroupID, Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
@@ -367,11 +367,11 @@ func setTestToolsetVisibility(t *testing.T, ctx context.Context, conn *pgxpool.P
 func createUnwrappedTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
 	ts := createRawTestToolset(t, ctx, conn, name)
-	testenv.SetLegacyAlias(t, ctx, conn, ts.ProjectID, ts.ID, ts.McpSlug.String, uuid.NullUUID{})
+	testenv.SetLegacyAlias(t, ctx, conn, ts.ProjectID, ts.ID, ts.Slug, uuid.NullUUID{})
 	return ts
 }
 
-// createRawTestToolset creates a bare toolset row; McpSlug carries the slug its callers address it at.
+// createRawTestToolset creates a bare toolset row; callers address it at its slug.
 func createRawTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -386,7 +386,6 @@ func createRawTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 		DefaultEnvironmentSlug: pgtype.Text{Valid: false},
 	})
 	require.NoError(t, err)
-	ts.McpSlug = pgtype.Text{String: slug, Valid: true}
 	return ts
 }
 

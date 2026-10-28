@@ -161,7 +161,7 @@ func TestHandleGetAuthorizationServer_ToolsetBackendWithExternalOAuth(t *testing
 		IsPublic: true,
 		Metadata: nil,
 	})
-	slug := external.Toolset.McpSlug.String
+	slug := external.McpSlug
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, external.Toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
 
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
@@ -350,7 +350,7 @@ func TestHandleGetProtectedResource_ToolsetBackendWithExternalOAuth(t *testing.T
 			external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
 				Slug: tc.slug, IsPublic: true, AuthorizationServerIssuer: tc.upstreamIssuer,
 			})
-			slug := external.Toolset.McpSlug.String
+			slug := external.McpSlug
 			createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, external.Toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
 
 			w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
@@ -530,7 +530,7 @@ func TestHandleGetAuthorizationServer_ExternalOAuth_EndpointSlugDiffers(t *testi
 		Metadata: nil,
 	})
 	slug := "ext-ep-" + uuid.NewString()
-	require.NotEqual(t, external.Toolset.McpSlug.String, slug)
+	require.NotEqual(t, external.McpSlug, slug)
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, external.Toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
 
 	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)

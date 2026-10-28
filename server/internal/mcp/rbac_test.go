@@ -262,7 +262,7 @@ func TestServePublic_RBAC_ProjectScopedGrant_AllowsToolCallInProject(t *testing.
 	require.NoError(t, err)
 }
 
-func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
+func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) hostedToolset {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -270,7 +270,7 @@ func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance
 
 	toolsetsRepo := toolsets_repo.New(ti.conn)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Test Private MCP " + slug,
@@ -279,7 +279,7 @@ func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, slug, "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, slug, "private", noIssuer())
 
 	return toolset
 }
