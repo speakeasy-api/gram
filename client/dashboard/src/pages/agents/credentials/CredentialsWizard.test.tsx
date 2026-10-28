@@ -29,6 +29,9 @@ const mocks = vi.hoisted(() => ({
   platformsStatus: "success" as "success" | "pending" | "error",
   registerIssuer: vi.fn(),
   admitSubject: vi.fn(),
+  withdrawSubject: vi.fn(),
+  workloadIssuers: vi.fn(),
+  workloadAdmissions: vi.fn(),
   projectId: "project_one",
   canFederate: true,
   canReadWorkloads: true,
@@ -149,7 +152,12 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
-  useWorkloadIdentities: () => ({ data: { issuers: [], admissions: [] } }),
+  useWorkloadIdentities: () => ({
+    data: {
+      issuers: mocks.workloadIssuers(),
+      admissions: mocks.workloadAdmissions(),
+    },
+  }),
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
@@ -166,6 +174,11 @@ vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
 }));
 vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
   useAdmitWorkloadSubjectMutation: () => ({ mutateAsync: mocks.admitSubject }),
+}));
+vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
+  useWithdrawWorkloadSubjectMutation: () => ({
+    mutateAsync: mocks.withdrawSubject,
+  }),
 }));
 // Editing writes through these three: the name, and the grants that decide
 // which servers the agent reaches.
@@ -316,6 +329,9 @@ beforeEach(() => {
   mocks.deleteGrant.mockResolvedValue({});
   mocks.registerIssuer.mockResolvedValue({});
   mocks.admitSubject.mockResolvedValue({});
+  mocks.withdrawSubject.mockResolvedValue({});
+  mocks.workloadIssuers.mockReturnValue([]);
+  mocks.workloadAdmissions.mockReturnValue([]);
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.mcpServers.mockResolvedValue({
     mcpServers: [
@@ -2021,6 +2037,127 @@ describe("Editing an agent that already exists", () => {
 
     expect(await screen.findByText("Grant is locked")).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
+  });
+  describe("its GKE workload", () => {
+    const cluster =
+      "https://container.googleapis.com/v1/projects/acme-prod/locations/us-central1/clusters/payments";
+    const admission = {
+      id: "admission_one",
+      agentId: "agent_one",
+      agentName: "Release Bot",
+      issuer: cluster,
+      issuerName: "GKE payments (acme-prod, us-central1)",
+      matchKind: "exact",
+      name: "",
+      organizationId: "org_example",
+      projectId: "",
+      subject: "system:serviceaccount:default:my-workload",
+      tags: [],
+      wildcardActive: false,
+      workloadIssuerId: "issuer_one",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    beforeEach(() => {
+      mocks.platforms.mockReturnValue([gke]);
+      mocks.workloadIssuers.mockReturnValue([
+        {
+          id: "issuer_one",
+          name: admission.issuerName,
+          issuer: cluster,
+          jwksUri: `${cluster}/jwks`,
+          organizationId: "org_example",
+          projectId: "",
+        },
+      ]);
+      mocks.workloadAdmissions.mockReturnValue([admission]);
+    });
+
+    async function reachWorkloadStep() {
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your cluster" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your workload" });
+    }
+
+    it("reads an unchanged workload back without writing", async () => {
+      await reachWorkloadStep();
+      expect(
+        (screen.getByLabelText("Namespace") as HTMLInputElement).value,
+      ).toBe("default");
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      expect(mocks.admitSubject).not.toHaveBeenCalled();
+      expect(mocks.withdrawSubject).not.toHaveBeenCalled();
+    });
+
+    it("saves a changed service account by replacing the rule", async () => {
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Namespace"), {
+        target: { value: "pr-review" },
+      });
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      // The cluster is already trusted, so only the rule changes.
+      expect(mocks.registerIssuer).not.toHaveBeenCalled();
+      expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toEqual({
+        admitWorkloadSubjectForm: {
+          projectScoped: false,
+          issuer: cluster,
+          subject: "system:serviceaccount:pr-review:review-agent",
+          matchKind: "exact",
+          agentId: "agent_one",
+          tags: [],
+        },
+      });
+      // The new rule first, so the agent is never left without one.
+      expect(mocks.admitSubject.mock.invocationCallOrder[0]!).toBeLessThan(
+        mocks.withdrawSubject.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
+        request: { id: "admission_one" },
+      });
+    });
+
+    it("keeps a project's rule with that project", async () => {
+      mocks.workloadAdmissions.mockReturnValue([
+        { ...admission, projectId: "project_two" },
+      ]);
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledOnce());
+      expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toMatchObject({
+        gramProject: "project-two",
+        admitWorkloadSubjectForm: { projectScoped: true },
+      });
+    });
+
+    it("retries only the withdrawal when that alone failed", async () => {
+      mocks.withdrawSubject.mockRejectedValueOnce(new Error("boom"));
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await screen.findByText(/the old one could not be removed/);
+
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await waitFor(() =>
+        expect(mocks.withdrawSubject).toHaveBeenCalledTimes(2),
+      );
+      expect(mocks.admitSubject).toHaveBeenCalledOnce();
+    });
   });
 });
 

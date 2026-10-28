@@ -3,8 +3,10 @@ import { WorkloadIssuerSelector } from "./WorkloadIssuerSelector";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { AssertionReuseField } from "../WorkloadIssuerPolicy";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
+import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
 import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/registerWorkloadIssuer.js";
+import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/withdrawWorkloadSubject.js";
 import {
   invalidateAllWorkloadIdentities,
   queryKeyWorkloadIdentities,
@@ -77,8 +79,7 @@ export function useWorkloadSetup({
   onConnected,
   onValueChange,
   initialValues,
-  connectedSubject,
-  settled = false,
+  replacing,
   setupOverride,
   targetProjectId,
   servers = [],
@@ -102,16 +103,13 @@ export function useWorkloadSetup({
   /** What the rule already says, when one is being edited rather than made. */
   initialValues?: VariableValues;
   /**
-   * The subject this agent is already admitted under. Its own rule is not a
-   * duplicate of itself, and the create step has nothing left to write.
+   * The rule this agent already holds, when it is being edited. Left as it
+   * is, the create step has nothing to write. Changed, the create step admits
+   * the new rule for the same agent and then withdraws this one: the API
+   * fixes a rule's issuer and subject at admission, so a change is a
+   * replacement.
    */
-  connectedSubject?: string;
-  /**
-   * The rule is not being written here: this flow is editing an agent that
-   * already holds one. Nothing on screen can clash with it, and the create
-   * step has nothing to do.
-   */
-  settled?: boolean;
+  replacing?: WorkloadAdmission;
   /** A value was typed, so the rail can mark what just changed. */
   onValueChange?: (key: string) => void;
 }): WorkloadSetup {
@@ -153,12 +151,14 @@ export function useWorkloadSetup({
   const [trustedIssuer, setTrustedIssuer] = useState<string | null>(null);
   // The rule this flow saved, which the refetched list then holds; it is not
   // a duplicate of itself.
-  const [admittedSubject, setAdmittedSubject] = useState<string | null>(
-    connectedSubject ?? null,
-  );
+  const [admittedSubject, setAdmittedSubject] = useState<string | null>(null);
+  // The replaced rule once it is gone, so a retry after the new rule saved
+  // but the old one failed to withdraw only withdraws.
+  const [withdrawnID, setWithdrawnID] = useState<string | null>(null);
 
   const registerIssuer = useRegisterWorkloadIssuerMutation();
   const admitSubject = useAdmitWorkloadSubjectMutation();
+  const withdrawSubject = useWithdrawWorkloadSubjectMutation();
 
   // The catalog's platforms come from the same map the picker offers tiles
   // from, plus the custom flow for everything the catalog does not know.
@@ -206,15 +206,32 @@ export function useWorkloadSetup({
     connection !== null &&
     (connection.issuer === trustedIssuer ||
       connectedIssuer(connection.issuer, issuers) !== undefined);
-  // The rule this flow has already written, or the one the agent being
-  // edited already holds. Read from the prop rather than from state seeded
-  // with it: the admission arrives a render or two after the first one, and
-  // the agent's own rule must never be reported as a clash with itself.
+  // The values on screen are still the rule the agent being edited holds.
+  // Read from the prop rather than from state seeded with it: the admission
+  // arrives a render or two after the first one.
+  const unchanged =
+    replacing !== undefined &&
+    connection !== null &&
+    connection.issuer === replacing.issuer &&
+    connection.subject === replacing.subject &&
+    connection.matchKind === replacing.matchKind;
+  // The rule this flow has already written, or the one being edited: neither
+  // is a clash with itself.
   const ours =
-    settled ||
-    (connection !== null &&
-      (connection.subject === admittedSubject ||
-        connection.subject === connectedSubject));
+    unchanged ||
+    (connection !== null && connection.subject === admittedSubject);
+  // A replacement keeps the replaced rule's tier: a rule admitted for one
+  // project stays with that project rather than widening to the organization.
+  const replacingProjectSlug = replacing?.projectId
+    ? organization.projects.find((p) => p.id === replacing.projectId)?.slug
+    : undefined;
+  const tier = customFlow
+    ? { gramProject: project.slug, projectScoped: !!selectedIssuer?.projectId }
+    : replacing === undefined
+      ? undefined
+      : replacingProjectSlug !== undefined
+        ? { gramProject: replacingProjectSlug, projectScoped: true }
+        : { projectScoped: false };
   const conflicting =
     connection === null || ours
       ? undefined
@@ -232,10 +249,19 @@ export function useWorkloadSetup({
   /**
    * Create the agent, trust the platform, and admit the subject against it.
    * The agent comes first because the access rule names it: a rule saved
-   * without one is refused at the token endpoint.
+   * without one is refused at the token endpoint. When a rule is being
+   * replaced, the old one is withdrawn only after the new one is saved, so
+   * the agent is never left without one.
    */
   const connect = async (): Promise<boolean> => {
     if (connection === null || connecting) return false;
+    if (unchanged) return true;
+    if (replacing?.projectId && replacingProjectSlug === undefined) {
+      setError(
+        "This access rule belongs to a project you cannot open. Ask an organization admin to change it.",
+      );
+      return false;
+    }
     // A clash the list already shows is refused by the server anyway, and
     // going ahead would create the agent first and strand it behind a failure
     // the step had been naming all along.
@@ -248,6 +274,7 @@ export function useWorkloadSetup({
     // Registering the issuer conflicts on a duplicate name, admitting the rule
     // on a duplicate rule; only the second means the values are taken.
     let admitting = false;
+    let replacingOld = false;
     try {
       const agentID = await ensureAgent();
       if (!isTrusted) {
@@ -265,27 +292,37 @@ export function useWorkloadSetup({
         });
         setTrustedIssuer(connection.issuer);
       }
-      admitting = true;
-      await admitSubject.mutateAsync({
-        request: {
-          ...(customFlow ? { gramProject: project.slug } : {}),
-          admitWorkloadSubjectForm: {
-            ...(customFlow
-              ? { projectScoped: !!selectedIssuer?.projectId }
-              : {}),
-            issuer: connection.issuer,
-            subject: connection.subject,
-            matchKind: connection.matchKind,
-            agentId: agentID,
-            tags: [],
+      if (connection.subject !== admittedSubject) {
+        admitting = true;
+        await admitSubject.mutateAsync({
+          request: {
+            ...(tier?.gramProject ? { gramProject: tier.gramProject } : {}),
+            admitWorkloadSubjectForm: {
+              ...(tier ? { projectScoped: tier.projectScoped } : {}),
+              issuer: connection.issuer,
+              subject: connection.subject,
+              matchKind: connection.matchKind,
+              agentId: agentID,
+              tags: [],
+            },
           },
-        },
-      });
-      setAdmittedSubject(connection.subject);
+        });
+        admitting = false;
+        setAdmittedSubject(connection.subject);
+      }
+      if (replacing !== undefined && withdrawnID !== replacing.id) {
+        replacingOld = true;
+        await withdrawSubject.mutateAsync({ request: { id: replacing.id } });
+        setWithdrawnID(replacing.id);
+      }
       onConnected(agentID);
       return true;
     } catch (failure) {
-      setError(connectFailureMessage(entry, platformName, failure, admitting));
+      setError(
+        replacingOld
+          ? "The new access rule was saved, but the old one could not be removed. Try again."
+          : connectFailureMessage(entry, platformName, failure, admitting),
+      );
       return false;
     } finally {
       // Refetched on failure too: the platform may have been trusted before
@@ -359,7 +396,7 @@ export function useWorkloadSetup({
       ) : (
         <div className="space-y-4">
           {step.body(context)}
-          {step.phase === "create" && !isTrusted && !settled && (
+          {step.phase === "create" && !isTrusted && (
             <AssertionReuseField
               checked={connection !== null && reuseIssuer === connection.issuer}
               disabled={connecting || connection === null}
@@ -377,7 +414,11 @@ export function useWorkloadSetup({
     connect,
     connecting,
     canConnect: connection !== null,
-    connected: connection !== null && connection.subject === admittedSubject,
+    connected:
+      unchanged ||
+      (connection !== null &&
+        connection.subject === admittedSubject &&
+        (replacing === undefined || withdrawnID === replacing.id)),
     error,
     values,
   };
