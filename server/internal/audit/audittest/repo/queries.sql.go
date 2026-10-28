@@ -57,14 +57,14 @@ func (q *Queries) CountAuditLogsByAction(ctx context.Context, action string) (in
 	return count, err
 }
 
-const countAuditLogsByVisibility = `-- name: CountAuditLogsByVisibility :one
+const countAuditLogsByCategory = `-- name: CountAuditLogsByCategory :one
 SELECT COUNT(*)
 FROM audit_logs
-WHERE visibility = $1
+WHERE category = $1
 `
 
-func (q *Queries) CountAuditLogsByVisibility(ctx context.Context, visibility string) (int64, error) {
-	row := q.db.QueryRow(ctx, countAuditLogsByVisibility, visibility)
+func (q *Queries) CountAuditLogsByCategory(ctx context.Context, category string) (int64, error) {
+	row := q.db.QueryRow(ctx, countAuditLogsByCategory, category)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -88,7 +88,7 @@ SELECT
   after_snapshot,
   acting_surface,
   acting_client_id,
-  visibility
+  category
 FROM audit_logs
 WHERE action = $1
 ORDER BY seq DESC
@@ -112,7 +112,7 @@ type GetLatestAuditLogByActionRow struct {
 	AfterSnapshot      []byte
 	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
-	Visibility         string
+	Category           string
 }
 
 func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) (GetLatestAuditLogByActionRow, error) {
@@ -135,7 +135,7 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 		&i.AfterSnapshot,
 		&i.ActingSurface,
 		&i.ActingClientID,
-		&i.Visibility,
+		&i.Category,
 	)
 	return i, err
 }
@@ -158,7 +158,7 @@ SELECT
   after_snapshot,
   acting_surface,
   acting_client_id,
-  visibility
+  category
 FROM audit_logs
 WHERE action = $1 AND subject_id = $2
 ORDER BY seq DESC
@@ -187,7 +187,7 @@ type GetLatestAuditLogByActionAndSubjectRow struct {
 	AfterSnapshot      []byte
 	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
-	Visibility         string
+	Category           string
 }
 
 func (q *Queries) GetLatestAuditLogByActionAndSubject(ctx context.Context, arg GetLatestAuditLogByActionAndSubjectParams) (GetLatestAuditLogByActionAndSubjectRow, error) {
@@ -210,32 +210,9 @@ func (q *Queries) GetLatestAuditLogByActionAndSubject(ctx context.Context, arg G
 		&i.AfterSnapshot,
 		&i.ActingSurface,
 		&i.ActingClientID,
-		&i.Visibility,
+		&i.Category,
 	)
 	return i, err
-}
-
-const getLatestOutboxAttributesByOrg = `-- name: GetLatestOutboxAttributesByOrg :one
-SELECT attributes
-FROM publish_outbox
-WHERE organization_id = $1
-  AND attributes->>'event_type' = $2::text
-ORDER BY id DESC
-LIMIT 1
-`
-
-type GetLatestOutboxAttributesByOrgParams struct {
-	OrganizationID string
-	EventType      string
-}
-
-// Returns the Pub/Sub attributes of the most-recently enqueued outbox entry for
-// an org+event_type pair, so a test can assert how the event is routed.
-func (q *Queries) GetLatestOutboxAttributesByOrg(ctx context.Context, arg GetLatestOutboxAttributesByOrgParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getLatestOutboxAttributesByOrg, arg.OrganizationID, arg.EventType)
-	var attributes []byte
-	err := row.Scan(&attributes)
-	return attributes, err
 }
 
 const getLatestOutboxPayloadByOrg = `-- name: GetLatestOutboxPayloadByOrg :one

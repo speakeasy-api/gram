@@ -86,13 +86,13 @@ linters:
       # the event, so (*audit.Logger).log stamps them from the context for every
       # audited mutation. Requiring each event to name them would invite call
       # sites to set them individually, which is the drift the central stamp
-      # exists to prevent. Visibility is defaulted there too: an entry is for
-      # customers unless its Log function marks it internal. Every other field
-      # of the struct stays enforced.
+      # exists to prevent. Category is defaulted there too: an entry records a
+      # configuration change unless its Log function says otherwise. Every
+      # other field of the struct stays enforced.
       - path: internal/audit/
         linters:
           - exhaustruct
-        text: "InsertAuditLogParams is missing (fields ActingSurface, ActingClientID(, Visibility)?|field Visibility)$"
+        text: "InsertAuditLogParams is missing (fields ActingSurface, ActingClientID(, Category)?|field Category)$"
       # The analytics catalog declares each field with only what it has; an
       # omitted field is its zero value by design, and spelling every empty
       # one out hides the declaration behind noise.

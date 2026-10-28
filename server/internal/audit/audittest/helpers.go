@@ -43,7 +43,7 @@ type LogRecord struct {
 	ActingSurface  *string
 	ActingClientID *string
 
-	Visibility audit.Visibility
+	Category audit.Category
 }
 
 func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) (LogRecord, error) {
@@ -82,30 +82,16 @@ func toLogRecord(row repo.GetLatestAuditLogByActionRow) LogRecord {
 		AfterSnapshot:    row.AfterSnapshot,
 		ActingSurface:    conv.FromPGText[string](row.ActingSurface),
 		ActingClientID:   conv.FromPGText[string](row.ActingClientID),
-		Visibility:       audit.Visibility(row.Visibility),
+		Category:         audit.Category(row.Category),
 	}
 }
 
-func AuditLogCountByVisibility(ctx context.Context, dbtx repo.DBTX, visibility audit.Visibility) (int64, error) {
-	count, err := repo.New(dbtx).CountAuditLogsByVisibility(ctx, string(visibility))
+func AuditLogCountByCategory(ctx context.Context, dbtx repo.DBTX, category audit.Category) (int64, error) {
+	count, err := repo.New(dbtx).CountAuditLogsByCategory(ctx, string(category))
 	if err != nil {
-		return 0, fmt.Errorf("count audit logs by visibility: %w", err)
+		return 0, fmt.Errorf("count audit logs by category: %w", err)
 	}
 	return count, nil
-}
-
-// LatestOutboxAttributes returns the Pub/Sub attributes of the newest outbox
-// entry an organization enqueued for an event type.
-func LatestOutboxAttributes(ctx context.Context, dbtx repo.DBTX, organizationID string, eventType string) (map[string]string, error) {
-	raw, err := repo.New(dbtx).GetLatestOutboxAttributesByOrg(ctx, repo.GetLatestOutboxAttributesByOrgParams{OrganizationID: organizationID, EventType: eventType})
-	if err != nil {
-		return nil, fmt.Errorf("get latest outbox attributes: %w", err)
-	}
-	var attributes map[string]string
-	if err := json.Unmarshal(raw, &attributes); err != nil {
-		return nil, fmt.Errorf("decode outbox attributes: %w", err)
-	}
-	return attributes, nil
 }
 
 func AuditLogCount(ctx context.Context, dbtx repo.DBTX) (int64, error) {

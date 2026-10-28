@@ -299,7 +299,7 @@ type activitySeed struct {
 	subjectName, subjectSlug       pgtype.Text
 	before, after, metadata        []byte
 	surface, clientID              pgtype.Text
-	visibility                     string
+	category                       string
 }
 
 func insertActivity(t *testing.T, ctx context.Context, conn *pgxpool.Pool, seed activitySeed) uuid.UUID {
@@ -318,7 +318,7 @@ func insertActivity(t *testing.T, ctx context.Context, conn *pgxpool.Pool, seed 
 		ActorDisplayName: seed.actorName, ActorSlug: seed.actorSlug, Action: seed.action, SubjectID: seed.subjectID,
 		SubjectType: seed.subjectType, SubjectDisplayName: seed.subjectName, SubjectSlug: seed.subjectSlug,
 		BeforeSnapshot: seed.before, AfterSnapshot: seed.after, Metadata: seed.metadata, ActingSurface: seed.surface, ActingClientID: seed.clientID,
-		Visibility: seed.visibility,
+		Category: seed.category,
 	})
 	require.NoError(t, err)
 	return row.ID
@@ -410,21 +410,22 @@ func TestListOrganizationActivityFiltered_Predicates(t *testing.T) {
 	require.Empty(t, missing.Logs)
 }
 
-// Staff see internal entries that the customer audit log hides.
-func TestListOrganizationActivityFiltered_IncludesInternalEntries(t *testing.T) {
+// Staff see every category, including security entries the customer audit
+// log page leaves out.
+func TestListOrganizationActivityFiltered_IncludesEveryCategory(t *testing.T) {
 	t.Parallel()
 	ctx, svc, conn := newTestAdminService(t)
-	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_internal", name: "Internal", slug: "activity-internal"})
-	internal := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_internal", actorID: "kit-runtime", actorType: "system", subjectType: "workload_admission", action: "workload-admission:admit", visibility: "internal"})
-	customer := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_internal", subjectType: "project", action: "project:update"})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_categories", name: "Categories", slug: "activity-categories"})
+	security := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_categories", actorID: "kit-runtime", actorType: "system", subjectType: "workload_admission", action: "workload-admission:admit", category: "security"})
+	configuration := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_categories", subjectType: "project", action: "project:update"})
 
-	result, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: "org_activity_internal"})
+	result, err := svc.ListOrganizationActivityFiltered(ctx, OrganizationActivityFilter{OrganizationID: "org_activity_categories"})
 	require.NoError(t, err)
 	ids := make([]string, 0, len(result.Logs))
 	for _, log := range result.Logs {
 		ids = append(ids, log.ID)
 	}
-	require.ElementsMatch(t, []string{internal.String(), customer.String()}, ids)
+	require.ElementsMatch(t, []string{security.String(), configuration.String()}, ids)
 }
 
 func TestListOrganizationActivityFiltered_ProjectIsolation(t *testing.T) {

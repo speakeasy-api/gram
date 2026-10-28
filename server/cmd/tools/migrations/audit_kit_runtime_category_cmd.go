@@ -18,65 +18,65 @@ import (
 )
 
 const (
-	auditKitRuntimeVisibilityName = "audit-kit-runtime-visibility"
+	auditKitRuntimeCategoryName = "audit-kit-runtime-category"
 
-	auditKitRuntimeVisibilityDefaultBatch = 1000
+	auditKitRuntimeCategoryDefaultBatch = 1000
 )
 
-type auditKitRuntimeVisibilityConfig struct {
+type auditKitRuntimeCategoryConfig struct {
 	dbURL       string
 	environment string
 	apply       bool
 	batchSize   int32
 }
 
-func parseAuditKitRuntimeVisibilityFlags(args []string, getenv func(string) string) (auditKitRuntimeVisibilityConfig, error) {
-	fs := flag.NewFlagSet(auditKitRuntimeVisibilityName, flag.ContinueOnError)
+func parseAuditKitRuntimeCategoryFlags(args []string, getenv func(string) string) (auditKitRuntimeCategoryConfig, error) {
+	fs := flag.NewFlagSet(auditKitRuntimeCategoryName, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	apply := fs.Bool("apply", false, "write the backfill (default is dry run)")
 	environment := fs.String("environment", "", "target environment name")
-	batchSize := fs.Int("batch-size", auditKitRuntimeVisibilityDefaultBatch, "rows updated per statement")
+	batchSize := fs.Int("batch-size", auditKitRuntimeCategoryDefaultBatch, "rows updated per statement")
 	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match environment for writes")
 	confirmTarget := fs.String("confirm-target", "", "must exactly match the parsed host, port, and database for writes")
-	confirmApply := fs.String("confirm-apply", "", "must equal "+auditKitRuntimeVisibilityName+" for writes")
+	confirmApply := fs.String("confirm-apply", "", "must equal "+auditKitRuntimeCategoryName+" for writes")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
-		return auditKitRuntimeVisibilityConfig{}, errors.New("invalid " + auditKitRuntimeVisibilityName + " flags")
+		return auditKitRuntimeCategoryConfig{}, errors.New("invalid " + auditKitRuntimeCategoryName + " flags")
 	}
 	if *environment == "" {
-		return auditKitRuntimeVisibilityConfig{}, errors.New("environment is required")
+		return auditKitRuntimeCategoryConfig{}, errors.New("environment is required")
 	}
 	if *batchSize < 1 || *batchSize > 10000 {
-		return auditKitRuntimeVisibilityConfig{}, errors.New("batch-size must be between 1 and 10000")
+		return auditKitRuntimeCategoryConfig{}, errors.New("batch-size must be between 1 and 10000")
 	}
 	if *apply && *confirmEnvironment != *environment {
-		return auditKitRuntimeVisibilityConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
+		return auditKitRuntimeCategoryConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
 	}
 	dbURL := getenv("GRAM_DATABASE_URL")
 	if dbURL == "" {
-		return auditKitRuntimeVisibilityConfig{}, errors.New("missing $GRAM_DATABASE_URL")
+		return auditKitRuntimeCategoryConfig{}, errors.New("missing $GRAM_DATABASE_URL")
 	}
 	dbConfig, err := pgx.ParseConfig(dbURL)
 	if err != nil {
-		return auditKitRuntimeVisibilityConfig{}, errors.New("invalid $GRAM_DATABASE_URL")
+		return auditKitRuntimeCategoryConfig{}, errors.New("invalid $GRAM_DATABASE_URL")
 	}
 	// A fallback may only retry the same server, so an outage can never
 	// redirect writes away from the confirmed target.
 	for _, fallback := range dbConfig.Fallbacks {
 		if *apply && (fallback.Host != dbConfig.Host || fallback.Port != dbConfig.Port) {
-			return auditKitRuntimeVisibilityConfig{}, errors.New("writes require $GRAM_DATABASE_URL to name a single host; fallbacks to other hosts are not allowed")
+			return auditKitRuntimeCategoryConfig{}, errors.New("writes require $GRAM_DATABASE_URL to name a single host; fallbacks to other hosts are not allowed")
 		}
 	}
 	if *apply && !requiresTLS(dbConfig) {
-		return auditKitRuntimeVisibilityConfig{}, errors.New("writes require a TLS connection: set sslmode=require, verify-ca or verify-full in $GRAM_DATABASE_URL")
+		return auditKitRuntimeCategoryConfig{}, errors.New("writes require a TLS connection: set sslmode=require, verify-ca or verify-full in $GRAM_DATABASE_URL")
 	}
 	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
 	if *apply && *confirmTarget != target {
-		return auditKitRuntimeVisibilityConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
+		return auditKitRuntimeCategoryConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
 	}
-	if *apply && *confirmApply != auditKitRuntimeVisibilityName {
-		return auditKitRuntimeVisibilityConfig{}, errors.New("writes require -confirm-apply=" + auditKitRuntimeVisibilityName)
+	if *apply && *confirmApply != auditKitRuntimeCategoryName {
+		return auditKitRuntimeCategoryConfig{}, errors.New("writes require -confirm-apply=" + auditKitRuntimeCategoryName)
 	}
-	return auditKitRuntimeVisibilityConfig{dbURL: dbURL, environment: *environment, apply: *apply, batchSize: int32(*batchSize)}, nil
+	return auditKitRuntimeCategoryConfig{dbURL: dbURL, environment: *environment, apply: *apply, batchSize: int32(*batchSize)}, nil
 }
 
 // requiresTLS reports whether every connection attempt pgx would make uses
@@ -94,13 +94,13 @@ func requiresTLS(config *pgx.ConnConfig) bool {
 	return true
 }
 
-// backfillAuditKitRuntimeVisibility marks the Kit runtime's own workload
-// admission entries as internal. A dry run only counts them. Each batch
+// backfillAuditKitRuntimeCategory moves the Kit runtime's own workload
+// admission entries into the security category. A dry run only counts them. Each batch
 // commits on its own, so an interrupted run resumes where it stopped.
-func backfillAuditKitRuntimeVisibility(ctx context.Context, db auditrepo.DBTX, apply bool, batchSize int32) (int64, error) {
+func backfillAuditKitRuntimeCategory(ctx context.Context, db auditrepo.DBTX, apply bool, batchSize int32) (int64, error) {
 	q := auditrepo.New(db)
 	if !apply {
-		pending, err := q.CountCustomerKitRuntimeWorkloadAdmissions(ctx)
+		pending, err := q.CountConfigurationKitRuntimeWorkloadAdmissions(ctx)
 		if err != nil {
 			return 0, fmt.Errorf("count kit runtime admission entries: %w", err)
 		}
@@ -109,22 +109,22 @@ func backfillAuditKitRuntimeVisibility(ctx context.Context, db auditrepo.DBTX, a
 
 	var updated int64
 	for {
-		n, err := q.MarkKitRuntimeWorkloadAdmissionsInternal(ctx, batchSize)
+		n, err := q.MarkKitRuntimeWorkloadAdmissionsSecurity(ctx, batchSize)
 		if err != nil {
-			return updated, fmt.Errorf("mark kit runtime admission entries internal: %w", err)
+			return updated, fmt.Errorf("mark kit runtime admission entries security: %w", err)
 		}
 		updated += n
 		if n == 0 {
 			return updated, nil
 		}
 		if err := ctx.Err(); err != nil {
-			return updated, fmt.Errorf("mark kit runtime admission entries internal: %w", err)
+			return updated, fmt.Errorf("mark kit runtime admission entries security: %w", err)
 		}
 	}
 }
 
-func runAuditKitRuntimeVisibility(args []string, stdout io.Writer, getenv func(string) string) int {
-	cfg, err := parseAuditKitRuntimeVisibilityFlags(args, getenv)
+func runAuditKitRuntimeCategory(args []string, stdout io.Writer, getenv func(string) string) int {
+	cfg, err := parseAuditKitRuntimeCategoryFlags(args, getenv)
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "invalid arguments: %v\n", err)
 		return 2
@@ -137,7 +137,7 @@ func runAuditKitRuntimeVisibility(args []string, stdout io.Writer, getenv func(s
 		return 1
 	}
 	defer pool.Close()
-	rows, err := backfillAuditKitRuntimeVisibility(ctx, pool, cfg.apply, cfg.batchSize)
+	rows, err := backfillAuditKitRuntimeCategory(ctx, pool, cfg.apply, cfg.batchSize)
 	mode := "dry-run"
 	if cfg.apply {
 		mode = "apply"

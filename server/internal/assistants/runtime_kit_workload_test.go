@@ -179,11 +179,11 @@ func TestKitWorkloadDBSharedIssuerAndExactRevoke(t *testing.T) {
 }
 
 // A runtime admitting and withdrawing its own workload on every start and
-// teardown is operational activity, so those entries are internal. Registering
-// the cluster issuer happens once per project and is a configuration change the
-// customer sees, attributed to the assistant's agent rather than to an
+// teardown is machine access, so those entries are security entries.
+// Registering the cluster issuer happens once per project and is a
+// configuration change, attributed to the assistant's agent rather than to an
 // anonymous system component.
-func TestKitWorkloadDBAuditVisibilityAndAttribution(t *testing.T) {
+func TestKitWorkloadDBAuditCategoryAndAttribution(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
 
@@ -194,18 +194,18 @@ func TestKitWorkloadDBAuditVisibilityAndAttribution(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(urn.PrincipalTypeAgent), issuerCreate.ActorType)
 	require.Equal(t, identity.AgentID.String(), issuerCreate.ActorID)
-	require.Equal(t, audit.VisibilityCustomer, issuerCreate.Visibility)
+	require.Equal(t, audit.CategoryConfiguration, issuerCreate.Category)
 
 	admit, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
 	require.NoError(t, err)
 	require.Equal(t, binding.Subject, admit.SubjectDisplay)
-	require.Equal(t, audit.VisibilityInternal, admit.Visibility)
+	require.Equal(t, audit.CategorySecurity, admit.Category)
 
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
 	withdraw, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
 	require.NoError(t, err)
 	require.Equal(t, binding.Subject, withdraw.SubjectDisplay)
-	require.Equal(t, audit.VisibilityInternal, withdraw.Visibility)
+	require.Equal(t, audit.CategorySecurity, withdraw.Category)
 }
 
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {

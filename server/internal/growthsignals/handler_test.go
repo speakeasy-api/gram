@@ -137,20 +137,6 @@ func TestEventHandlerPassesThroughUncuratedAction(t *testing.T) {
 	require.NotContains(t, captured[0].Properties, "mcp_kind")
 }
 
-// Internal audit entries are hidden from customers, not from Speakeasy: the
-// firehose is where operational activity is meant to be seen.
-func TestEventHandlerEmitsInternalAuditEntries(t *testing.T) {
-	t.Parallel()
-
-	handler, client := newTestEventHandler(t)
-	event := auditWebhookEvent(t, string(events.WorkloadAdmissionV1.EventType()), audit.ActionWorkloadAdmissionAdmit)
-	metadata := testMessageMetadata()
-	metadata.Attributes = map[string]string{"event_type": string(events.WorkloadAdmissionV1.EventType()), "audience": "internal"}
-
-	require.NoError(t, handler.Handle(t.Context(), event, metadata))
-	require.Len(t, client.Captured(), 1)
-}
-
 func TestEventHandlerIgnoresNonAuditEventType(t *testing.T) {
 	t.Parallel()
 

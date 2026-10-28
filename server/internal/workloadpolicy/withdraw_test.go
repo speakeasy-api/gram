@@ -111,12 +111,12 @@ func TestWithdrawIssuer_CascadesToItsAdmittedSubjects(t *testing.T) {
 	require.Empty(t, assignments, "withdrawing the issuer should already have tombstoned every assignment under it")
 }
 
-// Withdrawing the issuer is the customer-visible change. The cascaded entry
-// for an admission the Kit runtime admitted for itself is internal, like the
+// Withdrawing the issuer is a configuration change. The cascaded entry for an
+// admission the Kit runtime admitted for itself is a security entry, like the
 // runtime's own admit and withdraw entries. The signal is the audit trail, not
 // the admission's tags: a customer can tag an admission "kit-runtime", and that
-// must not hide its withdrawal.
-func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreInternal(t *testing.T) {
+// must not move its withdrawal out of the configuration audit log.
+func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreSecurityEntries(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
@@ -145,7 +145,7 @@ func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreInternal(t *testing.T) {
 		AdmissionURN:           urn.NewWorkloadAdmission(uuid.MustParse(ids[fleetRule])),
 		AdmissionDisplayName:   fleetRule,
 		AdmissionSnapshotAfter: nil,
-		Visibility:             audit.VisibilityInternal,
+		Category:               audit.CategorySecurity,
 	})
 	require.NoError(t, err)
 
@@ -159,15 +159,15 @@ func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreInternal(t *testing.T) {
 
 	runtime, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[fleetRule])
 	require.NoError(t, err)
-	require.Equal(t, audit.VisibilityInternal, runtime.Visibility)
+	require.Equal(t, audit.CategorySecurity, runtime.Category)
 
 	tagged, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[channelOne])
 	require.NoError(t, err)
-	require.Equal(t, audit.VisibilityCustomer, tagged.Visibility, "a customer-set tag must not hide a withdrawal")
+	require.Equal(t, audit.CategoryConfiguration, tagged.Category, "a customer-set tag must not reclassify a withdrawal")
 
 	issuer, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadIssuerDelete)
 	require.NoError(t, err)
-	require.Equal(t, audit.VisibilityCustomer, issuer.Visibility)
+	require.Equal(t, audit.CategoryConfiguration, issuer.Category)
 }
 
 func TestWithdrawIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {

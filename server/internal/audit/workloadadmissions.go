@@ -27,7 +27,7 @@ const KitRuntimeActorID = "kit-runtime"
 
 // KitRuntimeAdmittedSubjects reports which of the given admissions the Kit
 // runtime admitted for itself, according to the audit trail. Entries about
-// those admissions are operational and recorded as internal.
+// those admissions are security entries, not configuration changes.
 func KitRuntimeAdmittedSubjects(ctx context.Context, dbtx repo.DBTX, organizationID string, admissionIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
 	if len(admissionIDs) == 0 {
 		return map[uuid.UUID]bool{}, nil
@@ -92,10 +92,11 @@ type LogWorkloadAdmissionAdmitEvent struct {
 
 	AdmissionSnapshotAfter *WorkloadAdmissionSnapshot
 
-	// Visibility is VisibilityInternal when Speakeasy admits or withdraws a
+	// Category is CategorySecurity when Speakeasy admits or withdraws a
 	// workload on its own, as a runtime does for itself on every start and
-	// teardown. Empty means VisibilityCustomer.
-	Visibility Visibility
+	// teardown, and CategoryConfiguration when a person changes the policy.
+	// Empty means CategoryConfiguration.
+	Category Category
 }
 
 func (l *Logger) LogWorkloadAdmissionAdmit(ctx context.Context, dbtx repo.DBTX, event LogWorkloadAdmissionAdmitEvent) error {
@@ -126,7 +127,7 @@ func (l *Logger) LogWorkloadAdmissionAdmit(ctx context.Context, dbtx repo.DBTX, 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  after,
 
-		Visibility: string(event.Visibility),
+		Category: string(event.Category),
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.WorkloadAdmissionV1})
@@ -197,10 +198,11 @@ type LogWorkloadAdmissionWithdrawEvent struct {
 
 	AdmissionSnapshotBefore *WorkloadAdmissionSnapshot
 
-	// Visibility is VisibilityInternal when Speakeasy admits or withdraws a
+	// Category is CategorySecurity when Speakeasy admits or withdraws a
 	// workload on its own, as a runtime does for itself on every start and
-	// teardown. Empty means VisibilityCustomer.
-	Visibility Visibility
+	// teardown, and CategoryConfiguration when a person changes the policy.
+	// Empty means CategoryConfiguration.
+	Category Category
 }
 
 func (l *Logger) LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBTX, event LogWorkloadAdmissionWithdrawEvent) error {
@@ -231,7 +233,7 @@ func (l *Logger) LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBT
 		BeforeSnapshot: before,
 		AfterSnapshot:  nil,
 
-		Visibility: string(event.Visibility),
+		Category: string(event.Category),
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.WorkloadAdmissionV1})

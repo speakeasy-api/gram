@@ -794,8 +794,8 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	}
 
 	// Admissions a Kit runtime created for itself are created and withdrawn on
-	// every runtime start and teardown, so their cascaded entries are internal.
-	// The issuer withdrawal below stays customer-visible either way.
+	// every runtime start and teardown, so their cascaded entries are security
+	// entries. The issuer withdrawal below is a configuration change either way.
 	admissionIDs := make([]uuid.UUID, 0, len(admissions))
 	for _, admission := range admissions {
 		admissionIDs = append(admissionIDs, admission.ID)
@@ -809,9 +809,9 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	// issuer would not let the log answer when a given subject stopped being
 	// admitted.
 	for _, admission := range admissions {
-		visibility := audit.VisibilityCustomer
+		category := audit.CategoryConfiguration
 		if runtimeAdmitted[admission.ID] {
-			visibility = audit.VisibilityInternal
+			category = audit.CategorySecurity
 		}
 
 		assignedAgent := ""
@@ -820,7 +820,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 		}
 
 		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
-			Visibility:              visibility,
+			Category:                category,
 			OrganizationID:          t.organizationID,
 			ProjectID:               admission.ProjectID,
 			Actor:                   t.actor,
@@ -1051,7 +1051,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	}
 
 	if err := s.audit.LogWorkloadAdmissionAdmit(ctx, dbtx, audit.LogWorkloadAdmissionAdmitEvent{
-		Visibility:             audit.VisibilityCustomer,
+		Category:               audit.CategoryConfiguration,
 		OrganizationID:         t.organizationID,
 		ProjectID:              projectID,
 		Actor:                  t.actor,
@@ -1398,7 +1398,7 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 	}
 
 	if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
-		Visibility:              audit.VisibilityCustomer,
+		Category:                audit.CategoryConfiguration,
 		OrganizationID:          t.organizationID,
 		ProjectID:               withdrawn.ProjectID,
 		Actor:                   t.actor,

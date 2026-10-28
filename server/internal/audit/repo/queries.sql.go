@@ -12,12 +12,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countCustomerKitRuntimeWorkloadAdmissions = `-- name: CountCustomerKitRuntimeWorkloadAdmissions :one
+const countConfigurationKitRuntimeWorkloadAdmissions = `-- name: CountConfigurationKitRuntimeWorkloadAdmissions :one
 SELECT COUNT(*)::bigint
 FROM audit_logs a
 WHERE a.subject_type = 'workload_admission'
   AND a.action IN ('workload-admission:admit', 'workload-admission:withdraw')
-  AND a.visibility = 'customer'
+  AND a.category = 'configuration'
   AND EXISTS (
     SELECT 1
     FROM audit_logs admit
@@ -30,9 +30,9 @@ WHERE a.subject_type = 'workload_admission'
   )
 `
 
-// Counts the entries MarkKitRuntimeWorkloadAdmissionsInternal would change.
-func (q *Queries) CountCustomerKitRuntimeWorkloadAdmissions(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countCustomerKitRuntimeWorkloadAdmissions)
+// Counts the entries MarkKitRuntimeWorkloadAdmissionsSecurity would change.
+func (q *Queries) CountConfigurationKitRuntimeWorkloadAdmissions(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countConfigurationKitRuntimeWorkloadAdmissions)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -117,7 +117,7 @@ INSERT INTO audit_logs (
   metadata,
   acting_surface,
   acting_client_id,
-  visibility
+  category
 ) VALUES (
   $1,
   $2,
@@ -135,9 +135,9 @@ INSERT INTO audit_logs (
   $14,
   $15,
   $16,
-  -- Blank means the column default, so a writer that never sets visibility
-  -- records a customer entry.
-  COALESCE(NULLIF($17::text, ''), 'customer')
+  -- Blank means the column default, so a writer that never sets a category
+  -- records a configuration entry.
+  COALESCE(NULLIF($17::text, ''), 'configuration')
 )
 RETURNING id, organization_id
 `
@@ -159,7 +159,7 @@ type InsertAuditLogParams struct {
 	Metadata           []byte
 	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
-	Visibility         string
+	Category           string
 }
 
 type InsertAuditLogRow struct {
@@ -185,7 +185,7 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.Metadata,
 		arg.ActingSurface,
 		arg.ActingClientID,
-		arg.Visibility,
+		arg.Category,
 	)
 	var i InsertAuditLogRow
 	err := row.Scan(&i.ID, &i.OrganizationID)
@@ -200,7 +200,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
-  AND visibility = 'customer'
+  AND category = 'configuration'
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
@@ -220,8 +220,8 @@ type ListAuditActionFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity and internal events are excluded: facets power the
-// platform audit feed, which hides them (see ListAuditLogs).
+// Assistant activity and non-configuration entries are excluded: facets power
+// the platform audit feed, which hides them (see ListAuditLogs).
 func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditActionFacetsParams) ([]ListAuditActionFacetsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -248,7 +248,7 @@ WITH filtered_logs AS (
   FROM audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
-    AND visibility = 'customer'
+    AND category = 'configuration'
     AND (
       $2::uuid IS NULL
       OR project_id = $2::uuid
@@ -308,8 +308,8 @@ type ListAuditActorFacetsRow struct {
 	IsAdminActor bool
 }
 
-// Assistant activity and internal events are excluded: facets power the
-// platform audit feed, which hides them (see ListAuditLogs).
+// Assistant activity and non-configuration entries are excluded: facets power
+// the platform audit feed, which hides them (see ListAuditLogs).
 // Scoped through this organization's memberships for the same reason
 // ListAuditLogs is: the directory spans every tenant, and a facet label is
 // read by whoever can read the feed.
@@ -372,7 +372,7 @@ WHERE a.organization_id = $1
     )
     OR a.subject_type = $6::text
   )
-  AND ($8::boolean OR a.visibility = 'customer')
+  AND a.category = ANY($8::text[])
   AND (
     $9::text IS NULL
     OR a.subject_id = $9::text
@@ -412,7 +412,7 @@ type ListAuditLogsParams struct {
 	Action                 pgtype.Text
 	SubjectType            pgtype.Text
 	IncludeAssistantEvents bool
-	IncludeInternalEvents  bool
+	Categories             []string
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
@@ -447,9 +447,10 @@ type ListAuditLogsRow struct {
 
 // When no subject_type filter is given, assistant activity events (one per
 // assistant tool call) are excluded so they don't drown out the platform
-// audit feed. Internal entries (operational activity Speakeasy performs on its
-// own) are excluded whatever the filters, unless include_internal_events is
-// set. The private admin caller sets both include flags.
+// audit feed. Only entries in the requested categories are returned, whatever
+// the other filters: the customer audit log asks for configuration entries and
+// the private admin caller for every category. The private admin caller also
+// includes assistant events.
 // The actor name is resolved at read time rather than trusted from the row.
 // Every writer stores the acting user's EMAIL in actor_display_name, so the
 // stored value renders the feed as a column of addresses; joining the
@@ -473,7 +474,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.Action,
 		arg.SubjectType,
 		arg.IncludeAssistantEvents,
-		arg.IncludeInternalEvents,
+		arg.Categories,
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
@@ -529,7 +530,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
-  AND visibility = 'customer'
+  AND category = 'configuration'
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
@@ -549,8 +550,8 @@ type ListAuditSurfaceFacetsRow struct {
 	Count       int64
 }
 
-// Assistant activity and internal events are excluded: facets power the
-// platform audit feed, which hides them (see ListAuditLogs).
+// Assistant activity and non-configuration entries are excluded: facets power
+// the platform audit feed, which hides them (see ListAuditLogs).
 // Rows predating attribution have no surface and are counted as 'unknown',
 // so the facet totals reconcile with the unfiltered feed rather than silently
 // omitting an organization's older history.
@@ -616,13 +617,13 @@ func (q *Queries) ListKitRuntimeAdmittedSubjects(ctx context.Context, arg ListKi
 	return items, nil
 }
 
-const markKitRuntimeWorkloadAdmissionsInternal = `-- name: MarkKitRuntimeWorkloadAdmissionsInternal :execrows
+const markKitRuntimeWorkloadAdmissionsSecurity = `-- name: MarkKitRuntimeWorkloadAdmissionsSecurity :execrows
 WITH batch AS (
   SELECT a.id
   FROM audit_logs a
   WHERE a.subject_type = 'workload_admission'
     AND a.action IN ('workload-admission:admit', 'workload-admission:withdraw')
-    AND a.visibility = 'customer'
+    AND a.category = 'configuration'
     AND EXISTS (
       SELECT 1
       FROM audit_logs admit
@@ -636,19 +637,20 @@ WITH batch AS (
   LIMIT $1
 )
 UPDATE audit_logs
-SET visibility = 'internal'
+SET category = 'security'
 FROM batch
 WHERE audit_logs.id = batch.id
 `
 
-// Marks admit and withdraw entries for admissions the Kit runtime admitted for
-// itself as internal, including withdrawals a person caused by withdrawing the
-// issuer. Each Kit runtime admits and withdraws its own workload identity on
-// every start and teardown, which is operational activity rather than a
-// configuration change. Updates at most batch_size rows; callers repeat until
-// no rows change. Without an index on visibility, each batch scans the table.
-func (q *Queries) MarkKitRuntimeWorkloadAdmissionsInternal(ctx context.Context, batchSize int32) (int64, error) {
-	result, err := q.db.Exec(ctx, markKitRuntimeWorkloadAdmissionsInternal, batchSize)
+// Moves admit and withdraw entries for admissions the Kit runtime admitted for
+// itself into the security category, including withdrawals a person caused by
+// withdrawing the issuer. Each Kit runtime admits and withdraws its own
+// workload identity on every start and teardown: machine access, not a
+// configuration decision. Updates at most batch_size rows; callers repeat
+// until no rows change. Without an index on category, each batch scans the
+// table.
+func (q *Queries) MarkKitRuntimeWorkloadAdmissionsSecurity(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, markKitRuntimeWorkloadAdmissionsSecurity, batchSize)
 	if err != nil {
 		return 0, err
 	}

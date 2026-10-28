@@ -210,7 +210,7 @@ func TestAuditService_ListFacets_ExcludesAssistantEvents(t *testing.T) {
 	require.Equal(t, "project:update", result.Actions[0].Value)
 }
 
-func TestAuditService_ListFacets_ExcludesInternalEvents(t *testing.T) {
+func TestAuditService_ListFacets_CountsOnlyConfigurationEntries(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAuditService(t)
@@ -226,7 +226,7 @@ func TestAuditService_ListFacets_ExcludesInternalEvents(t *testing.T) {
 		action:         string(audit.ActionWorkloadAdmissionWithdraw),
 		subjectID:      uuid.NewString(),
 		subjectType:    "workload_admission",
-		visibility:     audit.VisibilityInternal,
+		category:       audit.CategorySecurity,
 	})
 	insertAuditLog(t, ctx, ti, auditLogSeed{
 		organizationID:   authCtx.ActiveOrganizationID,
@@ -247,10 +247,10 @@ func TestAuditService_ListFacets_ExcludesInternalEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Len(t, result.Actors, 1, "internal event actors must not appear in facets")
+	require.Len(t, result.Actors, 1, "security entry actors must not appear in facets")
 	require.Equal(t, "user:alice", result.Actors[0].Value)
-	require.Len(t, result.Actions, 1, "internal event actions must not appear in facets")
+	require.Len(t, result.Actions, 1, "security entry actions must not appear in facets")
 	require.Equal(t, "project:update", result.Actions[0].Value)
-	require.Len(t, result.Surfaces, 1, "internal event surfaces must not appear in facets")
+	require.Len(t, result.Surfaces, 1, "security entry surfaces must not appear in facets")
 	require.Equal(t, "dashboard", result.Surfaces[0].Value)
 }

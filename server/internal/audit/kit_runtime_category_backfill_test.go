@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 )
 
-func TestMarkKitRuntimeWorkloadAdmissionsInternal(t *testing.T) {
+func TestMarkKitRuntimeWorkloadAdmissionsSecurity(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -43,7 +43,7 @@ func TestMarkKitRuntimeWorkloadAdmissionsInternal(t *testing.T) {
 	insert("system", audit.KitRuntimeActorID, audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[1])
 	insert("user", "user-1", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[2])
 
-	// A person's own admission stays a customer entry, as does the same subject
+	// A person's own admission stays a configuration entry, as does the same subject
 	// id in another organization.
 	human := uuid.NewString()
 	insert("user", "user-1", audit.ActionWorkloadAdmissionAdmit, human)
@@ -58,17 +58,17 @@ func TestMarkKitRuntimeWorkloadAdmissionsInternal(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	pending, err := q.CountCustomerKitRuntimeWorkloadAdmissions(ctx)
+	pending, err := q.CountConfigurationKitRuntimeWorkloadAdmissions(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 6, pending)
 
-	n, err := q.MarkKitRuntimeWorkloadAdmissionsInternal(ctx, 4)
+	n, err := q.MarkKitRuntimeWorkloadAdmissionsSecurity(ctx, 4)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, n, "one statement changes at most batch_size rows")
-	n, err = q.MarkKitRuntimeWorkloadAdmissionsInternal(ctx, 4)
+	n, err = q.MarkKitRuntimeWorkloadAdmissionsSecurity(ctx, 4)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, n)
-	n, err = q.MarkKitRuntimeWorkloadAdmissionsInternal(ctx, 4)
+	n, err = q.MarkKitRuntimeWorkloadAdmissionsSecurity(ctx, 4)
 	require.NoError(t, err)
 	require.EqualValues(t, 0, n, "a finished backfill changes nothing on rerun")
 
@@ -76,10 +76,10 @@ func TestMarkKitRuntimeWorkloadAdmissionsInternal(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]bool{uuid.MustParse(runtimeSubjects[2]): true}, admitted)
 
-	internal, err := audittest.AuditLogCountByVisibility(ctx, conn, audit.VisibilityInternal)
+	security, err := audittest.AuditLogCountByCategory(ctx, conn, audit.CategorySecurity)
 	require.NoError(t, err)
-	require.EqualValues(t, 6, internal)
-	customer, err := audittest.AuditLogCountByVisibility(ctx, conn, audit.VisibilityCustomer)
+	require.EqualValues(t, 6, security)
+	configuration, err := audittest.AuditLogCountByCategory(ctx, conn, audit.CategoryConfiguration)
 	require.NoError(t, err)
-	require.EqualValues(t, 3, customer)
+	require.EqualValues(t, 3, configuration)
 }

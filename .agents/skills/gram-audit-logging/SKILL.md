@@ -26,15 +26,15 @@ Audit logging is how Speakeasy records _who did what to which resource_. Every m
 
 **Atomicity.** Audit entries are written inside the same database transaction as the mutation they describe, so the state and the record of the state commit together or not at all.
 
-**Visibility.** Who an entry is for, stored in `audit_logs.visibility`. The customer audit log is the record of configuration changes made by an organization's members or by the Speakeasy team; those entries are `customer` (the default). Activity Speakeasy performs on its own to keep the platform running, such as a runtime admitting its own workload identity every time it starts, is `internal`. Internal entries are hidden from `auditlogs.list`, `auditlogs.listFacets` and customer webhooks, and stay visible to the staff admin activity view and to internal analytics (PostHog, and the Slack firehose fed from it). Before adding an event, decide which it is:
+**Category.** What kind of event an entry records, stored in `audit_logs.category`. Categories describe the event, not who may see it: every category is stored, delivered as webhooks (the payload carries `category`), and returned by the staff admin activity view. The audit log page (`auditlogs.list` and `auditlogs.listFacets`) shows `configuration` entries. Before adding an event, decide which it is:
 
-- `customer`: a person or the Speakeasy team changed configuration, or a security-relevant change a customer would want to review (a grant, a revocation, a credential or trust registration).
-- `internal`: a system component repeats the event as part of normal operation, its frequency follows runtime churn or traffic rather than decisions, and no person chose it. If the configuration change that caused it is already audited, the follow-on event is internal.
+- `configuration` (the default): a person or the Speakeasy team changed the platform's configuration — created, updated or deleted a resource, granted or revoked access, admitted or withdrew a workload, registered a credential or trust relationship.
+- `security`: machine access or other security-relevant activity that is not a configuration decision — for example a runtime admitting and withdrawing its own workload identity on every start and teardown. Its frequency follows runtime churn or traffic rather than decisions, and no person chose it. Customers still need it when auditing what their users and automated processes did, which is why it is kept and delivered rather than dropped.
 - An event written by a system actor must still name what acted. Prefer attributing it to the agent or person it acts for; a bare system principal with no display name renders as "Speakeasy" in the dashboard.
 
-Once customers have seen an action in their audit log, removing it is a breaking change, so choose before shipping rather than after.
+The same action can fall in either category depending on who caused it: a person admitting a workload is a configuration change, while the Kit runtime admitting its own workload is a security entry. Once customers have seen an action on the audit log page, moving it off is a visible change, so choose before shipping rather than after. Add a category only with a schema change to the `audit_logs_category_check` constraint.
 
-**Outbox event.** By default, every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`. Operator backfills construct their logger with `audit.NewLogger(audit.WithoutOutbox())`, which records audit rows but publishes no webhook events, so bulk system writes do not flood customer webhooks. Internal entries are still published, under the same event type, but with an `audience=internal` Pub/Sub attribute (`outbox.PublishInternalWebhookEvent`); the Svix relay drops them (`outbox.IsInternalEvent`) while internal subscribers such as `growthsignals` keep receiving them.
+**Outbox event.** By default, every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`. Operator backfills construct their logger with `audit.NewLogger(audit.WithoutOutbox())`, which records audit rows but publishes no webhook events, so bulk system writes do not flood customer webhooks. Every category is published the same way; the payload's `category` field lets subscribers separate configuration changes from security entries.
 
 ## Server
 
@@ -91,10 +91,10 @@ Audit entries are surfaced to Speakeasy users through a small, fixed set of endp
 
 **HTTP routes** (design: `server/design/auditlogs/design.go`):
 
-- `GET /rpc/auditlogs.list` — paginated list; supports cursor, `project_slug`, `actor_id`, and `action` filters. Never returns `internal` entries, whatever the filters.
-- `GET /rpc/auditlogs.listFacets` — returns the set of actors and actions that actually appear, for UI facet pickers. Computed from `customer` entries only.
+- `GET /rpc/auditlogs.list` — paginated list; supports cursor, `project_slug`, `actor_id`, and `action` filters. Returns `configuration` entries only, whatever the filters.
+- `GET /rpc/auditlogs.listFacets` — returns the set of actors and actions that actually appear, for UI facet pickers. Computed from `configuration` entries only.
 
-The staff admin activity view (`internal/admin`, `ListAuditLogs` with `IncludeInternalEvents: true`) returns both.
+The staff admin activity view (`internal/admin`, `ListAuditLogs` with `Categories: audit.Categories()`) returns every category. `ListAuditLogs` takes the categories to return, so a future customer view of security entries passes `security` rather than needing a new query.
 
 **Generated client surfaces** — regenerated by `mise run gen:goa-server` then `mise run gen:sdk`:
 
@@ -114,15 +114,15 @@ When a handler mutates a resource whose subject already has `Action*`/`Log*` def
 5. Treat audit-log failures as `oops.CodeUnexpected`. Audit logging is not optional — if it fails, fail the request.
 6. Add a test that asserts the event was recorded (see "How to assert audit events in tests" below).
 
-### How to record an operational event as internal
+### How to record an event in the security category
 
-Use this when a system component audits something it does on its own and repeatedly — see **Visibility** for how to tell.
+Use this when a system component audits machine access it performs on its own and repeatedly — see **Category** for how to tell.
 
-1. Add a `Visibility Visibility` field to the subject's `Log<Verb>Event` struct, documented with when callers set it.
-2. In the `Log<Verb>` function, set `Visibility: string(event.Visibility)` on the `repo.InsertAuditLogParams` literal. `Log*` functions for events without the field leave it out of the literal; `(*Logger).log` and the insert query default a blank value to `customer`, and `log` rejects any value other than `customer` or `internal`.
-3. Once an event struct has the field, every caller of that event sets it: `audit.VisibilityInternal` at the system call site and `audit.VisibilityCustomer` at the human ones (`exhaustruct` enforces this).
-4. Test it with `audittest.LatestAuditLogByAction(...).Visibility` and, for webhook routing, `outbox.IsInternalEvent(audittest.LatestOutboxAttributes(...))`.
-5. Rows written before the change keep `customer`. Reclassify them with an application-data backfill under `server/cmd/tools/migrations/` (see `AUDIT_KIT_RUNTIME_VISIBILITY_BACKFILL.md`), never in a migration file.
+1. Add a `Category Category` field to the subject's `Log<Verb>Event` struct, documented with when callers set it.
+2. In the `Log<Verb>` function, set `Category: string(event.Category)` on the `repo.InsertAuditLogParams` literal. `Log*` functions for events without the field leave it out of the literal; `(*Logger).log` and the insert query default a blank value to `configuration`, and `log` rejects any value that is not a known category.
+3. Once an event struct has the field, every caller of that event sets it: `audit.CategorySecurity` at the system call site and `audit.CategoryConfiguration` at the human ones (`exhaustruct` enforces this).
+4. Test it with `audittest.LatestAuditLogByAction(...).Category`, and decode the outbox payload (`GetLatestOutboxPayloadByOrg`) to check its `category`.
+5. Rows written before the change keep `configuration`. Reclassify them with an application-data backfill under `server/cmd/tools/migrations/` (see `AUDIT_KIT_RUNTIME_CATEGORY_BACKFILL.md`), never in a migration file.
 
 ### How to audit a cascading delete of child resources
 
@@ -191,7 +191,7 @@ This file documents conventions that evolve over time. Adding a new action, subj
 - Changing how facets are computed — today they derive from row data with no registration; if that changes, the "no registration step" claim stops being true.
 - Adding a new audit-relevant mise task that belongs on the cheat sheet.
 - Introducing a new top-level concept (a new principal type for actors, a new kind of subject scoping beyond org/project, etc.).
-- Changing what `customer` and `internal` visibility mean, or which readers include internal entries.
+- Adding a category, changing what a category means, or changing which readers show which categories.
 
 ## Cross-references
 

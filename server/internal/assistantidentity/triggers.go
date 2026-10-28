@@ -133,7 +133,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, project, trigger uuid
 			return fmt.Errorf("admit assistant trigger workload: %w", err)
 		}
 		if err := s.audit.LogWorkloadAdmissionAdmit(ctx, tx, audit.LogWorkloadAdmissionAdmitEvent{
-			Visibility:     audit.VisibilityCustomer,
+			Category:       audit.CategoryConfiguration,
 			OrganizationID: root.OrganizationID, ProjectID: projectID,
 			Actor: actor.principal, ActorDisplayName: actor.displayName, ActorSlug: nil,
 			AdmissionURN: urn.NewWorkloadAdmission(admission.ID), AdmissionDisplayName: admission.Subject,
@@ -281,7 +281,7 @@ func (s *Service) withdrawWorkload(ctx context.Context, tx pgx.Tx, org string, p
 			return fmt.Errorf("withdraw assistant trigger admission: %w", err)
 		}
 		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, tx, audit.LogWorkloadAdmissionWithdrawEvent{
-			Visibility:     audit.VisibilityCustomer,
+			Category:       audit.CategoryConfiguration,
 			OrganizationID: org, ProjectID: projectID, Actor: actor.principal, ActorDisplayName: actor.displayName, ActorSlug: nil,
 			AdmissionURN: urn.NewWorkloadAdmission(withdrawn.ID), AdmissionDisplayName: withdrawn.Subject,
 			AdmissionSnapshotBefore: workloadpolicy.AdmissionSnapshot(withdrawn, issuer, assignedAgent),

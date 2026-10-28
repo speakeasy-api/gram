@@ -6,12 +6,12 @@ reusable **Source → Transform → Sink** pipeline.
 Each concrete migration is a set of three small implementations wired together by
 the shared harness. The migrations shipped today:
 
-| Migration                                                                           | Doc                                                                                    |
-| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)                               |
-| `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)                     |
-| Default auth permissions (`mcp:auth` defaults and legacy API key policies)          | [AUTH_PERMISSION_DEFAULTS_BACKFILL.md](./AUTH_PERMISSION_DEFAULTS_BACKFILL.md)         |
-| Kit runtime workload admission audit entries marked internal                        | [AUDIT_KIT_RUNTIME_VISIBILITY_BACKFILL.md](./AUDIT_KIT_RUNTIME_VISIBILITY_BACKFILL.md) |
+| Migration                                                                           | Doc                                                                                |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)                           |
+| `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)                 |
+| Default auth permissions (`mcp:auth` defaults and legacy API key policies)          | [AUTH_PERMISSION_DEFAULTS_BACKFILL.md](./AUTH_PERMISSION_DEFAULTS_BACKFILL.md)     |
+| Kit runtime workload admission audit entries moved to the security category         | [AUDIT_KIT_RUNTIME_CATEGORY_BACKFILL.md](./AUDIT_KIT_RUNTIME_CATEGORY_BACKFILL.md) |
 
 ## Concepts
 

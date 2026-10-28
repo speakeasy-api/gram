@@ -95,20 +95,25 @@ const (
 
 type Action string
 
-// Visibility says who an audit entry is for.
+// Category says what kind of event an audit entry records.
 //
-// The customer audit log is the record of configuration changes made by an
-// organization's members or by the Speakeasy team. Activity Speakeasy performs
-// on its own to keep the platform running, such as a runtime admitting its own
-// workload identity on every start, is recorded as internal: it stays out of
-// the customer feed and customer webhooks, and remains available to staff and
-// internal analytics.
-type Visibility string
+// Configuration entries are changes to the platform's configuration made by an
+// organization's members or by the Speakeasy team; the audit log page shows
+// these. Security entries record machine access and other security-relevant
+// activity that is not a configuration decision, such as a runtime admitting
+// its own workload identity on every start. Every category is stored,
+// delivered as webhooks and visible to staff.
+type Category string
 
 const (
-	VisibilityCustomer Visibility = "customer"
-	VisibilityInternal Visibility = "internal"
+	CategoryConfiguration Category = "configuration"
+	CategorySecurity      Category = "security"
 )
+
+// Categories lists every category, for readers that show all of them.
+func Categories() []string {
+	return []string{string(CategoryConfiguration), string(CategorySecurity)}
+}
 
 func marshalAuditPayload(value any) ([]byte, error) {
 	if value == nil {

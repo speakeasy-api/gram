@@ -18,21 +18,6 @@ import (
 // consumer that wants a subset of the webhook stream has to filter on this.
 const eventTypeAttribute = "event_type"
 
-// audienceAttribute marks a webhook event that is published for Speakeasy's own
-// consumers only. Internal consumers, such as product analytics, read every
-// event on the topic; the customer delivery subscriber drops events carrying
-// audienceInternal so they never reach a customer endpoint.
-const (
-	audienceAttribute = "audience"
-	audienceInternal  = "internal"
-)
-
-// IsInternalEvent reports whether a webhook message was published with
-// PublishInternalWebhookEvent and must not be delivered to customers.
-func IsInternalEvent(attributes map[string]string) bool {
-	return attributes[audienceAttribute] == audienceInternal
-}
-
 // PublishWebhookEvent enqueues a customer-facing webhook event.
 //
 // THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
@@ -43,19 +28,6 @@ func IsInternalEvent(attributes map[string]string) bool {
 // envelope, published to a topic, and delivered by a subscriber rather than by
 // a Temporal activity.
 func PublishWebhookEvent[T any](ctx context.Context, dbtx DBTX, orgID string, def *EventDef[T], payload T) (PublishResult, error) {
-	return publishWebhookEvent(ctx, dbtx, orgID, def, payload, false)
-}
-
-// PublishInternalWebhookEvent enqueues a webhook event for Speakeasy's own
-// consumers. It travels the same topic as customer events, so internal
-// subscribers see it unchanged, but the customer delivery subscriber drops it.
-//
-// THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
-func PublishInternalWebhookEvent[T any](ctx context.Context, dbtx DBTX, orgID string, def *EventDef[T], payload T) (PublishResult, error) {
-	return publishWebhookEvent(ctx, dbtx, orgID, def, payload, true)
-}
-
-func publishWebhookEvent[T any](ctx context.Context, dbtx DBTX, orgID string, def *EventDef[T], payload T, internal bool) (PublishResult, error) {
 	eventID, err := uuid.NewV7()
 	if err != nil {
 		return PublishResult{}, fmt.Errorf("generate webhook event id: %w", err)
@@ -64,9 +36,6 @@ func publishWebhookEvent[T any](ctx context.Context, dbtx DBTX, orgID string, de
 	msg, err := buildWebhookMessage(orgID, def, payload, eventID)
 	if err != nil {
 		return PublishResult{}, err
-	}
-	if internal {
-		msg.Attributes[audienceAttribute] = audienceInternal
 	}
 
 	return Publish(ctx, dbtx, orgID, msg)
