@@ -82,6 +82,14 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server transaction input")
 	}
 
+	// Before the server row exists, so the source's liveness and ownership are
+	// settled under its row lock and the auth client sync below has that lock
+	// ahead of any server lock.
+	sources := credentialSourcesOf([]uuid.NullUUID{input.RemoteMCPServerID}, []uuid.NullUUID{input.TunneledMCPServerID})
+	if err := verifyLiveCredentialSources(ctx, tx, input.ProjectID, sources); err != nil {
+		return repo.McpServer{}, err
+	}
+
 	serverID, err := uuid.NewV7()
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("generate MCP server ID: %w", err)
@@ -140,6 +148,12 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		McpServerSlug:    slug,
 	}); err != nil {
 		return repo.McpServer{}, fmt.Errorf("audit MCP server creation: %w", err)
+	}
+
+	// A source's credential headers are usually set up before any server
+	// fronts them, so offer their auth clients from this server as it appears.
+	if err := syncCredentialSources(ctx, tx, input.OrganizationID, sources); err != nil {
+		return repo.McpServer{}, err
 	}
 
 	return server, nil
