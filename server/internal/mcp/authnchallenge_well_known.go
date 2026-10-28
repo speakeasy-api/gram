@@ -149,7 +149,7 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, hosting, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
@@ -158,8 +158,8 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	}
 	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownProtectedResource, mcpSlug, toolset, wrapperID)
 
-	if toolset.UserSessionIssuerID.Valid {
-		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcproute.MCP)
+	if hosting.UserSessionIssuerID.Valid {
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, hosting, mcproute.MCP)
 		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 			return err
 		}
@@ -204,7 +204,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, hosting, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
@@ -213,8 +213,8 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	}
 	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownAuthorizationServer, mcpSlug, toolset, wrapperID)
 
-	if toolset.UserSessionIssuerID.Valid {
-		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcproute.MCP)
+	if hosting.UserSessionIssuerID.Valid {
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, hosting, mcproute.MCP)
 		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 			return err
 		}
