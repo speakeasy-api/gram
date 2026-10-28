@@ -143,3 +143,17 @@ func (s *Service) catalogIconAssetID(src string) (uuid.UUID, error) {
 	}
 	return id, nil
 }
+
+// IsPublicCatalogIcon checks stored metadata against trusted startup configuration
+// and the current asset association. Legacy rows have not necessarily passed write validation.
+func (s *Service) IsPublicCatalogIcon(ctx context.Context, icon *CatalogIcon) bool {
+	if s == nil || icon == nil || len(icon.Src) > 2048 || icon.MimeType != "image/svg+xml" || len(icon.Sizes) != 1 || icon.Sizes[0] != "any" {
+		return false
+	}
+	id, err := s.catalogIconAssetID(icon.Src)
+	if err != nil || s.db == nil {
+		return false
+	}
+	valid, err := repo.New(s.db).IsCatalogSVGAsset(ctx, id)
+	return err == nil && valid
+}

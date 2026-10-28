@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"
+	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/stretchr/testify/require"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -83,10 +85,78 @@ func TestRegistryIconsApprovalRevisionAndRetry(t *testing.T) {
 }
 func TestRegistryIconsBoundedProjection(t *testing.T) {
 	data := json.RawMessage(`{"server":{"icons":[{"src":"private"}]},"_meta":{"private":"secret","com.speakeasy.ai/icons":{"default":{"src":"https://public.example/icon.svg","mimeType":"image/svg+xml","sizes":["any"]}}}}`)
-	icons := boundedCatalogIcons(data)
-	require.NotNil(t, icons.Default)
+	icons := boundedCatalogIcons(t.Context(), nil, data)
+	require.Nil(t, icons.Default)
 	encoded, err := json.Marshal(icons)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "secret")
 	require.NotContains(t, string(encoded), "private")
+}
+
+type validatedRegistryReader struct {
+	*recordingRegistryReader
+	*mcpregistry.Service
+}
+
+func TestRegistryIconsTrustedProjection(t *testing.T) {
+	f := newProposalFixture(t, "admin_mcp_registry_icon_projection")
+	_, _, registry := newRegistryEntryWriter(t, f)
+	base, err := url.Parse("https://assets.example")
+	require.NoError(t, err)
+	registry.WithAssetBaseURL(base)
+	asset, err := assetrepo.New(f.db).CreatePlatformAsset(t.Context(), assetrepo.CreatePlatformAssetParams{Name: "icon.svg", Url: "icon.svg", Sha256: "projection-icon", Kind: "image", ContentType: "image/svg+xml", ContentLength: 10})
+	require.NoError(t, err)
+	canonical := assets.ServeImageURL(base, asset.ID)
+	for _, tc := range []struct {
+		name, src string
+		want      bool
+	}{
+		{"canonical", canonical, true},
+		{"arbitrary text", "private-value", false},
+		{"userinfo", strings.Replace(canonical, "https://", "https://user:password@", 1), false},
+		{"external", strings.Replace(canonical, "assets.example", "external.example", 1), false},
+		{"noncanonical path", strings.Replace(canonical, "/rpc/", "/other/", 1), false},
+		{"extra query", canonical + "&token=secret", false},
+		{"duplicate id", canonical + "&id=" + asset.ID.String(), false},
+		{"fragment", canonical + "#secret", false},
+		{"missing asset", assets.ServeImageURL(base, uuid.New()), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Deliberately invalid stored record: icon safety is independent of schema projection.
+			raw, err := mcpregistry.WithCatalogIcons(json.RawMessage(`{"_meta":{"private":"unrelated-secret"}}`), mcpregistry.CatalogIcons{
+				Default: &mcpregistry.CatalogIcon{Src: tc.src, MimeType: "image/svg+xml", Sizes: []string{"any"}},
+				Dark:    &mcpregistry.CatalogIcon{Src: canonical, MimeType: "image/svg+xml", Sizes: []string{"any"}},
+			})
+			require.NoError(t, err)
+			reader := &validatedRegistryReader{recordingRegistryReader: &recordingRegistryReader{entry: &gen.AdminRegistryEntry{ID: testRegistryID, DataJSON: string(raw)}}, Service: registry}
+			body, data := registryToolCall(t, reader, "get_registry_entry", `{"id":"`+testRegistryID+`"}`, true)
+			var output RegistryEntryDetail
+			require.NoError(t, json.Unmarshal(data, &output))
+			require.True(t, output.Found)
+			require.False(t, output.ProjectionAvailable)
+			require.NotContains(t, body, "unrelated-secret")
+			require.NotNil(t, output.CuratedIcons.Dark)
+			require.Equal(t, canonical, output.CuratedIcons.Dark.Src)
+			if tc.want {
+				require.NotNil(t, output.CuratedIcons.Default)
+			} else {
+				require.Nil(t, output.CuratedIcons.Default)
+				require.NotContains(t, body, tc.src)
+			}
+		})
+	}
+	icon := &mcpregistry.CatalogIcon{Src: canonical, MimeType: "image/svg+xml", Sizes: []string{"any"}}
+	for _, assignment := range []string{"content_type = 'image/png'", "project_id = '00000000-0000-4000-8000-000000000001'", "organization_id = '" + f.orgA + "'", "deleted_at = clock_timestamp()"} {
+		_, err = f.db.Exec(t.Context(), "UPDATE assets SET "+assignment+" WHERE id = $1", asset.ID) //nolint:glint // notestingrawsql: exercise unsafe legacy asset associations.
+		require.NoError(t, err)
+		require.False(t, registry.IsPublicCatalogIcon(t.Context(), icon))
+		_, err = f.db.Exec(t.Context(), "UPDATE assets SET content_type = 'image/svg+xml', project_id = NULL, organization_id = NULL, deleted_at = NULL WHERE id = $1", asset.ID) //nolint:glint // notestingrawsql: restore the asset fixture.
+		require.NoError(t, err)
+	}
+	registry.WithAssetBaseURL(nil)
+	require.False(t, registry.IsPublicCatalogIcon(t.Context(), icon))
+	registry.WithAssetBaseURL(base)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.False(t, registry.IsPublicCatalogIcon(ctx, icon))
 }
