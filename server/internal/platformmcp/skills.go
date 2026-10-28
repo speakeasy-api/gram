@@ -151,7 +151,7 @@ type SkillSummary struct {
 	// LastLoadedOverMcpAt is when an agent last loaded the skill over a hosted
 	// MCP server. Absent when it never has, or when the response was built
 	// from a skill write that does not compute it.
-	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty"`
+	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty" jsonschema:"RFC 3339 time an agent last read this skill over a hosted MCP server; absent when never loaded over MCP, and on results of skill writes, which do not compute it"`
 }
 
 // SkillVersionSummary is one immutable version. Content appears only when the
