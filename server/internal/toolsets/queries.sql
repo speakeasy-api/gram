@@ -40,8 +40,6 @@ INSERT INTO toolsets (
   , slug
   , description
   , default_environment_slug
-  , mcp_slug
-  , mcp_enabled
 ) VALUES (
     @organization_id
   , @project_id
@@ -49,8 +47,6 @@ INSERT INTO toolsets (
   , @slug
   , @description
   , @default_environment_slug
-  , @mcp_slug
-  , @mcp_enabled
 )
 RETURNING *;
 
@@ -103,7 +99,7 @@ WHERE project_id = @project_id
 ORDER BY created_at DESC;
 
 -- name: UpdateToolsetDetails :one
--- Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state and MirrorToolsetHosting writes them.
+-- Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
@@ -115,16 +111,12 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: UpdateToolset :one
--- Test fixture: also writes the MCP hosting columns, which production code writes only through MirrorToolsetHosting.
+-- Test fixture.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
   , description = COALESCE(@description, description)
   , default_environment_slug = COALESCE(@default_environment_slug, default_environment_slug)
-  , mcp_slug = COALESCE(@mcp_slug, mcp_slug)
-  , mcp_is_public = COALESCE(@mcp_is_public, mcp_is_public)
-  , custom_domain_id = COALESCE(@custom_domain_id, custom_domain_id)
-  , mcp_enabled = COALESCE(@mcp_enabled, mcp_enabled)
   , tool_selection_mode = COALESCE(@tool_selection_mode, tool_selection_mode)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
@@ -258,9 +250,8 @@ SELECT
   t.slug,
   t.description,
   t.default_environment_slug,
+  -- The legacy alias, the address of a hosted server without a servable endpoint.
   t.mcp_slug,
-  t.mcp_is_public,
-  t.mcp_enabled,
   t.tool_selection_mode,
   t.external_oauth_server_id,
   t.created_at,
@@ -292,14 +283,37 @@ WHERE slug = @slug
   AND external_oauth_server_id IS NULL
 RETURNING *;
 
--- name: UpdateToolsetUserSessionIssuer :one
--- Test fixture: production code writes the issuer column only through MirrorToolsetHosting and the issuer migration.
+-- name: OtherCustomDomainAliasServedOnPlatform :one
+-- Whether another live-project toolset's custom-domain alias holds the slug while no platform alias does: the
+-- loose platform lookup serves that alias, so a second custom-domain alias with the slug would contend for it.
+SELECT (
+  NOT EXISTS (
+    SELECT 1
+    FROM toolsets pa
+    WHERE pa.mcp_slug = @slug
+      AND pa.custom_domain_id IS NULL
+      AND pa.deleted IS FALSE
+      AND pa.id <> @toolset_id
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM toolsets t
+    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+    WHERE t.mcp_slug = @slug
+      AND t.custom_domain_id IS NOT NULL
+      AND t.deleted IS FALSE
+      AND t.id <> @toolset_id
+  )
+)::boolean AS served;
+
+-- name: MoveToolsetMCPAlias :exec
+-- Moves a legacy toolset's MCP alias to the hosted endpoint that now holds its address.
 UPDATE toolsets
 SET
-    user_session_issuer_id = @user_session_issuer_id
+    mcp_slug = @mcp_slug
+  , custom_domain_id = @custom_domain_id
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
-RETURNING *;
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE AND mcp_slug IS NOT NULL;
 
 -- name: UpdateToolsetToolVariationsGroup :one
 UPDATE toolsets
@@ -471,17 +485,3 @@ LEFT JOIN LATERAL (
 WHERE s.id = ANY(@toolset_ids::uuid[])
   AND s.deleted IS FALSE;
 
--- name: MirrorToolsetHosting :one
--- Writes a hosted toolset's hosting columns from its canonical server so pods that still read them stay consistent.
-UPDATE toolsets
-SET
-    name = @name
-  , mcp_slug = @mcp_slug
-  , mcp_enabled = @mcp_enabled
-  , mcp_is_public = @mcp_is_public
-  , custom_domain_id = @custom_domain_id
-  , user_session_issuer_id = @user_session_issuer_id
-  , tool_variations_group_id = @tool_variations_group_id
-  , updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
-RETURNING *;

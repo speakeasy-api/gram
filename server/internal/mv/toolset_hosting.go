@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -40,29 +39,15 @@ func canonicalHosting(ctx context.Context, db tsr.DBTX, organizationID string, t
 	return byID, nil
 }
 
-// toolsetHostingColumns are the toolset columns the hosting derivation reads, including the OAuth attachments that
-// decide how a disabled server re-enables.
-type toolsetHostingColumns struct {
-	McpSlug               pgtype.Text
-	CustomDomainID        uuid.NullUUID
-	McpEnabled            bool
-	McpIsPublic           bool
-	UserSessionIssuerID   uuid.NullUUID
-	ExternalOauthServerID uuid.NullUUID
-}
-
-// deriveToolsetHosting applies hostingstate.Apply to a toolset's hosting columns.
-func deriveToolsetHosting(columns toolsetHostingColumns, row *hostingstate.Row) toolsetHosting {
-	//nolint:exhaustruct // Only the hosting columns feed the derivation.
-	derived := hostingstate.Apply(tsr.Toolset{
-		McpSlug: columns.McpSlug, CustomDomainID: columns.CustomDomainID, McpEnabled: columns.McpEnabled, McpIsPublic: columns.McpIsPublic,
-		UserSessionIssuerID: columns.UserSessionIssuerID, ExternalOauthServerID: columns.ExternalOauthServerID,
-	}, row)
+// deriveToolsetHosting applies hostingstate.Derive given the toolset's legacy alias and external OAuth server, which
+// decides how a disabled server re-enables.
+func deriveToolsetHosting(alias hostingstate.Address, externalOAuthServerID uuid.NullUUID, row *hostingstate.Row) toolsetHosting {
+	hosting, address := hostingstate.Derive(alias, externalOAuthServerID, row)
 	return toolsetHosting{
-		McpSlug:             conv.FromPGText[types.Slug](derived.McpSlug),
-		CustomDomainID:      conv.FromNullableUUID(derived.CustomDomainID),
-		McpEnabled:          derived.McpEnabled,
-		McpIsPublic:         derived.McpIsPublic,
-		UserSessionIssuerID: derived.UserSessionIssuerID,
+		McpSlug:             conv.FromPGText[types.Slug](address.Slug),
+		CustomDomainID:      conv.FromNullableUUID(address.CustomDomainID),
+		McpEnabled:          hosting.Enabled,
+		McpIsPublic:         hosting.Public,
+		UserSessionIssuerID: hosting.UserSessionIssuerID,
 	}
 }

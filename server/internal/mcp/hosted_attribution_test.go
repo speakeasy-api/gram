@@ -22,13 +22,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/wide"
 )
 
@@ -95,8 +93,8 @@ func TestServePublic_HostedEndpoint_AttributesServerAndEndpoint(t *testing.T) {
 			require.True(t, ok)
 			projectID := *authCtx.ProjectID
 			slug := "attr-" + uuid.NewString()[:8]
-			toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
-			server := createToolsetMcpEndpoint(t, ctx, ti.conn, projectID, toolset.ID, conv.Ternary(legacy, slug+"-wrapper", slug), "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
+			toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
+			server := hostedEndpointServer(t, ctx, ti, toolset, slug, legacy)
 			addHTTPTools(t, ctx, ti, toolset.ID, projectID, authCtx.ActiveOrganizationID, "attr_tool")
 			endpointID := mcpEndpointIDForServer(t, ctx, ti, projectID, server.ID)
 
@@ -222,7 +220,7 @@ func TestHandleToolsCall_AttributionLookupFailureStillCountsAttempt(t *testing.T
 		func(config *pgxpool.Config) { config.ConnConfig.Tracer = tracer }, mcp.MetaRuntimeConfig{})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "failed-attribution-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "failed-attribution-"+uuid.NewString()[:8])
 	reqCtx := contextvalues.SetRequestContext(ctx, &contextvalues.RequestContext{
 		Host: "mcp.example.test", ReqURL: "/mcp/lookup-failure", Method: http.MethodPost,
 	})

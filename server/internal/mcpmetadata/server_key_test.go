@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -40,15 +41,16 @@ func createHostedToolset(t *testing.T, ctx context.Context, ti *testInstance, sl
 		Slug:                   slug,
 		Description:            conv.ToPGText("A hosted toolset"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug + "-mcp"),
-		McpEnabled:             true,
 	})
+	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug+"-mcp", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	toolset, err = toolsets_repo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	require.NoError(t, err)
 	return toolset
 }
 
 // createCanonicalWrapper inserts the mcp_servers row that shares the toolset's id.
-func createCanonicalWrapper(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset) mcpservers_repo.McpServer {
+func createCanonicalWrapper(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, visibility string) mcpservers_repo.McpServer {
 	t.Helper()
 
 	server, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
@@ -61,18 +63,11 @@ func createCanonicalWrapper(t *testing.T, ctx context.Context, ti *testInstance,
 		RemoteMcpServerID:   uuid.NullUUID{},
 		TunneledMcpServerID: uuid.NullUUID{},
 		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		Visibility:          legacyVisibility(toolset),
+		Visibility:          visibility,
 		NetworkAccessMode:   networkaccess.Storage(networkaccess.ModePublicOnly),
 	})
 	require.NoError(t, err)
 	return server
-}
-
-// syncWrapperVisibility mirrors a toolset's MCP flags onto its canonical wrapper, as hosted Sync does.
-func syncWrapperVisibility(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset) {
-	t.Helper()
-
-	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: legacyVisibility(toolset), ID: toolset.ID, ProjectID: toolset.ProjectID}))
 }
 
 // requireSingleMetadataRow asserts id has exactly one metadata row.
@@ -131,9 +126,9 @@ func TestSetMcpMetadata_NewRowsUseTheServerKey(t *testing.T) {
 
 	ctx, ti := newTestMCPMetadataService(t)
 	bySlug := createHostedToolset(t, ctx, ti, "hosted-new-slug")
-	createCanonicalWrapper(t, ctx, ti, bySlug)
+	createCanonicalWrapper(t, ctx, ti, bySlug, mcpservers.VisibilityPrivate)
 	byServer := createHostedToolset(t, ctx, ti, "hosted-new-server")
-	createCanonicalWrapper(t, ctx, ti, byServer)
+	createCanonicalWrapper(t, ctx, ti, byServer, mcpservers.VisibilityPrivate)
 	unwrapped := createHostedToolset(t, ctx, ti, "hosted-new-unwrapped")
 
 	slugRow := setBySlug(t, ctx, ti, bySlug, &gen.SetMcpMetadataPayload{Instructions: new("hello")})
@@ -158,7 +153,7 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	toolset := createHostedToolset(t, ctx, ti, "hosted-moved")
-	createCanonicalWrapper(t, ctx, ti, toolset)
+	createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityPrivate)
 	seeded := seedServerKeyedRow(t, ctx, ti, toolset, "before", "API_KEY")
 	original, err := ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{ToolsetSlug: new(types.Slug(toolset.Slug))})
 	require.NoError(t, err)
@@ -237,7 +232,7 @@ func TestExportMcpMetadata_ByMcpServerID(t *testing.T) {
 
 	ctx, ti := newTestMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-export")
-	createCanonicalWrapper(t, ctx, ti, toolset)
+	createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityPrivate)
 
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpServerID: new(toolset.ID.String())})
 	require.NoError(t, err)
@@ -272,7 +267,7 @@ func TestSetMcpMetadata_ServerKeyedSaveKeepsHeaderAliases(t *testing.T) {
 
 	ctx, ti := newTestMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-save-aliases")
-	createCanonicalWrapper(t, ctx, ti, toolset)
+	createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityPrivate)
 	original := seedServerKeyedRow(t, ctx, ti, toolset, "before")
 
 	rows, err := testrepo.New(ti.conn).SetMcpMetadataHeaderDisplayNamesFixture(ctx, testrepo.SetMcpMetadataHeaderDisplayNamesFixtureParams{
@@ -357,26 +352,14 @@ func TestMcpMetadata_ToolsetIgnoresNonCanonicalServerHoldingItsID(t *testing.T) 
 	}
 }
 
-// legacyVisibility maps a legacy toolset's MCP flags onto mcp_servers.visibility.
-func legacyVisibility(toolset toolsets_repo.Toolset) string {
-	switch {
-	case !toolset.McpEnabled:
-		return "disabled"
-	case toolset.McpIsPublic:
-		return "public"
-	default:
-		return "private"
-	}
-}
-
-func TestExportMcpMetadata_BySlugKeepsToolsetAddressIdentity(t *testing.T) {
+func TestExportMcpMetadata_BySlugKeepsFrozenAliasIdentity(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
 
 	legacy := createHostedToolset(t, ctx, ti, "alias-owner")
-	createCanonicalWrapper(t, ctx, ti, legacy)
+	createCanonicalWrapper(t, ctx, ti, legacy, mcpservers.VisibilityPrivate)
 	other := createHostedToolset(t, ctx, ti, "endpoint-owner")
-	otherServer := createCanonicalWrapper(t, ctx, ti, other)
+	otherServer := createCanonicalWrapper(t, ctx, ti, other, mcpservers.VisibilityPrivate)
 	_, err := mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID: other.ProjectID, McpServerID: uuid.NullUUID{UUID: otherServer.ID, Valid: true}, Slug: legacy.McpSlug.String,
 	})
@@ -384,9 +367,9 @@ func TestExportMcpMetadata_BySlugKeepsToolsetAddressIdentity(t *testing.T) {
 
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpSlug: new(types.Slug(legacy.McpSlug.String))})
 	require.NoError(t, err)
-	require.Equal(t, legacy.Slug, result.Slug, "a toolset's address keeps naming its toolset")
+	require.Equal(t, legacy.Slug, result.Slug, "the frozen alias keeps naming its toolset")
 
-	// An endpoint slug no toolset holds names the endpoint's server.
+	// A slug no toolset's mcp_slug holds names its endpoint's server.
 	_, err = mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID: other.ProjectID, McpServerID: uuid.NullUUID{UUID: otherServer.ID, Valid: true}, Slug: "endpoint-owner-second",
 	})

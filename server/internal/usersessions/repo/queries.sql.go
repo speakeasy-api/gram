@@ -150,21 +150,6 @@ SELECT (
           AND project.deleted IS FALSE
     ) + (
         SELECT COUNT(*)
-        FROM toolsets AS toolset
-        JOIN projects AS project ON project.id = toolset.project_id
-        WHERE toolset.user_session_issuer_id = $1::uuid
-          AND toolset.deleted IS FALSE
-          AND project.organization_id = $2::text
-          AND project.deleted IS FALSE
-          AND NOT EXISTS (
-              SELECT 1
-              FROM mcp_servers AS server
-              WHERE server.toolset_id = toolset.id
-                AND server.project_id = toolset.project_id
-                AND server.deleted IS FALSE
-          )
-    ) + (
-        SELECT COUNT(*)
         FROM meta_mcp_servers AS meta_server
         JOIN projects AS project ON project.id = meta_server.project_id
         WHERE meta_server.user_session_issuer_id = $1::uuid
@@ -410,17 +395,6 @@ FROM (
     AND server.deleted IS FALSE
     AND project.organization_id = $3::text
     AND server.project_id <> $2::uuid
-
-  UNION ALL
-
-  SELECT toolset.id
-  FROM toolsets AS toolset
-  JOIN projects AS project ON project.id = toolset.project_id
-  WHERE toolset.user_session_issuer_id = $1
-    AND toolset.deleted IS FALSE
-    AND project.organization_id = $3::text
-    AND toolset.project_id <> $2::uuid
-    AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
   UNION ALL
 
@@ -1222,16 +1196,6 @@ WHERE issuer.id = $1
       AND project.deleted IS FALSE
       AND project.organization_id = issuer.organization_id
 
-    UNION ALL
-
-    SELECT 1
-    FROM toolsets AS toolset
-    JOIN projects AS project ON project.id = toolset.project_id
-    WHERE toolset.user_session_issuer_id = issuer.id
-      AND toolset.deleted IS FALSE
-      AND project.deleted IS FALSE
-      AND project.organization_id = issuer.organization_id
-      AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
   )
 RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 ), tombstones AS (
@@ -1373,15 +1337,6 @@ WHERE issuer.id = $1
     WHERE server.user_session_issuer_id = issuer.id
       AND server.deleted IS FALSE
       AND server.project_id = issuer.project_id
-
-    UNION ALL
-
-    SELECT 1
-    FROM toolsets AS toolset
-    WHERE toolset.user_session_issuer_id = issuer.id
-      AND toolset.deleted IS FALSE
-      AND toolset.project_id = issuer.project_id
-      AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
     UNION ALL
 
@@ -2545,22 +2500,6 @@ SELECT EXISTS (
       AND server.visibility <> 'disabled'
       AND NOT (server.tunneled_mcp_server_id IS NOT NULL AND server.visibility = 'public')
       AND COALESCE(NULLIF(server.network_access_mode, ''), 'public_only') IN ('public_only', 'dual')
-    UNION ALL
-    SELECT 1
-    FROM toolsets AS toolset
-    JOIN projects AS project ON project.id = toolset.project_id
-    WHERE toolset.user_session_issuer_id = $1
-      AND project.organization_id = $2::text
-      AND project.deleted IS FALSE
-      AND toolset.deleted IS FALSE
-      AND toolset.mcp_enabled IS TRUE
-      AND toolset.mcp_slug IS NOT NULL
-      AND NOT EXISTS (
-          SELECT 1 FROM mcp_servers AS server
-          WHERE server.toolset_id = toolset.id
-            AND server.project_id = toolset.project_id
-            AND server.deleted IS FALSE
-      )
 ) AS available
 `
 
@@ -2914,7 +2853,6 @@ JOIN LATERAL (SELECT s.subject_urn::text AS subject_urn, s.user_session_issuer_i
       JOIN remote_sessions AS attached ON attached.id = b.remote_session_id
         AND attached.subject_urn = 'user:' || a.owner_user_id
         AND b.attached_by_subject_id = attached.subject_urn
-        AND attached.grant_generation = b.grant_generation
         AND attached.remote_session_client_id = b.remote_session_client_id
       JOIN remote_session_clients AS c ON c.id = attached.remote_session_client_id
       JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
@@ -3144,27 +3082,6 @@ FROM (
       AND project.deleted IS FALSE
     UNION ALL
     SELECT
-        'toolset'::text,
-        toolset.id,
-        toolset.name,
-        toolset.slug,
-        project.id,
-        project.name
-    FROM toolsets AS toolset
-    JOIN projects AS project ON project.id = toolset.project_id
-    WHERE toolset.user_session_issuer_id = $1::uuid
-      AND toolset.deleted IS FALSE
-      AND project.organization_id = $2::text
-      AND project.deleted IS FALSE
-      AND NOT EXISTS (
-          SELECT 1
-          FROM mcp_servers AS server
-          WHERE server.toolset_id = toolset.id
-            AND server.project_id = toolset.project_id
-            AND server.deleted IS FALSE
-      )
-    UNION ALL
-    SELECT
         'meta_mcp_server'::text,
         meta_server.id,
         meta_server.name,
@@ -3199,13 +3116,9 @@ type ListOrganizationManagedUserSessionIssuerMCPServersRow struct {
 	ProjectName string
 }
 
-// The live MCP servers, toolsets, and meta MCP servers attached to an issuer,
-// each read through its own live project in the organization. A toolset
-// wrapped by a live MCP server is listed once, as that server, because clients
-// reach it through the server's endpoints. Pages by id across the three kinds.
-// A wrapper MCP server can share its toolset's id, so the cursor relies on that
-// exclusion: without it the two rows would share a cursor position and a page
-// boundary between them would skip one.
+// The live MCP servers and meta MCP servers attached to an issuer, each read
+// through its own live project in the organization. A hosted toolset is listed
+// as its canonical MCP server. Pages by id across both kinds.
 func (q *Queries) ListOrganizationManagedUserSessionIssuerMCPServers(ctx context.Context, arg ListOrganizationManagedUserSessionIssuerMCPServersParams) ([]ListOrganizationManagedUserSessionIssuerMCPServersRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationManagedUserSessionIssuerMCPServers,
 		arg.UserSessionIssuerID,
@@ -3364,19 +3277,6 @@ FROM (
     AND toolset.deleted IS FALSE
     AND project.deleted IS FALSE
     AND project.organization_id = issuer.organization_id
-  UNION ALL
-  SELECT toolset.id, toolset.name, project.id AS project_id, project.name AS project_name
-  FROM user_session_issuers AS issuer
-  JOIN toolsets AS toolset ON toolset.user_session_issuer_id = issuer.id
-  JOIN projects AS project ON project.id = toolset.project_id
-  WHERE issuer.id = $1
-    AND issuer.project_id IS NULL
-    AND issuer.organization_id = $2::text
-    AND issuer.deleted IS FALSE
-    AND toolset.deleted IS FALSE
-    AND project.deleted IS FALSE
-    AND project.organization_id = issuer.organization_id
-    AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 ) AS listed
 ORDER BY listed.project_name, listed.name, listed.id
 `
@@ -3393,7 +3293,7 @@ type ListOrganizationUserSessionIssuerToolsetsRow struct {
 	ProjectName string
 }
 
-// Toolsets on the issuer: through their canonical wrapper's issuer, or their own column when they have none.
+// Toolsets on the issuer through their canonical wrapper's issuer.
 func (q *Queries) ListOrganizationUserSessionIssuerToolsets(ctx context.Context, arg ListOrganizationUserSessionIssuerToolsetsParams) ([]ListOrganizationUserSessionIssuerToolsetsRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationUserSessionIssuerToolsets, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {
@@ -3534,7 +3434,6 @@ JOIN (
       JOIN remote_sessions AS s ON s.id = b.remote_session_id
         AND s.subject_urn = 'user:' || a.owner_user_id
         AND b.attached_by_subject_id = s.subject_urn
-        AND s.grant_generation = b.grant_generation
         AND s.remote_session_client_id = b.remote_session_client_id
       JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
       JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
@@ -6494,42 +6393,6 @@ func (q *Queries) UpdateRemoteSessionsToUserSessionIssuer(ctx context.Context, a
 	return result.RowsAffected(), nil
 }
 
-const updateToolsetsToUserSessionIssuer = `-- name: UpdateToolsetsToUserSessionIssuer :execrows
-UPDATE toolsets AS toolset
-SET user_session_issuer_id = $1,
-    updated_at = clock_timestamp()
-FROM projects AS project
-WHERE toolset.user_session_issuer_id = $2
-  AND project.id = toolset.project_id
-  AND project.organization_id = $3::text
-  AND 2 = (
-    SELECT COUNT(*)
-    FROM user_session_issuers AS issuer
-    LEFT JOIN projects AS issuer_project ON issuer_project.id = issuer.project_id
-    WHERE issuer.id IN ($2, $1)
-      AND issuer.deleted IS FALSE
-      AND (
-        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
-        OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = $3::text AND issuer_project.deleted IS FALSE)
-      )
-  )
-`
-
-type UpdateToolsetsToUserSessionIssuerParams struct {
-	TargetIssuerID uuid.NullUUID
-	SourceIssuerID uuid.NullUUID
-	OrganizationID string
-}
-
-// Wrapped toolsets keep their issuer column equal to their canonical server's for pods that still read it.
-func (q *Queries) UpdateToolsetsToUserSessionIssuer(ctx context.Context, arg UpdateToolsetsToUserSessionIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateToolsetsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const updateUserSessionClientCIMDCache = `-- name: UpdateUserSessionClientCIMDCache :one
 UPDATE user_session_clients
 SET client_id_metadata_fetched_at = clock_timestamp(),
@@ -7068,15 +6931,6 @@ SELECT EXISTS (
         UNION ALL
 
         SELECT 1
-        FROM toolsets AS toolset
-        WHERE toolset.user_session_issuer_id = issuer.id
-          AND toolset.deleted IS FALSE
-          AND toolset.project_id = issuer.project_id
-          AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
-
-        UNION ALL
-
-        SELECT 1
         FROM meta_mcp_servers AS meta_mcp_server
         WHERE meta_mcp_server.project_id = issuer.project_id
           AND meta_mcp_server.user_session_issuer_id = issuer.id
@@ -7090,7 +6944,7 @@ type UserSessionIssuerHasActiveOwnerParams struct {
 	ProjectID           uuid.UUID
 }
 
-// An issuer can be referenced by an MCP server, toolset, or meta MCP server.
+// An issuer can be referenced by an MCP server or meta MCP server.
 // Only delete it once no active owner remains.
 //
 // This project mutation helper deliberately ignores organization-owned rows.

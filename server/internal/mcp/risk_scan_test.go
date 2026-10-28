@@ -152,7 +152,7 @@ func TestRiskScan_PromptRetrieval(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	slug := "scan-prompt-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
 	_, err := templatesrepo.New(ti.conn).CreateTemplate(ctx, templatesrepo.CreateTemplateParams{
 		ProjectID: *authCtx.ProjectID,
@@ -228,7 +228,7 @@ func TestRiskScan_HostedHTTPPreservesPayloadAndErrorResult(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	slug := "scan-http-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
 	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "scan_http")
 
@@ -281,7 +281,7 @@ func TestRiskScan_LegacyToolsetRouteResolvesWrapperServer(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "scan-legacy-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	toolset := createUnhostedToolset(t, ctx, ti, authCtx, slug)
 	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
 	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "legacy_scan")
 
@@ -313,7 +313,7 @@ func TestRiskScan_LegacyToolsetRouteSkipsDisabledWrapperServer(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "scan-legacy-disabled-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	toolset := createUnhostedToolset(t, ctx, ti, authCtx, slug)
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "disabled", uuid.NullUUID{}, uuid.Nil)
 	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "legacy_scan_disabled")
 
@@ -345,7 +345,7 @@ func TestRiskScan_LegacyToolsetRouteLeavesAmbiguousWrapperUnattributed(t *testin
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "scan-legacy-ambiguous-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	toolset := createUnhostedToolset(t, ctx, ti, authCtx, slug)
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug+"-one", "public", uuid.NullUUID{}, uuid.Nil)
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug+"-two", "public", uuid.NullUUID{}, uuid.Nil)
 	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "legacy_scan_ambiguous")
@@ -377,9 +377,9 @@ func TestRiskScan_LegacyToolsetRouteResolvesCanonicalWrapperOverOtherServers(t *
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "scan-legacy-canonical-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug+"-member", "public", uuid.NullUUID{}, uuid.Nil)
-	canonical := createToolsetMcpEndpointWithID(t, ctx, ti.conn, toolset.ID, *authCtx.ProjectID, toolset.ID, slug+"-canonical", "public", uuid.NullUUID{}, uuid.Nil)
+	canonical := exposeCanonicalWrapper(t, ctx, ti, toolset.ProjectID, toolset.ID, slug+"-canonical", "public")
 	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "legacy_scan_canonical")
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -407,7 +407,7 @@ func TestRiskScan_HostedScopedBlockPolicyOnlyStopsMatchingServer(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	slug := "scan-block-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 	scopedServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
 	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "scan_block")
 	evaluator := mcpriskscan.NewPolicyEvaluator(
@@ -454,7 +454,7 @@ func TestRiskScan_HostedScopedBlockPolicyOnlyStopsMatchingServer(t *testing.T) {
 	require.Zero(t, upstreamCalls.Load())
 
 	otherSlug := "scan-pass-" + uuid.NewString()[:8]
-	otherToolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, otherSlug)
+	otherToolset := createPublicMCPToolset(t, ctx, ti, authCtx, otherSlug)
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, otherToolset.ID, otherSlug, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
 	addHTTPTools(t, ctx, ti, otherToolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "scan_block")
 	response, err = servePublicHTTP(t, t.Context(), ti, otherSlug, body, "", map[string]string{"Mcp-Test-Server-Url": upstream.URL})
@@ -471,7 +471,7 @@ func TestRiskScan_HostedHTTPResponsePolicies(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	slug := "scan-response-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
 	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "scan_response")
 
@@ -556,7 +556,7 @@ func TestRiskScan_PromptAsToolPreservesRendering(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	slug := "scan-template-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 	toolURN := urn.NewTool(urn.ToolKindPrompt, "prompt", "scan-template")
 	_, err := templatesrepo.New(ti.conn).CreateTemplate(ctx, templatesrepo.CreateTemplateParams{
 		ProjectID: *authCtx.ProjectID, ToolUrn: toolURN,
@@ -631,8 +631,8 @@ func TestRiskScan_ResourceReadKeepsIdentityAndSyntheticBody(t *testing.T) {
 			require.True(t, ok)
 			projectID := *authCtx.ProjectID
 			slug := "scan-resource-" + uuid.NewString()[:8]
-			toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
-			server := createToolsetMcpEndpoint(t, ctx, ti.conn, projectID, toolset.ID, conv.Ternary(legacy, slug+"-wrapper", slug), "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
+			toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
+			server := hostedEndpointServer(t, ctx, ti, toolset, slug, legacy)
 			deployments := deploymentsrepo.New(ti.conn)
 			deploymentID, err := deployments.InsertDeployment(ctx, deploymentsrepo.InsertDeploymentParams{
 				ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID,
@@ -703,11 +703,7 @@ func TestRiskScan_ResourceReadKeepsIdentityAndSyntheticBody(t *testing.T) {
 			require.Len(t, events, 2)
 			require.Equal(t, authCtx.ActiveOrganizationID, events[0][attr.OrganizationIDKey])
 			require.Equal(t, projectID.String(), events[0][attr.ProjectIDKey])
-			if legacy {
-				require.Empty(t, events[0][attr.McpServerIDKey], "telemetry fallback must not alter risk-policy identity")
-			} else {
-				require.Equal(t, server.ID.String(), events[0][attr.McpServerIDKey])
-			}
+			require.Equal(t, server.ID.String(), events[0][attr.McpServerIDKey])
 			require.Equal(t, toolset.ID.String(), events[0][attr.ToolsetIDKey])
 			require.Equal(t, resourceURI, events[0][attr.ResourceURIKey])
 			require.Empty(t, events[0][attr.ToolNameKey])

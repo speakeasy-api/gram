@@ -14,6 +14,20 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// HideMcpServerRequestBody is the type of the "agent" service "hideMcpServer"
+// endpoint HTTP request body.
+type HideMcpServerRequestBody struct {
+	// The MCP server, as getMyConnections reports it.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
+// UnhideMcpServerRequestBody is the type of the "agent" service
+// "unhideMcpServer" endpoint HTTP request body.
+type UnhideMcpServerRequestBody struct {
+	// The MCP server, as getMyConnections reports it.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
 // UpdateConfigurationRequestBody is the type of the "agent" service
 // "updateConfiguration" endpoint HTTP request body.
 type UpdateConfigurationRequestBody struct {
@@ -607,6 +621,370 @@ type GetMyConnectionsUnexpectedResponseBody struct {
 // GetMyConnectionsGatewayErrorResponseBody is the type of the "agent" service
 // "getMyConnections" endpoint HTTP response body for the "gateway_error" error.
 type GetMyConnectionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerUnauthorizedResponseBody is the type of the "agent" service
+// "hideMcpServer" endpoint HTTP response body for the "unauthorized" error.
+type HideMcpServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerForbiddenResponseBody is the type of the "agent" service
+// "hideMcpServer" endpoint HTTP response body for the "forbidden" error.
+type HideMcpServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerBadRequestResponseBody is the type of the "agent" service
+// "hideMcpServer" endpoint HTTP response body for the "bad_request" error.
+type HideMcpServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerNotFoundResponseBody is the type of the "agent" service
+// "hideMcpServer" endpoint HTTP response body for the "not_found" error.
+type HideMcpServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerConflictResponseBody is the type of the "agent" service
+// "hideMcpServer" endpoint HTTP response body for the "conflict" error.
+type HideMcpServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerUnsupportedMediaResponseBody is the type of the "agent" service
+// "hideMcpServer" endpoint HTTP response body for the "unsupported_media"
+// error.
+type HideMcpServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerInvalidResponseBody is the type of the "agent" service
+// "hideMcpServer" endpoint HTTP response body for the "invalid" error.
+type HideMcpServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerInvariantViolationResponseBody is the type of the "agent"
+// service "hideMcpServer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type HideMcpServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerUnexpectedResponseBody is the type of the "agent" service
+// "hideMcpServer" endpoint HTTP response body for the "unexpected" error.
+type HideMcpServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// HideMcpServerGatewayErrorResponseBody is the type of the "agent" service
+// "hideMcpServer" endpoint HTTP response body for the "gateway_error" error.
+type HideMcpServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerUnauthorizedResponseBody is the type of the "agent" service
+// "unhideMcpServer" endpoint HTTP response body for the "unauthorized" error.
+type UnhideMcpServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerForbiddenResponseBody is the type of the "agent" service
+// "unhideMcpServer" endpoint HTTP response body for the "forbidden" error.
+type UnhideMcpServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerBadRequestResponseBody is the type of the "agent" service
+// "unhideMcpServer" endpoint HTTP response body for the "bad_request" error.
+type UnhideMcpServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerNotFoundResponseBody is the type of the "agent" service
+// "unhideMcpServer" endpoint HTTP response body for the "not_found" error.
+type UnhideMcpServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerConflictResponseBody is the type of the "agent" service
+// "unhideMcpServer" endpoint HTTP response body for the "conflict" error.
+type UnhideMcpServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerUnsupportedMediaResponseBody is the type of the "agent"
+// service "unhideMcpServer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UnhideMcpServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerInvalidResponseBody is the type of the "agent" service
+// "unhideMcpServer" endpoint HTTP response body for the "invalid" error.
+type UnhideMcpServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerInvariantViolationResponseBody is the type of the "agent"
+// service "unhideMcpServer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UnhideMcpServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerUnexpectedResponseBody is the type of the "agent" service
+// "unhideMcpServer" endpoint HTTP response body for the "unexpected" error.
+type UnhideMcpServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UnhideMcpServerGatewayErrorResponseBody is the type of the "agent" service
+// "unhideMcpServer" endpoint HTTP response body for the "gateway_error" error.
+type UnhideMcpServerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2759,6 +3137,9 @@ type AgentServerConnectionResponseBody struct {
 	// Present only when state is no_access and the organization accepts access
 	// requests.
 	RequestAccessURL *string `form:"request_access_url,omitempty" json:"request_access_url,omitempty" xml:"request_access_url,omitempty"`
+	// True when the user hid this server, from the gateway consent page or the
+	// device agent. Absent when not hidden.
+	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
 }
 
 // SyncedAgentUserResponseBody is used to define fields on response body types.
@@ -3474,6 +3855,287 @@ func NewGetMyConnectionsUnexpectedResponseBody(res *goa.ServiceError) *GetMyConn
 // from the result of the "getMyConnections" endpoint of the "agent" service.
 func NewGetMyConnectionsGatewayErrorResponseBody(res *goa.ServiceError) *GetMyConnectionsGatewayErrorResponseBody {
 	body := &GetMyConnectionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerUnauthorizedResponseBody(res *goa.ServiceError) *HideMcpServerUnauthorizedResponseBody {
+	body := &HideMcpServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerForbiddenResponseBody builds the HTTP response body from the
+// result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerForbiddenResponseBody(res *goa.ServiceError) *HideMcpServerForbiddenResponseBody {
+	body := &HideMcpServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerBadRequestResponseBody builds the HTTP response body from
+// the result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerBadRequestResponseBody(res *goa.ServiceError) *HideMcpServerBadRequestResponseBody {
+	body := &HideMcpServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerNotFoundResponseBody builds the HTTP response body from the
+// result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerNotFoundResponseBody(res *goa.ServiceError) *HideMcpServerNotFoundResponseBody {
+	body := &HideMcpServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerConflictResponseBody builds the HTTP response body from the
+// result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerConflictResponseBody(res *goa.ServiceError) *HideMcpServerConflictResponseBody {
+	body := &HideMcpServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerUnsupportedMediaResponseBody(res *goa.ServiceError) *HideMcpServerUnsupportedMediaResponseBody {
+	body := &HideMcpServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerInvalidResponseBody builds the HTTP response body from the
+// result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerInvalidResponseBody(res *goa.ServiceError) *HideMcpServerInvalidResponseBody {
+	body := &HideMcpServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerInvariantViolationResponseBody(res *goa.ServiceError) *HideMcpServerInvariantViolationResponseBody {
+	body := &HideMcpServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerUnexpectedResponseBody builds the HTTP response body from
+// the result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerUnexpectedResponseBody(res *goa.ServiceError) *HideMcpServerUnexpectedResponseBody {
+	body := &HideMcpServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewHideMcpServerGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "hideMcpServer" endpoint of the "agent" service.
+func NewHideMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *HideMcpServerGatewayErrorResponseBody {
+	body := &HideMcpServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "unhideMcpServer" endpoint of the "agent" service.
+func NewUnhideMcpServerUnauthorizedResponseBody(res *goa.ServiceError) *UnhideMcpServerUnauthorizedResponseBody {
+	body := &UnhideMcpServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerForbiddenResponseBody builds the HTTP response body from
+// the result of the "unhideMcpServer" endpoint of the "agent" service.
+func NewUnhideMcpServerForbiddenResponseBody(res *goa.ServiceError) *UnhideMcpServerForbiddenResponseBody {
+	body := &UnhideMcpServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerBadRequestResponseBody builds the HTTP response body from
+// the result of the "unhideMcpServer" endpoint of the "agent" service.
+func NewUnhideMcpServerBadRequestResponseBody(res *goa.ServiceError) *UnhideMcpServerBadRequestResponseBody {
+	body := &UnhideMcpServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerNotFoundResponseBody builds the HTTP response body from
+// the result of the "unhideMcpServer" endpoint of the "agent" service.
+func NewUnhideMcpServerNotFoundResponseBody(res *goa.ServiceError) *UnhideMcpServerNotFoundResponseBody {
+	body := &UnhideMcpServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerConflictResponseBody builds the HTTP response body from
+// the result of the "unhideMcpServer" endpoint of the "agent" service.
+func NewUnhideMcpServerConflictResponseBody(res *goa.ServiceError) *UnhideMcpServerConflictResponseBody {
+	body := &UnhideMcpServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "unhideMcpServer" endpoint of the "agent" service.
+func NewUnhideMcpServerUnsupportedMediaResponseBody(res *goa.ServiceError) *UnhideMcpServerUnsupportedMediaResponseBody {
+	body := &UnhideMcpServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerInvalidResponseBody builds the HTTP response body from the
+// result of the "unhideMcpServer" endpoint of the "agent" service.
+func NewUnhideMcpServerInvalidResponseBody(res *goa.ServiceError) *UnhideMcpServerInvalidResponseBody {
+	body := &UnhideMcpServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "unhideMcpServer" endpoint of the "agent"
+// service.
+func NewUnhideMcpServerInvariantViolationResponseBody(res *goa.ServiceError) *UnhideMcpServerInvariantViolationResponseBody {
+	body := &UnhideMcpServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerUnexpectedResponseBody builds the HTTP response body from
+// the result of the "unhideMcpServer" endpoint of the "agent" service.
+func NewUnhideMcpServerUnexpectedResponseBody(res *goa.ServiceError) *UnhideMcpServerUnexpectedResponseBody {
+	body := &UnhideMcpServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUnhideMcpServerGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "unhideMcpServer" endpoint of the "agent" service.
+func NewUnhideMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *UnhideMcpServerGatewayErrorResponseBody {
+	body := &UnhideMcpServerGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5071,6 +5733,30 @@ func NewGetMyConnectionsPayload(apikeyToken *string, email *string) *agent.GetMy
 	return v
 }
 
+// NewHideMcpServerPayload builds a agent service hideMcpServer endpoint
+// payload.
+func NewHideMcpServerPayload(body *HideMcpServerRequestBody, apikeyToken *string, email *string) *agent.HideMcpServerPayload {
+	v := &agent.HideMcpServerPayload{
+		McpServerID: *body.McpServerID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+
+	return v
+}
+
+// NewUnhideMcpServerPayload builds a agent service unhideMcpServer endpoint
+// payload.
+func NewUnhideMcpServerPayload(body *UnhideMcpServerRequestBody, apikeyToken *string, email *string) *agent.UnhideMcpServerPayload {
+	v := &agent.UnhideMcpServerPayload{
+		McpServerID: *body.McpServerID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+
+	return v
+}
+
 // NewListSyncedUsersPayload builds a agent service listSyncedUsers endpoint
 // payload.
 func NewListSyncedUsersPayload(sessionToken *string) *agent.ListSyncedUsersPayload {
@@ -5226,6 +5912,30 @@ func NewCreateSessionHandoffPayload(body *CreateSessionHandoffRequestBody, apike
 	v.Hostname = hostname
 
 	return v
+}
+
+// ValidateHideMcpServerRequestBody runs the validations defined on
+// HideMcpServerRequestBody
+func ValidateHideMcpServerRequestBody(body *HideMcpServerRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateUnhideMcpServerRequestBody runs the validations defined on
+// UnhideMcpServerRequestBody
+func ValidateUnhideMcpServerRequestBody(body *UnhideMcpServerRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
 }
 
 // ValidateUpdateConfigurationRequestBody runs the validations defined on

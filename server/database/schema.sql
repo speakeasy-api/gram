@@ -84,12 +84,17 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   -- changes. New orgs store GRAM_NEW_ORG_DEFAULT_HOST. Validated in application
   -- code and re-checked on read.
   default_host TEXT,
+  -- Staff-entered link to the organization's adoption dashboard, shown on the
+  -- admin overview. NULL when none has been set. URL shape is validated in
+  -- application code.
+  adoption_dashboard_url TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   disabled_at timestamptz,
 
-  CONSTRAINT organization_metadata_pkey PRIMARY KEY (id)
+  CONSTRAINT organization_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_metadata_adoption_dashboard_url_check CHECK (char_length(adoption_dashboard_url) <= 2048)
 );
 
 COMMENT ON COLUMN organization_metadata.id IS '@access: confidential';
@@ -109,6 +114,8 @@ COMMENT ON COLUMN organization_metadata.sso_enabled IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.verified_domains IS '@access: opaque-confidential';
 COMMENT ON COLUMN organization_metadata.creation_source IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.default_host IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.adoption_dashboard_url IS 'Staff-entered link to the adoption dashboard for this organization.
+@access: restricted';
 COMMENT ON COLUMN organization_metadata.created_at IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.updated_at IS '@access: confidential';
 COMMENT ON COLUMN organization_metadata.disabled_at IS '@access: confidential';
@@ -3928,13 +3935,12 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   organization_id TEXT NOT NULL,
   attachment_scope TEXT GENERATED ALWAYS AS ('organization:' || organization_id) STORED,
   org_url TEXT NOT NULL,
-  -- Normalized issuer URL from discovery; unique only after credential proof.
-  -- Pinned to the authoritative remote_session_issuers.issuer by the scope FK.
+  -- Normalized issuer URL from discovery. Several organizations may connect
+  -- the same Okta org. Pinned to the authoritative remote_session_issuers.issuer by the scope FK.
   issuer_url TEXT NOT NULL,
-  -- Set only by a platform admin to allow one Okta tenant on more than one
-  -- Speakeasy org.
+  -- Unused; dropped once no deployed build reads it.
   issuer_url_override_reason TEXT,
-  -- Set only by successful credential proof; pending rows never reserve an issuer.
+  -- Set only by successful credential proof.
   ownership_claimed boolean NOT NULL DEFAULT FALSE,
   remote_session_issuer_id uuid NOT NULL,
   remote_session_client_id uuid NOT NULL,
@@ -3989,12 +3995,6 @@ COMMENT ON COLUMN okta_identity_provider_connections.created_at IS '@access: con
 COMMENT ON COLUMN okta_identity_provider_connections.updated_at IS '@access: confidential';
 COMMENT ON COLUMN okta_identity_provider_connections.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN okta_identity_provider_connections.deleted IS '@access: confidential';
-
--- Pending connections do not reserve an issuer. Proven claims are exclusive
--- unless a platform admin records an override reason.
-CREATE UNIQUE INDEX IF NOT EXISTS okta_identity_provider_connections_issuer_url_key
-ON okta_identity_provider_connections (issuer_url)
-WHERE deleted IS FALSE AND ownership_claimed IS TRUE AND issuer_url_override_reason IS NULL;
 
 CREATE INDEX IF NOT EXISTS okta_identity_provider_connections_remote_session_issuer_idx
 ON okta_identity_provider_connections (organization_id, remote_session_issuer_id);
@@ -10415,6 +10415,77 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_mcp_server_id_key
 ON meta_mcp_server_members (meta_mcp_server_id, mcp_server_id)
 WHERE deleted IS FALSE;
+
+-- Links a skill to the MCP surface that serves it over the Skills extension.
+-- target_kind names the surface: 'mcp_server' and 'meta_mcp_server' point at
+-- stored rows through their id column, while row-less surfaces such as the
+-- organization gateway are named by their kind alone and leave both id columns
+-- NULL. Which columns each kind sets is validated in application code.
+CREATE TABLE IF NOT EXISTS mcp_skill_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  -- NULL serves the skill's latest valid version.
+  pinned_version_id uuid,
+
+  target_kind TEXT NOT NULL CHECK (target_kind <> ''),
+  mcp_server_id uuid,
+  meta_mcp_server_id uuid,
+
+  created_by_user_id TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_skill_links_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_skill_links_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_skill_links_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  -- No delete action, as on skill_distributions: versions are only removed
+  -- together with their skill, which cascades this row in the same statement.
+  CONSTRAINT mcp_skill_links_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
+  CONSTRAINT mcp_skill_links_project_id_mcp_server_id_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_skill_links_project_id_meta_mcp_server_id_fkey FOREIGN KEY (project_id, meta_mcp_server_id) REFERENCES meta_mcp_servers (project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN mcp_skill_links.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.skill_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.pinned_version_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.target_kind IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.meta_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.deleted IS '@access: confidential';
+
+-- One live link per skill and target. NULLS NOT DISTINCT makes row-less
+-- targets, whose id columns are both NULL, unique per kind.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_skill_links_project_id_skill_id_target_key
+ON mcp_skill_links (project_id, skill_id, target_kind, mcp_server_id, meta_mcp_server_id) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_skill_links_mcp_server_id_idx
+ON mcp_skill_links (mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_skill_links_meta_mcp_server_id_idx
+ON mcp_skill_links (meta_mcp_server_id)
+WHERE deleted IS FALSE;
+
+-- Serves row-less targets that span projects, such as the organization
+-- gateway, which reads every project's links of its kind.
+CREATE INDEX IF NOT EXISTS mcp_skill_links_organization_id_target_kind_idx
+ON mcp_skill_links (organization_id, target_kind)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_skill_links_skill_id_pinned_version_id_idx
+ON mcp_skill_links (skill_id, pinned_version_id);
 
 CREATE TABLE IF NOT EXISTS mcp_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),

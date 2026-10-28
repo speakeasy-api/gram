@@ -529,10 +529,6 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		name string
 		fn   func() (int64, error)
 	}{
-		// Toolsets before mcp_servers; wrapped toolsets mirror their server's issuer.
-		{name: "toolsets", fn: func() (int64, error) {
-			return q.UpdateToolsetsToUserSessionIssuer(ctx, repo.UpdateToolsetsToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
-		}},
 		{name: "MCP servers", fn: func() (int64, error) {
 			moved, err := q.UpdateMCPServersToUserSessionIssuer(ctx, repo.UpdateMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
 			if err != nil {

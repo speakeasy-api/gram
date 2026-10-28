@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -77,7 +76,6 @@ func TestSetUserSessionIssuer_SetsAndClearsHostedServerIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, issuerID, *updated.UserSessionIssuerID)
 	require.Equal(t, issuerID, storedHostedIssuer(t, ctx, ti, toolset).UUID.String())
-	hostedmcptest.RequireMirrored(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(toolset.ID))
 	records := buf.deprecationRecords(t)
 	require.Len(t, records, 1)
 	require.Equal(t, authCtx.ActiveOrganizationID, records[0]["gram.org.id"])
@@ -96,7 +94,6 @@ func TestSetUserSessionIssuer_SetsAndClearsHostedServerIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, cleared.UserSessionIssuerID)
 	require.False(t, storedHostedIssuer(t, ctx, ti, toolset).Valid)
-	hostedmcptest.RequireMirrored(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(toolset.ID))
 	require.Len(t, buf.deprecationRecords(t), 1)
 
 	record, err = audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionMcpServerUpdate, toolset.ID)
@@ -209,8 +206,6 @@ func TestSetUserSessionIssuer_RejectsToolsetWithoutHostedServer(t *testing.T) {
 		Slug:                   "shim-unwrapped",
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 

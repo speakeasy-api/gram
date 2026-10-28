@@ -553,10 +553,7 @@ func DescribeToolsetEntries(
 			})
 		}
 
-		hosting := deriveToolsetHosting(toolsetHostingColumns{
-			McpSlug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID, McpEnabled: toolset.McpEnabled, McpIsPublic: toolset.McpIsPublic,
-			UserSessionIssuerID: toolset.UserSessionIssuerID, ExternalOauthServerID: toolset.ExternalOauthServerID,
-		}, hostingstate.For(hostingByID, toolset.ID))
+		hosting := deriveToolsetHosting(hostingstate.LegacyAlias(toolset), toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
 		result = append(result, &types.ToolsetEntry{
 			ID:                           toolset.ID.String(),
 			OrganizationID:               toolset.OrganizationID,
@@ -640,10 +637,7 @@ func DescribeToolset(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
 	}
-	hosting := deriveToolsetHosting(toolsetHostingColumns{
-		McpSlug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID, McpEnabled: toolset.McpEnabled, McpIsPublic: toolset.McpIsPublic,
-		UserSessionIssuerID: toolset.UserSessionIssuerID, ExternalOauthServerID: toolset.ExternalOauthServerID,
-	}, hostingstate.For(hostingByID, toolset.ID))
+	hosting := deriveToolsetHosting(hostingstate.LegacyAlias(toolset), toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
 
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
@@ -1102,10 +1096,7 @@ func GetToolsetsSummary(
 			}
 		}
 
-		hosting := deriveToolsetHosting(toolsetHostingColumns{
-			McpSlug: ts.McpSlug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpEnabled: ts.McpEnabled, McpIsPublic: ts.McpIsPublic,
-			UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ExternalOauthServerID: ts.ExternalOauthServerID,
-		}, hostingstate.For(hostingByID, ts.ID))
+		hosting := deriveToolsetHosting(hostingstate.Address{Slug: ts.McpSlug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, ts.ExternalOauthServerID, hostingstate.For(hostingByID, ts.ID))
 		result = append(result, &types.ToolsetSummary{
 			ID:                     ts.ID.String(),
 			OrganizationID:         ts.OrganizationID,

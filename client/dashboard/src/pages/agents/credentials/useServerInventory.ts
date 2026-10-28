@@ -21,6 +21,11 @@ export interface InventoryServer {
   name: string;
   /** The path under /mcp/ the server answers on. */
   slug: string;
+  /**
+   * The absolute URL a runtime calls this server at, or absent when it has no
+   * addressable endpoint.
+   */
+  mcpUrl?: string;
   upstreamUrl?: string;
   description?: string;
   toolsetSlug?: string;
@@ -40,6 +45,16 @@ export interface ServerInventory {
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
+}
+
+/**
+ * An MCP path on this deployment as an absolute URL. A runtime calls it from
+ * outside the browser, so a path relative to the dashboard is no use to it;
+ * getServerURL is empty when the build leaves it unset, and then the current
+ * origin is what serves MCP.
+ */
+function platformMcpUrl(path: string): string {
+  return new URL(`/mcp/${path}`, getServerURL() || window.location.origin).href;
 }
 
 export function useServerInventory(): ServerInventory {
@@ -135,6 +150,13 @@ export function useServerInventory(): ServerInventory {
           ? `${getServerURL()}/mcp/${server.platformEndpointSlug}`
           : server.primaryEndpointUrl,
       ),
+      // The server's own public URL first: on a custom domain it is the one
+      // the server answers on, and a lockdown can refuse the platform host.
+      mcpUrl:
+        server.primaryEndpointUrl ??
+        (server.platformEndpointSlug
+          ? platformMcpUrl(server.platformEndpointSlug)
+          : undefined),
       activityTarget: server.toolsetId
         ? `hosted_mcp_server:${toolsets.data?.toolsets?.find((toolset) => toolset.id === server.toolsetId)?.slug ?? ""}`
         : `tunneled_mcp_server:${server.slug ?? ""}`,
@@ -163,6 +185,7 @@ export function useServerInventory(): ServerInventory {
       )
       .map((toolset) => {
         const projectSlug = projects.get(toolset.projectId)?.slug ?? "";
+        const slug = mcpUrlSuffix({ slug: projectSlug }, toolset) ?? "";
         return {
           id: toolset.id,
           resourceId: toolset.id,
@@ -172,7 +195,8 @@ export function useServerInventory(): ServerInventory {
           // A toolset answers on its own mcpSlug, or on the legacy
           // project/toolset/environment route — never on the toolset slug by
           // itself, so the shared resolver decides the path.
-          slug: mcpUrlSuffix({ slug: projectSlug }, toolset) ?? "",
+          slug,
+          mcpUrl: slug ? platformMcpUrl(slug) : undefined,
           projectId: toolset.projectId,
           projectName: projects.get(toolset.projectId)?.name ?? "",
           projectSlug,

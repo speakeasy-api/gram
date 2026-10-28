@@ -513,6 +513,456 @@ func DecodeGetMyConnectionsResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildHideMcpServerRequest instantiates a HTTP request object with method and
+// path set to call the "agent" service "hideMcpServer" endpoint
+func (c *Client) BuildHideMcpServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: HideMcpServerAgentPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "hideMcpServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeHideMcpServerRequest returns an encoder for requests sent to the agent
+// hideMcpServer server.
+func EncodeHideMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.HideMcpServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "hideMcpServer", "*agent.HideMcpServerPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.Email != nil {
+			head := *p.Email
+			req.Header.Set("Gram-User-Email", head)
+		}
+		body := NewHideMcpServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agent", "hideMcpServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeHideMcpServerResponse returns a decoder for responses returned by the
+// agent hideMcpServer endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeHideMcpServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeHideMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body HideMcpServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+			}
+			err = ValidateHideMcpServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+			}
+			return nil, NewHideMcpServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body HideMcpServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+			}
+			err = ValidateHideMcpServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+			}
+			return nil, NewHideMcpServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body HideMcpServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+			}
+			err = ValidateHideMcpServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+			}
+			return nil, NewHideMcpServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body HideMcpServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+			}
+			err = ValidateHideMcpServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+			}
+			return nil, NewHideMcpServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body HideMcpServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+			}
+			err = ValidateHideMcpServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+			}
+			return nil, NewHideMcpServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body HideMcpServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+			}
+			err = ValidateHideMcpServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+			}
+			return nil, NewHideMcpServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body HideMcpServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+			}
+			err = ValidateHideMcpServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+			}
+			return nil, NewHideMcpServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body HideMcpServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+				}
+				err = ValidateHideMcpServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+				}
+				return nil, NewHideMcpServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body HideMcpServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+				}
+				err = ValidateHideMcpServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+				}
+				return nil, NewHideMcpServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "hideMcpServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body HideMcpServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "hideMcpServer", err)
+			}
+			err = ValidateHideMcpServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "hideMcpServer", err)
+			}
+			return nil, NewHideMcpServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "hideMcpServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUnhideMcpServerRequest instantiates a HTTP request object with method
+// and path set to call the "agent" service "unhideMcpServer" endpoint
+func (c *Client) BuildUnhideMcpServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UnhideMcpServerAgentPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "unhideMcpServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUnhideMcpServerRequest returns an encoder for requests sent to the
+// agent unhideMcpServer server.
+func EncodeUnhideMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.UnhideMcpServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "unhideMcpServer", "*agent.UnhideMcpServerPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.Email != nil {
+			head := *p.Email
+			req.Header.Set("Gram-User-Email", head)
+		}
+		body := NewUnhideMcpServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agent", "unhideMcpServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUnhideMcpServerResponse returns a decoder for responses returned by
+// the agent unhideMcpServer endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUnhideMcpServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUnhideMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body UnhideMcpServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+			}
+			err = ValidateUnhideMcpServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+			}
+			return nil, NewUnhideMcpServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UnhideMcpServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+			}
+			err = ValidateUnhideMcpServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+			}
+			return nil, NewUnhideMcpServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UnhideMcpServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+			}
+			err = ValidateUnhideMcpServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+			}
+			return nil, NewUnhideMcpServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UnhideMcpServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+			}
+			err = ValidateUnhideMcpServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+			}
+			return nil, NewUnhideMcpServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UnhideMcpServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+			}
+			err = ValidateUnhideMcpServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+			}
+			return nil, NewUnhideMcpServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UnhideMcpServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+			}
+			err = ValidateUnhideMcpServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+			}
+			return nil, NewUnhideMcpServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UnhideMcpServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+			}
+			err = ValidateUnhideMcpServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+			}
+			return nil, NewUnhideMcpServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UnhideMcpServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+				}
+				err = ValidateUnhideMcpServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+				}
+				return nil, NewUnhideMcpServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UnhideMcpServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+				}
+				err = ValidateUnhideMcpServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+				}
+				return nil, NewUnhideMcpServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "unhideMcpServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UnhideMcpServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "unhideMcpServer", err)
+			}
+			err = ValidateUnhideMcpServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "unhideMcpServer", err)
+			}
+			return nil, NewUnhideMcpServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "unhideMcpServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListSyncedUsersRequest instantiates a HTTP request object with method
 // and path set to call the "agent" service "listSyncedUsers" endpoint
 func (c *Client) BuildListSyncedUsersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -3219,6 +3669,7 @@ func unmarshalAgentServerConnectionResponseBodyToAgentAgentServerConnection(v *A
 		State:            *v.State,
 		ConnectURL:       v.ConnectURL,
 		RequestAccessURL: v.RequestAccessURL,
+		Hidden:           v.Hidden,
 	}
 
 	return res

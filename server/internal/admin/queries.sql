@@ -480,22 +480,14 @@ WHERE id = @id
 RETURNING id, name, slug, disabled_at;
 
 -- name: AdminListProjectsForOrganization :many
--- Not a plain sum: once AGE-1880 copies legacy servers into mcp_servers, a
--- toolset and its mcp_servers row would each be counted. The anti join on the
--- legacy half gives the same answer before and after that copy, and it is the
--- direction that plans as an index anti join rather than a seq scan of toolsets.
 SELECT
     p.id,
     p.slug,
     p.name,
     p.created_at,
     p.updated_at,
-    ((SELECT count(*) FROM toolsets t
-        WHERE t.project_id = p.id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
-          AND NOT EXISTS (SELECT 1 FROM mcp_servers m2
-                           WHERE m2.toolset_id = t.id AND m2.deleted IS FALSE))
-     + (SELECT count(*) FROM mcp_servers m
-          WHERE m.project_id = p.id AND m.deleted IS FALSE))::bigint AS mcp_server_count
+    (SELECT count(*) FROM mcp_servers m
+       WHERE m.project_id = p.id AND m.deleted IS FALSE)::bigint AS mcp_server_count
 FROM projects p
 WHERE p.organization_id = @organization_id
   AND p.deleted IS FALSE
@@ -545,31 +537,6 @@ LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
 WHERE m.project_id = @project_id
   AND m.deleted IS FALSE
 ORDER BY m.created_at, m.id;
-
--- name: AdminListProjectToolsetOnlyMcpServers :many
--- The legacy half of AdminListProjectsForOrganization's count, with the same
--- anti join, so this list and that count agree.
-SELECT
-    t.id,
-    t.name,
-    t.slug,
-    t.mcp_slug,
-    t.mcp_is_public,
-    t.default_environment_slug,
-    p.slug AS project_slug,
-    d.domain AS custom_domain,
-    t.created_at
-FROM toolsets t
-JOIN projects p ON p.id = t.project_id
-LEFT JOIN custom_domains d ON d.id = t.custom_domain_id AND d.deleted IS FALSE
-    AND d.organization_id = p.organization_id
-    AND d.verified IS TRUE AND d.activated IS TRUE
-WHERE t.project_id = @project_id
-  AND t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
-  AND NOT EXISTS (SELECT 1 FROM mcp_servers m
-                   WHERE m.toolset_id = t.id AND m.deleted IS FALSE)
-ORDER BY t.created_at, t.id;
 
 -- name: AdminListOrganizationMembers :many
 SELECT
@@ -646,6 +613,7 @@ SELECT
     t.converted_at AS trial_converted_at,
     t.demoted_at AS trial_demoted_at,
     om.creation_source,
+    om.adoption_dashboard_url,
     om.created_at,
     om.updated_at,
     (
@@ -661,6 +629,15 @@ WHERE om.id = sqlc.arg('id')::text
    OR (sqlc.arg('allow_slug')::boolean AND om.slug = sqlc.arg('id')::text)
 ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;
+
+-- name: AdminSetOrganizationAdoptionDashboardURL :one
+-- NULL clears the link. Keyed on id alone, like every other admin write.
+UPDATE organization_metadata
+SET
+    adoption_dashboard_url = sqlc.narg('adoption_dashboard_url')::text,
+    updated_at = clock_timestamp()
+WHERE id = sqlc.arg('id')::text
+RETURNING id;
 
 -- name: AdminAcquireStripeSubscriptionLock :exec
 -- Serializes assignments of the same Stripe subscription across organizations.
@@ -953,8 +930,8 @@ WHERE id = @id;
 ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (false) NOT VALID;
 
 -- name: AdminGetMcpServerAuth :one
--- The server describeMcpServerHealth reports on, keyed on the mcp_servers id or,
--- for a toolset-only server, the toolset id. A toolset-backed wrapper takes its
+-- The server describeMcpServerHealth reports on, keyed on the mcp_servers id.
+-- A toolset-backed wrapper takes its
 -- issuer from its own row, not its toolset's, matching how the MCP endpoint
 -- resolves it; the legacy OAuth columns live on the toolset only.
 -- toolset_wrapper_count counts the live wrappers competing for the toolset's
@@ -964,11 +941,10 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
 -- endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
 -- a domain root has no such path), else the server's own slug, else the
--- toolset's mcp_slug when no other wrapper shares that toolset.
+-- toolset's legacy alias when no other wrapper shares that toolset.
 SELECT
     m.id,
     COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,
-    FALSE AS toolset_only,
     m.toolset_id,
     m.remote_mcp_server_id,
     m.tunneled_mcp_server_id,
@@ -1001,29 +977,7 @@ CROSS JOIN LATERAL (
 ) w
 WHERE m.id = @id
   AND m.project_id = @project_id
-  AND m.deleted IS FALSE
-UNION ALL
-SELECT
-    t.id,
-    t.name,
-    TRUE AS toolset_only,
-    t.id AS toolset_id,
-    NULL::uuid AS remote_mcp_server_id,
-    NULL::uuid AS tunneled_mcp_server_id,
-    CASE WHEN t.mcp_is_public THEN 'public' ELSE 'private' END AS visibility,
-    t.created_at,
-    t.user_session_issuer_id,
-    t.external_oauth_server_id,
-    COALESCE(t.mcp_slug, '')::text AS url_slug,
-    t.slug AS toolset_slug,
-    0::bigint AS toolset_wrapper_count
-FROM toolsets t
-WHERE t.id = @id
-  AND t.project_id = @project_id
-  AND t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
-  AND NOT EXISTS (SELECT 1 FROM mcp_servers m
-                   WHERE m.toolset_id = t.id AND m.deleted IS FALSE);
+  AND m.deleted IS FALSE;
 
 -- name: AdminGetUserSessionIssuer :one
 -- The issuer a server in the project points at. It may be attached to the
@@ -1052,7 +1006,7 @@ WHERE i.id = @id
 
 -- name: AdminListOtherServersUsingIssuer :many
 -- Live servers in the project, other than the one described, that share the
--- issuer: mcp_servers rows and toolset-only toolsets.
+-- issuer.
 SELECT m.id, COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name
 FROM mcp_servers m
 LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
@@ -1060,17 +1014,7 @@ WHERE m.project_id = @project_id
   AND m.user_session_issuer_id = @user_session_issuer_id::uuid
   AND m.id <> @exclude_id
   AND m.deleted IS FALSE
-UNION ALL
-SELECT t.id, t.name
-FROM toolsets t
-WHERE t.project_id = @project_id
-  AND t.user_session_issuer_id = @user_session_issuer_id
-  AND t.id <> @exclude_id
-  AND t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
-  AND NOT EXISTS (SELECT 1 FROM mcp_servers w
-                   WHERE w.toolset_id = t.id AND w.deleted IS FALSE)
-ORDER BY name, id;
+ORDER BY 2, 1;
 
 -- name: AdminUserSessionStats :one
 -- A refresh soft-deletes a session row and inserts a new one, so

@@ -3449,6 +3449,83 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.setAdoptionDashboardUrl:
+        post:
+            description: Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.
+            operationId: adminSetAdoptionDashboardUrl
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetAdoptionDashboardURLRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setAdoptionDashboardUrl admin
+            tags:
+                - admin
+            x-speakeasy-name-override: setAdoptionDashboardUrl
     /admin/organization.setInferenceKeyMonthlyLimit:
         post:
             tags:
@@ -16110,6 +16187,98 @@ paths:
             x-speakeasy-name-override: getSessionMeta
             x-speakeasy-react-hook:
                 name: AgentSessionMeta
+    /rpc/agent.hideMcpServer:
+        post:
+            description: Hide an MCP server for the enrolled user, the same preference the gateway consent page's Hide sets. Gateways leave a hidden server out of the user's tools, and getMyConnections reports it as hidden. Only servers getMyConnections reports to the user can be hidden; anything else is not found. Hiding a hidden server changes nothing. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getMyConnections resolves the user.
+            operationId: hideAgentMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+                  example: dev@acme.corp
+                  in: header
+                  name: Gram-User-Email
+                  schema:
+                    description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+                    example: dev@acme.corp
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/HideAgentMcpServerRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: hideMcpServer agent
+            tags:
+                - agent
+            x-speakeasy-name-override: hideMcpServer
+            x-speakeasy-react-hook:
+                name: HideAgentMcpServer
     /rpc/agent.listAiScanTargets:
         get:
             description: 'List the Shadow AI scan targets this organization''s device agents probe for: the Speakeasy built-ins plus the organization''s own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy''s catalog, an organization target by being deleted. Requires a session with the org:admin scope.'
@@ -16582,6 +16751,98 @@ paths:
             x-speakeasy-name-override: reportSessionMoved
             x-speakeasy-react-hook:
                 name: ReportAgentSessionMoved
+    /rpc/agent.unhideMcpServer:
+        post:
+            description: Show a hidden MCP server again for the enrolled user. Unhiding a server that is not hidden changes nothing. Authenticates like hideMcpServer.
+            operationId: unhideAgentMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+                  example: dev@acme.corp
+                  in: header
+                  name: Gram-User-Email
+                  schema:
+                    description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+                    example: dev@acme.corp
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnhideAgentMcpServerRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: unhideMcpServer agent
+            tags:
+                - agent
+            x-speakeasy-name-override: unhideMcpServer
+            x-speakeasy-react-hook:
+                name: UnhideAgentMcpServer
     /rpc/agent.updateConfiguration:
         post:
             description: Create or replace the organization-wide, non-secret device-agent configuration. Requires a session with the org:admin scope. Known settings are replaced wholesale — omitting one removes it — while stored keys this server does not recognize are preserved for forward compatibility; identity and credential keys are rejected.
@@ -42235,6 +42496,14 @@ paths:
                   name: custom_domain_id
                   schema:
                     description: Optional custom domain ID. Omit to check platform-domain slug availability.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional MCP server the slug is for. Addresses that server may claim, such as its own legacy alias, read as available.
+                  in: query
+                  name: mcp_server_id
+                  schema:
+                    description: Optional MCP server the slug is for. Addresses that server may claim, such as its own legacy alias, read as available.
                     format: uuid
                     type: string
                 - allowEmptyValue: true
@@ -94525,6 +94794,10 @@ components:
                 account_type:
                     type: string
                     description: Speakeasy account type (e.g. free, pro, payg, enterprise).
+                adoption_dashboard_url:
+                    type: string
+                    description: Staff-entered link to the organization's adoption dashboard. Absent when none has been set.
+                    format: uri
                 created_at:
                     type: string
                     description: The creation date of the organization.
@@ -95352,6 +95625,10 @@ components:
                 associations:
                     type: integer
                     description: Configured identities and server links decided.
+                    format: int64
+                attachments_waiting:
+                    type: integer
+                    description: Agent attachments whose grants a run does not write while the organization's upstream selector writes are not allowed. While any wait, complete is false.
                     format: int64
                 complete:
                     type: boolean
@@ -96334,6 +96611,9 @@ components:
                     type: string
                     description: Page that signs the user in to this server in the browser. Present when state is not_connected or reauthorization_required.
                     format: uri
+                hidden:
+                    type: boolean
+                    description: True when the user hid this server, from the gateway consent page or the device agent. Absent when not hidden.
                 id:
                     type: string
                     description: The server's id, as getPlugins reports it on each plugin server.
@@ -101105,12 +101385,23 @@ components:
         CreateOrganizationRequestBody:
             type: object
             properties:
+                name:
+                    type: string
+                    description: Organization display name. When omitted, a name is derived from the registrable company domain.
+                    minLength: 1
+                    maxLength: 100
                 ownership_confirmed:
                     type: boolean
                     description: The operator confirms that domain ownership was established outside this form.
+                slug:
+                    type: string
+                    description: Preferred organization URL slug. When omitted, a unique slug is derived from the organization name. Explicit slugs use lowercase letters, numbers, and hyphens.
+                    pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+                    minLength: 2
+                    maxLength: 100
                 url:
                     type: string
-                    description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.
+                    description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the verified email domain.
                     minLength: 1
             required:
                 - url
@@ -107532,6 +107823,15 @@ components:
                 - project_id
                 - project_slug
                 - hidden_at
+        HideAgentMcpServerRequestBody:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The MCP server, as getMyConnections reports it.
+                    format: uuid
+            required:
+                - mcp_server_id
         HideMcpServerRequestBody:
             type: object
             properties:
@@ -112847,6 +113147,9 @@ components:
                     type: string
                     description: The ID of the MCP server
                     format: uuid
+                legacy_platform_slug:
+                    type: string
+                    description: 'The slug of an older Speakeasy-hosted address of this hosted server: its legacy custom-domain address, which the Speakeasy domain also answers under the same access rules. Absent when a platform endpoint or another alias holds that slug.'
                 name:
                     type: string
                     description: A human-readable display name for the server
@@ -122354,6 +122657,17 @@ components:
             required:
                 - target_id
                 - access
+        SetAdoptionDashboardURLRequestBody:
+            type: object
+            properties:
+                adoption_dashboard_url:
+                    type: string
+                    description: An https URL, or empty to clear the link.
+                    maxLength: 2048
+                organization_id:
+                    type: string
+            required:
+                - organization_id
         SetAuthClientAudienceRequestBody:
             type: object
             properties:
@@ -128729,6 +129043,15 @@ components:
                 plugin_id: 550e8400-e29b-41d4-a716-446655440001
             required:
                 - id
+        UnhideAgentMcpServerRequestBody:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The MCP server, as getMyConnections reports it.
+                    format: uuid
+            required:
+                - mcp_server_id
         UnhideMcpServerRequestBody:
             type: object
             properties:
