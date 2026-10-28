@@ -774,16 +774,19 @@ func TestRegistrationServiceDirectRemoteProtocols(t *testing.T) {
 func TestRegistrationServiceOffersSignInInChatWhenTheClientIsAutomatic(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		oauthDiscovery string
-		nextAction     string
-		registration   string
+		name                string
+		oauthDiscovery      string
+		attachmentSupported bool
+		nextAction          string
+		registration        string
 	}{
-		{oauthDiscoveryAvailableDCR, "connect_sign_in", AutomaticClientRegistrationDCR},
-		{oauthDiscoveryAvailableCIMD, "connect_sign_in", AutomaticClientRegistrationCIMD},
-		{oauthDiscoveryAvailable, "secure_dashboard_setup_required", AutomaticClientRegistrationNone},
-		{oauthDiscoveryIncomplete, "secure_dashboard_setup_required", AutomaticClientRegistrationNone},
+		{"dcr", oauthDiscoveryAvailableDCR, true, "connect_sign_in", AutomaticClientRegistrationDCR},
+		{"dcr_dashboard_only", oauthDiscoveryAvailableDCR, false, "secure_dashboard_setup_required", AutomaticClientRegistrationDCR},
+		{"cimd", oauthDiscoveryAvailableCIMD, true, "connect_sign_in", AutomaticClientRegistrationCIMD},
+		{"available", oauthDiscoveryAvailable, false, "secure_dashboard_setup_required", AutomaticClientRegistrationNone},
+		{"incomplete", oauthDiscoveryIncomplete, false, "secure_dashboard_setup_required", AutomaticClientRegistrationNone},
 	} {
-		t.Run(tc.oauthDiscovery, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			registrationID := uuid.New()
 			store := &recordingRegistrationStore{
@@ -793,7 +796,9 @@ func TestRegistrationServiceOffersSignInInChatWhenTheClientIsAutomatic(t *testin
 				completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
 				dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server"},
 			}
-			inspector := &testDirectRemoteInspector{inspection: directRemoteInspection("https://remote.example.test/mcp", nil, "authentication_required", tc.oauthDiscovery, true)}
+			inspection := directRemoteInspection("https://remote.example.test/mcp", nil, "authentication_required", tc.oauthDiscovery, true)
+			inspection.AttachmentSupported = tc.attachmentSupported
+			inspector := &testDirectRemoteInspector{inspection: inspection}
 			service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
 			service.WithDashboardURL(&url.URL{Scheme: "https", Host: "dashboard.example.test"})
 

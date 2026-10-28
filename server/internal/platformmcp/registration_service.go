@@ -585,10 +585,10 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
 		}
 		nextAction = "secure_dashboard_setup_required"
-		// The provider issues a client on its own, so the only step left is the
-		// user's sign-in, which the agent can connect in chat. The dashboard
-		// link stays as the fallback.
-		if registration := automaticClientRegistrationFromInspection(inspection); registration == AutomaticClientRegistrationDCR || registration == AutomaticClientRegistrationCIMD {
+		// Attachment can set up the provider's client automatically, so the
+		// only step left is the user's sign-in, which the agent can connect in
+		// chat. The dashboard link stays as the fallback.
+		if inspection.AttachmentSupported {
 			nextAction = "connect_sign_in"
 		}
 	}

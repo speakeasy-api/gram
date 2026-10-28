@@ -67,6 +67,11 @@ type DirectRemoteInspection struct {
 	OAuthDiscovery         string   `json:"oauth_discovery"`
 	Trust                  string   `json:"trust"`
 	RequiresDashboardSetup bool     `json:"requires_dashboard_setup"`
+	// AttachmentSupported reports that attach_platform_mcp_identity_provider
+	// can obtain a client from the discovered provider on its own. A dynamic
+	// registration endpoint only the dashboard's automatic setup can use leaves
+	// it false.
+	AttachmentSupported bool `json:"-"`
 }
 
 // DirectRemoteInspector is the boundary shared by candidate inspection and
@@ -145,11 +150,13 @@ func (s *GuardianDirectRemoteInspector) inspect(ctx context.Context, rawURL stri
 	}
 	if err != nil {
 		if authenticationURL != "" {
-			oauthDiscovery, discoveryErr := directRemoteOAuthDiscovery(probeCtx, s.policy, client, authenticationURL)
+			oauthDiscovery, attachmentSupported, discoveryErr := directRemoteOAuthDiscovery(probeCtx, s.policy, client, authenticationURL)
 			if discoveryErr != nil {
 				return DirectRemoteInspection{}, sanitizedSetupFailure(discoveryErr)
 			}
-			return directRemoteInspection(authenticationURL, nil, "authentication_required", oauthDiscovery, true), nil
+			inspection := directRemoteInspection(authenticationURL, nil, "authentication_required", oauthDiscovery, true)
+			inspection.AttachmentSupported = attachmentSupported
+			return inspection, nil
 		}
 		return DirectRemoteInspection{}, directRemoteProbeError(probeCtx, err)
 	}
@@ -459,8 +466,9 @@ type directRemoteHTTPClient interface {
 // directRemoteOAuthDiscovery returns a safe discovery category or a sanitized
 // temporary failure. Metadata URLs are derived from the canonical resource or a
 // discovered issuer, rechecked with Guardian before egress, and charged to the
-// inspection response budget.
-func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, resourceURL string) (string, error) {
+// inspection response budget. The boolean reports whether attachment can use
+// the automatic registration path the category names.
+func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, resourceURL string) (string, bool, error) {
 	available := false
 	for _, metadataURL := range directRemoteProtectedResourceMetadataURLs(resourceURL) {
 		metadata, status, err := directRemoteGetJSON(ctx, policy, client, metadataURL)
@@ -469,9 +477,9 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 		}
 		if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
 			if available {
-				return oauthDiscoveryAvailable, nil
+				return oauthDiscoveryAvailable, false, nil
 			}
-			return "", err
+			return "", false, err
 		}
 		if err != nil || status != http.StatusOK {
 			continue
@@ -495,24 +503,24 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 				}
 				if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
 					if available {
-						return oauthDiscoveryAvailable, nil
+						return oauthDiscoveryAvailable, false, nil
 					}
-					return "", err
+					return "", false, err
 				}
 				if err != nil || status != http.StatusOK {
 					continue
 				}
-				if discovery := directRemoteAutomaticRegistration(authorizationMetadata); discovery != "" {
-					return discovery, nil
+				if discovery, attachmentSupported := directRemoteAutomaticRegistration(authorizationMetadata); discovery != "" {
+					return discovery, attachmentSupported, nil
 				}
 				available = true
 			}
 		}
 	}
 	if available {
-		return oauthDiscoveryAvailable, nil
+		return oauthDiscoveryAvailable, false, nil
 	}
-	return oauthDiscoveryIncomplete, nil
+	return oauthDiscoveryIncomplete, false, nil
 }
 
 // directRemoteAutomaticRegistration names the automatic client registration
@@ -521,8 +529,9 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 // attachment can use it, then a Client ID Metadata Document under the
 // predicate the dashboard's automatic setup and attachment share. A valid
 // dynamic registration endpoint attachment cannot use still counts, since the
-// dashboard's automatic setup registers public clients through it.
-func directRemoteAutomaticRegistration(metadata map[string]any) string {
+// dashboard's automatic setup registers public clients through it; the boolean
+// is false only in that case, because attachment cannot connect it.
+func directRemoteAutomaticRegistration(metadata map[string]any) (string, bool) {
 	endpoint, _ := metadata["registration_endpoint"].(string)
 	supported, _ := metadata["client_id_metadata_document_supported"].(bool)
 	var methods []string
@@ -536,13 +545,13 @@ func directRemoteAutomaticRegistration(metadata map[string]any) string {
 	}
 	switch {
 	case attachmentCanUseDynamicRegistration(endpoint, methods):
-		return oauthDiscoveryAvailableDCR
+		return oauthDiscoveryAvailableDCR, true
 	case remotesessions.SupportsClientIDMetadataDocument(supported, methods):
-		return oauthDiscoveryAvailableCIMD
+		return oauthDiscoveryAvailableCIMD, true
 	case validDynamicClientRegistrationEndpoint(endpoint):
-		return oauthDiscoveryAvailableDCR
+		return oauthDiscoveryAvailableDCR, false
 	default:
-		return ""
+		return "", false
 	}
 }
 
@@ -628,6 +637,7 @@ func directRemoteInspection(canonicalURL string, toolNames []string, authenticat
 		OAuthDiscovery:         oauthDiscovery,
 		Trust:                  "user_supplied_unreviewed",
 		RequiresDashboardSetup: requiresDashboardSetup,
+		AttachmentSupported:    false,
 	}
 }
 

@@ -44,7 +44,7 @@ type RegisterRemoteMCPToolOutput struct {
 	ReceiptID                   string `json:"receipt_id"`
 	RegistrationID              string `json:"registration_id"`
 	Replayed                    bool   `json:"replayed"`
-	AutomaticClientRegistration string `json:"automatic_client_registration,omitempty" jsonschema:"for a server that requires sign-in: dynamic_client_registration or client_id_metadata_document means its OAuth provider is connected automatically and only the user's sign-in remains; none means a client must be configured by hand in the dashboard"`
+	AutomaticClientRegistration string `json:"automatic_client_registration,omitempty" jsonschema:"for a server that requires sign-in: dynamic_client_registration or client_id_metadata_document means its OAuth client is set up automatically and only the user's sign-in remains; none means the provider offers neither, so the dashboard setup configures a hand-registered OAuth client or, when OAuth discovery is incomplete, a static credential"`
 	NextAction                  string `json:"next_action"`
 	DashboardSetupURL           string `json:"dashboard_setup_url,omitempty"`
 }
