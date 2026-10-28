@@ -63,12 +63,19 @@ func TestHideMcpServer_OnlyDeliveredServers(t *testing.T) {
 	undelivered := seedPlugin(t, ctx, ti.conn, ti.orgID, other, "hidden")
 	assignPlugin(t, ctx, ti.conn, undelivered, ti.orgID, "*")
 	unseen, _ := seedPluginMCPServer(t, ctx, ti.conn, ti.orgID, other, undelivered, "Unseen", 1)
+	unreadable, _ := seedPluginMCPServer(t, ctx, ti.conn, ti.orgID, ti.projectID, delivered, "Unreadable", 2)
+	ti.service.WithConnectionStatuses(&stubConnectionStatuses{
+		byMCP:   map[uuid.UUID]platformmcp.GetMyMCPConnectionStatusOutput{},
+		missing: map[uuid.UUID]bool{unreadable: true},
+		users:   nil,
+	})
 	email := new(mockidp.MockUserEmail)
 
 	for name, id := range map[string]string{
 		"undelivered server": unseen.String(),
 		"gateway":            gateway.String(),
 		"unknown server":     uuid.NewString(),
+		"unreadable server":  unreadable.String(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

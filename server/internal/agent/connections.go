@@ -132,9 +132,21 @@ func (s *Service) HideMcpServer(ctx context.Context, payload *gen.HideMcpServerP
 	if err != nil {
 		return err
 	}
-	if !slices.ContainsFunc(serverRows, func(row repo.ListAgentPluginServersRow) bool {
+	idx := slices.IndexFunc(serverRows, func(row repo.ListAgentPluginServersRow) bool {
 		return row.McpServerID.Valid && row.McpServerID.UUID == serverID
-	}) {
+	})
+	if idx < 0 {
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+	}
+	// Only a server getMyConnections would list: delivery alone isn't enough
+	// when the member can't read the server itself.
+	row := serverRows[idx]
+	grants, err := authz.LoadGrants(ctx, s.db, member.organizationID, grantPrincipals(member.principals))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error loading member grants").LogError(ctx, s.logger)
+	}
+	principal := platformmcp.Principal{UserID: member.userID, OrganizationID: member.organizationID, ConnectionID: "", Generation: "", ClientID: "", Surface: ""}
+	if _, ok := s.serverConnection(ctx, principal, grants, row, *pluginServerID(row)); !ok {
 		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 	}
 	if err := hiddenmcpservers.Hide(ctx, s.db, member.organizationID, member.userID, serverID); err != nil {
