@@ -1,0 +1,44 @@
+server/database/schema.sql
+  h_9630b74bdac540 16160-16161,16218-16221
+server/internal/background/catalog_promotion.go
+  h_9630b74bdac540 138
+client/admin/src/pages/registry/RegistryPromotionDocs.test.tsx
+  h_9630b74bdac540 105-163
+.changeset/catalogue-promotion-existing-guides.md
+  h_9630b74bdac540 1-6
+server/internal/catalogpromotion/types.go
+  h_9630b74bdac540 120-122,124-126,139,162,179-180,184-185,187-188
+server/internal/adminmcp/tool_catalog_promotion_test.go
+  h_9630b74bdac540 168-205
+server/internal/adminmcp/tool_catalog_promotion.go
+  h_9630b74bdac540 54,153,155,167,177-180,238,243,247
+client/admin/src/pages/registry/registryPromotionLabels.ts
+  h_9630b74bdac540 29-30,49-50
+client/admin/src/pages/registry/RegistryPromotionDocs.tsx
+  h_9630b74bdac540 35-36,38-40,45,50-56,111,125-129,142,146,149,157,160
+server/internal/catalogpromotion/service.go
+  h_9630b74bdac540 678-685,688-690
+server/internal/thirdparty/catalogpromotion/client_test.go
+  h_9630b74bdac540 30-48,62-64,108,110,190-192,207-209,225-394,397-421
+server/internal/catalogpromotion/delivery.go
+  h_9630b74bdac540 29-38,160,169,172-178,183-204,206-210,246,258
+docs/runbooks/catalogue-promotions.md
+  h_9630b74bdac540 14-15,30-34,126-147,166-167,195,197-198,227-229
+server/internal/thirdparty/catalogpromotion/client.go
+  h_9630b74bdac540 19,43-48,51-60,62-70,80,85-86,134-135,138-147,151,154,157,160,165,170,173-186,189,193,197,201,206,215,218-276,279,317-327,374-382,387,393,400,403-405,407,410,414,417,420,422
+server/internal/catalogpromotion/delivery_test.go
+  h_9630b74bdac540 28-29,33,36,42,44-215
+server/internal/catalogpromotion/queries.sql
+  h_9630b74bdac540 135,167,173,175-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dbfe8deb7dfa4586726b179c7b687976601dcb9c",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
