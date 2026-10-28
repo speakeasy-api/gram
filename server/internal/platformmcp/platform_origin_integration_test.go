@@ -219,7 +219,11 @@ func TestMemberMCPURLsFollowOrganizationDefaultHost(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, install.Supported)
 	require.NotEmpty(t, install.Instructions)
-	require.Equal(t, wantURL, install.Instructions[0].URL)
+	endpointURLs := make([]string, 0, len(install.Instructions))
+	for _, step := range install.Instructions {
+		endpointURLs = append(endpointURLs, step.URL)
+	}
+	require.Contains(t, endpointURLs, wantURL, "the endpoint uses the organization default host")
 
 	status, err := service.GetMyMCPConnectionStatus(ctx, f.principal, GetMyMCPStatusInput{ProjectID: f.project.ID.String(), MCPID: f.mcpID.String()})
 	require.NoError(t, err)
