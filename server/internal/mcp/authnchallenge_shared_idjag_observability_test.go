@@ -44,8 +44,15 @@ func TestSharedAuthorizationServer_IDJAGResourceRefusalsAreRecorded(t *testing.T
 				t.Helper()
 				return signer.sign(t, sharedTestUpstreamIssuer, issuerURL, serverURL+"/mcp/unknown", clientID, "user@example.test", "id-jag-claim-refusal")
 			},
-			code:   "invalid_target",
+			code:   "invalid_grant",
 			reason: mcpmetrics.IDJAGRejectionResourceMismatch,
+		},
+		"missing assertion": {
+			assertion: func(*testing.T, idJAGTestAssertion, string, string, string) string {
+				return ""
+			},
+			code:   "invalid_request",
+			reason: mcpmetrics.IDJAGRejectionInvalidRequest,
 		},
 		"malformed assertion": {
 			assertion: func(*testing.T, idJAGTestAssertion, string, string, string) string {
@@ -59,7 +66,7 @@ func TestSharedAuthorizationServer_IDJAGResourceRefusalsAreRecorded(t *testing.T
 				t.Helper()
 				return signer.signWithResourceClaim(t, sharedTestUpstreamIssuer, issuerURL, 42, clientID, "user@example.test", "id-jag-bad-claim")
 			},
-			code:   "invalid_target",
+			code:   "invalid_grant",
 			reason: mcpmetrics.IDJAGRejectionResourceMismatch,
 		},
 	} {

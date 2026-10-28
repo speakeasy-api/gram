@@ -168,6 +168,36 @@ describe("CimdAdmissionModeField", () => {
     expect(screen.getByText(/Nobody vets it first/i)).toBeDefined();
   });
 
+  it("says identity-provider sign-in follows the mode when the issuer trusts one", () => {
+    render(
+      <CimdAdmissionModeField
+        userSessionIssuer={{
+          ...issuer("open"),
+          trustedRemoteSessionIssuerId: "remote-1",
+        }}
+      />,
+    );
+
+    expect(screen.queryByText(/identity provider/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Off" }));
+    expect(
+      screen.getByText(/identity provider stops working too/i),
+    ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Verified clients" }));
+    expect(
+      screen.getByText(/identity provider works only for these clients/i),
+    ).toBeDefined();
+  });
+
+  it("does not mention identity-provider sign-in without a trusted provider", () => {
+    render(<CimdAdmissionModeField userSessionIssuer={issuer("open")} />);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Off" }));
+    expect(screen.queryByText(/identity provider/i)).toBeNull();
+  });
+
   it("saves a mode change directly for an already-configured issuer", () => {
     render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
 

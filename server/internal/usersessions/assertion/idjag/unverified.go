@@ -1,6 +1,8 @@
 package idjag
 
 import (
+	"encoding/json"
+
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 )
 
@@ -16,11 +18,18 @@ func UnverifiedResource(raw string) (string, bool, error) {
 	if err != nil {
 		return "", true, reject(ReasonMalformed, err)
 	}
-	var extra additionalClaims
-	if err := token.UnsafeClaimsWithoutVerification(&extra); err != nil {
+	// Decoded as Validate decodes the verified payload, so both read the same claim.
+	var payload json.RawMessage
+	if err := token.UnsafeClaimsWithoutVerification(&payload); err != nil {
 		return "", true, reject(ReasonMalformed, err)
 	}
-	resource, ok, err := extra.resource()
+	var extra struct {
+		Resource json.RawMessage `json:"resource,omitempty"`
+	}
+	if err := json.Unmarshal(payload, &extra); err != nil {
+		return "", true, reject(ReasonMalformed, err)
+	}
+	resource, ok, err := additionalClaims{Resource: extra.Resource, ClientID: "", Email: "", Scope: ""}.resource()
 	if err != nil {
 		return "", true, reject(ReasonResourceMismatch, err)
 	}

@@ -144,7 +144,7 @@ func TestTokenIDJAGExchangeRecordsClientNotAllowed(t *testing.T) {
 		}
 	}
 	require.Len(t, rejected, 1)
-	reason := string(mcpmetrics.IDJAGRejectionClientNotAllowed)
+	reason := string(mcpmetrics.IDJAGRejectionClientNotCIMD)
 	require.Equal(t, reason, rejected[0][string(attr.OAuthIDJAGRejectionReasonKey)])
 	require.Equal(t, issuer.ID.String(), rejected[0][string(attr.UserSessionIssuerIDKey)])
 
@@ -156,18 +156,22 @@ func TestTokenIDJAGExchangeRecordsClientRefusals(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		mode      admission.Mode
-		clientID  func(ds *cimdDocServer) string
-		failFetch bool
-		outcome   mcpmetrics.IDJAGExchangeOutcome
-		reason    mcpmetrics.IDJAGRejectionReason
-		message   string
-		status    int
+		mode          admission.Mode
+		clientID      func(ds *cimdDocServer) string
+		failFetch     bool
+		block         string
+		authorization string
+		outcome       mcpmetrics.IDJAGExchangeOutcome
+		reason        mcpmetrics.IDJAGRejectionReason
+		message       string
+		status        int
 	}{
 		"presets refuses an unlisted document": {mode: admission.ModePresets, clientID: func(ds *cimdDocServer) string { return ds.clientID }, outcome: mcpmetrics.IDJAGExchangeRejected, reason: mcpmetrics.IDJAGRejectionClientNotAdmitted, message: "oauth ID-JAG token request rejected", status: http.StatusBadRequest},
 		"disabled refuses every document":      {mode: admission.ModeDisabled, clientID: func(*cimdDocServer) string { return codexCIMDClientID }, outcome: mcpmetrics.IDJAGExchangeRejected, reason: mcpmetrics.IDJAGRejectionClientNotAdmitted, message: "oauth ID-JAG token request rejected", status: http.StatusBadRequest},
 		"unknown client":                       {mode: admission.ModeOpen, clientID: func(*cimdDocServer) string { return "unknown-client" }, outcome: mcpmetrics.IDJAGExchangeRejected, reason: mcpmetrics.IDJAGRejectionClientInvalid, message: "oauth ID-JAG token request rejected", status: http.StatusBadRequest},
 		"document fetch fails":                 {mode: admission.ModeOpen, clientID: func(ds *cimdDocServer) string { return ds.clientID }, failFetch: true, outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionClientMetadataUnavailable, message: "oauth ID-JAG token request failed", status: http.StatusServiceUnavailable},
+		"blocked AI tool":                      {mode: admission.ModeOpen, clientID: func(*cimdDocServer) string { return codexCIMDClientID }, block: "codex", outcome: mcpmetrics.IDJAGExchangeRejected, reason: mcpmetrics.IDJAGRejectionClientBlocked, message: "oauth ID-JAG token request rejected", status: http.StatusBadRequest},
+		"malformed client authentication":      {mode: admission.ModeOpen, clientID: func(*cimdDocServer) string { return codexCIMDClientID }, authorization: "Bearer not-a-client", outcome: mcpmetrics.IDJAGExchangeRejected, reason: mcpmetrics.IDJAGRejectionClientInvalid, message: "oauth ID-JAG token request rejected", status: http.StatusUnauthorized},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -196,8 +200,11 @@ func TestTokenIDJAGExchangeRecordsClientRefusals(t *testing.T) {
 			require.NoError(t, err)
 			seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
 			setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, tc.mode)
+			if tc.block != "" {
+				blockTarget(t, ctx, ti, authCtx.ActiveOrganizationID, tc.block)
+			}
 
-			w := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, tc.clientID(ds), "unused.assertion.value")
+			w := postIDJAGTokenWithAuthorization(t, ctx, ti, toolset.McpSlug.String, tc.clientID(ds), "unused.assertion.value", tc.authorization)
 			require.Equal(t, tc.status, w.Code, w.Body.String())
 
 			var lines []map[string]any

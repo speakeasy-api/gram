@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -184,8 +185,14 @@ func issuerIDJAGConfigured(issuer usersessions_repo.UserSessionIssuer) bool {
 	return !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
 }
 
-// idJAGAdvertised reports whether the validator's trust lookup would accept ID-JAGs for an issuer.
-func (s *Service) idJAGAdvertised(ctx context.Context, logger *slog.Logger, organizationID string, issuerID uuid.UUID) bool {
+// idJAGAdvertised reports whether the validator's trust lookup would accept
+// ID-JAGs for an issuer whose admission admits some client. Only admitted
+// client ID metadata document clients may exchange one, so disabled admission
+// leaves the grant unusable.
+func (s *Service) idJAGAdvertised(ctx context.Context, logger *slog.Logger, organizationID string, issuerID uuid.UUID, cimdAdmissionModeRaw pgtype.Text) bool {
+	if mode, _ := admission.ResolveMode(cimdAdmissionModeRaw.String, cimdAdmissionModeRaw.Valid); mode == admission.ModeDisabled {
+		return false
+	}
 	_, err := s.idJAGTrust.TrustedIssuer(ctx, organizationID, issuerID)
 	switch {
 	case err == nil:

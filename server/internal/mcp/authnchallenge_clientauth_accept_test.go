@@ -424,6 +424,11 @@ func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testin
 	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
 	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Equal(t, []string{oauthwire.GrantProfileIDJAG}, meta.GrantProfiles)
+
+	// Only admitted client ID metadata document clients may exchange an ID-JAG.
+	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeDisabled)
+	meta = loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
+	require.Empty(t, meta.GrantProfiles)
 }
 
 // A trusted issuer without a jwks_uri cannot have its assertions verified.

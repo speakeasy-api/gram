@@ -70,7 +70,7 @@ func (e *idJAGExchange) record(ctx context.Context) {
 // one rejection log line, counted as an ID-JAG exchange under reason. logger
 // already carries the issuer.
 func (s *Service) recordSharedIDJAGResourceRejection(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, rejection sharedResourceRejection, resources []string, reason mcpmetrics.IDJAGRejectionReason) {
-	exchange := &idJAGExchange{metrics: s.metrics, logger: logger, issuerID: issuerID.String(), outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}
+	exchange := s.startSharedIDJAGExchange(issuerID, logger)
 	attrs := exchange.reject(reason, nil)
 	s.recordSharedResourceRejectionAs(ctx, logger, "oauth ID-JAG token request rejected", issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources, attrs...)
 	exchange.record(ctx)
@@ -89,15 +89,13 @@ func (s *Service) rejectTokenClient(ctx context.Context, logger *slog.Logger, r 
 	exchange.record(ctx)
 }
 
-// failTokenClientMetadata logs a client metadata document fetch that failed
-// for a token request; on the ID-JAG grant it is counted as a failed exchange.
-func (s *Service) failTokenClientMetadata(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, grantType string, err error) {
+// failTokenClient counts an ID-JAG exchange that failed while checking its
+// client as a failed exchange under reason. Other grants are not counted.
+func (s *Service) failTokenClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, grantType string, reason mcpmetrics.IDJAGRejectionReason, err error) {
 	if grantType != oauthwire.GrantTypeJWTBearer {
-		logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
 		return
 	}
 	issuerID := endpoint.UserSessionIssuerID.String()
-	reason := mcpmetrics.IDJAGRejectionClientMetadataUnavailable
 	logger.With(attr.SlogUserSessionIssuerID(issuerID)).InfoContext(ctx, "oauth ID-JAG token request failed", attr.SlogOAuthIDJAGOutcome(string(mcpmetrics.IDJAGExchangeError)), attr.SlogOAuthIDJAGRejectionReason(reason), attr.SlogError(err))
 	s.metrics.RecordIDJAGExchange(ctx, issuerID, mcpmetrics.IDJAGExchangeError, reason)
 }
@@ -106,7 +104,24 @@ func (s *Service) failTokenClientMetadata(ctx context.Context, logger *slog.Logg
 // token endpoint refused before the grant handler because the assertion could
 // not be read. logger already carries the issuer.
 func (s *Service) recordSharedIDJAGAssertionRejection(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, err error) {
-	exchange := &idJAGExchange{metrics: s.metrics, logger: logger, issuerID: issuerID.String(), outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}
+	exchange := s.startSharedIDJAGExchange(issuerID, logger)
 	logger.LogAttrs(ctx, slog.LevelInfo, "oauth ID-JAG token request rejected", exchange.rejectAssertion(err)...)
 	exchange.record(ctx)
+}
+
+// recordSharedIDJAGRequestRejection records an ID-JAG exchange the shared
+// token endpoint refused before the grant handler because the request itself
+// was malformed. logger already carries the issuer.
+func (s *Service) recordSharedIDJAGRequestRejection(ctx context.Context, logger *slog.Logger, r *http.Request, issuerID uuid.UUID, reason string, idJAGReason mcpmetrics.IDJAGRejectionReason) {
+	exchange := s.startSharedIDJAGExchange(issuerID, logger)
+	creds := extractClientCredentials(r)
+	clientID, _ := resolvePresentedClientID(creds)
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientID, creds.method, oauthwire.GrantTypeJWTBearer, reason, exchange.reject(idJAGReason, nil)...)
+	exchange.record(ctx)
+}
+
+// startSharedIDJAGExchange starts an exchange the shared token endpoint
+// refuses before it names an MCP server. logger already carries the issuer.
+func (s *Service) startSharedIDJAGExchange(issuerID uuid.UUID, logger *slog.Logger) *idJAGExchange {
+	return &idJAGExchange{metrics: s.metrics, logger: logger, issuerID: issuerID.String(), outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}
 }

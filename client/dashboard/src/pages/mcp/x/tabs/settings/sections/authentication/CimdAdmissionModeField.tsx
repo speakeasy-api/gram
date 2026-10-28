@@ -55,6 +55,15 @@ const MODE_OPTIONS: {
   },
 ];
 
+// Identity-provider sign-in (ID-JAG) admits only the clients this setting
+// lets in, so the modes that narrow it say so on issuers that trust one.
+const IDP_SIGN_IN_NOTES: Partial<Record<string, string>> = {
+  [WritableMode.Presets]:
+    "Sign-in through your identity provider works only for these clients.",
+  [WritableMode.Disabled]:
+    "Sign-in through your identity provider stops working too.",
+};
+
 export function CimdAdmissionModeField({
   userSessionIssuer,
   onDraftModeChange,
@@ -130,9 +139,16 @@ export function CimdAdmissionModeField({
     save(draftMode);
   };
 
-  const explanation = MODE_OPTIONS.find(
+  const modeExplanation = MODE_OPTIONS.find(
     (option) => option.value === selectedMode,
   )?.explanation;
+  const idpSignInNote =
+    userSessionIssuer.trustedRemoteSessionIssuerId && selectedMode
+      ? IDP_SIGN_IN_NOTES[selectedMode]
+      : undefined;
+  const explanation = [modeExplanation, idpSignInNote]
+    .filter(Boolean)
+    .join(" ");
 
   // The allowlist only means anything in the mode that consults it, and it
   // follows the SELECTION rather than the saved value: an operator moving

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -396,7 +397,7 @@ func TestSharedAuthorizationServer_IDJAGResourceClaimRefusalDoesNotConsumeIDJAG(
 			oauthwire.ParamAssertion: {signer.signWithResourceClaim(t, sharedTestUpstreamIssuer, f.issuerURL, claim, f.client.ClientID, mockidp.MockUserEmail, assertionID)},
 		})
 		require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-		require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error, claim)
+		require.Equal(t, "invalid_grant", decodeSharedTokenResponse(t, w).Error, claim)
 	}
 	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), url.Values{
 		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer}, oauthwire.ParamClientID: {f.client.ClientID},
@@ -430,6 +431,23 @@ func TestSharedAuthorizationServer_MetadataOmitsIDJAGWithoutTrustedIssuerJWKS(t 
 			assertSharedMetadataOmitsIDJAG(t, jwksURL)
 		})
 	}
+}
+
+func TestSharedAuthorizationServer_MetadataOmitsIDJAGWhenAdmissionDisabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti, _, _ := newIDJAGTestService(t)
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, requireProjectAuthContext(t, ctx).ActiveOrganizationID, sharedTestUpstreamIssuer, "https://identity.example.test/keys")
+	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
+	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeDisabled)
+	issuerURL := ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String()
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleSharedAuthorizationServerMetadata(w, sharedRequest(ctx, http.MethodGet, issuerURL+"/.well-known/oauth-authorization-server", issuer.ID.String(), nil)))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var metadata struct {
+		Profiles []string `json:"authorization_grant_profiles_supported"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+	require.NotContains(t, metadata.Profiles, oauthwire.GrantProfileIDJAG)
 }
 
 func assertSharedMetadataOmitsIDJAG(t *testing.T, jwksURL string) {

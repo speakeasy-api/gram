@@ -97,7 +97,7 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 		grantTypes = append(grantTypes, "client_credentials")
 	}
 	var grantProfiles []string
-	if issuer.idJAGConfigured && s.idJAGAdvertised(ctx, issuer.logger, issuer.organizationID, issuer.authorizationServer.issuerID) {
+	if issuer.idJAGConfigured && s.idJAGAdvertised(ctx, issuer.logger, issuer.organizationID, issuer.authorizationServer.issuerID, issuer.cimdAdmissionModeRaw) {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
 	} else if s.workloadGrant != nil {
@@ -320,7 +320,11 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	if code := oauthwire.ClientAuthenticationError(r); code == oautherr.CodeInvalidRequest {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", "", "", r.PostForm.Get(oauthwire.ParamGrantType), code)
+		if grantType := r.PostForm.Get(oauthwire.ParamGrantType); grantType == oauthwire.GrantTypeJWTBearer {
+			s.recordSharedIDJAGRequestRejection(ctx, logger, r, issuer.authorizationServer.issuerID, code, mcpmetrics.IDJAGRejectionClientInvalid)
+		} else {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", "", "", grantType, code)
+		}
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "invalid client authentication request")
 	}
 
@@ -348,8 +352,13 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		var rejection sharedResourceRejection
 		claimed := false
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 {
+			assertion := r.PostForm.Get(oauthwire.ParamAssertion)
+			if assertion == "" {
+				s.recordSharedIDJAGRequestRejection(ctx, logger, r, issuer.authorizationServer.issuerID, "missing_assertion", mcpmetrics.IDJAGRejectionInvalidRequest)
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
+			}
 			// Unverified: it only picks the server whose ID-JAG checks then verify it.
-			resource, ok, claimErr := idjag.UnverifiedResource(r.PostForm.Get(oauthwire.ParamAssertion))
+			resource, ok, claimErr := idjag.UnverifiedResource(assertion)
 			if idjag.ReasonOf(claimErr) == idjag.ReasonMalformed {
 				s.recordSharedIDJAGAssertionRejection(ctx, logger, issuer.authorizationServer.issuerID, claimErr)
 				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "assertion is invalid")
@@ -375,6 +384,11 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 				s.recordSharedIDJAGResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, rejection, resources, mcpmetrics.IDJAGRejectionResourceMismatch)
 			default:
 				s.recordSharedResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources)
+			}
+			// A resource claim the request did not name makes the assertion
+			// invalid, not the request's target (RFC 7523 §3.1).
+			if claimed {
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "assertion resource does not identify an MCP server of this authorization server")
 			}
 			code := oautherr.CodeInvalidTarget
 			if rejection == sharedResourceMissing {

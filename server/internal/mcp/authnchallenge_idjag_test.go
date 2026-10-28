@@ -99,6 +99,11 @@ func (a idJAGTestAssertion) signWithoutResource(t *testing.T, issuer, audience, 
 
 func postIDJAGToken(t *testing.T, ctx context.Context, ti *testInstance, slug, clientID, assertion string, resources ...string) *httptest.ResponseRecorder {
 	t.Helper()
+	return postIDJAGTokenWithAuthorization(t, ctx, ti, slug, clientID, assertion, "", resources...)
+}
+
+func postIDJAGTokenWithAuthorization(t *testing.T, ctx context.Context, ti *testInstance, slug, clientID, assertion, authorization string, resources ...string) *httptest.ResponseRecorder {
+	t.Helper()
 	form := url.Values{
 		"grant_type": {oauthwire.GrantTypeJWTBearer},
 		"client_id":  {clientID},
@@ -107,6 +112,9 @@ func postIDJAGToken(t *testing.T, ctx context.Context, ti *testInstance, slug, c
 	form["resource"] = resources
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/token", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
 	routeCtx := chi.NewRouteContext()
 	routeCtx.URLParams.Add("mcpSlug", slug)
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))

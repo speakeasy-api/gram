@@ -140,14 +140,14 @@ type InboundEMAIssuer struct {
 
 	// ClientIDMetadataAdmissionMode is the issuer's effective client ID
 	// metadata document admission mode: disabled, presets, or open.
-	ClientIDMetadataAdmissionMode string `json:"client_id_metadata_admission_mode" jsonschema:"the effective client ID metadata document admission mode, the client gate ID-JAG exchanges share with sign-in: open (and the legacy reporting) admits any valid client ID metadata document, presets admits preset_clients, custom_client_urls, and Speakeasy's own assistant clients, disabled admits none"`
+	ClientIDMetadataAdmissionMode string `json:"client_id_metadata_admission_mode" jsonschema:"which MCP clients may sign in and exchange ID-JAGs, by client ID metadata document: open admits any valid document (reporting is a legacy value that admits the same), presets admits preset_clients, custom_client_urls, and Speakeasy's own assistant clients, disabled admits none"`
 
 	// CustomClientURLs are the client ID metadata document URLs this issuer
 	// admits beyond the presets, listed in presets mode only.
-	CustomClientURLs []string `json:"custom_client_urls"`
+	CustomClientURLs []string `json:"custom_client_urls" jsonschema:"client ID metadata document URLs this issuer admits beyond preset_clients; filled in presets mode only"`
 
 	// CustomClientURLsTruncated reports more custom URLs than were listed.
-	CustomClientURLsTruncated bool `json:"custom_client_urls_truncated"`
+	CustomClientURLsTruncated bool `json:"custom_client_urls_truncated" jsonschema:"true when the issuer admits more custom URLs than custom_client_urls lists"`
 
 	// CustomClientURLsUnavailable reports that the custom URLs could not be read.
 	CustomClientURLsUnavailable bool `json:"custom_client_urls_unavailable,omitempty" jsonschema:"true when custom_client_urls could not be read, so the list is empty but not verified; read get_inbound_ema_trust again"`
