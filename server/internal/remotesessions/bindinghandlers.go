@@ -132,7 +132,7 @@ func (s *Service) ListBindings(ctx context.Context, payload *gen.ListBindingsPay
 	items := make([]*gen.PrincipalRemoteSessionBinding, 0, len(rows))
 	for _, row := range rows {
 		view := bindingView(row.ID, row.PrincipalID, row.UserSessionIssuerID, row.RemoteSessionClientID, row.RemoteSessionID)
-		if source, ok := available[row.RemoteSessionID]; ok && source.GrantGeneration == row.GrantGeneration {
+		if source, ok := available[row.RemoteSessionID]; ok {
 			view.RemoteSession = mv.BuildRemoteSessionView(source, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail))
 		}
 		items = append(items, view)

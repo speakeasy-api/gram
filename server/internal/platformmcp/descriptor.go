@@ -254,6 +254,11 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
 	allowlist := clientToolAllowlist(principal.ClientID)
+	// The small discovery surface reaches every tool by design, so the
+	// allowlist only narrows the full catalogue.
+	if discoveryModeFromContext(ctx) != discoveryFull {
+		allowlist = nil
+	}
 	visible := make([]*mcp.Tool, 0, len(tools))
 	for _, tool := range tools {
 		descriptor, ok := descriptors[tool.Name]

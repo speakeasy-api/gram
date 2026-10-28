@@ -142,7 +142,7 @@ func createLegacyHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.
 		ID:                    toolset.ID,
 		ProjectID:             toolset.ProjectID,
 		Name:                  conv.ToPGText(toolset.Name),
-		Slug:                  conv.ToPGText(input.slug),
+		Slug:                  pgtype.Text{String: "", Valid: false},
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UserSessionIssuerID:   input.issuerID,
 		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},

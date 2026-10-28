@@ -36,6 +36,17 @@ type Service interface {
 	// per-user key, or an org install key with the user's email vouched in the
 	// Gram-User-Email header, the same way getPlugins resolves the polling user.
 	GetMyConnections(context.Context, *GetMyConnectionsPayload) (res *GetMyConnectionsResult, err error)
+	// Hide an MCP server for the enrolled user, the same preference the gateway
+	// consent page's Hide sets. Gateways leave a hidden server out of the user's
+	// tools, and getMyConnections reports it as hidden. Only servers
+	// getMyConnections reports to the user can be hidden; anything else is not
+	// found. Hiding a hidden server changes nothing. Accepts a per-user key, or an
+	// org install key with the user's email vouched in the Gram-User-Email header,
+	// the same way getMyConnections resolves the user.
+	HideMcpServer(context.Context, *HideMcpServerPayload) (err error)
+	// Show a hidden MCP server again for the enrolled user. Unhiding a server that
+	// is not hidden changes nothing. Authenticates like hideMcpServer.
+	UnhideMcpServer(context.Context, *UnhideMcpServerPayload) (err error)
 	// List users in the current organization who are actively running the
 	// Speakeasy device agent, attributed by the email each agent reports on sync.
 	// Dashboard-only; requires an org admin session.
@@ -135,7 +146,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"getPlugins", "getMyConnections", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
+var MethodNames = [14]string{"getPlugins", "getMyConnections", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -250,6 +261,9 @@ type AgentServerConnection struct {
 	// Present only when state is no_access and the organization accepts access
 	// requests.
 	RequestAccessURL *string
+	// True when the user hid this server, from the gateway consent page or the
+	// device agent. Absent when not hidden.
+	Hidden *bool
 }
 
 type AgentSessionMeta struct {
@@ -520,6 +534,18 @@ type GetSessionMetaResult struct {
 	Sessions []*AgentSessionMeta
 }
 
+// HideMcpServerPayload is the payload type of the agent service hideMcpServer
+// method.
+type HideMcpServerPayload struct {
+	ApikeyToken *string
+	// The MCP server, as getMyConnections reports it.
+	McpServerID string
+	// Email address of the enrolled user, sent in the Gram-User-Email header.
+	// Required when authenticating with an org-scoped agent install key; ignored
+	// for a per-user key, whose owner is the enrolled user.
+	Email *string
+}
+
 // ListAiScanTargetsPayload is the payload type of the agent service
 // listAiScanTargets method.
 type ListAiScanTargetsPayload struct {
@@ -616,6 +642,18 @@ type SyncedAgentUser struct {
 	FirstSeenAt string
 	// Most recent time this email was seen syncing the device agent.
 	LastSeenAt string
+}
+
+// UnhideMcpServerPayload is the payload type of the agent service
+// unhideMcpServer method.
+type UnhideMcpServerPayload struct {
+	ApikeyToken *string
+	// The MCP server, as getMyConnections reports it.
+	McpServerID string
+	// Email address of the enrolled user, sent in the Gram-User-Email header.
+	// Required when authenticating with an org-scoped agent install key; ignored
+	// for a per-user key, whose owner is the enrolled user.
+	Email *string
 }
 
 // UpdateConfigurationPayload is the payload type of the agent service

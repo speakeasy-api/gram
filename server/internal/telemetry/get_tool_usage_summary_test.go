@@ -183,6 +183,15 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 	})
 	require.NoError(t, err)
 	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-hosted-payments", uuid.NullUUID{})
+	// The canonical server, without endpoints, is what makes the aliased toolset hosted.
+	_, err = mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:         toolset.ID,
+		ProjectID:  toolset.ProjectID,
+		Name:       pgtype.Text{String: toolset.Name, Valid: true},
+		ToolsetID:  uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility: "private",
+	})
+	require.NoError(t, err)
 	now := time.Now().UTC()
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID:      projectID,
