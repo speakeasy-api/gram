@@ -6,7 +6,7 @@ afterEach(cleanup);
 
 const gatewayURL = "https://app.example.test/agent-mcp/agent_1";
 
-it("adds the gateway to OpenClaw by hand with the key the shell expands", () => {
+it("adds the gateway to OpenClaw by hand without the key in argv", () => {
   const writeText = vi.fn<(text: string) => Promise<void>>(() =>
     Promise.resolve(),
   );
@@ -31,12 +31,22 @@ it("adds the gateway to OpenClaw by hand with the key the shell expands", () => 
   fireEvent.click(screen.getByRole("button", { name: "Copy OpenClaw" }));
 
   const copied = writeText.mock.calls[0]?.[0] ?? "";
-  expect(copied).toContain(`openclaw mcp add speakeasy --url ${gatewayURL}`);
-  expect(copied).toContain("--transport streamable-http");
-  // OpenClaw sends headers as written, so the block names the variable for
-  // the shell to expand and never carries the key.
-  expect(copied).toContain(
-    '--header "Authorization=Bearer $SPEAKEASY_AGENT_KEY"',
-  );
+  // OpenClaw sends headers as written, so the key goes into its config
+  // through a private batch file the shell fills in, never through argv.
+  expect(copied).toContain("umask 077");
+  expect(copied).toContain('openclaw config set --batch-file "$batch"');
+  expect(copied).toContain("chmod 600 ~/.openclaw/openclaw.json");
+  expect(copied).not.toContain("openclaw mcp add");
+  const batch = copied.split("\n").find((line) => line.startsWith("[{"));
+  expect(JSON.parse(batch ?? "")).toEqual([
+    {
+      path: "mcp.servers.speakeasy",
+      value: {
+        url: gatewayURL,
+        transport: "streamable-http",
+        headers: { Authorization: "Bearer $SPEAKEASY_AGENT_KEY" },
+      },
+    },
+  ]);
   expect(copied).not.toContain("gram_secret");
 });

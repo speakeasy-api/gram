@@ -291,13 +291,30 @@ export function StepInstall({
                 />
                 <CodeBlock
                   value={[
-                    // OpenClaw sends MCP headers as written, so the shell has
-                    // to expand the key; named `speakeasy` like the one-line
-                    // setup's entry, so either replaces the other.
+                    // OpenClaw sends MCP headers as written, so its config must
+                    // hold the key. A private batch file keeps the key out of
+                    // argv, as the one-line setup does; the entry is named
+                    // `speakeasy` like that setup's, so either replaces the other.
                     "# Saves the key in ~/.openclaw/openclaw.json. Restart the Gateway after.",
-                    `openclaw mcp add speakeasy --url ${gatewayURL} \\`,
-                    "  --transport streamable-http \\",
-                    `  --header "Authorization=Bearer $${KEY_ENV}"`,
+                    "(",
+                    "  umask 077",
+                    "  batch=$(mktemp)",
+                    '  cat >"$batch" <<EOF',
+                    JSON.stringify([
+                      {
+                        path: "mcp.servers.speakeasy",
+                        value: {
+                          url: gatewayURL,
+                          transport: "streamable-http",
+                          headers: { Authorization: `Bearer $${KEY_ENV}` },
+                        },
+                      },
+                    ]),
+                    "EOF",
+                    '  openclaw config set --batch-file "$batch"',
+                    '  rm -f "$batch"',
+                    ")",
+                    "chmod 600 ~/.openclaw/openclaw.json",
                   ].join("\n")}
                   label="OpenClaw"
                   language="shell"
