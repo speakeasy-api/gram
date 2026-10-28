@@ -143,15 +143,15 @@ func (s *Service) ReportCrash(ctx context.Context, payload *gen.ReportCrashPaylo
 	if authCtx.APIKeyID == "" {
 		credential = reporter
 	}
-	if err := s.allowCrashReport(ctx, s.crashReportCredentialLimiter, authCtx.ActiveOrganizationID+":"+credential, "too many crash reports for this credential; retry shortly"); err != nil {
+	if err := s.allowCrashReport(ctx, s.crashReportCredentialLimiter, authCtx.ActiveOrganizationID, credential, "too many crash reports for this credential; retry shortly"); err != nil {
 		return nil, err
 	}
 	serial := deviceidentity.NormalizeSerial(payload.SerialNumber)
-	deviceKey := authCtx.ActiveOrganizationID + ":serial:" + serial
+	device := "serial:" + serial
 	if serial == "" {
-		deviceKey = authCtx.ActiveOrganizationID + ":" + reporter
+		device = reporter
 	}
-	if err := s.allowCrashReport(ctx, s.crashReportLimiter, deviceKey, "too many crash reports from this device; retry shortly"); err != nil {
+	if err := s.allowCrashReport(ctx, s.crashReportLimiter, authCtx.ActiveOrganizationID, device, "too many crash reports from this device; retry shortly"); err != nil {
 		return nil, err
 	}
 	environment := deviceidentity.NormalizeEnvironment(payload.Environment)
@@ -173,17 +173,18 @@ func (s *Service) ReportCrash(ctx context.Context, payload *gen.ReportCrashPaylo
 	return &gen.ReportCrashResult{Accepted: accepted}, nil
 }
 
-// allowCrashReport charges one batch to key's budget on limiter: a device's
-// (keyed like reportState's, or by reporter when there is no serial) or a
-// credential's. A limiter store outage fails open: it isn't a throttle.
-func (s *Service) allowCrashReport(ctx context.Context, limiter *ratelimit.Limiter, key, refusal string) error {
+// allowCrashReport charges one batch to subject's budget in the organization
+// on limiter: a device's (keyed like reportState's, or by reporter when there
+// is no serial) or a credential's. A limiter store outage fails open: it isn't
+// a throttle.
+func (s *Service) allowCrashReport(ctx context.Context, limiter *ratelimit.Limiter, organizationID, subject, refusal string) error {
 	if limiter == nil {
 		return nil
 	}
-	res, err := limiter.Allow(ctx, key)
+	res, err := limiter.Allow(ctx, organizationID+":"+subject)
 	switch {
 	case err != nil:
-		s.logger.WarnContext(ctx, "reportCrash rate limit unavailable", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "reportCrash rate limit unavailable", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 		return nil
 	case !res.Allowed:
 		return oops.E(oops.CodeRateLimitExceeded, nil, "%s", refusal)
