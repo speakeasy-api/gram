@@ -58,7 +58,9 @@ mask "$session"
 echo "HTTP 200: $(jq -c '{token_type, expires_in, scope, has_refresh_token: (has("refresh_token"))}' "$resp")"
 rm -f "$resp"
 
-# Posts one JSON-RPC message; prints the JSON body (SSE "data:" lines unwrapped).
+# Posts one JSON-RPC message. Sets MCP_LAST_CODE, MCP_LAST_SESSION and
+# MCP_LAST_BODY (the JSON body, SSE "data:" lines unwrapped). Call it directly,
+# not inside $(...): a command substitution is a subshell and drops the globals.
 mcp_post() {
 	local body="$1" headers out code
 	headers="$(mktemp)"; out="$(mktemp)"
@@ -72,20 +74,22 @@ mcp_post() {
 	MCP_LAST_CODE="$code"
 	MCP_LAST_SESSION="$(grep -i '^mcp-session-id:' "$headers" | cut -d: -f2- | tr -d ' \r' || true)"
 	if grep -qi '^content-type: *text/event-stream' "$headers"; then
-		sed -n 's/^data: *//p' "$out"
+		MCP_LAST_BODY="$(sed -n 's/^data: *//p' "$out")"
 	else
-		cat "$out"
+		MCP_LAST_BODY="$(cat "$out")"
 	fi
 	rm -f "$headers" "$out"
 }
 
 echo "== 3. MCP at $MCP_URL"
-init="$(mcp_post '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"wif-github-experiment","version":"0"}}}')"
+mcp_post '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"wif-github-experiment","version":"0"}}}'
+init="$MCP_LAST_BODY"
 [ "$MCP_LAST_CODE" = 200 ] || die "initialize HTTP $MCP_LAST_CODE: $(printf '%s' "$init" | head -c 300)"
 MCP_SESSION_ID="$MCP_LAST_SESSION"
 echo "initialize: $(printf '%s' "$init" | jq -c '.result.serverInfo // .error')"
-mcp_post '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
-tools="$(mcp_post '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')"
+mcp_post '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+mcp_post '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+tools="$MCP_LAST_BODY"
 [ "$MCP_LAST_CODE" = 200 ] || die "tools/list HTTP $MCP_LAST_CODE: $(printf '%s' "$tools" | head -c 300)"
-printf '%s' "$tools" | jq -c '{tool_count: (.result.tools | length), first_tools: [.result.tools[:5][].name], error}'
+printf '%s' "$tools" | jq -c '{tool_count: ((.result.tools // []) | length), first_tools: [(.result.tools // [])[:5][].name], error}'
 echo "OK: GitHub workload reached $MCP_URL with no stored secret"
