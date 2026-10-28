@@ -2110,7 +2110,6 @@ JOIN (
       JOIN remote_sessions AS s ON s.id = b.remote_session_id
         AND s.subject_urn = 'user:' || a.owner_user_id
         AND b.attached_by_subject_id = s.subject_urn
-        AND s.grant_generation = b.grant_generation
         AND s.remote_session_client_id = b.remote_session_client_id
       JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
       JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
@@ -2857,7 +2856,6 @@ JOIN LATERAL (SELECT s.subject_urn::text AS subject_urn, s.user_session_issuer_i
       JOIN remote_sessions AS attached ON attached.id = b.remote_session_id
         AND attached.subject_urn = 'user:' || a.owner_user_id
         AND b.attached_by_subject_id = attached.subject_urn
-        AND attached.grant_generation = b.grant_generation
         AND attached.remote_session_client_id = b.remote_session_client_id
       JOIN remote_session_clients AS c ON c.id = attached.remote_session_client_id
       JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
