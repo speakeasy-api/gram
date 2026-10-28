@@ -33,14 +33,17 @@ import (
 )
 
 const (
-	operationRegisterCatalogMCP  = "register_catalog_mcp"
-	receiptStatusPending         = "pending"
-	receiptStatusSucceeded       = "succeeded"
-	receiptResultRegistered      = "registered"
-	registrationStatusPending    = "pending"
-	registrationStatusRegistered = "registered"
-	receiptLifetime              = 24 * time.Hour
-	maxMCPEndpointSlugLength     = 128
+	operationRegisterCatalogMCP = "register_catalog_mcp"
+	receiptStatusPending        = "pending"
+	receiptStatusSucceeded      = "succeeded"
+	receiptResultRegistered     = "registered"
+	// receiptResultAlreadyRegistered completes a request that found the MCP
+	// server already fully added, so a replay reports the same outcome.
+	receiptResultAlreadyRegistered = "already_registered"
+	registrationStatusPending      = "pending"
+	registrationStatusRegistered   = "registered"
+	receiptLifetime                = 24 * time.Hour
+	maxMCPEndpointSlugLength       = 128
 
 	// readableSlugSuffixLength is the length of the random suffix a readable
 	// slug gets when the bare one is taken. Five characters from a 35-character
@@ -86,6 +89,9 @@ type OperationReceipt struct {
 	InputHash      string
 	ExpiresAt      time.Time
 	Replayed       bool
+	// AlreadyRegistered is set when this request found the MCP server already
+	// fully added to the project, so nothing new was created.
+	AlreadyRegistered bool
 	// Invalid when the receipt was written by a surface with no OAuth
 	// connection. Unwrapping these to a bare uuid.Nil would be read downstream
 	// as "connection missing" rather than "no connection applies".
@@ -619,10 +625,14 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
 
+	resultCode := receiptResultRegistered
+	if !componentsCreated {
+		resultCode = receiptResultAlreadyRegistered
+	}
 	completedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
 		RegistrationID: storedReceipt.RegistrationID,
 		Status:         receiptStatusSucceeded,
-		ResultCode:     optionalText(receiptResultRegistered),
+		ResultCode:     optionalText(resultCode),
 		ID:             storedReceipt.ID,
 		OrganizationID: principal.OrganizationID,
 	})
@@ -990,6 +1000,7 @@ func operationReceiptFromRow(row platformrepo.PlatformMcpOperationReceipt, repla
 		InputHash:            row.InputHash,
 		ExpiresAt:            row.ExpiresAt.Time,
 		Replayed:             replayed,
+		AlreadyRegistered:    row.ResultCode.String == receiptResultAlreadyRegistered,
 		ConnectionID:         row.ConnectionID,
 		ConnectionGeneration: row.ConnectionGeneration,
 	}
