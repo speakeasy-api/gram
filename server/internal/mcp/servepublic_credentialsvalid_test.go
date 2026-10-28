@@ -61,10 +61,9 @@ func TestServePublic_PrivateWithoutOAuth_ValidAPIKey_Succeeds(t *testing.T) {
 		Slug:                   "private-no-oauth-mcp-" + uuid.New().String()[:8],
 		Description:            conv.ToPGText("A private MCP server without OAuth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("private-no-oauth-mcp-" + uuid.New().String()[:8]),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	toolset = hostLegacyToolset(t, ctx, ti, toolset, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
 
 	// Create API key
 	apiKey := ti.createTestAPIKey(ctx, t)

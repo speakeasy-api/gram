@@ -619,8 +619,6 @@ func TestRegistrationStoreAllowsLegacyToolsetBackedServer(t *testing.T) {
 		ProjectID:      project.ID,
 		Name:           "Legacy hosted server",
 		Slug:           "legacy-" + uuid.NewString()[:8],
-		McpSlug:        conv.ToPGText("legacy-mcp-" + uuid.NewString()[:8]),
-		McpEnabled:     true,
 	})
 	require.NoError(t, err)
 	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{

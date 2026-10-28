@@ -553,7 +553,7 @@ func DescribeToolsetEntries(
 			})
 		}
 
-		hosting := deriveToolsetHosting(hostingstate.ToolsetColumns(toolset), toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
+		hosting := deriveToolsetHosting(hostingstate.LegacyAlias(toolset), toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
 		result = append(result, &types.ToolsetEntry{
 			ID:                           toolset.ID.String(),
 			OrganizationID:               toolset.OrganizationID,
@@ -637,7 +637,7 @@ func DescribeToolset(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
 	}
-	hosting := deriveToolsetHosting(hostingstate.ToolsetColumns(toolset), toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
+	hosting := deriveToolsetHosting(hostingstate.LegacyAlias(toolset), toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
 
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
@@ -1096,11 +1096,7 @@ func GetToolsetsSummary(
 			}
 		}
 
-		columns := hostingstate.Columns{
-			Hosting: hostingstate.Hosting{Enabled: ts.McpEnabled, Public: ts.McpIsPublic, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
-			Address: hostingstate.Address{Slug: ts.McpSlug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
-		}
-		hosting := deriveToolsetHosting(columns, ts.ExternalOauthServerID, hostingstate.For(hostingByID, ts.ID))
+		hosting := deriveToolsetHosting(hostingstate.Address{Slug: ts.McpSlug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, ts.ExternalOauthServerID, hostingstate.For(hostingByID, ts.ID))
 		result = append(result, &types.ToolsetSummary{
 			ID:                     ts.ID.String(),
 			OrganizationID:         ts.OrganizationID,

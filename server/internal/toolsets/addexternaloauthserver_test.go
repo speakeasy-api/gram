@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestToolsetsService_AddExternalOAuthServer_HonorsProjectScopedAuthorization(t *testing.T) {
@@ -248,23 +247,20 @@ func TestToolsetsService_AddExternalOAuthServer_PrivateToolset_NoAuditLog(t *tes
 	require.Equal(t, beforeCount, afterCount)
 }
 
-// A disabled server with a public frozen alias reads private, so it cannot take external OAuth.
+// A disabled server reads private, so it cannot take external OAuth.
 func TestToolsetsService_AddExternalOAuthServer_DisabledServerReadsPrivate(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
 	ctx = withAccountType(t, ctx, "pro")
 	toolset := createMinimalPublicToolset(t, ctx, ti, "Disabled External OAuth Toolset")
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: uuid.MustParse(toolset.ID), ProjectID: *authCtx.ProjectID}))
 	setHostedVisibility(t, ctx, ti, toolset, "private")
 	require.NoError(t, ti.service.DisableHostedServer(ctx, uuid.MustParse(toolset.ID)))
 
 	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 	require.NoError(t, err)
 	require.NotNil(t, stored.McpIsPublic)
-	require.False(t, *stored.McpIsPublic, "the frozen public flag does not make a disabled server public")
+	require.False(t, *stored.McpIsPublic, "a disabled server is not public")
 
 	_, err = ti.service.AddExternalOAuthServer(ctx, &gen.AddExternalOAuthServerPayload{
 		Slug: toolset.Slug, ExternalOauthServer: &types.ExternalOAuthServerForm{Metadata: map[string]any{"issuer": "https://example.com"}},
