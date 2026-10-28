@@ -58,6 +58,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 		Title:       "Add a Reviewed MCP Server to a Project",
 		Description: "Add one reviewed catalogue MCP server to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin.",
 		Annotations: registrationAnnotations(),
+		Meta:        cardToolMeta(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -88,12 +89,12 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
 			}
 		}
-		nextAction := "start_setup"
+		nextAction := nextActionStartSetup
 		if isBrowserCatalogProviderKey(result.ProviderKey) {
-			nextAction = "continue_dashboard_setup"
+			nextAction = nextActionContinueDashboardSetup
 		}
 		if len(result.SecretFieldsPending) > 0 {
-			nextAction = "secure_dashboard_setup_required"
+			nextAction = nextActionSecureDashboardSetup
 		}
 		dashboardSetupURL := ""
 		if isBrowserCatalogProviderKey(result.ProviderKey) {
@@ -114,7 +115,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				dashboardSetupURL = ""
 			}
 		}
-		return nil, RegisterCatalogMCPToolOutput{
+		return cardResult(serverCard(result.ServerName, result.Project, nextAction, dashboardSetupURL)), RegisterCatalogMCPToolOutput{
 			ProjectSlug:         result.Project.Slug,
 			ProviderKey:         result.ProviderKey,
 			CatalogRef:          result.CatalogRef,
@@ -139,6 +140,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 		Title:       "Add Your Own MCP Server to a Project",
 		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin, and a project Shadow MCP policy is applied at that later step, where the administrator's distribution counts as the review.",
 		Annotations: registrationAnnotations(),
+		Meta:        cardToolMeta(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterRemoteMCPToolInput) (*mcp.CallToolResult, RegisterRemoteMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -169,7 +171,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
 			}
 		}
-		return nil, RegisterRemoteMCPToolOutput{
+		return cardResult(serverCard(result.ServerName, result.Project, result.NextAction, result.DashboardSetupURL)), RegisterRemoteMCPToolOutput{
 			ProjectSlug:       result.Project.Slug,
 			CanonicalURL:      result.RemoteURL,
 			ReceiptID:         result.Receipt.ID.String(),

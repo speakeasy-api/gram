@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speakeasy</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#ffffff, #18181b);
+  --fg: light-dark(#18181b, #fafafa);
+  --muted: light-dark(#52525b, #a1a1aa);
+  --line: light-dark(#e4e4e7, #3f3f46);
+  --mark-bg: light-dark(#f4f4f5, #27272a);
+  --accent: light-dark(#18181b, #fafafa);
+  --accent-fg: light-dark(#ffffff, #18181b);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.card { padding: 16px; display: grid; gap: 10px; }
+.card header { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mark {
+  flex: none; width: 40px; height: 40px; border-radius: 8px;
+  display: grid; place-items: center;
+  background: var(--mark-bg); border: 1px solid var(--line);
+  font-weight: 600; font-size: 16px;
+}
+.heading { min-width: 0; }
+h1 { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+p { margin: 0; overflow-wrap: anywhere; }
+.sub, .note { color: var(--muted); }
+.note {
+  justify-self: start; font-size: 12px; padding: 2px 8px;
+  border: 1px solid var(--line); border-radius: 999px;
+}
+.action {
+  justify-self: start; padding: 8px 14px; border-radius: 8px;
+  background: var(--accent); color: var(--accent-fg);
+  font-weight: 600; text-decoration: none;
+}
+.action:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main id="card"></main>
+<script>
+(function () {
+  "use strict";
+  // The card arrives already rendered and escaped by the server, in the tool
+  // result's _meta. This shell only places it, follows the host theme, and
+  // opens the card's one link through the host.
+  var CARD_KEY = "com.speakeasy/card";
+  var root = document.getElementById("card");
+  var nextId = 1;
+  var initializeId = 0;
+
+  function post(message) {
+    message.jsonrpc = "2.0";
+    window.parent.postMessage(message, "*");
+  }
+  function request(method, params) {
+    var id = nextId++;
+    post({ id: id, method: method, params: params });
+    return id;
+  }
+  function notify(method, params) {
+    post({ method: method, params: params });
+  }
+  function setTheme(theme) {
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.style.colorScheme = theme;
+    }
+  }
+  // A result without a card, such as a refusal, leaves the view empty and
+  // reports its zero height so the host can collapse it.
+  function render(meta) {
+    var card = meta && meta[CARD_KEY];
+    if (typeof card === "string") {
+      root.innerHTML = card;
+    }
+    notify("ui/notifications/size-changed", {
+      width: document.documentElement.scrollWidth,
+      height: document.documentElement.scrollHeight
+    });
+  }
+
+  window.addEventListener("message", function (event) {
+    var message = event.data;
+    if (event.source !== window.parent || !message || message.jsonrpc !== "2.0") {
+      return;
+    }
+    if (message.id === initializeId && message.result) {
+      setTheme(message.result.hostContext && message.result.hostContext.theme);
+      notify("ui/notifications/initialized", {});
+    } else if (message.method === "ui/notifications/tool-result") {
+      render(message.params && message.params._meta);
+    } else if (message.method === "ui/notifications/host-context-changed") {
+      setTheme(message.params && message.params.theme);
+    }
+  });
+
+  root.addEventListener("click", function (event) {
+    var link = event.target.closest && event.target.closest("a[href]");
+    if (!link) {
+      return;
+    }
+    var url = link.href;
+    if (!/^https?:\/\//i.test(url)) {
+      event.preventDefault();
+      return;
+    }
+    // A sandboxed view cannot open a window itself; the host opens the link.
+    event.preventDefault();
+    if (window.openai && typeof window.openai.openExternal === "function") {
+      window.openai.openExternal({ href: url });
+    } else {
+      request("ui/open-link", { url: url });
+    }
+  });
+
+  initializeId = request("ui/initialize", {
+    appInfo: { name: "speakeasy-platform-card", version: "1" },
+    appCapabilities: {},
+    protocolVersion: "2026-01-26"
+  });
+
+  // ChatGPT also exposes the result directly on window.openai.
+  function renderFromOpenAI() {
+    setTheme(window.openai.theme);
+    render(window.openai.toolResponseMetadata);
+  }
+  if (window.openai) {
+    renderFromOpenAI();
+    window.addEventListener("openai:set_globals", renderFromOpenAI);
+  }
+})();
+</script>
+</body>
+</html>

@@ -363,6 +363,9 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 					URI:      resource.URI,
 					MIMEType: resource.MIMEType,
 					Text:     text,
+					// MCP Apps hosts read a view's presentation hints from
+					// the contents they render.
+					Meta: resource.Meta,
 				}}}, nil
 		})
 	}

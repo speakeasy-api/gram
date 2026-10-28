@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"testing"
 
@@ -104,4 +105,51 @@ func TestCatalogRegistrationToolReAddsBrowserCatalogServerAfterDashboardDelete(t
 	require.NotEqual(t, first.RegistrationID, second.RegistrationID, "the stale registration must be replaced, not reused")
 	require.Equal(t, "continue_dashboard_setup", second.NextAction)
 	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings#authentication$`, second.DashboardSetupURL)
+}
+
+// Over MCP, a registration result carries the card in _meta and keeps the same
+// text and structured content as a client without MCP Apps support reads.
+func TestCatalogRegistrationToolResultCarriesServerCard(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_card")
+	require.NoError(t, err)
+
+	providerKey := "browser-catalog-registry-" + uuid.NewString()
+	principal, project, reg := newBrowserCatalogRegistrationHarness(t, ctx, conn, providerKey)
+	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	reg.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			return next(contextWithPrincipal(ctx, principal), method, req)
+		}
+	})
+
+	result, err := connectTestClient(t, reg.server).CallTool(ctx, &mcp.CallToolParams{Name: "register_catalog_mcp", Arguments: map[string]any{
+		"project_slug":    project.Slug,
+		"provider_key":    providerKey,
+		"catalog_ref":     "app.example/mcp",
+		"idempotency_key": "browser-catalog-card",
+	}})
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+
+	structured, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.JSONEq(t, string(structured), text.Text, "the text content is still the structured output")
+	var output RegisterCatalogMCPToolOutput
+	require.NoError(t, json.Unmarshal(structured, &output))
+	require.Equal(t, project.Slug, output.ProjectSlug)
+	require.Equal(t, "continue_dashboard_setup", output.NextAction)
+	require.NotContains(t, text.Text, "Private until added to a plugin", "the card is not part of the model-visible result")
+
+	card, ok := result.Meta[cardMetaKey].(string)
+	require.True(t, ok)
+	require.Contains(t, card, "<h1>Reviewed MCP</h1>")
+	require.Contains(t, card, "Added to project "+project.Name)
+	require.Contains(t, card, "Private until added to a plugin")
+	require.Contains(t, card, `href="`+output.DashboardSetupURL+`"`)
 }

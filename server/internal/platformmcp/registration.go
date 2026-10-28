@@ -221,7 +221,7 @@ func (s *RegistrationStore) ResolveRegistrationDashboardSetup(ctx context.Contex
 	if organization.Slug == "" || mcpServerRoute == "" {
 		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
 	}
-	return RegistrationDashboardSetup{OrganizationSlug: organization.Slug, MCPServerRoute: mcpServerRoute}, nil
+	return RegistrationDashboardSetup{OrganizationSlug: organization.Slug, MCPServerRoute: mcpServerRoute, ServerName: server.Name.String}, nil
 }
 
 // BeginReceipt atomically establishes the 24-hour idempotency boundary. It

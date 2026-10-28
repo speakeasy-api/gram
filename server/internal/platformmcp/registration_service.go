@@ -58,6 +58,9 @@ type RegisterCatalogMCPResult struct {
 	Receipt             OperationReceipt
 	Registration        string
 	SecretFieldsPending []CatalogConfigurationField
+
+	// ServerName is the display name the MCP server was added under.
+	ServerName string
 }
 
 // RegistrationDashboardSetup is the persisted, server-owned dashboard target
@@ -66,6 +69,9 @@ type RegisterCatalogMCPResult struct {
 type RegistrationDashboardSetup struct {
 	OrganizationSlug string
 	MCPServerRoute   string
+
+	// ServerName is the MCP server's display name, which may be empty.
+	ServerName string
 }
 
 // RegistrationService is the handler-facing boundary for one reviewed catalog
@@ -336,28 +342,42 @@ func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principa
 	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings").String() + "#authentication", nil
 }
 
-// DashboardAuthorizationURL returns the Inspect page only after the upstream
-// provider is attached. Inspect owns the visible Connect/Authorize action.
-func (s *RegistrationService) DashboardAuthorizationURL(ctx context.Context, principal Principal, projectSlug, registrationID string) (string, error) {
+// DashboardAuthorization is where a user signs in to an MCP server's
+// upstream provider after it is attached.
+type DashboardAuthorization struct {
+	// URL is the MCP server's Inspect page, which owns the visible
+	// Connect/Authorize action.
+	URL string
+
+	// ServerName is the MCP server's display name, which may be empty.
+	ServerName string
+}
+
+// DashboardAuthorization returns the Inspect page only after the upstream
+// provider is attached.
+func (s *RegistrationService) DashboardAuthorization(ctx context.Context, principal Principal, projectSlug, registrationID string) (DashboardAuthorization, error) {
 	if s == nil || s.store == nil || s.dashboardURL == nil || projectSlug == "" || registrationID == "" {
-		return "", ErrRegistrationUnavailable
+		return DashboardAuthorization{}, ErrRegistrationUnavailable
 	}
 	parsedID, err := uuid.Parse(registrationID)
 	if err != nil {
-		return "", ErrSetupHandoffInvalid
+		return DashboardAuthorization{}, ErrSetupHandoffInvalid
 	}
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, projectSlug)
 	if err != nil {
-		return "", fmt.Errorf("resolve authorization setup project: %w", err)
+		return DashboardAuthorization{}, fmt.Errorf("resolve authorization setup project: %w", err)
 	}
 	setup, err := s.store.ResolveRegistrationDashboardSetup(ctx, principal, project, parsedID)
 	if err != nil {
-		return "", err
+		return DashboardAuthorization{}, err
 	}
 	if setup.OrganizationSlug == "" || setup.MCPServerRoute == "" {
-		return "", ErrRegistrationUnavailable
+		return DashboardAuthorization{}, ErrRegistrationUnavailable
 	}
-	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "inspect").String(), nil
+	return DashboardAuthorization{
+		URL:        s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "inspect").String(),
+		ServerName: setup.ServerName,
+	}, nil
 }
 
 // AttachDefaultIdentityProvider attaches the one OAuth provider advertised by
@@ -502,6 +522,9 @@ type RegisterRemoteMCPResult struct {
 	Registration      string
 	NextAction        string
 	DashboardSetupURL string
+
+	// ServerName is the display name the MCP server was added under.
+	ServerName string
 }
 
 // RegisterRemoteMCP re-inspects the exact URL before persistence. An inspection
@@ -581,10 +604,10 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 		if err != nil {
 			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
 		}
-		nextAction = "secure_dashboard_setup_required"
+		nextAction = nextActionSecureDashboardSetup
 	}
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})
-	return RegisterRemoteMCPResult{Project: project, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL}, nil
+	return RegisterRemoteMCPResult{Project: project, ServerName: displayName, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL}, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
@@ -673,6 +696,7 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "succeeded", State: ""})
 	return RegisterCatalogMCPResult{
 		Project:             project,
+		ServerName:          configuration.displayName,
 		ProviderKey:         catalog.ProviderKey,
 		CatalogRef:          catalog.CatalogRef,
 		SetupIntent:         catalog.SetupIntent,
