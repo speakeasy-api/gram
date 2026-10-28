@@ -1,0 +1,14 @@
+server/database/schema.sql
+  h_9630b74bdac540 16160-16161,16218-16221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5f83a9a1908450a75c2c490ad122992573c93e79",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
