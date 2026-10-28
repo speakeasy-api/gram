@@ -10,50 +10,20 @@ import {
 } from "@/components/billing/payg-plan-state";
 import { PaygPortalButton } from "@/components/billing/payg-portal-button";
 import { ResumePaygButton } from "@/components/billing/resume-payg-button";
-import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useSession } from "@/contexts/Auth";
 import type { ReactNode } from "react";
 import { Heading } from "../ui/Heading";
 
-/**
- * Offers checkout during an active trial or when Free/Base or PAYG has no subscription.
- * Starting checkout leaves the trial unchanged until Stripe confirms completion.
- * Unsubscribed PAYG organizations retain a way to finish billing setup.
- * Attached subscriptions expose their live state and management controls.
- */
+/** Manages an attached subscription; the billing route owns setup redirects. */
 export function PaygPlanSection(): JSX.Element | null {
   const billing = useBillingState();
-  const { rawGramAccountType } = useSession();
-  if (billing.status === "unavailable") return null;
-  if (billing.status === "needs-setup") {
-    if (rawGramAccountType === "payg" && billing.trialLifecycle !== "active") {
-      return (
-        <PaymentSection>
-          <Stack gap={3}>
-            <Text className="font-medium">Finish setting up billing</Text>
-            <Text muted small>
-              Complete checkout to activate your pay-as-you-go subscription.
-            </Text>
-            <StartPaygCheckoutCTA
-              label="Add payment method"
-              eligibility="billing"
-            />
-          </Stack>
-        </PaymentSection>
-      );
-    }
-    return (
-      <AddPaymentMethodSection
-        activeTrial={billing.trialLifecycle === "active"}
-      />
-    );
-  }
+  if (billing.status === "unavailable" || billing.status === "needs-setup")
+    return null;
   return (
     <PaymentSection>
       <PaygPlanBody billing={billing} />
@@ -61,47 +31,12 @@ export function PaygPlanSection(): JSX.Element | null {
   );
 }
 
-// Copy variants are code-owned; an offer only selects presentation, never access.
-function AddPaymentMethodSection({
-  activeTrial = false,
-}: {
-  activeTrial?: boolean;
-}): JSX.Element {
-  const { acceptedSignupOfferFlow } = useSession();
-  const generic = activeTrial
-    ? "Add a payment method to start pay as you go when your trial ends."
-    : "Add a payment method to start pay as you go.";
-  return (
-    <PaymentSection description={generic}>
-      <Stack gap={4}>
-        {acceptedSignupOfferFlow === "tailscale_partner_gateway" && (
-          <Alert variant="info">
-            Your accepted Tailscale partner promotion will be applied at
-            checkout.
-          </Alert>
-        )}
-        <StartPaygCheckoutCTA
-          label="Add payment method"
-          eligibility="billing"
-        />
-      </Stack>
-    </PaymentSection>
-  );
-}
-
-function PaymentSection({
-  description,
-  children,
-}: {
-  description?: string;
-  children: ReactNode;
-}): JSX.Element {
+function PaymentSection({ children }: { children: ReactNode }): JSX.Element {
   return (
     <section className="space-y-6">
       <div className="border-b border-border pb-2">
         <Heading variant="h3">Payment</Heading>
       </div>
-      {description && <Text muted>{description}</Text>}
       {children}
     </section>
   );

@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import type { StripeCheckoutSession } from "@stripe/stripe-js";
@@ -31,6 +32,8 @@ export function PaygCheckoutSummary({
 }: {
   checkout: StripeCheckoutSession;
 }): JSX.Element {
+  const todayId = useId();
+  const dueTodayId = useId();
   const trial = checkout.recurring?.trial;
   const activeTrial = trial != null && trial.trialEnd * 1000 > Date.now();
   const trialEnd = activeTrial
@@ -111,7 +114,10 @@ export function PaygCheckoutSummary({
       </ul>
       <dl>
         <div className="relative space-y-2 pb-6 pl-6">
-          <dt className="font-mono text-xs uppercase tracking-wide text-muted">
+          <dt
+            id={todayId}
+            className="font-mono text-xs uppercase tracking-wide text-muted"
+          >
             <span
               aria-hidden="true"
               className="absolute left-0 top-1 size-2 bg-foreground"
@@ -122,7 +128,10 @@ export function PaygCheckoutSummary({
             />
             Today
           </dt>
-          <dd className="flex items-baseline justify-between gap-4 text-base text-foreground">
+          <dd
+            aria-labelledby={todayId}
+            className="flex items-baseline justify-between gap-4 text-base text-foreground"
+          >
             <span>{activeTrial ? "Trial active" : "Payment due today"}</span>
             <span className="shrink-0 text-right font-mono tabular-nums text-muted">
               {checkout.total.total.amount}
@@ -164,8 +173,13 @@ export function PaygCheckoutSummary({
       </dl>
       <dl className="border-t border-border pt-4">
         <div className="flex items-baseline justify-between gap-4">
-          <dt className="text-lg font-medium text-foreground">Due today</dt>
-          <dd className="font-mono text-xl font-medium text-foreground tabular-nums">
+          <dt id={dueTodayId} className="text-lg font-medium text-foreground">
+            Due today
+          </dt>
+          <dd
+            aria-labelledby={dueTodayId}
+            className="font-mono text-xl font-medium text-foreground tabular-nums"
+          >
             {checkout.total.total.amount}
           </dd>
         </div>

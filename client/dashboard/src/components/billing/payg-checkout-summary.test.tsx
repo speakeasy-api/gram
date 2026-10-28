@@ -1,5 +1,5 @@
 import type { StripeCheckoutSession } from "@stripe/stripe-js";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   PaygCheckoutHeader,
@@ -215,7 +215,14 @@ it("shows trial billing once and the actual amount due today", () => {
   render(<PaygCheckoutSummary checkout={session} />);
   expect(screen.getByText(/^Trial ends /)).toBeTruthy();
   expect(screen.getAllByText("Billed monthly based on usage")).toHaveLength(1);
-  expect(screen.getAllByText("$12.34").length).toBeGreaterThan(0);
+  expect(
+    within(screen.getByRole("definition", { name: "Today" })).getByText(
+      "$12.34",
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("definition", { name: "Due today" }).textContent,
+  ).toBe("$12.34");
   expect(
     screen.queryByText(/days free|Then |, billed based on usage/),
   ).toBeNull();
@@ -256,7 +263,14 @@ it("preserves nonmetered trial totals from Stripe", () => {
   );
   expect(screen.getByText(/^Trial ends /)).toBeTruthy();
   expect(screen.getByText("$56.78")).toBeTruthy();
-  expect(screen.getAllByText("$12.34").length).toBeGreaterThan(0);
+  expect(
+    within(screen.getByRole("definition", { name: "Today" })).getByText(
+      "$12.34",
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("definition", { name: "Due today" }).textContent,
+  ).toBe("$12.34");
   expect(screen.queryByText(/Billed.*usage/)).toBeNull();
 });
 
@@ -268,7 +282,14 @@ it("preserves nontrial nonmetered totals from Stripe", () => {
   );
   expect(screen.getByText("Total")).toBeTruthy();
   expect(screen.getByText("$49.00")).toBeTruthy();
-  expect(screen.getAllByText("$23.45").length).toBeGreaterThan(0);
+  expect(
+    within(screen.getByRole("definition", { name: "Today" })).getByText(
+      "$23.45",
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("definition", { name: "Due today" }).textContent,
+  ).toBe("$23.45");
   expect(screen.queryByText(/Billed.*usage/)).toBeNull();
 });
 
@@ -294,7 +315,14 @@ it("shows billing timing and the amount due today", () => {
     screen.queryByText(/What happens next|Trial starts|After day/),
   ).toBeNull();
   expect(screen.getByText("Billed monthly based on usage")).toBeTruthy();
-  expect(screen.getAllByText("$12.34").length).toBeGreaterThan(0);
+  expect(
+    within(screen.getByRole("definition", { name: "Today" })).getByText(
+      "$12.34",
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("definition", { name: "Due today" }).textContent,
+  ).toBe("$12.34");
 });
 
 it("uses the actual trial end, not a new fixed-length trial", () => {
@@ -328,7 +356,14 @@ it("shows usage-based billing without substituting a zero total", () => {
   );
   expect(screen.getByText("Usage-based")).toBeTruthy();
   expect(screen.getByText("Billed monthly based on usage")).toBeTruthy();
-  expect(screen.getAllByText("$12.34").length).toBeGreaterThan(0);
+  expect(
+    within(screen.getByRole("definition", { name: "Today" })).getByText(
+      "$12.34",
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("definition", { name: "Due today" }).textContent,
+  ).toBe("$12.34");
   expect(screen.queryByText("$0.00")).toBeNull();
   expect(screen.queryByText(/14 days|After day 14/)).toBeNull();
 });

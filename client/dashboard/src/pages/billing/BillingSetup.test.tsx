@@ -554,3 +554,36 @@ it("shows the selected Payment method tab on payment management", async () => {
     screen.getByText("Other inference billed at provider cost"),
   ).toBeTruthy();
 });
+
+it.each([
+  ["needs setup", true, "Billing setup destination"],
+  ["unavailable", false, "Billing overview destination"],
+])(
+  "redirects payment management when billing is %s",
+  async (_state, admin, destination) => {
+    mocks.admin = admin;
+    mocks.fetchSubscription.mockResolvedValue(missing);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/test-org/billing/payment-method"]}>
+          <Routes>
+            <Route
+              path="/:org/billing/payment-method"
+              element={<BillingPaymentMethod />}
+            />
+            <Route
+              path="/:org/billing/setup"
+              element={<p>Billing setup destination</p>}
+            />
+            <Route
+              path="/:org/billing"
+              element={<p>Billing overview destination</p>}
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText(destination)).toBeTruthy();
+    expect(mocks.createCheckout).not.toHaveBeenCalled();
+  },
+);

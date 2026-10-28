@@ -1,4 +1,4 @@
-import { MemoryRouter, useLocation } from "react-router";
+import { MemoryRouter } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -175,10 +175,6 @@ function notFound(): Error {
   return Object.assign(new Error("subscription not found"), {
     statusCode: 404,
   });
-}
-
-function LocationProbe() {
-  return <span data-testid="location">{useLocation().pathname}</span>;
 }
 
 /** The section's children reach for the query client to invalidate. */
@@ -570,77 +566,10 @@ describe("PaygPlanSection", () => {
     expect(cancelTrigger()).toBeNull();
   });
 
-  describe("when the organization has no Stripe subscription", () => {
-    beforeEach(() => {
-      queryState({ isError: true, error: notFound() });
-    });
-
-    it("gives an eligible admin actionable setup without management controls", () => {
-      render(<PaygPlanSection />);
-
-      expect(screen.getByText(/finish setting up billing/i)).toBeTruthy();
-      expect(portalButton()).toBeNull();
-      expect(checkoutCta()).not.toBeNull();
-      expect(cancelTrigger()).toBeNull();
-      expect(resumeButton()).toBeNull();
-    });
-
-    it("lets an admin restart checkout after abandoning a trial conversion", () => {
-      mocks.session.mockReturnValue({
-        activeOrganizationId: "org-1",
-        rawGramAccountType: "payg",
-        whitelisted: true,
-        // Converted trials are omitted from the session, even before their end.
-        trial: null,
-      });
-
-      render(
-        <>
-          <PaygPlanSection />
-          <LocationProbe />
-        </>,
-      );
-      fireEvent.click(checkoutCta()!);
-
-      expect(mocks.checkoutMutate).not.toHaveBeenCalled();
-      expect(screen.getByTestId("location").textContent).toBe(
-        "/test-org/billing/setup",
-      );
-      expect(mocks.refetch).not.toHaveBeenCalled();
-    });
-
-    it("hides unavailable billing setup from a member", () => {
-      mocks.hasAnyScope.mockReturnValue(false);
-      render(<PaygPlanSection />);
-
-      expect(heading()).toBeNull();
-      expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
-      expect(checkoutCta()).toBeNull();
-    });
-
-    it("hides unavailable billing setup when self-serve billing is disabled", () => {
-      mocks.flagResult.mockReturnValue({ status: "disabled" });
-      render(<PaygPlanSection />);
-
-      expect(heading()).toBeNull();
-      expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
-      expect(checkoutCta()).toBeNull();
-    });
-
-    // The answer is definitive, so it outranks whatever the cache still holds.
-    it("outranks a cached subscription", () => {
-      queryState({
-        data: subscription(),
-        isError: true,
-        error: notFound(),
-      });
-
-      render(<PaygPlanSection />);
-
-      expect(checkoutCta()).not.toBeNull();
-      expect(screen.queryByText("Pay as you go")).toBeNull();
-      expect(cancelTrigger()).toBeNull();
-    });
+  it("leaves subscription setup to the billing route", () => {
+    queryState({ isError: true, error: notFound() });
+    const { container } = render(<PaygPlanSection />);
+    expect(container.innerHTML).toBe("");
   });
 
   it("explains a failed load and retries it in place", () => {
@@ -692,129 +621,6 @@ describe("PaygPlanSection", () => {
   // running, but checkout hasn't created a Stripe subscription yet — asking
   // for one answers 404. The section renders the no-payment state instead:
   // the checkout CTA that attaches a payment method.
-  describe("during an active product trial", () => {
-    beforeEach(() => {
-      mocks.session.mockReturnValue({
-        activeOrganizationId: "org-1",
-        rawGramAccountType: "payg",
-        trial: {
-          startedAt: new Date(Date.now() - 2 * DAY),
-          endsAt: new Date(Date.now() + 12 * DAY),
-        },
-      });
-      queryState({ isError: true, error: notFound() });
-    });
-
-    it.each([
-      { isFetching: true },
-      { isError: true, error: new Error("unavailable") },
-    ])("withholds trial setup until absence is confirmed: %j", (state) => {
-      queryState(state);
-      render(<PaygPlanSection />);
-      expect(checkoutCta()).toBeNull();
-      expect(portalButton()).toBeNull();
-    });
-
-    it("preserves enterprise trials even with their subscription flag", () => {
-      mocks.productTier.mockReturnValue("enterprise");
-      mocks.session.mockReturnValue({
-        ...mocks.session(),
-        rawGramAccountType: "enterprise",
-        hasActiveSubscription: true,
-      });
-      render(<PaygPlanSection />);
-      expect(checkoutCta()).not.toBeNull();
-      expect(screen.getByText(/when your trial ends/)).toBeTruthy();
-    });
-
-    it("retains trial timing with partner copy", () => {
-      mocks.session.mockReturnValue({
-        ...mocks.session(),
-        acceptedSignupOfferFlow: "tailscale_partner_gateway",
-      });
-      render(<PaygPlanSection />);
-      expect(screen.getByText(/when your trial ends/)).toBeTruthy();
-      expect(screen.getByRole("alert").textContent).toContain(
-        "Your accepted Tailscale partner promotion will be applied at checkout.",
-      );
-    });
-
-    it("offers checkout only after confirming absence in Stripe", () => {
-      render(<PaygPlanSection />);
-
-      expect(heading()).not.toBeNull();
-      expect(checkoutCta()).not.toBeNull();
-      expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
-        enabled: true,
-      });
-    });
-
-    // The description reflects the payment state: an invitation to attach a
-    // payment method, not a report on one.
-    it("describes attaching a payment method", () => {
-      render(<PaygPlanSection />);
-
-      expect(
-        screen.getByText(/add a payment method to start pay as you go/i),
-      ).toBeTruthy();
-      expect(
-        screen.queryByText(/subscription, payment method, and invoices/i),
-      ).toBeNull();
-    });
-
-    // Every tier a trial runs on gets the section shut off with the rollout
-    // flag — it is the only payment surface on the page, so the flag is part
-    // of its render rule.
-    it("renders nothing while the rollout flag is not enabled", () => {
-      mocks.flagResult.mockReturnValue({ status: "disabled" });
-
-      const { container } = render(<PaygPlanSection />);
-
-      expect(container.innerHTML).toBe("");
-    });
-
-    it("never renders the no-subscription copy beside the CTA", () => {
-      queryState({ isError: true, error: notFound() });
-
-      render(<PaygPlanSection />);
-
-      expect(screen.queryByText(/no stripe subscription/i)).toBeNull();
-      expect(
-        screen.queryByText(/billing isn't managed through stripe/i),
-      ).toBeNull();
-    });
-
-    // The CTA is admin-only, so a member would get a section describing an
-    // action they cannot take. They get nothing instead.
-    it("renders nothing for a member", () => {
-      mocks.hasAnyScope.mockReturnValue(false);
-
-      const { container } = render(<PaygPlanSection />);
-
-      expect(container.innerHTML).toBe("");
-    });
-
-    // Once the trial is over the subscription view takes over from the CTA,
-    // on the same clock the CTA and the inference-cap read.
-    it("takes over once the trial has ended", () => {
-      mocks.session.mockReturnValue({
-        activeOrganizationId: "org-1",
-        rawGramAccountType: "payg",
-        trial: {
-          startedAt: new Date(Date.now() - 20 * DAY),
-          endsAt: new Date(Date.now() - 6 * DAY),
-        },
-      });
-
-      queryState({ data: subscription() });
-      render(<PaygPlanSection />);
-
-      expect(heading()).not.toBeNull();
-      expect(checkoutCta()).toBeNull();
-      expect(screen.getByText("Pay as you go")).toBeTruthy();
-    });
-  });
-
   it.each<StripeSubscription["status"]>([
     "active",
     "trialing",
@@ -836,97 +642,6 @@ describe("PaygPlanSection", () => {
       expect(portalButton()).not.toBeNull();
     },
   );
-
-  describe("unsubscribed Free/Base organizations", () => {
-    beforeEach(() => {
-      mocks.productTier.mockReturnValue("base");
-      mocks.session.mockReturnValue({
-        activeOrganizationId: "org-1",
-        rawGramAccountType: "free",
-        hasActiveSubscription: false,
-        trial: null,
-      });
-      queryState({ isError: true, error: notFound() });
-    });
-
-    it("navigates to checkout with generic nontrial copy", () => {
-      render(
-        <>
-          <PaygPlanSection />
-          <LocationProbe />
-        </>,
-      );
-      expect(
-        screen.getByText("Add a payment method to start pay as you go."),
-      ).toBeTruthy();
-      fireEvent.click(checkoutCta()!);
-      expect(mocks.checkoutMutate).not.toHaveBeenCalled();
-      expect(screen.getByTestId("location").textContent).toBe(
-        "/test-org/billing/setup",
-      );
-    });
-
-    it.each([undefined, "unknown_flow", "tailscale_partner_gateway"])(
-      "selects code-owned copy for %s",
-      (flow) => {
-        mocks.session.mockReturnValue({
-          ...mocks.session(),
-          acceptedSignupOfferFlow: flow,
-        });
-        render(<PaygPlanSection />);
-        expect(
-          Boolean(screen.queryByText(/accepted Tailscale partner promotion/)),
-        ).toBe(flow === "tailscale_partner_gateway");
-        expect(checkoutCta()).not.toBeNull();
-      },
-    );
-
-    it.each([
-      { data: subscription() },
-      { isFetching: true },
-      { isError: true, error: new Error("unavailable") },
-    ])("requires confirmed subscription absence: %j", (state) => {
-      queryState(state);
-      render(<PaygPlanSection />);
-      expect(checkoutCta()).toBeNull();
-    });
-
-    it("hides after verified activation, not after clicking checkout", () => {
-      const view = render(<PaygPlanSection />);
-      fireEvent.click(checkoutCta()!);
-      expect(checkoutCta()).not.toBeNull();
-      mocks.session.mockReturnValue({
-        ...mocks.session(),
-        hasActiveSubscription: true,
-      });
-      view.rerender(<PaygPlanSection />);
-      expect(checkoutCta()).toBeNull();
-    });
-
-    it.each(["pro", "enterprise"])(
-      "does not offer the new prompt for raw tier %s",
-      (tier) => {
-        mocks.session.mockReturnValue({
-          ...mocks.session(),
-          rawGramAccountType: tier,
-        });
-        render(<PaygPlanSection />);
-        expect(checkoutCta()).toBeNull();
-      },
-    );
-
-    it("requires the rollout flag", () => {
-      mocks.flagResult.mockReturnValue({ status: "disabled" });
-      render(<PaygPlanSection />);
-      expect(checkoutCta()).toBeNull();
-    });
-
-    it("requires organization admin", () => {
-      mocks.hasAnyScope.mockReturnValue(false);
-      render(<PaygPlanSection />);
-      expect(checkoutCta()).toBeNull();
-    });
-  });
 
   // With no active trial (the beforeEach default), every other tier has no
   // payment relationship to report: enterprise bills through its contract,
