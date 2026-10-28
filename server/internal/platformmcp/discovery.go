@@ -172,7 +172,11 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 				if listReq, ok := req.(*mcp.ListToolsRequest); ok && listReq.Params != nil && listReq.Params.Cursor != "" {
 					return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: "tools/list is not paginated for this caller"}
 				}
-				listed := &mcp.ListToolsResult{Tools: discoveryTools(mode)}
+				firstRun, err := firstRunToolsFor(ctx, next, method, req)
+				if err != nil {
+					return nil, err
+				}
+				listed := &mcp.ListToolsResult{Tools: append(discoveryTools(mode), firstRun...)}
 				listed.CacheScope = "private"
 				return listed, nil
 			case "tools/call":
@@ -213,10 +217,49 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 	}
 }
 
+// firstRunTools are the tools most people reach for first: find or add an MCP
+// server, check it works, install it, and ask how. The small surface lists them
+// directly next to the meta-tools, so these steps take one call instead of a
+// search, a describe and a call. Every other tool stays behind search.
+var firstRunTools = []string{
+	"search_mcp_catalog",
+	"inspect_mcp_candidate",
+	"register_catalog_mcp",
+	"register_remote_mcp",
+	"find_mcp",
+	"get_mcp_readiness",
+	"get_my_install_instructions",
+	"search_speakeasy_docs",
+}
+
+// firstRunToolsFor returns the first-run tools this caller may see, taken from
+// the caller's own filtered catalogue so discovery and authorization rules
+// apply unchanged. Output schemas are left out to fit the host's tool budget;
+// results still carry their structured content.
+func firstRunToolsFor(ctx context.Context, next mcp.MethodHandler, method string, req mcp.Request) ([]*mcp.Tool, error) {
+	result, err := next(ctx, method, req)
+	if err != nil {
+		return nil, err
+	}
+	catalogue, ok := result.(*mcp.ListToolsResult)
+	if !ok {
+		return nil, nil
+	}
+	tools := make([]*mcp.Tool, 0, len(firstRunTools))
+	for _, tool := range catalogue.Tools {
+		if slices.Contains(firstRunTools, tool.Name) {
+			listed := *tool
+			listed.OutputSchema = nil
+			tools = append(tools, &listed)
+		}
+	}
+	return tools, nil
+}
+
 // discoveryInstructions replace the full server instructions, which Codex cuts
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
-	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. This connection lists discovery tools only; every Platform tool is reachable through them. " +
+	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. This connection lists the tools most people use first; call them directly. Every other Platform tool is reachable through the discovery tools. " +
 		"Find tools with search_platform_tools (plain words, such as \"add an MCP server from the catalog\"). Always call describe_platform_tool before using a tool: it returns the input schema and the rules for that tool. Then run it with call_platform_tool. Answer how-to and setup questions with search_speakeasy_docs and cite the pages it returns. " +
 		"Write tools preview first: show the user what will change and wait for explicit confirmation before calling again with confirmed set. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
 	if mode == discoveryCode {
