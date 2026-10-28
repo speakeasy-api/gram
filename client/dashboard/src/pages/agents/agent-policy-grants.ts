@@ -168,6 +168,15 @@ export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
 }
 
 /**
+ * What a permission on every resource of its kind applies to, as the editor and
+ * the agent's profile show it. An org grant narrowed to a project is not whole,
+ * so a caller passes no kind for it.
+ */
+export function agentPolicyUnrestrictedLabel(kind: string | undefined): string {
+  return kind === "org" ? "Whole organization" : "All resources";
+}
+
+/**
  * The resource kind a scope's selectors must carry. Mirrors
  * `ResourceKindForScope` in server/internal/authz/selector.go, which derives it
  * from the scope; `ValidateSelector` rejects a selector that disagrees.

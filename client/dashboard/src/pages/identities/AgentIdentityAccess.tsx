@@ -5,7 +5,10 @@ import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { ResourceLink } from "@/pages/access/ResourceLink";
 import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
-import { AGENT_POLICY_SCOPES } from "@/pages/agents/agent-policy-grants";
+import {
+  AGENT_POLICY_SCOPES,
+  agentPolicyUnrestrictedLabel,
+} from "@/pages/agents/agent-policy-grants";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
@@ -119,7 +122,11 @@ export function AgentIdentityPermissions({
                       className="flex flex-wrap items-center gap-x-2 gap-y-1"
                     >
                       {selector.resourceId === "*" ? (
-                        <Text small>All resources</Text>
+                        <Text small>
+                          {agentPolicyUnrestrictedLabel(
+                            narrowing ? undefined : selector.resourceKind,
+                          )}
+                        </Text>
                       ) : (
                         <ResourceLink
                           challenge={{
