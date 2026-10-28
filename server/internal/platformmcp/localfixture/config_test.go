@@ -21,7 +21,7 @@ func TestNewConfigBuildsCodeOwnedCatalogDescriptor(t *testing.T) {
 	require.Equal(t, ProviderKey, descriptor.ProviderKey)
 	require.Equal(t, CanonicalRef, descriptor.CanonicalRef)
 	require.Len(t, resources, 1)
-	require.Equal(t, "gram://platform-mcp/setup/local-fixture/provider_setup", resources[0].URI)
+	require.Equal(t, "speakeasy://platform-mcp/setup/local-fixture/provider_setup", resources[0].URI)
 	require.LessOrEqual(t, len(resources[0].Text), 32*1024)
 	require.NotContains(t, resources[0].Text, config.RemoteURL())
 	require.Equal(t, SetupIntent, descriptor.SetupIntent)

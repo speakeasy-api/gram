@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -305,6 +306,12 @@ func (s *CatalogIdentityProviderAttachmentService) associateExistingAttachment(c
 	}
 	if associated == 0 {
 		return ErrRegistrationInvalid
+	}
+	// This server may put the client on a second source, so the credential
+	// headers it copied from the first are no longer its to send. Last in this
+	// transaction, so it locks only the copy rows it rewrites.
+	if err := authclientbackfill.SyncServerDerivedCopies(ctx, tx, principal.OrganizationID, registration.McpServerID.UUID); err != nil {
+		return fmt.Errorf("sync mcp server auth client headers: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit identity-provider association: %w", err)

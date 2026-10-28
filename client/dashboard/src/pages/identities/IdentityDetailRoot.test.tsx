@@ -84,7 +84,9 @@ function setup(urn: string) {
           <Route
             path="/identities/:identityUrn"
             element={<IdentityDetailRoot />}
-          />
+          >
+            <Route path="overview" element={<h1>Identity overview</h1>} />
+          </Route>
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

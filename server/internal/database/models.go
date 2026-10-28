@@ -4083,6 +4083,9 @@ type OrganizationMetadatum struct {
 	CreationSource pgtype.Text
 	// @access: confidential
 	DefaultHost pgtype.Text
+	// Staff-entered link to the adoption dashboard for this organization.
+	// @access: restricted
+	AdoptionDashboardUrl pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

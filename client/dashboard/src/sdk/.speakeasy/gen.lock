@@ -600,7 +600,9 @@ trackedFiles:
   src/funcs/remoteSessionIssuersRefreshMetadata.ts: {}
   src/funcs/remoteSessionIssuersUpdate.ts: {}
   src/funcs/remoteSessionsAttachBinding.ts: {}
+  src/funcs/remoteSessionsBeginBindingRefresh.ts: {}
   src/funcs/remoteSessionsCommitServerIdentityConfiguration.ts: {}
+  src/funcs/remoteSessionsCompleteBindingRefresh.ts: {}
   src/funcs/remoteSessionsCount.ts: {}
   src/funcs/remoteSessionsDetachBinding.ts: {}
   src/funcs/remoteSessionsDetachServerClientAssociation.ts: {}
@@ -1004,9 +1006,12 @@ trackedFiles:
   src/models/components/authzchallenge.ts: {}
   src/models/components/awsiamcredential.ts: {}
   src/models/components/awskmskey.ts: {}
+  src/models/components/beginbindingrefreshrequestbody.ts: {}
   src/models/components/beginresponsebody.ts: {}
   src/models/components/beginslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/billingemail.ts: {}
+  src/models/components/bindingrefreshattempt.ts: {}
+  src/models/components/bindingrefreshresult.ts: {}
   src/models/components/blockagentonconnectionform.ts: {}
   src/models/components/builtincard.ts: {}
   src/models/components/builtindashboard.ts: {}
@@ -1042,6 +1047,7 @@ trackedFiles:
   src/models/components/codexhookresult.ts: {}
   src/models/components/commitserveridentityconfigurationform.ts: {}
   src/models/components/commitserveridentityconfigurationresult.ts: {}
+  src/models/components/completebindingrefreshrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsresult.ts: {}
   src/models/components/countremotesessionsresult.ts: {}
@@ -2219,6 +2225,7 @@ trackedFiles:
   src/models/operations/authlogin.ts: {}
   src/models/operations/authtransferin.ts: {}
   src/models/operations/authtransferout.ts: {}
+  src/models/operations/beginbindingrefresh.ts: {}
   src/models/operations/beginslackdirectoryconnection.ts: {}
   src/models/operations/blockagentonconnection.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
@@ -2233,6 +2240,7 @@ trackedFiles:
   src/models/operations/clonetoolset.ts: {}
   src/models/operations/commitserveridentityconfiguration.ts: {}
   src/models/operations/compileexpr.ts: {}
+  src/models/operations/completebindingrefresh.ts: {}
   src/models/operations/confirmoktaresourceconnections.ts: {}
   src/models/operations/countremotesessions.ts: {}
   src/models/operations/createagent.ts: {}
@@ -3796,6 +3804,8 @@ trackedFiles:
   src/react-query/remoteSessions.core.ts: {}
   src/react-query/remoteSessions.ts: {}
   src/react-query/remoteSessionsAttachBinding.ts: {}
+  src/react-query/remoteSessionsBeginBindingRefresh.ts: {}
+  src/react-query/remoteSessionsCompleteBindingRefresh.ts: {}
   src/react-query/remoteSessionsCount.core.ts: {}
   src/react-query/remoteSessionsCount.ts: {}
   src/react-query/remoteSessionsDetachBinding.ts: {}
@@ -4727,6 +4737,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  beginBindingRefresh:
+    speakeasy-default-begin-binding-refresh:
+      requestBody:
+        application/json: {"binding_id": "c2ab3676-c12e-44d5-96c1-c2c9e1e75c7b", "principal_id": "ac1fe0b4-234f-4eb4-926a-0632f775b558", "user_session_issuer_id": "65f150ff-0f4e-4761-a65b-6d9c263674f6"}
+      responses:
+        "200":
+          application/json: {"attempt_id": "06ed0d0e-7ffe-44f7-be0a-4a7ee6210603"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   beginSlackDirectoryConnection:
     speakeasy-default-begin-slack-directory-connection:
       requestBody:
@@ -4931,6 +4952,17 @@ examples:
       responses:
         "200":
           application/json: {"error": "<value>", "ok": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  completeBindingRefresh:
+    speakeasy-default-complete-binding-refresh:
+      requestBody:
+        application/json: {"attempt_id": "45cc81c1-c77c-47f5-b40b-4d7f520af05f", "principal_id": "663274a6-54b7-4414-bc1e-77f7d7b850e5", "user_session_issuer_id": "881b42aa-58d4-4369-aaf8-87fa21f65df3"}
+      responses:
+        "200":
+          application/json: {"completed": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

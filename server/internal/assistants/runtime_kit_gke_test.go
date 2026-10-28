@@ -515,3 +515,14 @@ func TestKitGKEBootstrapRestoreMarkerGate(t *testing.T) {
 		})
 	}
 }
+
+func TestKitGKETemplateAndClaimHaveDistinctPolicyNames(t *testing.T) {
+	t.Parallel()
+	objects, err := RenderKitGKEProvision(kitGKEInput())
+	require.NoError(t, err)
+	require.Equal(t, objects.Claim.GetName()+"-template", objects.Template.GetName())
+	ref, found, err := unstructured.NestedString(objects.Claim.Object, "spec", "sandboxTemplateRef", "name")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, objects.Template.GetName(), ref)
+}

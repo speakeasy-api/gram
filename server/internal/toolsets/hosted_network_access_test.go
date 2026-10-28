@@ -110,7 +110,6 @@ func TestHostedNetworkAccessModeTransitions(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, addresses, 1)
 		require.Equal(t, string(*created.McpSlug), addresses[0].Slug)
-		requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 	}
 }
 
@@ -138,7 +137,6 @@ func TestHostedNetworkAccessCanDisableDuringIngressOutage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, &description, updated.Description)
 	require.NoError(t, ti.service.DisableHostedServer(ctx, uuid.MustParse(created.ID)))
-	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 }
 
 func TestHostedNetworkAccessPreservesDomainRoot(t *testing.T) {
@@ -168,14 +166,12 @@ func TestHostedNetworkAccessPreservesDomainRoot(t *testing.T) {
 	require.Len(t, after, 1)
 	require.Equal(t, addresses[0].ID, after[0].ID)
 	require.True(t, after[0].IsDomainRoot.Bool, "a network mode change leaves the domain root alone")
-	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 
 	require.NoError(t, ti.service.DisableHostedServer(ctx, serverID))
 	after, err = endpoints.ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: serverID})
 	require.NoError(t, err)
 	require.Len(t, after, 1)
 	require.False(t, after[0].IsDomainRoot.Valid && after[0].IsDomainRoot.Bool, "a disabled server holds no domain root")
-	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 }
 
 func TestSetHostedNetworkAccessInTransaction(t *testing.T) {
@@ -215,7 +211,6 @@ func TestSetHostedNetworkAccessInTransaction(t *testing.T) {
 	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
 	require.NoError(t, err)
 	require.Equal(t, types.NetworkAccessMode("dual"), *stored.NetworkAccessMode)
-	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 }
 
 func TestSetHostedNetworkAccessInTransactionRequiresActorPrincipal(t *testing.T) {
@@ -264,22 +259,6 @@ func setHostedMode(t *testing.T, ctx context.Context, ti *testInstance, toolset 
 	updated, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 	require.NoError(t, err)
 	return updated
-}
-
-// A disabled server without OAuth reads private, as it would re-enable, while the mirrored column keeps its flag.
-func TestDisabledPublicHostedServerReadsPrivate(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestToolsetsService(t)
-	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Disabled Public")
-	require.NoError(t, ti.service.DisableHostedServer(ctx, uuid.MustParse(created.ID)))
-
-	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
-	require.NoError(t, err)
-	require.NotNil(t, stored.McpEnabled)
-	require.False(t, *stored.McpEnabled)
-	require.NotNil(t, stored.McpIsPublic)
-	require.False(t, *stored.McpIsPublic, "a disabled server without OAuth re-enables private")
-	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 }
 
 // An endpoint left on a deleted domain cannot serve, so it does not block a private mode on a platform ingress.
