@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -166,7 +168,9 @@ func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, o
 		TargetKind: "mcp", TargetName: name, ClientFamily: client,
 		Supported: false, Instructions: []InstallInstruction{}, Fallback: "",
 	}
-	if slug == "" || s.serverURL == nil {
+	// The slug goes into shell commands and config snippets. The API enforces
+	// this pattern, but the database does not, so check it again here.
+	if !installSlugPattern.MatchString(slug) || s.serverURL == nil {
 		output.Fallback = "This MCP server does not have a public installation endpoint. Use the dashboard or ask an organization administrator for the supported setup path."
 		return output, nil
 	}
@@ -182,6 +186,8 @@ func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, o
 	}
 	return output, nil
 }
+
+var installSlugPattern = regexp.MustCompile(constants.SlugPattern)
 
 // clientInstallSteps returns the shortest working way to add one remote MCP
 // endpoint in a client: a one-click link where the client has one, and a

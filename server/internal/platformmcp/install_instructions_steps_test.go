@@ -46,3 +46,17 @@ func TestClientInstallStepsGiveEachClientAWorkingPath(t *testing.T) {
 	require.Equal(t, endpoint, cowork[0].URL)
 	require.Empty(t, cowork[0].Snippet)
 }
+
+func TestStandaloneMCPInstallInstructionsRejectUnsafeSlug(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://mcp.example.test")
+	require.NoError(t, err)
+	service := &PluginsService{serverURL: serverURL}
+
+	output, err := service.standaloneMCPInstallInstructions(t.Context(), "", OnboardingClientClaudeCode, "Example", "bad;slug$(id)")
+	require.NoError(t, err)
+	require.False(t, output.Supported)
+	require.Empty(t, output.Instructions)
+	require.NotEmpty(t, output.Fallback)
+}

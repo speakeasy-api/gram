@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/base64"
 	"net/url"
 	"testing"
 	"time"
@@ -219,11 +220,12 @@ func TestMemberMCPURLsFollowOrganizationDefaultHost(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, install.Supported)
 	require.NotEmpty(t, install.Instructions)
-	endpointURLs := make([]string, 0, len(install.Instructions))
-	for _, step := range install.Instructions {
-		endpointURLs = append(endpointURLs, step.URL)
-	}
-	require.Contains(t, endpointURLs, wantURL, "the endpoint uses the organization default host")
+	link, err := url.Parse(install.Instructions[0].URL)
+	require.NoError(t, err)
+	config, err := base64.StdEncoding.DecodeString(link.Query().Get("config"))
+	require.NoError(t, err)
+	require.JSONEq(t, `{"url":"`+wantURL+`"}`, string(config), "the Cursor install link uses the organization default host")
+	require.Equal(t, wantURL, install.Instructions[1].URL, "the mcp.json step uses the organization default host")
 
 	status, err := service.GetMyMCPConnectionStatus(ctx, f.principal, GetMyMCPStatusInput{ProjectID: f.project.ID.String(), MCPID: f.mcpID.String()})
 	require.NoError(t, err)
