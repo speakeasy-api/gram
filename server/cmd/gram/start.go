@@ -1754,7 +1754,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("catalog validator: %w", err)
 			}
-			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)), featureFlags)
+			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL)), featureFlags)
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger, mcpCatalog)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
@@ -1885,7 +1885,7 @@ func newStartCommand() *cli.Command {
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine, mcpPolicyEvaluator))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			if c.Bool("registry-discovery-enabled") {
-				registry := mcpregistry.New(db, registryValidator)
+				registry := mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL)
 				if err := registry.AttachDiscovery(ctx, logger, mux, true, auth.New(logger, db, sessionManager, authzEngine), authzEngine); err != nil {
 					return fmt.Errorf("registry discovery readiness: %w", err)
 				}
@@ -2197,7 +2197,7 @@ func newStartCommand() *cli.Command {
 					}
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
+						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 						CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 						GuardianPolicy:                 guardianPolicy,
 						TunnelHTTPClient:               tunnelHTTPClient,
@@ -2237,7 +2237,7 @@ func newStartCommand() *cli.Command {
 						IssuerMetadataRefresher:        issuerMetadataRefresher,
 						RemoteSessionAssertionSigner:   clientAssertionSigner,
 						IssuerKeySweeper:               issuerKeySweeper(identityProviderProvisioner),
-						StartupSeeds:                   startupSeeds(logger, db),
+						StartupSeeds:                   startupSeeds(logger, db, siteURL),
 						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
 						TemporalEnv:                    temporalEnv,

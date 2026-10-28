@@ -73,6 +73,10 @@ func (s *Service) CreateTx(ctx context.Context, tx pgx.Tx, data json.RawMessage)
 		return Entry{}, err
 	}
 	q := repo.New(tx)
+	data, err = s.canonicalIcons(ctx, q, data)
+	if err != nil {
+		return Entry{}, err
+	}
 	if err := checkOktaMappingConflicts(ctx, q, uuid.Nil, data); err != nil {
 		return Entry{}, err
 	}
@@ -142,6 +146,10 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 	if published == nil {
 		if issues := s.validator.Validate(data); len(issues) > 0 {
 			return Entry{}, &InvalidError{Issues: issues}
+		}
+		data, err = s.canonicalIcons(ctx, q, data)
+		if err != nil {
+			return Entry{}, err
 		}
 		// Save replaces the full raw record, including unknown metadata. Its name
 		// is required by the record schema and must preserve the stored identity.

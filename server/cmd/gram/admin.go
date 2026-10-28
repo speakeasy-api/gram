@@ -518,7 +518,7 @@ func newAdminCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("load registry validator: %w", err)
 			}
-			registryService := mcpregistry.New(db, registryValidator)
+			registryService := mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL)
 			if err := registryService.Ready(ctx); err != nil {
 				return fmt.Errorf("registry readiness: %w", err)
 			}
