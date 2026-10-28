@@ -27,11 +27,16 @@ func promotionCandidateView(c catalogpromotion.Candidate) *gen.AdminRegistryProm
 	if v := c.SuggestedMetadata; v != nil {
 		suggestions = &gen.AdminRegistryPromotionSuggestions{PublicName: conv.PtrEmpty(v.Name), PublicTitle: conv.PtrEmpty(v.Title), PublicDescription: conv.PtrEmpty(v.Description), PublicURL: conv.PtrEmpty(v.URL), DocumentationURL: conv.PtrEmpty(v.DocumentationURL), DocsSlug: conv.PtrEmpty(v.DocsSlug), AuthMode: conv.PtrEmpty(v.AuthMode)}
 	}
+	var setupGuides []*gen.AdminRegistryPromotionSetupGuide
+	for _, guide := range c.SetupGuides {
+		setupGuides = append(setupGuides, &gen.AdminRegistryPromotionSetupGuide{Slug: guide.Slug, Title: guide.Title})
+	}
 	var discovery *gen.AdminRegistryPromotionAuthDiscovery
 	if c.AuthDiscovery != nil {
 		discovery = &gen.AdminRegistryPromotionAuthDiscovery{SupportsDcr: c.AuthDiscovery.SupportsDCR, SupportsCimd: c.AuthDiscovery.SupportsCIMD, AuthSetup: c.AuthDiscovery.AuthSetup, Status: c.AuthDiscovery.Status}
 	}
-	return &gen.AdminRegistryPromotionCandidate{AuthDiscovery: discovery, CreatedAt: c.CreatedAt, CurationRevision: c.CurationRevision, SuggestedMetadata: suggestions, ID: c.ID, OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, McpServerID: c.MCPServerID, RemoteMcpServerID: c.RemoteMCPServerID,
+	return &gen.AdminRegistryPromotionCandidate{AuthDiscovery: discovery, CreatedAt: c.CreatedAt, CurationRevision: c.CurationRevision, SuggestedMetadata: suggestions,
+		SetupGuides: setupGuides, SetupGuidesVersion: conv.PtrEmpty(c.SetupGuidesVersion), EndpointGuideSlug: conv.PtrEmpty(c.EndpointGuideSlug), ID: c.ID, OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, McpServerID: c.MCPServerID, RemoteMcpServerID: c.RemoteMCPServerID,
 		SourceName: conv.PtrEmpty(c.SourceName), SourceRevision: c.SourceRevision, Eligible: c.Eligible, CanOverrideEligibility: c.CanOverrideEligibility(), Reason: c.Reason, Status: c.Status, ObservedSuccesses: c.ObservedSuccesses, ObservedFailures: c.ObservedFailures, ObservedDays: c.ObservedDays,
 		CheckedAt: conv.PtrEmpty(c.CheckedAt), RegistryEntryID: conv.PtrEmpty(c.RegistryEntryID), DocsStatus: conv.PtrEmpty(c.DocsStatus), DocsURL: conv.PtrEmpty(c.DocsURL), DeliveryError: conv.PtrEmpty(c.DeliveryError), DocsRevision: c.DocsRevision, DocsRetryAllowed: c.DocsRetryAllowed, DocsAttempts: c.DocsAttempts,
 		DocsLastAttemptAt: conv.PtrEmpty(c.DocsLastAttemptAt), DocsNextAttemptAt: conv.PtrEmpty(c.DocsNextAttemptAt), DocsQueuedAt: conv.PtrEmpty(c.DocsQueuedAt), PromotedAt: conv.PtrEmpty(c.PromotedAt), PublicTitle: conv.PtrEmpty(c.PublicTitle)}

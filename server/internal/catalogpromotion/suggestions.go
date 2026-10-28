@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/setupguides"
 )
 
 // suggestedMetadata supplies editable staff-only drafts from observed metadata.
@@ -47,6 +48,12 @@ func suggestedMetadata(source repo.GetSourceRow) *PublicMetadata {
 				if len(name) <= 200 {
 					result.Name = name
 				}
+			}
+			// A guide that already documents this exact endpoint is the right
+			// guide, whatever the source is called, so reuse its slug rather than
+			// requesting a duplicate under a title-derived one.
+			if guide, ok := setupguides.ForEndpoint(result.URL); ok {
+				result.DocsSlug = guide.Slug
 			}
 		}
 	}

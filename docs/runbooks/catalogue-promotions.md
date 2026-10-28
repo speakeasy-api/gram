@@ -63,6 +63,15 @@ documentation references require staff input; the form does not invent them.
 Suggestions never overwrite edits on refresh. Guide status and retry information
 remain visible through the Published filter after promotion.
 
+When the shared endpoint matches exactly one existing setup guide, the form
+suggests that guide's slug. Under the slug field, the form warns when the slug
+already belongs to a guide, because publishing then links to that guide and
+requests no new one. Keep the slug only for the same provider. The check uses
+the guides embedded in the server (`setupguides.PinnedVersion`), so it can lag
+the docs repository's `main`; delivery rechecks GitHub before requesting a
+guide. The Admin MCP promotion preview shows the same check as "Existing setup
+guide". Neither blocks publication.
+
 Enable staff Admin MCP using `GRAM_ADMIN_MCP_ENABLED` and its independent
 `GRAM_ADMIN_MCP_SIGNING_KEY`. For writes, set `GRAM_ADMIN_MCP_WRITES_ENABLED=true`
 and include `promote_registry_candidate`, `retry_registry_promotion_docs`, and
@@ -136,7 +145,8 @@ promoting the same provider. Existing native catalogue rollout remains unchanged
 The checks exist because the factory researches and rewrites a whole guide on
 every trigger. A guide written outside promotion (for example, alongside the
 catalogue change itself) must use the same slug staff choose at promotion, or
-promotion requests a second guide.
+promotion requests a second guide. The review form's slug warning helps staff
+pick the existing slug.
 
 `existing_guide` is final: promotion never refreshes an existing guide. Refreshes
 go through the setup docs repository's `guide:stale` sweep. `guide_in_review`

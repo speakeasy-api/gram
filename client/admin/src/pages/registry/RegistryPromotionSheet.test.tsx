@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   cleanup,
   fireEvent,
@@ -5,10 +6,10 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { queryOptions, useMutation } from "@tanstack/react-query";
-import { renderWithApp } from "@/test/harness";
+
 import { RegistryPromotionSheet } from "./RegistryPromotionSheet";
+import { renderWithApp } from "@/test/harness";
 
 const api = vi.hoisted(() => ({
   candidate: vi.fn(),
@@ -591,3 +592,72 @@ it.each([
     expect(api.promote).not.toHaveBeenCalled();
   },
 );
+const setupGuides = [
+  { slug: "slack", title: "Slack" },
+  { slug: "box", title: "Box" },
+];
+it("warns when the slug already belongs to another guide and updates as it is edited", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: metadata,
+    setupGuides,
+    setupGuidesVersion: "v0.3.9",
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  const slug = await screen.findByRole("textbox", {
+    name: "Setup documentation slug",
+  });
+  expect(
+    screen.getByText(/No guide in the setup guides released to Speakeasy/)
+      .textContent,
+  ).toContain("(v0.3.9)");
+  fireEvent.change(slug, { target: { value: "box" } });
+  expect(screen.getByText(/already uses this slug/).textContent).toContain(
+    "Box",
+  );
+  expect(
+    screen.getByRole("link", { name: "View guide" }).getAttribute("href"),
+  ).toBe(
+    "https://github.com/speakeasy-api/mcp-setup-docs/tree/main/guides/box",
+  );
+  fireEvent.change(slug, { target: { value: "box-enterprise" } });
+  expect(screen.queryByText(/already uses this slug/)).toBeNull();
+  expect(
+    screen.getByText(/No guide in the setup guides released to Speakeasy/),
+  ).toBeTruthy();
+});
+it("notes an endpoint-matched slug instead of warning, without blocking publication", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: { ...metadata, docsSlug: "slack", authMode: "none" },
+    setupGuides,
+    setupGuidesVersion: "v0.3.9",
+    endpointGuideSlug: "slack",
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  expect(
+    (await screen.findByText(/guide for this endpoint/)).textContent,
+  ).toContain("Slack");
+  expect(screen.queryByText(/already uses this slug/)).toBeNull();
+  fireEvent.click(screen.getByRole("checkbox"));
+  const button = screen.getByRole("button", {
+    name: "Publish catalog entry",
+  }) as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+});
+it("shows no guide hint when the candidate carries no guide list", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: metadata,
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByRole("textbox", { name: "Setup documentation slug" });
+  expect(screen.queryByText(/setup guides released to Speakeasy/)).toBeNull();
+  expect(screen.queryByText(/already uses this slug/)).toBeNull();
+});

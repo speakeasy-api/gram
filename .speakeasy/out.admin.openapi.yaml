@@ -10503,6 +10503,9 @@ components:
           type: string
         eligible:
           type: boolean
+        endpoint_guide_slug:
+          type: string
+          description: Slug of the one pinned guide that documents the suggested public endpoint.
         id:
           type: string
         mcp_server_id:
@@ -10531,6 +10534,14 @@ components:
           type: string
         remote_mcp_server_id:
           type: string
+        setup_guides:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRegistryPromotionSetupGuide'
+          description: Guides in the pinned setup-docs export, for warning when a slug is already taken. Present only with suggested_metadata. Guides merged after the pinned version are missing.
+        setup_guides_version:
+          type: string
+          description: Pinned setup-docs export version that setup_guides came from.
         source_name:
           type: string
         source_revision:
@@ -10569,6 +10580,17 @@ components:
           type: string
       required:
         - candidates
+    AdminRegistryPromotionSetupGuide:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+      description: A setup guide in the setup-docs export pinned in the server.
+      required:
+        - slug
+        - title
     AdminRegistryPromotionSuggestions:
       type: object
       properties:

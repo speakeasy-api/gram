@@ -1453,6 +1453,14 @@ type AdminRegistryPromotionCandidate struct {
 	CreatedAt         string
 	CurationRevision  string
 	SuggestedMetadata *AdminRegistryPromotionSuggestions
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuide
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscovery
 	SourceRevision    string
 	Eligible          bool
@@ -1483,6 +1491,12 @@ type AdminRegistryPromotionCandidate struct {
 type AdminRegistryPromotionCandidates struct {
 	Candidates []*AdminRegistryPromotionCandidate
 	NextCursor *string
+}
+
+// A setup guide in the setup-docs export pinned in the server.
+type AdminRegistryPromotionSetupGuide struct {
+	Slug  string
+	Title string
 }
 
 // Untrusted observed metadata suggestions. Staff must edit and explicitly

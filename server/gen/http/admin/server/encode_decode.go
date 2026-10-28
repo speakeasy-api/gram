@@ -23390,6 +23390,8 @@ func marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidat
 		SourceName:             v.SourceName,
 		CreatedAt:              v.CreatedAt,
 		CurationRevision:       v.CurationRevision,
+		SetupGuidesVersion:     v.SetupGuidesVersion,
+		EndpointGuideSlug:      v.EndpointGuideSlug,
 		SourceRevision:         v.SourceRevision,
 		Eligible:               v.Eligible,
 		CanOverrideEligibility: v.CanOverrideEligibility,
@@ -23415,6 +23417,16 @@ func marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidat
 	if v.SuggestedMetadata != nil {
 		res.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(v.SuggestedMetadata)
 	}
+	if v.SetupGuides != nil {
+		res.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(v.SetupGuides))
+		for i, val := range v.SetupGuides {
+			if val == nil {
+				res.SetupGuides[i] = nil
+				continue
+			}
+			res.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
+	}
 	if v.AuthDiscovery != nil {
 		res.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(v.AuthDiscovery)
 	}
@@ -23437,6 +23449,21 @@ func marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSugges
 		DocumentationURL:  v.DocumentationURL,
 		DocsSlug:          v.DocsSlug,
 		AuthMode:          v.AuthMode,
+	}
+
+	return res
+}
+
+// marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody
+// builds a value of type *AdminRegistryPromotionSetupGuideResponseBody from a
+// value of type *admin.AdminRegistryPromotionSetupGuide.
+func marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(v *admin.AdminRegistryPromotionSetupGuide) *AdminRegistryPromotionSetupGuideResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminRegistryPromotionSetupGuideResponseBody{
+		Slug:  v.Slug,
+		Title: v.Title,
 	}
 
 	return res
