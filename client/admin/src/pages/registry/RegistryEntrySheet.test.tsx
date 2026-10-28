@@ -1,4 +1,10 @@
-import { fireEvent, screen, waitFor, cleanup } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  cleanup,
+} from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { renderWithApp } from "@/test/harness";
@@ -24,6 +30,12 @@ const mutations = vi.hoisted(() => ({
   save: vi.fn(),
   create: vi.fn(),
   visibility: vi.fn(),
+  upload: vi.fn(),
+}));
+vi.mock("@gram/admin-client/react-query/adminUploadPlatformImage", () => ({
+  buildAdminUploadPlatformImageMutation: () => ({
+    mutationFn: mutations.upload,
+  }),
 }));
 const okta = vi.hoisted(() => ({ candidates: [] as unknown[] }));
 vi.mock("@gram/admin-client/react-query/adminSaveRegistryEntry", () => ({
@@ -631,3 +643,68 @@ it.each([
     expect(confirm).not.toHaveBeenCalled();
   },
 );
+
+it("locks JSON and Save during upload and saves icons with the same draft after retry", async () => {
+  let resolve!: (value: unknown) => void;
+  mutations.upload.mockImplementation(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  mutations.save.mockRejectedValueOnce(new Error("Temporary save failure"));
+  await mount();
+  const editor = (await screen.findByLabelText(
+    "Record JSON",
+  )) as HTMLTextAreaElement;
+  fireEvent.change(screen.getByLabelText("Upload primary logo"), {
+    target: {
+      files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
+    },
+  });
+  expect(editor.disabled).toBe(true);
+  expect(
+    (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  await act(async () =>
+    resolve({ asset: { id: "accepted", contentType: "image/svg+xml" } }),
+  );
+  const draft = editor.value;
+  expect(draft).toContain("9007199254740993");
+  expect(draft).toContain("com.speakeasy.ai/icons");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByText("Temporary save failure");
+  expect(editor.value).toBe(draft);
+  mutations.save.mockResolvedValueOnce({ ...entry, dataJson: draft });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.save).toHaveBeenCalledTimes(2));
+  expect(mutations.save.mock.calls[1]![0].request.dataJson).toBe(draft);
+});
+
+it("retains icon draft on conflict and keeps Save locked until reload", async () => {
+  mutations.upload.mockResolvedValue({
+    asset: { id: "accepted", contentType: "image/svg+xml" },
+  });
+  mutations.save.mockRejectedValue(
+    Object.assign(new Error("Conflict"), { statusCode: 409 }),
+  );
+  await mount();
+  const editor = (await screen.findByLabelText(
+    "Record JSON",
+  )) as HTMLTextAreaElement;
+  fireEvent.change(screen.getByLabelText("Upload primary logo"), {
+    target: {
+      files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
+    },
+  });
+  await screen.findByAltText("Light preview");
+  const draft = editor.value;
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("button", { name: "Reload" });
+  expect(editor.value).toBe(draft);
+  expect(
+    (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});

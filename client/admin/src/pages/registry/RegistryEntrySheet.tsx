@@ -1,4 +1,5 @@
 import { lazy, Suspense, useRef, useState, type JSX } from "react";
+import { RegistryIcons } from "./RegistryIcons.tsx";
 import { RegistryOktaCandidates } from "./RegistryOktaCandidates";
 import { addOinName } from "./registryOktaNames";
 import { useBlocker } from "@tanstack/react-router";
@@ -71,7 +72,10 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
   const [serverIssues, setServerIssues] = useState<ValidationIssue[]>([]);
   const [edited, setEdited] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
+  const [requestBusy, setBusy] = useState(false);
+  const [iconBusy, setIconBusy] = useState(false);
+  const iconInFlight = useRef(false);
+  const busy = requestBusy || iconBusy;
   const [conflict, setConflict] = useState(false);
   const inFlight = useRef(false);
   const opener = useRef(document.activeElement as HTMLElement | null);
@@ -126,7 +130,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
   const perform = async (
     kind: "save" | "visibility" | "reload",
   ): Promise<void> => {
-    if (inFlight.current) return;
+    if (inFlight.current || iconInFlight.current) return;
     if (kind === "save") {
       const checked = validateRegistryText(text, base ?? undefined);
       setIssues(checked);
@@ -278,6 +282,21 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
                   }}
                 />
               )}
+              <RegistryIcons
+                value={text}
+                disabled={busy}
+                onBusyChange={(value) => {
+                  iconInFlight.current = value;
+                  setIconBusy(value);
+                }}
+                onChange={(value) => {
+                  setText(value);
+                  setIssues([]);
+                  setServerIssues([]);
+                  setEdited(true);
+                  if (errorStatus(failure) === 422) setFailure(null);
+                }}
+              />
               <Suspense fallback={<p role="status">Loading JSON editor…</p>}>
                 <RegistryJsonEditor
                   value={text}
@@ -345,7 +364,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
             >
               Save
             </Button>
-            <Button variant="outline" disabled={busy} onClick={close}>
+            <Button variant="outline" disabled={requestBusy} onClick={close}>
               Cancel
             </Button>
             {conflict && (
