@@ -100,9 +100,6 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		return RemoteMCPProvisioningResult{}, err
 	}
 
-	if err := mcpservers.VerifyLiveRemoteMCPSourceInTransaction(ctx, tx, *authCtx.ProjectID, remote.ID); err != nil {
-		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "verify remote MCP source")
-	}
 	mcpServer, err := mcpservers.CreateMCPServerInTransaction(ctx, tx, s.audit, mcpservers.MCPServerTransactionInput{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,

@@ -222,7 +222,7 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}
 	created, err = repo.New(tx).GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: created.ID, ProjectID: created.ProjectID})
 	if err != nil {
-		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "reload mirrored toolset").LogError(ctx, logger)
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "reload created toolset").LogError(ctx, logger)
 	}
 
 	result := ToolsetCreateResult{Toolset: created, McpEnabled: mcpEnabled, AddedToDefaultPlugin: false, PluginCreated: false}

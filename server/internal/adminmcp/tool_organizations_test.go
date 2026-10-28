@@ -132,6 +132,25 @@ func TestOrganizationSummaryAndTrialRequireExactID(t *testing.T) {
 	require.NotContains(t, body, "private database failure")
 }
 
+func TestOrganizationSummaryAdoptionDashboardURL(t *testing.T) {
+	t.Parallel()
+	link := "https://example.com/adoption"
+	summaryFields := func(url *string) map[string]json.RawMessage {
+		reads := &recordingOrganizationReader{org: &gen.AdminOrganization{
+			ID: "org-a", Name: "Example One", Slug: "example-one", AccountType: "payg",
+			AdoptionDashboardURL: url,
+		}}
+		status, _, data := callStaffReadTool(t, reads, "get_organization_summary", `{"organization_id":"org-a"}`)
+		require.Equal(t, http.StatusOK, status)
+		var fields map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(data, &fields))
+		return fields
+	}
+
+	require.JSONEq(t, `"`+link+`"`, string(summaryFields(&link)["adoption_dashboard_url"]))
+	require.NotContains(t, summaryFields(nil), "adoption_dashboard_url")
+}
+
 func TestConfiguredOrganizationReadsAppearInContext(t *testing.T) {
 	t.Parallel()
 	auth := &testAuthenticator{principal: staffPrincipal()}

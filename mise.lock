@@ -236,10 +236,12 @@ version = "1.4.4"
 backend = "github:FiloSottile/mkcert"
 
 [tools."github:FiloSottile/mkcert"."platforms.linux-arm64"]
+checksum = "sha256:b98f2cc69fd9147fe4d405d859c57504571adec0d3611c3eefd04107c7ac00d0"
 url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-arm64"
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709957"
 
 [tools."github:FiloSottile/mkcert"."platforms.linux-arm64-musl"]
+checksum = "sha256:b98f2cc69fd9147fe4d405d859c57504571adec0d3611c3eefd04107c7ac00d0"
 url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-arm64"
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709957"
 
@@ -249,18 +251,22 @@ url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709955"
 
 [tools."github:FiloSottile/mkcert"."platforms.linux-x64-musl"]
+checksum = "sha256:6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52"
 url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64"
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709955"
 
 [tools."github:FiloSottile/mkcert"."platforms.macos-arm64"]
+checksum = "sha256:c8af0df44bce04359794dad8ea28d750437411d632748049d08644ffb66a60c6"
 url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-darwin-arm64"
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709954"
 
 [tools."github:FiloSottile/mkcert"."platforms.macos-x64"]
+checksum = "sha256:a32dfab51f1845d51e810db8e47dcf0e6b51ae3422426514bf5a2b8302e97d4e"
 url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-darwin-amd64"
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709952"
 
 [tools."github:FiloSottile/mkcert"."platforms.windows-x64"]
+checksum = "sha256:d2660b50a9ed59eada480750561c96abc2ed4c9a38c6a24d93e30e0977631398"
 url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-windows-amd64.exe"
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709958"
 

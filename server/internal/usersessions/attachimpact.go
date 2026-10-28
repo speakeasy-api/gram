@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -133,12 +134,12 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		toolset, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
+		hosting, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "load toolset MCP server").LogError(ctx, logger)
 		}
 		if wrapper == nil {
-			return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+			return attachTarget{issuerID: hosting.UserSessionIssuerID, onPlatformHost: !hostingstate.LegacyAlias(toolset).CustomDomainID.Valid}, nil
 		}
 		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset)
 	default:
@@ -166,18 +167,19 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 }
 
 // canonicalAttachTarget previews a toolset's canonical wrapper, which owns the issuer: its live endpoints and,
-// while the server is enabled, the toolset's mirrored address, which still serves on its own host.
+// while the server is enabled, the toolset's frozen alias, which still serves on its own host.
 func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, wrapper *mcpserversrepo.McpServer, toolset toolsetsrepo.Toolset) (attachTarget, error) {
 	customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
 	if err != nil {
 		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, err
 	}
-	// The toolset's mirrored address still serves on its own host while the server is enabled.
-	if toolset.McpSlug.Valid && toolset.McpSlug.String != "" && (wrapper.Visibility == visibility.Public || wrapper.Visibility == visibility.Private) {
-		customDomainIDs = append(customDomainIDs, toolset.CustomDomainID)
+	// The frozen alias still serves on its own host while the server is enabled.
+	alias := hostingstate.LegacyAlias(toolset)
+	if alias.Slug.Valid && alias.Slug.String != "" && (wrapper.Visibility == visibility.Public || wrapper.Visibility == visibility.Private) {
+		customDomainIDs = append(customDomainIDs, alias.CustomDomainID)
 	}
 	if len(customDomainIDs) == 0 {
-		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: !alias.CustomDomainID.Valid}, nil
 	}
 	return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 }
