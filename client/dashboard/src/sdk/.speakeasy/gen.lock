@@ -693,9 +693,11 @@ trackedFiles:
   src/funcs/skillsDistribute.ts: {}
   src/funcs/skillsGet.ts: {}
   src/funcs/skillsGetShared.ts: {}
+  src/funcs/skillsLink.ts: {}
   src/funcs/skillsList.ts: {}
   src/funcs/skillsListDistributions.ts: {}
   src/funcs/skillsListFeedback.ts: {}
+  src/funcs/skillsListLinks.ts: {}
   src/funcs/skillsListSuggestionFeedback.ts: {}
   src/funcs/skillsListSuggestions.ts: {}
   src/funcs/skillsListTags.ts: {}
@@ -705,6 +707,7 @@ trackedFiles:
   src/funcs/skillsShare.ts: {}
   src/funcs/skillsTriggerSuggestion.ts: {}
   src/funcs/skillsUndistribute.ts: {}
+  src/funcs/skillsUnlink.ts: {}
   src/funcs/skillsUnshare.ts: {}
   src/funcs/skillsUpdate.ts: {}
   src/funcs/slackDirectoryConnectionsBegin.ts: {}
@@ -1394,6 +1397,7 @@ trackedFiles:
   src/models/components/launchercandidate.ts: {}
   src/models/components/launchercontext.ts: {}
   src/models/components/launcherjudgment.ts: {}
+  src/models/components/linkskillrequestbody.ts: {}
   src/models/components/listactorattributesresult.ts: {}
   src/models/components/listagentconnectionblocksresult.ts: {}
   src/models/components/listagentsresult.ts: {}
@@ -1513,6 +1517,7 @@ trackedFiles:
   src/models/components/listsigintsignalsresult.ts: {}
   src/models/components/listskilldistributionsresult.ts: {}
   src/models/components/listskillfeedbackresult.ts: {}
+  src/models/components/listskilllinksresult.ts: {}
   src/models/components/listskillsresult.ts: {}
   src/models/components/listskillsuggestionfeedbackresult.ts: {}
   src/models/components/listskillsuggestionsresult.ts: {}
@@ -1925,6 +1930,7 @@ trackedFiles:
   src/models/components/skillfeedbacktimelinepoint.ts: {}
   src/models/components/skillinsightmetrics.ts: {}
   src/models/components/skillinsightpoint.ts: {}
+  src/models/components/skilllink.ts: {}
   src/models/components/skillpromptinjectionfinding.ts: {}
   src/models/components/skillsharelink.ts: {}
   src/models/components/skillsightingtimelinepoint.ts: {}
@@ -2049,6 +2055,7 @@ trackedFiles:
   src/models/components/unhidemcpserverrequestbody.ts: {}
   src/models/components/unknownskillactivation.ts: {}
   src/models/components/unlinkemarequestbody.ts: {}
+  src/models/components/unlinkskillrequestbody.ts: {}
   src/models/components/unmarkriskresultsfalsepositiverequestbody.ts: {}
   src/models/components/unproxiedmcpserver.ts: {}
   src/models/components/unproxiedmcpserverclientusagerow.ts: {}
@@ -2581,6 +2588,7 @@ trackedFiles:
   src/models/operations/killswitcheslistmcpservers.ts: {}
   src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/launcherjudge.ts: {}
+  src/models/operations/linkskill.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listagentconnectionblocks.ts: {}
   src/models/operations/listagentdelegablegrants.ts: {}
@@ -2715,6 +2723,7 @@ trackedFiles:
   src/models/operations/listsigintsignals.ts: {}
   src/models/operations/listskilldistributions.ts: {}
   src/models/operations/listskillfeedback.ts: {}
+  src/models/operations/listskilllinks.ts: {}
   src/models/operations/listskills.ts: {}
   src/models/operations/listskillsuggestionfeedback.ts: {}
   src/models/operations/listskillsuggestions.ts: {}
@@ -2933,6 +2942,7 @@ trackedFiles:
   src/models/operations/unhideagentmcpserver.ts: {}
   src/models/operations/unhidemcpserver.ts: {}
   src/models/operations/unlinkema.ts: {}
+  src/models/operations/unlinkskill.ts: {}
   src/models/operations/unmarkriskresultsfalsepositive.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
   src/models/operations/unshareskill.ts: {}
@@ -3527,6 +3537,7 @@ trackedFiles:
   src/react-query/latestDeployment.ts: {}
   src/react-query/launcherJudge.ts: {}
   src/react-query/liftKillswitch.ts: {}
+  src/react-query/linkSkill.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
   src/react-query/listAPIKeys.ts: {}
   src/react-query/listAgentDelegableGrants.core.ts: {}
@@ -4025,6 +4036,8 @@ trackedFiles:
   src/react-query/skillEfficacySettings.ts: {}
   src/react-query/skillFeedback.core.ts: {}
   src/react-query/skillFeedback.ts: {}
+  src/react-query/skillLinks.core.ts: {}
+  src/react-query/skillLinks.ts: {}
   src/react-query/skillSuggestionFeedback.core.ts: {}
   src/react-query/skillSuggestionFeedback.ts: {}
   src/react-query/skillSuggestions.core.ts: {}
@@ -4103,6 +4116,7 @@ trackedFiles:
   src/react-query/unhideMcpServer.ts: {}
   src/react-query/unknownSkillActivations.core.ts: {}
   src/react-query/unknownSkillActivations.ts: {}
+  src/react-query/unlinkSkill.ts: {}
   src/react-query/unproxiedMcpServers.core.ts: {}
   src/react-query/unproxiedMcpServers.ts: {}
   src/react-query/unshareSkill.ts: {}
@@ -9198,6 +9212,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  linkSkill:
+    speakeasy-default-link-skill:
+      requestBody:
+        application/json: {"id": "550e8400-e29b-41d4-a716-446655440000", "mcp_server_id": "550e8400-e29b-41d4-a716-446655440001", "target_kind": "mcp_server"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-06-09T14:15:28.616Z", "id": "bdc7bf70-9ddf-4fcd-bb01-fdec0a39803a", "skill_display_name": "<value>", "skill_id": "e5a62f27-5a99-45e0-9a4d-aca6bc55bd80", "skill_name": "<value>", "target_kind": "meta_mcp_server"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listAIDetectionUsers:
     speakeasy-default-list-AI-detection-users:
       parameters:
@@ -10751,6 +10776,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listSkillLinks:
+    speakeasy-default-list-skill-links:
+      parameters:
+        query:
+          limit: 20
+      responses:
+        "200":
+          application/json: {"links": [{"created_at": "2025-03-04T00:39:51.405Z", "id": "e2e3c089-a782-4ece-af7f-b875c625d69c", "skill_display_name": "<value>", "skill_id": "c3a4eb13-c199-4859-b9d8-6b75e9185fca", "skill_name": "<value>", "target_kind": "organization_gateway"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listSkillSuggestionFeedback:
     speakeasy-default-list-skill-suggestion-feedback:
       parameters:
@@ -13301,6 +13338,15 @@ examples:
       responses:
         "200":
           application/json: {"generation": 192488, "grant_source": "<value>", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "remediation": "<value>", "resource": "<value>", "retryable": false, "scopes": ["<value 1>", "<value 2>", "<value 3>"], "stage": "eligibility", "state": "incomplete_metadata"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  unlinkSkill:
+    speakeasy-default-unlink-skill:
+      requestBody:
+        application/json: {"link_id": "550e8400-e29b-41d4-a716-446655440000"}
+      responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -899,3 +899,49 @@ func toolNames(tools []*mcp.Tool) []string {
 	}
 	return names
 }
+
+func TestPostgresSkillMCPTargetsResolvesPastTheLookupCap(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "skill_mcp_targets_cap")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	// More servers than the lookup cap, all sorting before the gateway, so a
+	// capped inventory would cut off both the last server and the gateway.
+	toolsetID := uuid.New()
+	_, err = testrepo.New(conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID: toolsetID, OrganizationID: principal.OrganizationID, ProjectID: project.ID,
+		Name: "Catalogue toolset", Slug: "catalogue-toolset",
+	})
+	require.NoError(t, err)
+	inserted, err := testrepo.New(conn).CreateMCPServerCatalogueFixtures(ctx, testrepo.CreateMCPServerCatalogueFixturesParams{
+		ProjectID: project.ID, NamePrefix: "Server ", SlugPrefix: "server-",
+		ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private", ServerCount: maxSkillTargetLookup + 1,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, maxSkillTargetLookup+1, inserted)
+	gatewayID, err := testrepo.New(conn).CreateMCPGatewayFixture(ctx, testrepo.CreateMCPGatewayFixtureParams{
+		ID: uuid.New(), OrganizationID: principal.OrganizationID, ProjectID: project.ID, Name: "Team Gateway",
+	})
+	require.NoError(t, err)
+
+	targets := NewPostgresSkillTargets(conn)
+	gateways, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetGateway, "team gateway")
+	require.NoError(t, err)
+	require.Equal(t, []SkillMCPTarget{{Kind: SkillMCPTargetGateway, ID: gatewayID.String(), Name: "Team Gateway", Slug: ""}}, gateways)
+
+	last, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, fmt.Sprintf("server-%04d", maxSkillTargetLookup))
+	require.NoError(t, err)
+	require.Len(t, last, 1)
+	require.Equal(t, fmt.Sprintf("Server %04d", maxSkillTargetLookup), last[0].Name)
+
+	byID, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, last[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, last, byID)
+
+	wrongKind, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, "Team Gateway")
+	require.NoError(t, err)
+	require.Empty(t, wrongKind, "a gateway is never matched as an MCP server")
+}
