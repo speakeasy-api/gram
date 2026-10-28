@@ -594,7 +594,7 @@ func TestInboundEMATrustGetNextStepKeepsAudienceGuidanceWithDisabledAdmission(t 
 	require.NoError(t, err)
 	require.Contains(t, output.NextStep, "no single audience")
 	require.Contains(t, output.NextStep, "ID-JAG sign-in cannot work until its admission mode is presets or open")
-	require.Contains(t, output.NextStep, "organizationUserSessionIssuers.updateIssuer")
+	require.Contains(t, output.NextStep, "organizationUserSessionIssuers.update management API")
 	require.Equal(t, 1, strings.Count(output.NextStep, "Issuer "+output.Issuers[0].Slug+":"))
 }
 

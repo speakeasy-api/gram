@@ -825,7 +825,7 @@ func (s *InboundEMATrustService) customClientURLs(ctx context.Context, organizat
 func inboundEMAAdmissionNote(issuer InboundEMAIssuer) string {
 	switch admission.Mode(issuer.ClientIDMetadataAdmissionMode) {
 	case admission.ModeDisabled:
-		return "Client ID metadata documents are disabled for this issuer, so ID-JAG sign-in cannot work until its admission mode is presets or open. Change it with the organizationUserSessionIssuers.updateIssuer management API (client_id_metadata_admission_mode); set_mcp_client_admission only changes project issuers."
+		return "Client ID metadata documents are disabled for this issuer, so ID-JAG sign-in cannot work until its admission mode is presets or open. Change it with the organizationUserSessionIssuers.update management API (client_id_metadata_admission_mode); set_mcp_client_admission only changes project issuers."
 	case admission.ModePresets:
 		return "This issuer admits only listed clients: the client the identity provider issues ID-JAGs to must be in preset_clients or custom_client_urls."
 	default:
