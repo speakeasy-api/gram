@@ -1,6 +1,8 @@
 import { Alert } from "@/components/ui/Alert";
 import { CodeBlock } from "./CodeBlock";
-import { Links, VariableField } from "./SetupFields";
+import { ConsoleRow } from "./ConsoleRow";
+import { ExchangeValues } from "./GkeExchange";
+import { Links, PendingValues, VariableField } from "./SetupFields";
 import type { Connection, PlatformSetup } from "./setupInstructions";
 import {
   platformEndpoints,
@@ -53,30 +55,8 @@ function podManifest(values: Record<string, string>, audience?: string) {
     "        sources:",
     "          - serviceAccountToken:",
     "              path: token",
-    `              audience: ${audience ?? "SPEAKEASY_AUDIENCE"}`,
+    `              audience: ${audience || "SPEAKEASY_AUDIENCE"}`,
     "              expirationSeconds: 600",
-  ].join("\n");
-}
-
-/** The exchange, run inside the pod each time it needs a Speakeasy token. */
-function exchangeScript(tokenEndpoint?: string) {
-  return [
-    `TOKEN_ENDPOINT=${tokenEndpoint ?? "SPEAKEASY_TOKEN_ENDPOINT"}`,
-    "MCP_URL=https://your-mcp-server-url",
-    "",
-    "# Read the file each time: Kubernetes replaces the token before it expires.",
-    'response=$(curl -sS "$TOKEN_ENDPOINT" \\',
-    '  --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \\',
-    '  --data-urlencode "assertion=$(cat "$SPEAKEASY_TOKEN_FILE")")',
-    "token=$(printf '%s' \"$response\" | jq -r '.access_token // empty')",
-    'if [ -z "$token" ]; then echo "Exchange failed: $response" >&2; exit 1; fi',
-    "",
-    "# Reuse $token until it expires (expires_in seconds), then exchange again.",
-    'curl -sS --fail-with-body "$MCP_URL" \\',
-    '  -H "Authorization: Bearer $token" \\',
-    '  -H "Content-Type: application/json" \\',
-    '  -H "Accept: application/json, text/event-stream" \\',
-    '  -d \'{"jsonrpc":"2.0","id":1,"method":"tools/list"}\'',
   ].join("\n");
 }
 
@@ -218,6 +198,24 @@ export function gkeSetupInstructions(entry: CatalogEntry): PlatformSetup {
               issues it for Speakeasy&apos;s audience and replaces it before it
               expires, so nothing secret is stored in the cluster.
             </p>
+            <ol className="border-border divide-border divide-y border">
+              <ConsoleRow
+                number={1}
+                label="Issue the token for Speakeasy"
+                fields={[
+                  {
+                    label: "Audience",
+                    value: computed.issuer_url ?? "",
+                    hint: "The pod spec below sets this as the token's audience.",
+                  },
+                ]}
+              />
+            </ol>
+            {!computed.issuer_url && (
+              <PendingValues placeholders={["SPEAKEASY_AUDIENCE"]}>
+                {issuerPicker}
+              </PendingValues>
+            )}
             <CodeBlock
               value={podManifest(values, computed.issuer_url)}
               label="Pod spec"
@@ -238,7 +236,7 @@ export function gkeSetupInstructions(entry: CatalogEntry): PlatformSetup {
               token once, and at 600 seconds Kubernetes writes a fresh one about
               every 8 minutes, before the access token runs out.
             </p>
-            {issuerPicker}
+            {computed.issuer_url && issuerPicker}
           </>
         ),
       },
@@ -247,17 +245,12 @@ export function gkeSetupInstructions(entry: CatalogEntry): PlatformSetup {
         short: "Exchange",
         title: "Exchange the token and call the server",
         phase: "connect",
-        body: ({ computed }) => (
+        body: ({ computed, servers, issuerPicker }) => (
           <>
-            <p className="text-sm">
-              Before calling an MCP server, the workload exchanges its token for
-              a Speakeasy access token. Set <code>MCP_URL</code> to the
-              server&apos;s URL, from its page in Speakeasy.
-            </p>
-            <CodeBlock
-              value={exchangeScript(computed.token_endpoint)}
-              label="Inside the pod"
-              language="shell"
+            <ExchangeValues
+              tokenEndpoint={computed.token_endpoint}
+              servers={servers}
+              issuerPicker={issuerPicker}
             />
             <p className="text-muted-foreground text-sm">
               The access token lasts up to 15 minutes and cannot be refreshed.

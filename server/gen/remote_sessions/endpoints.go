@@ -16,6 +16,8 @@ import (
 
 // Endpoints wraps the "remoteSessions" service endpoints.
 type Endpoints struct {
+	BeginBindingRefresh               goa.Endpoint
+	CompleteBindingRefresh            goa.Endpoint
 	ListBindings                      goa.Endpoint
 	AttachBinding                     goa.Endpoint
 	DetachBinding                     goa.Endpoint
@@ -34,6 +36,8 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		BeginBindingRefresh:               NewBeginBindingRefreshEndpoint(s, a.APIKeyAuth),
+		CompleteBindingRefresh:            NewCompleteBindingRefreshEndpoint(s, a.APIKeyAuth),
 		ListBindings:                      NewListBindingsEndpoint(s, a.APIKeyAuth),
 		AttachBinding:                     NewAttachBindingEndpoint(s, a.APIKeyAuth),
 		DetachBinding:                     NewDetachBindingEndpoint(s, a.APIKeyAuth),
@@ -50,6 +54,8 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "remoteSessions" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.BeginBindingRefresh = m(e.BeginBindingRefresh)
+	e.CompleteBindingRefresh = m(e.CompleteBindingRefresh)
 	e.ListBindings = m(e.ListBindings)
 	e.AttachBinding = m(e.AttachBinding)
 	e.DetachBinding = m(e.DetachBinding)
@@ -60,6 +66,76 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRemoteSessions = m(e.ListRemoteSessions)
 	e.CountRemoteSessions = m(e.CountRemoteSessions)
 	e.RevokeRemoteSession = m(e.RevokeRemoteSession)
+}
+
+// NewBeginBindingRefreshEndpoint returns an endpoint function that calls the
+// method "beginBindingRefresh" of service "remoteSessions".
+func NewBeginBindingRefreshEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BeginBindingRefreshPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.BeginBindingRefresh(ctx, p)
+	}
+}
+
+// NewCompleteBindingRefreshEndpoint returns an endpoint function that calls
+// the method "completeBindingRefresh" of service "remoteSessions".
+func NewCompleteBindingRefreshEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CompleteBindingRefreshPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CompleteBindingRefresh(ctx, p)
+	}
 }
 
 // NewListBindingsEndpoint returns an endpoint function that calls the method

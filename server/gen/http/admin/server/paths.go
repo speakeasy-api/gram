@@ -177,6 +177,11 @@ func SetStripeCustomerAdminPath() string {
 	return "/admin/organization.setStripeCustomer"
 }
 
+// SetAdoptionDashboardURLAdminPath returns the URL path to the admin service setAdoptionDashboardUrl HTTP endpoint.
+func SetAdoptionDashboardURLAdminPath() string {
+	return "/admin/organization.setAdoptionDashboardUrl"
+}
+
 // GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
 func GetStripeSubscriptionAdminPath() string {
 	return "/admin/organization.stripeSubscription"
