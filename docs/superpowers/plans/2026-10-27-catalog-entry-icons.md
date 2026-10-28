@@ -366,3 +366,19 @@ Still required after local setup is repaired: actual Admin upload/save/reopen/re
 - Return canonical public URLs from the Admin upload endpoint rather than deriving them from the Admin browser origin.
 - Forward security headers through the Admin serving adapter as well as the public route.
 - Verify legacy metadata against trusted origin and live platform assets before exposing it through the restricted staff MCP projection.
+
+### Local browser acceptance follow-up — 2026-10-28
+
+The earlier local startup blocker was repaired with development-only key/IDP/runtime setup, local PostgreSQL and ClickHouse migrations, and local certificates. System certificate trust was not changed: macOS trust installation needs interactive sudo, so the isolated test browser used `ignoreHTTPSErrors`. No production configuration was changed.
+
+Actual Admin browser checks passed against the fictional local catalog entry:
+
+- Primary and dark SVG uploads, explicit Save, close/reopen, and loaded previews.
+- Primary upload reused the existing asset because its bytes match the seeded SVG (content deduplication).
+- Removing dark in the draft displayed “Using primary”; discarding that draft preserved saved values.
+- An SVG containing an `onload` attribute was rejected with “invalid SVG image”.
+- Local reseed followed by reload/reopen retained the saved white dark-mode logo and purple primary logo.
+- Actual-product screenshot captured and visually inspected at `.playwright-cli/catalog-icons-product.png` (ignored local evidence, not the mockup).
+- The local public proxy returned HTTP 200, `image/svg+xml`, restrictive SVG CSP including `sandbox`, and `X-Content-Type-Options: nosniff`.
+
+Browser CLI commands subsequently stalled; direct SVG document navigation was not confirmed. Deployed/proxied production behavior remains untested. Local services were left running for inspection. No application source changes were needed for this follow-up.
