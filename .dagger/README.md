@@ -27,6 +27,11 @@ Container tools are installed from `mise.toml` and `mise.lock`. Local configurat
 credentials, generated binaries, and test reports are excluded from source inputs.
 Build tasks receive the workspace commit explicitly for version stamps.
 
+Source filtering uses `.gitignore` and the additional `Workspace.Directory`
+`Exclude` patterns in `.dagger/go/main.go`. Dagger 1.0.0-beta.21 does not
+automatically load `.daggerignore`; maintain pipeline-specific exclusions in
+`GoPipeline.New`.
+
 ## Tests and reports
 
 Use `dagger:go-test` to export reports: it writes `junit-report.xml`, server
