@@ -140,4 +140,9 @@ func TestCatalogRegistrationToolReportsAServerAlreadyInTheProject(t *testing.T) 
 	retry := register("catalog-already-first")
 	require.Equal(t, first.RegistrationID, retry.RegistrationID)
 	require.True(t, retry.Replayed)
+	require.False(t, retry.AlreadyRegistered, "a retry reports the original outcome")
+
+	retryAgain := register("catalog-already-second")
+	require.True(t, retryAgain.Replayed)
+	require.True(t, retryAgain.AlreadyRegistered, "a retry reports the original outcome")
 }

@@ -32,14 +32,17 @@ import (
 )
 
 const (
-	operationRegisterCatalogMCP  = "register_catalog_mcp"
-	receiptStatusPending         = "pending"
-	receiptStatusSucceeded       = "succeeded"
-	receiptResultRegistered      = "registered"
-	registrationStatusPending    = "pending"
-	registrationStatusRegistered = "registered"
-	receiptLifetime              = 24 * time.Hour
-	maxMCPEndpointSlugLength     = 128
+	operationRegisterCatalogMCP = "register_catalog_mcp"
+	receiptStatusPending        = "pending"
+	receiptStatusSucceeded      = "succeeded"
+	receiptResultRegistered     = "registered"
+	// receiptResultAlreadyRegistered completes a request that found the MCP
+	// server already fully added, so a replay reports the same outcome.
+	receiptResultAlreadyRegistered = "already_registered"
+	registrationStatusPending      = "pending"
+	registrationStatusRegistered   = "registered"
+	receiptLifetime                = 24 * time.Hour
+	maxMCPEndpointSlugLength       = 128
 )
 
 var (
@@ -612,10 +615,14 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
 
+	resultCode := receiptResultRegistered
+	if !componentsCreated {
+		resultCode = receiptResultAlreadyRegistered
+	}
 	completedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
 		RegistrationID: storedReceipt.RegistrationID,
 		Status:         receiptStatusSucceeded,
-		ResultCode:     optionalText(receiptResultRegistered),
+		ResultCode:     optionalText(resultCode),
 		ID:             storedReceipt.ID,
 		OrganizationID: principal.OrganizationID,
 	})
@@ -651,9 +658,7 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	if err := tx.Commit(ctx); err != nil {
 		return OperationReceipt{}, fmt.Errorf("commit platform mcp component convergence: %w", err)
 	}
-	completed := operationReceiptFromRow(completedReceipt, receipt.Replayed)
-	completed.AlreadyRegistered = !componentsCreated
-	return completed, nil
+	return operationReceiptFromRow(completedReceipt, receipt.Replayed), nil
 }
 
 func (s *RegistrationStore) CompleteRegistrationWithRemoteURL(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, remoteURL string) (OperationReceipt, error) {
@@ -892,6 +897,7 @@ func operationReceiptFromRow(row platformrepo.PlatformMcpOperationReceipt, repla
 		InputHash:            row.InputHash,
 		ExpiresAt:            row.ExpiresAt.Time,
 		Replayed:             replayed,
+		AlreadyRegistered:    row.ResultCode.String == receiptResultAlreadyRegistered,
 		ConnectionID:         row.ConnectionID,
 		ConnectionGeneration: row.ConnectionGeneration,
 	}
