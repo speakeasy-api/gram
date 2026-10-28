@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -240,4 +241,23 @@ func TestCandidateInspectionDirectRemoteProtocols(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A catalogue entry whose tool count is unknown must not read as a server with
+// no tools, and the sign-in classification carries its meaning to the agent.
+func TestCatalogCandidateOmitsUnknownToolCountAndExplainsSignIn(t *testing.T) {
+	t.Parallel()
+
+	raw, err := json.Marshal(CatalogCandidate{ProviderKey: "provider", CatalogRef: "app.example/mcp", Name: "Example", AuthSetup: "manual"})
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "tool_count")
+	require.Contains(t, string(raw), `"auth_setup":"manual"`)
+
+	raw, err = json.Marshal(CatalogCandidate{ToolCount: 3})
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"tool_count":3`)
+
+	field, ok := reflect.TypeFor[CatalogCandidate]().FieldByName("AuthSetup")
+	require.True(t, ok)
+	require.Contains(t, field.Tag.Get("jsonschema"), "search_speakeasy_docs")
 }
