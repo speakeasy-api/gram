@@ -24,7 +24,6 @@ func TestKitWorkloadAssertionFlags(t *testing.T) {
 	for _, name := range []string{"project-number", "organization-id", "cluster-location", "cluster-name"} {
 		require.True(t, names["assistant-kit-gke-"+name])
 	}
-	require.True(t, names["assistant-kit-gke-metadata-image"])
 	require.True(t, names["assistant-kit-workload-jwks-url"])
 	require.True(t, names["assistant-kit-workload-subject"])
 	require.True(t, names["assistant-kit-workload-assertion-file"])
@@ -59,9 +58,7 @@ func kitCLIContext(t *testing.T, values map[string]string) *cli.Context {
 func TestKitGKEProvisionCLI(t *testing.T) {
 	t.Parallel()
 	c := kitCLIContext(t, map[string]string{
-		"assistant-kit-gke-ingress-cidr": "10.1.0.0/16",
-
-		"assistant-kit-gke-metadata-image":    "example.invalid/runtime@sha256:" + strings.Repeat("a", 64),
+		"assistant-kit-gke-ingress-cidr":      "10.1.0.0/16",
 		"assistant-kit-gke-snapshots-enabled": "true",
 		"assistant-kit-gke-cpu-request":       "200m",
 		"assistant-kit-gke-work-size-limit":   "2Gi",
@@ -84,8 +81,6 @@ func TestKitGKEProvisionCLI(t *testing.T) {
 func TestKitGKEProvisionCLIRejectsUnsafeConfiguration(t *testing.T) {
 	t.Parallel()
 	for name, value := range map[string]string{
-
-		"assistant-kit-gke-metadata-image":  "example.invalid/runtime:latest",
 		"assistant-kit-network":             "local-network",
 		"assistant-runtime-local-ca-file":   "/local/ca.pem",
 		"assistant-kit-gke-ingress-cidr":    "",
@@ -98,7 +93,7 @@ func TestKitGKEProvisionCLIRejectsUnsafeConfiguration(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			values := map[string]string{"assistant-kit-gke-ingress-cidr": "10.1.0.0/16", "assistant-kit-gke-metadata-image": "example.invalid/runtime@sha256:" + strings.Repeat("a", 64)}
+			values := map[string]string{"assistant-kit-gke-ingress-cidr": "10.1.0.0/16"}
 			values[name] = value
 			_, err := kitGKEProvisionFromCLI(kitCLIContext(t, values))
 			require.Error(t, err)
@@ -112,7 +107,7 @@ func TestKitCLIOptInAndProviderValidation(t *testing.T) {
 	require.NoError(t, installKitLocalRuntimeFromCLI(kitCLIContext(t, nil), nil, nil, nil, nil, nil))
 	c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "local"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local environment")
-	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-gke-project-number": "123456789012", "assistant-kit-gke-organization-id": "987654321098", "assistant-kit-gke-cluster-location": "us-central1", "assistant-kit-gke-cluster-name": "assistants", "assistant-kit-gke-metadata-image": "example.invalid/runtime@sha256:" + strings.Repeat("a", 64)})
+	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-gke-project-number": "123456789012", "assistant-kit-gke-organization-id": "987654321098", "assistant-kit-gke-cluster-location": "us-central1", "assistant-kit-gke-cluster-name": "assistants"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "ingress-cidr")
 	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-workload-subject": "local-subject"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local-only")
@@ -135,7 +130,7 @@ func TestPrivateIngressRegistersAssistantRuntimeFlags(t *testing.T) {
 
 func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"assistant-kit-workload-issuer", "assistant-kit-workload-jwks-url", "assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
+	for _, name := range []string{"assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v0.2.19", "assistant-runtime-provider": "gke", name: "local-projection-value"})
@@ -144,22 +139,14 @@ func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
 	}
 }
 
-func TestKitGKEProvisionCLIRejectsMalformedMetadataImage(t *testing.T) {
+func TestKitGKEIgnoresExternalIssuerOptions(t *testing.T) {
 	t.Parallel()
-	for _, image := range []string{
-		"example.invalid/Runtime@sha256:" + strings.Repeat("a", 64),
-		"example.invalid/runtime@sha256:abc",
-		"example.invalid/runtime:latest",
-	} {
-		t.Run(image, func(t *testing.T) {
-			t.Parallel()
-			_, err := kitGKEProvisionFromCLI(kitCLIContext(t, map[string]string{
-
-				"assistant-kit-gke-metadata-image": image,
-			}))
-			require.ErrorContains(t, err, "assistant-kit-gke-metadata-image")
-		})
-	}
+	values := kitGKEIdentityCLIValues()
+	values["assistant-kit-image"] = "example.invalid/kit:v0.2.19"
+	values["assistant-runtime-provider"] = "gke"
+	values["assistant-kit-workload-issuer"] = "https://issuer.example.invalid"
+	values["assistant-kit-workload-jwks-url"] = "https://issuer.example.invalid/jwks"
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(kitCLIContext(t, values), nil, nil, nil, nil, nil), "ingress-cidr")
 }
 
 func kitGKEIdentityCLIValues() map[string]string {
