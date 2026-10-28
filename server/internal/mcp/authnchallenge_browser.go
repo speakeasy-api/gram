@@ -131,9 +131,6 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login parent mismatch"), oauthui.ReasonSessionChanged))
 	}
-	if err := validateWorkloadReconnectBinding(parent); err != nil {
-		return err
-	}
 	// A login on another callback host carries its own browser binding, set
 	// there by the bind stop of the remote login browser hop.
 	if remote.BrowserHash != "" {
@@ -142,6 +139,9 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 		}
 	} else if err := validateChallengeBrowser(r, parent, true); err != nil {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding"), oauthui.ReasonSessionChanged))
+	}
+	if err := validateWorkloadReconnectBinding(parent); err != nil {
+		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid workload connection binding"), oauthui.ReasonSessionChanged))
 	}
 	if err := validateCodeReconnectBinding(parent); err != nil {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, err, "invalid code connection binding"), oauthui.ReasonSessionChanged))
