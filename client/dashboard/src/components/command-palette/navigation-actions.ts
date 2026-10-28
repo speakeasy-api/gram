@@ -24,7 +24,7 @@ export const routeToNavAction = (
 // Flatten a route map into command-palette navigation actions. Only top-level
 // pages a user can actually land on: external links, unauthenticated pages, and
 // full-screen pages outside the main layout are excluded.
-export const routesToNavActions = (
+const routesToNavActions = (
   routeMap: Record<string, AppRoute>,
   group: string,
   idPrefix: string,
