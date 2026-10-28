@@ -69,8 +69,11 @@ Each event uses the first credential that resolves:
 4. The shared org key baked into the plugin, or `SPEAKEASY_AI_HOOKS_ORG_KEY`.
 
 `SPEAKEASY_AI_HOOKS_ORG_KEY` replaces the baked key and clears `agent_key`
-before this order is applied, for live events and offline replay alike.
-A matching cached sign-in then wins, so events can be attributed to the
+before this order is applied. Live events always take it. Offline replay
+takes it only for spooled events whose server matches
+`SPEAKEASY_AI_HOOKS_SERVER_URL` (and whose org matches
+`SPEAKEASY_AI_HOOKS_ORG_ID`, when both are set); other replayed events keep
+their baked key. A matching cached sign-in then wins, so events can be attributed to the
 signed-in person instead of the agent. Use `SPEAKEASY_AI_HOOKS_API_KEY` when
 an explicit credential must win over the cache.
 

@@ -36,8 +36,8 @@ type Config struct {
 	// cross project boundaries).
 	OrgID string
 	// HooksAPIKey is the shared org-wide hooks key baked into a published
-	// plugin. It is a fallback behind explicit and cached per-user keys and is
-	// never persisted locally.
+	// plugin. It is a fallback behind explicit and cached per-user keys, unless
+	// AgentKey marks it as an agent's key, and is never persisted locally.
 	HooksAPIKey string
 	// AgentKey marks HooksAPIKey as an agent identity's own key rather than
 	// the shared org key. It then outranks a cached personal sign-in, so an

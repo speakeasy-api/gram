@@ -29,6 +29,9 @@ type PluginConfig struct {
 	HooksAPIKey  string
 	BrowserLogin bool
 	BinaryPath   string
+	// AgentKey marks HooksAPIKey as an agent identity's own key, so it
+	// outranks a cached personal sign-in (see Config.AgentKey).
+	AgentKey bool
 }
 
 const pluginName = "speakeasy-observability"
@@ -210,7 +213,7 @@ func writeConfigFile(dir string, cfg PluginConfig) error {
 		Project:      cfg.ProjectSlug,
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,
-		AgentKey:     false,
+		AgentKey:     cfg.AgentKey,
 		BrowserLogin: cfg.BrowserLogin,
 		Nonblocking:  false,
 	})

@@ -368,11 +368,15 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 			}
 		}
 		envURL := strings.TrimRight(Env("HOOKS_SERVER_URL"), "/")
+		// The org key replaces the plugin's baked key, so it applies only when
+		// the environment names this entry's server. Without that, every
+		// spooled deployment would look like a match.
+		envNamesDeployment := envURL != "" && sameDeployment(envURL, Env("HOOKS_ORG_ID"), entry.ServerURL, entry.OrgID)
 		if envURL == "" {
 			envURL = entry.ServerURL
 		}
 		envMatchesDeployment := sameDeployment(envURL, Env("HOOKS_ORG_ID"), entry.ServerURL, entry.OrgID)
-		if orgKey := Env("HOOKS_ORG_KEY"); orgKey != "" && envMatchesDeployment {
+		if orgKey := Env("HOOKS_ORG_KEY"); orgKey != "" && envNamesDeployment {
 			cfg.HooksAPIKey = orgKey
 			cfg.AgentKey = false
 		}

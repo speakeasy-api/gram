@@ -341,9 +341,10 @@ func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenth
 	// fails the prompt open on every provider: blocking each turn on a
 	// credential the machine does not hold would brick the session, and the
 	// turn's tool events stay gated regardless. Only Claude can carry the
-	// context note that routes the user to sign-in.
+	// context note that routes the user to sign-in. An agent's plugin skips
+	// it: a personal sign-in would record the agent's events under that person.
 	if v.nudge {
-		if e.Provider == agenthooks.ProviderClaudeCode {
+		if e.Provider == agenthooks.ProviderClaudeCode && !r.cfg.AgentKey {
 			if note := r.loginNudge(e.Session.ID); note != "" {
 				return agenthooks.AcceptPrompt().WithContext(note), nil
 			}

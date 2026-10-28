@@ -308,6 +308,12 @@ func TestDrainAgentKeyOutranksDiskCache(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "")
+	t.Setenv("GRAM_HOOKS_ORG_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", "")
+	t.Setenv("GRAM_HOOKS_SERVER_URL", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_ID", "")
+	t.Setenv("GRAM_HOOKS_ORG_ID", "")
 	fs := newFakeServer(t, nil)
 
 	require.NoError(t, os.WriteFile(authFile, []byte(
@@ -393,6 +399,28 @@ func TestDrainEnvironmentKeysStayWithinDeployment(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDrainOrgKeyNeedsNamedDeployment: without SPEAKEASY_AI_HOOKS_SERVER_URL
+// the drain cannot tell which deployment the org key belongs to, so it keeps
+// the entry's baked key.
+func TestDrainOrgKeyNeedsNamedDeployment(t *testing.T) {
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
+	t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", "")
+	t.Setenv("GRAM_HOOKS_SERVER_URL", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_ID", "")
+	t.Setenv("GRAM_HOOKS_ORG_ID", "")
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://other.example.test","org":"org-other","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+	entry := spoolEntry{ServerURL: "https://other.example.test", OrgID: "org-other", ConfigPath: cfgPath}
+
+	auth := resolveDrainAuth(entry, drainAuthKey(entry), make(map[string]drainAuth))
+	require.True(t, auth.ok)
+	require.Equal(t, "agent-key", auth.c.APIKey)
+	require.Equal(t, "agent-key", auth.orgKey)
 }
 
 // TestMaybeSpawnDrainAfterRecovery drives the real provider path: sends fail

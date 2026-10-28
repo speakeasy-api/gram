@@ -637,6 +637,8 @@ func TestAgentKeyReadFromPluginConfig(t *testing.T) {
 	cfg, _ := SplitInlineFlags(Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + cfgPath})
 	require.Equal(t, "agent-key", cfg.HooksAPIKey)
 	require.True(t, cfg.AgentKey)
+	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "")
+	t.Setenv("GRAM_HOOKS_ORG_KEY", "")
 	require.True(t, LoadConfig(cfg).AgentKey)
 
 	t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
@@ -898,6 +900,7 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				ProjectSlug:  "default",
 				OrgID:        "org-1",
 				HooksAPIKey:  "shared-key",
+				AgentKey:     false,
 				BrowserLogin: false,
 				BinaryPath:   "/tmp/speakeasy-hooks",
 			})
@@ -935,6 +938,7 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 		ProjectSlug:  "default",
 		OrgID:        "org-1",
 		HooksAPIKey:  "shared-key",
+		AgentKey:     false,
 		BrowserLogin: false,
 		BinaryPath:   "/tmp/speakeasy-hooks",
 	})
@@ -951,6 +955,80 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(b, &cfg))
 	require.Equal(t, "https://gram.test", cfg.ServerURL)
+}
+
+// TestWritePluginMarksAgentKey: a package written for an agent records the
+// agent_key marker, so its key outranks a cached personal sign-in.
+func TestWritePluginMarksAgentKey(t *testing.T) {
+	for _, agent := range []bool{true, false} {
+		dir := t.TempDir()
+		err := WritePlugin(t.Context(), "openclaw", dir, PluginConfig{
+			ServerURL:    "https://gram.test",
+			SiteURL:      "",
+			ProjectSlug:  "default",
+			OrgID:        "org-1",
+			HooksAPIKey:  "install-key",
+			AgentKey:     agent,
+			BrowserLogin: false,
+			BinaryPath:   "/tmp/speakeasy-hooks",
+		})
+		require.NoError(t, err)
+
+		cfg, _ := SplitInlineFlags(Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + filepath.Join(dir, configFileName)})
+		require.Equal(t, "install-key", cfg.HooksAPIKey)
+		require.Equal(t, agent, cfg.AgentKey)
+	}
+}
+
+// TestAgentKeySessionStartSkipsBrowserLogin: an agent's plugin never opens a
+// browser sign-in, even with browser login on and no cached sign-in, because
+// its own key outranks any cache that sign-in would write.
+func TestAgentKeySessionStartSkipsBrowserLogin(t *testing.T) {
+	unsetClaudeLaunch(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_FORCE", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "1")
+	forceInteractiveEnv(t)
+	var opened atomic.Int32
+	orig := openBrowser
+	t.Cleanup(func() { openBrowser = orig })
+	openBrowser = func(string) { opened.Add(1) }
+
+	fs := newFakeServer(t, nil)
+	cfg := Config{ServerURL: fs.URL, SiteURL: "", ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "agent-key", AgentKey: true, BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	payload := []byte(`{"session_id":"agent-session","hook_event_name":"SessionStart","source":"startup"}`)
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Zero(t, opened.Load(), "an agent's plugin must not start a browser sign-in")
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.NotEmpty(t, fs.headers)
+	require.Equal(t, "agent-key", fs.headers[len(fs.headers)-1].Get("Gram-Key"))
+}
+
+// TestAgentKeyPluginSkipsLoginNudge: an agent's plugin with no usable key
+// still fails the prompt open, but never asks the person to sign in.
+func TestAgentKeyPluginSkipsLoginNudge(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	cfg := Config{ServerURL: fs.URL, SiteURL: "", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", AgentKey: true, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
+	require.Equal(t, 0, res.ExitCode)
+	require.NotContains(t, string(res.Stdout), "additionalContext")
+	require.NotContains(t, string(res.Stdout), "login")
 }
 
 // unsetClaudeLaunch clears the env a live Claude Code session exports. Launch

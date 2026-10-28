@@ -102,6 +102,7 @@ func runInstall(args []string) int {
 		HooksAPIKey:  relay.Env("HOOKS_ORG_KEY"),
 		BrowserLogin: *browserLogin,
 		BinaryPath:   binaryPath,
+		AgentKey:     false, // the environment's org key is shared, never an agent's
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "speakeasy-hooks install: %v\n", err)
 		return 1
