@@ -153,7 +153,10 @@ type Service struct {
 	db                        *pgxpool.Pool
 	// skillResolver answers which managed skills a hosted endpoint serves to
 	// a caller over the Skills extension and records their reads.
-	skillResolver   *mcpskills.Resolver
+	skillResolver *mcpskills.Resolver
+	// platformSkills is the embedded reviewed skill catalog the platform
+	// toolset serves over the Skills extension, built once at construction.
+	platformSkills  *mcpskills.EmbeddedCatalog
 	authRepo        *auth_repo.Queries
 	toolsetsRepo    *toolsets_repo.Queries
 	mcpMetadataRepo *metadata_repo.Queries
@@ -552,6 +555,10 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("initialize ID-JAG validator: %w", err)
 	}
+	platformSkills, err := mcpskills.NewEmbeddedCatalog()
+	if err != nil {
+		return nil, fmt.Errorf("initialize platform skill catalog: %w", err)
+	}
 
 	platformSvc := platformtoolsruntime.NewService(
 		logger,
@@ -587,6 +594,7 @@ func NewService(
 		guardianPolicy:            guardianPolicy,
 		db:                        db,
 		skillResolver:             mcpskills.NewResolver(logger, db),
+		platformSkills:            platformSkills,
 		authRepo:                  auth_repo.New(db),
 		toolsetsRepo:              toolsets_repo.New(db),
 		mcpMetadataRepo:           metadata_repo.New(db),

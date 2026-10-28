@@ -2,10 +2,9 @@ package mcp
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
 
@@ -42,27 +41,7 @@ func (s *Service) skillsOverMCPEnabledForOrganization(ctx context.Context, organ
 		slug = org.Slug
 	}
 
-	return evaluateSkillsOverMCPFlag(ctx, s.logger, s.features, organizationID, slug)
-}
-
-// evaluateSkillsOverMCPFlag decides the flag from the provider's locally
-// cached definitions only. The decision sits on every hosted initialize and
-// server/discover, so it must never wait on a remote flag service: the local
-// path answers from the definitions the SDK polls in the background and
-// fails closed (off) when they are unavailable or inconclusive, and a
-// provider without local evaluation configured keeps the extension off
-// everywhere. An empty slug evaluates by organization id alone.
-func evaluateSkillsOverMCPFlag(ctx context.Context, logger *slog.Logger, features feature.Provider, organizationID, organizationSlug string) bool {
-	if features == nil || organizationID == "" {
-		return false
-	}
-
-	on, err := features.IsFlagEnabledLocal(ctx, feature.FlagSkillsOverMCP, organizationID, feature.OrgProjectGroups(organizationSlug, ""), nil)
-	if err != nil {
-		logger.WarnContext(ctx, "skills-over-mcp flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return false
-	}
-	return on
+	return mcpskills.FlagEnabled(ctx, s.logger, s.features, organizationID, slug)
 }
 
 // hostedExtensions lists the extension capability labels the hosted surface

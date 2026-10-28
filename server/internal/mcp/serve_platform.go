@@ -217,7 +217,14 @@ func (s *Service) handlePlatformToolsetRequest(
 		}()
 	}
 
-	if !methodAvailable(req, *protocolVersion, mcpversions.SupportedPlatformToolset(), nil) {
+	// The declared extensions are resolved only for an extension method: the
+	// flag behind them costs a lookup, and a core method's availability does
+	// not depend on it. Every path below evaluates the flag at most once.
+	var extensions []string
+	if mcpversions.KnownExtensionMethod(req.Method) {
+		extensions = s.platformExtensions(ctx, authCtx)
+	}
+	if !methodAvailable(req, *protocolVersion, mcpversions.SupportedPlatformToolset(), extensions) {
 		return nil, unavailableMethod(req)
 	}
 
@@ -225,21 +232,46 @@ func (s *Service) handlePlatformToolsetRequest(
 	case mcpversions.MethodPing:
 		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
 	case mcpversions.MethodServerDiscover:
-		return handleServerDiscover(ctx, s.logger, req.ID, describePlatformServer(), mcpversions.SupportedPlatformToolset())
+		return handleServerDiscover(ctx, s.logger, req.ID, describePlatformServer(s.platformSkillsEnabled(ctx, authCtx)), mcpversions.SupportedPlatformToolset())
 	case mcpversions.MethodInitialize:
-		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion)
+		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion, s.platformSkillsEnabled(ctx, authCtx))
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
 	case mcpversions.MethodToolsList:
 		return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
 	case mcpversions.MethodToolsCall:
 		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
+	case mcpversions.MethodResourcesList:
+		// The platform toolset has resources only while it declares the
+		// Skills extension, and even then lists none: skills are listed
+		// through skills/list. Without the extension there is no resources
+		// capability, and the method stays unknown.
+		if !s.platformSkillsEnabled(ctx, authCtx) {
+			return nil, unavailableMethod(req)
+		}
+		return s.listPlatformResources(ctx, req)
+	case mcpversions.MethodResourcesRead:
+		// While the extension is off the surface declares no resources, so
+		// the method stays unknown, as it was before the extension existed.
+		// While it is on, an embedded skill's SKILL.md is the only resource
+		// this surface reads, and any other URI is an unknown resource.
+		if !s.platformSkillsEnabled(ctx, authCtx) {
+			return nil, unavailableMethod(req)
+		}
+		return s.readPlatformResource(ctx, req)
+	case mcpversions.MethodSkillsList:
+		return s.listPlatformSkills(ctx, req)
+	case mcpversions.MethodSkillsGet:
+		return s.getPlatformSkill(ctx, req)
 	default:
 		return nil, unavailableMethod(req)
 	}
 }
 
-func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, protocolVersion *mcpversions.Resolution) (json.RawMessage, error) {
+// handlePlatformInitialize answers the handshake for the platform toolset.
+// skillsEnabled selects whether the Skills extension is declared among the
+// capabilities.
+func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, protocolVersion *mcpversions.Resolution, skillsEnabled bool) (json.RawMessage, error) {
 	// Malformed params must not fail the handshake, so a parse error is
 	// logged, the requested version is left unrecorded, and negotiation
 	// proceeds from an absent request — answering the unversioned default.
@@ -265,7 +297,7 @@ func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetr
 
 	result := &result[initializeResult]{
 		ID:             req.ID,
-		Result:         describePlatformServer().initializeResult(negotiated),
+		Result:         describePlatformServer(skillsEnabled).initializeResult(negotiated),
 		serverIdentity: serverInfoPlatformToolset,
 		cacheHints:     nil,
 	}
