@@ -145,9 +145,9 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 		// is not MCP-enabled is reported as needing no index.
 		target, err := toolsetsrepo.New(conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: indexedToolset, ProjectID: indexedProject})
 		require.NoError(t, err)
-		target, _, err = hostedmcp.LoadServerState(ctx, conn, target)
+		hosting, _, err := hostedmcp.LoadServerState(ctx, conn, target)
 		require.NoError(t, err)
-		if !target.McpEnabled {
+		if !hosting.Enabled {
 			return toolsets.ErrToolsetIndexNotRequired
 		}
 		return nil
