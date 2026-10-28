@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: mocks.flagStatus }),
+  useFeatureFlag: (flag: string) => {
+    expect(flag).toBe("inference-workload-setup");
+    return { status: mocks.flagStatus };
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project_one" }),
