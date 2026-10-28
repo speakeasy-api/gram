@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,35 +102,41 @@ func legacyAliasPages(pages ...[]mcpendpoints.AliasBackfillCandidate) func(uuid.
 	}
 }
 
-func TestLegacyAliasEndpointsRunJournalsWritesAndCountsTotals(t *testing.T) {
+func TestLegacyAliasEndpointsRunJournalsIntentBeforeCommit(t *testing.T) {
 	t.Parallel()
 	created, failing, unknown := uuid.New(), uuid.New(), uuid.New()
 	projectID, endpointID, domainID := uuid.New(), uuid.New(), uuid.New()
 	journal := &recordingJournal{}
 	var out bytes.Buffer
+	planned := mcpendpoints.AliasBackfillResult{
+		Rows: []mcpendpoints.AliasBackfillRow{
+			{ToolsetID: created, ProjectID: projectID, Slug: "old", CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Action: mcpendpoints.AliasBackfillSkip, Reason: "custom domain deleted"},
+			{ToolsetID: created, ProjectID: projectID, Slug: "old", PlatformForCustomDomain: true, Action: mcpendpoints.AliasBackfillCreate, EndpointID: uuid.NullUUID{UUID: endpointID, Valid: true}},
+		},
+		AliasMove: &mcpendpoints.AliasMove{
+			From: legacyalias.Alias{Slug: pgtype.Text{String: "old", Valid: true}, CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}},
+			To:   legacyalias.Alias{Slug: pgtype.Text{String: "old", Valid: true}},
+		},
+	}
+	var journalAtCommit []string
 	run := legacyAliasEndpointsRun{
 		list: legacyAliasPages([]mcpendpoints.AliasBackfillCandidate{
 			{ToolsetID: created, ProjectID: projectID, OrganizationID: "org"},
 			{ToolsetID: failing, ProjectID: projectID, OrganizationID: "org"},
 			{ToolsetID: unknown, ProjectID: projectID, OrganizationID: "org"},
 		}),
-		backfill: func(candidate mcpendpoints.AliasBackfillCandidate) (mcpendpoints.AliasBackfillResult, error) {
+		backfill: func(candidate mcpendpoints.AliasBackfillCandidate, beforeCommit func(mcpendpoints.AliasBackfillResult) error) (mcpendpoints.AliasBackfillResult, error) {
 			switch candidate.ToolsetID {
 			case failing:
 				return mcpendpoints.AliasBackfillResult{}, errors.New("boom")
 			case unknown:
-				return mcpendpoints.AliasBackfillResult{}, mcpendpoints.ErrAliasBackfillCommitUnknown
+				require.NoError(t, beforeCommit(mcpendpoints.AliasBackfillResult{Rows: []mcpendpoints.AliasBackfillRow{{ToolsetID: unknown, ProjectID: projectID, Slug: "u", Action: mcpendpoints.AliasBackfillCreate, EndpointID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}}}))
+				// An interrupted commit must stay reported as unknown.
+				return mcpendpoints.AliasBackfillResult{}, fmt.Errorf("backfill candidate: %w", fmt.Errorf("%w: %w", mcpendpoints.ErrAliasBackfillCommitUnknown, context.Canceled))
 			}
-			return mcpendpoints.AliasBackfillResult{
-				Rows: []mcpendpoints.AliasBackfillRow{
-					{ToolsetID: created, ProjectID: projectID, Slug: "old", CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Action: mcpendpoints.AliasBackfillSkip, Reason: "custom domain deleted"},
-					{ToolsetID: created, ProjectID: projectID, Slug: "old", PlatformForCustomDomain: true, Action: mcpendpoints.AliasBackfillCreate, EndpointID: uuid.NullUUID{UUID: endpointID, Valid: true}},
-				},
-				AliasMove: &mcpendpoints.AliasMove{
-					From: legacyalias.Alias{Slug: pgtype.Text{String: "old", Valid: true}, CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}},
-					To:   legacyalias.Alias{Slug: pgtype.Text{String: "old", Valid: true}},
-				},
-			}, nil
+			require.NoError(t, beforeCommit(planned))
+			journalAtCommit = strings.Split(strings.TrimSpace(journal.String()), "\n")
+			return planned, nil
 		},
 		apply:   true,
 		stdout:  &out,
@@ -139,25 +147,59 @@ func TestLegacyAliasEndpointsRunJournalsWritesAndCountsTotals(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, legacyAliasEndpointsTotals{"skip": 1, "created": 1, "alias_moved": 1, "failed": 1, "commit_outcome_unknown": 1}, totals)
 
+	require.Len(t, journalAtCommit, 1, "the pending entry is flushed before the commit")
 	lines := strings.Split(strings.TrimSpace(journal.String()), "\n")
-	require.Len(t, lines, 2)
-	require.Equal(t, 2, journal.syncs)
-	var endpoint, move legacyAliasJournalEntry
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &endpoint))
-	require.NoError(t, json.Unmarshal([]byte(lines[1]), &move))
-	require.Equal(t, "endpoint_created", endpoint.Kind)
-	require.Equal(t, endpointID, *endpoint.EndpointID)
-	require.Equal(t, &legacyAliasJournalAddress{Slug: "old", CustomDomainID: nil}, endpoint.Address)
-	require.Equal(t, "alias_moved", move.Kind)
-	require.Equal(t, &legacyAliasJournalAddress{Slug: "old", CustomDomainID: &domainID}, move.AliasFrom)
-	require.Equal(t, &legacyAliasJournalAddress{Slug: "old", CustomDomainID: nil}, move.AliasTo)
+	require.Len(t, lines, 4)
+	require.Equal(t, 4, journal.syncs)
+	entries := make([]legacyAliasJournalEntry, len(lines))
+	for i, line := range lines {
+		require.NoError(t, json.Unmarshal([]byte(line), &entries[i]))
+	}
+	require.Equal(t, legacyAliasJournalEntry{
+		Status: "pending", McpServerID: created, ProjectID: projectID,
+		Endpoints: []legacyAliasJournalEndpoint{{EndpointID: endpointID, Address: legacyAliasJournalAddress{Slug: "old", CustomDomainID: nil}}},
+		AliasMove: &legacyAliasJournalMove{From: legacyAliasJournalAddress{Slug: "old", CustomDomainID: &domainID}, To: legacyAliasJournalAddress{Slug: "old", CustomDomainID: nil}},
+	}, entries[0])
+	require.Equal(t, legacyAliasJournalEntry{Status: "committed", McpServerID: created, ProjectID: projectID}, entries[1])
+	require.Equal(t, "pending", entries[2].Status)
+	require.Equal(t, unknown, entries[2].McpServerID)
+	require.Equal(t, legacyAliasJournalEntry{Status: "commit_outcome_unknown", McpServerID: unknown, ProjectID: projectID}, entries[3])
 
 	var report bytes.Buffer
 	code := legacyAliasEndpointsReport(&report, legacyAliasEndpointsConfig{environment: "dev", apply: true}, totals, nil)
 	require.Equal(t, 1, code)
 	require.Contains(t, report.String(), "mode=apply environment=dev alias_moved=1 commit_outcome_unknown=1 created=1 failed=1 skip=1")
-	require.Contains(t, out.String(), "action=commit_outcome_unknown")
+	require.Contains(t, out.String(), "toolset="+unknown.String()+" project="+projectID.String()+" action=commit_outcome_unknown")
 	require.Contains(t, out.String(), "action=failed")
+}
+
+type failingJournal struct{}
+
+func (failingJournal) Write([]byte) (int, error) { return 0, errors.New("disk full") }
+func (failingJournal) Sync() error               { return nil }
+
+func TestLegacyAliasEndpointsJournalFailureStopsBeforeCommit(t *testing.T) {
+	t.Parallel()
+	committed := false
+	var out bytes.Buffer
+	run := legacyAliasEndpointsRun{
+		list: legacyAliasPages([]mcpendpoints.AliasBackfillCandidate{{ToolsetID: uuid.New(), ProjectID: uuid.New(), OrganizationID: "org"}}),
+		backfill: func(candidate mcpendpoints.AliasBackfillCandidate, beforeCommit func(mcpendpoints.AliasBackfillResult) error) (mcpendpoints.AliasBackfillResult, error) {
+			result := mcpendpoints.AliasBackfillResult{Rows: []mcpendpoints.AliasBackfillRow{{ToolsetID: candidate.ToolsetID, Slug: "s", Action: mcpendpoints.AliasBackfillCreate, EndpointID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}}}
+			if err := beforeCommit(result); err != nil {
+				return result, fmt.Errorf("%w: %w", mcpendpoints.ErrAliasBackfillNotRecorded, err)
+			}
+			committed = true
+			return result, nil
+		},
+		apply:   true,
+		stdout:  &out,
+		journal: failingJournal{},
+	}
+	totals, err := run.execute()
+	require.ErrorIs(t, err, mcpendpoints.ErrAliasBackfillNotRecorded)
+	require.False(t, committed)
+	require.Equal(t, legacyAliasEndpointsTotals{"failed": 1}, totals)
 }
 
 func TestLegacyAliasEndpointsDryRunWritesNoJournalAndExitsZero(t *testing.T) {
@@ -165,7 +207,7 @@ func TestLegacyAliasEndpointsDryRunWritesNoJournalAndExitsZero(t *testing.T) {
 	var out bytes.Buffer
 	run := legacyAliasEndpointsRun{
 		list: legacyAliasPages([]mcpendpoints.AliasBackfillCandidate{{ToolsetID: uuid.New(), ProjectID: uuid.New(), OrganizationID: "org"}}),
-		backfill: func(candidate mcpendpoints.AliasBackfillCandidate) (mcpendpoints.AliasBackfillResult, error) {
+		backfill: func(candidate mcpendpoints.AliasBackfillCandidate, _ func(mcpendpoints.AliasBackfillResult) error) (mcpendpoints.AliasBackfillResult, error) {
 			return mcpendpoints.AliasBackfillResult{Rows: []mcpendpoints.AliasBackfillRow{{ToolsetID: candidate.ToolsetID, Slug: "s", Action: mcpendpoints.AliasBackfillCreate}}}, nil
 		},
 		apply:   false,

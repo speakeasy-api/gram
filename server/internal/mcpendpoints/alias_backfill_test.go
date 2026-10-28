@@ -2,6 +2,8 @@ package mcpendpoints_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -91,7 +93,7 @@ func (f *aliasBackfillFixture) runResult(t *testing.T, ctx context.Context, tool
 	t.Helper()
 	result, err := mcpendpoints.BackfillAliasEndpoints(ctx, f.ti.conn, testenv.NewLogger(t), audit.NewLogger(audit.WithoutOutbox()), mcpendpoints.AliasBackfillCandidate{
 		ToolsetID: toolset.ID, ProjectID: toolset.ProjectID, OrganizationID: f.authCtx.ActiveOrganizationID,
-	}, apply)
+	}, apply, nil)
 	require.NoError(t, err)
 	return result
 }
@@ -210,6 +212,16 @@ func TestAliasBackfillDeletedDomainAliasGetsPlatformEndpoint(t *testing.T) {
 	moved := legacyalias.Alias{Slug: pgtype.Text{String: slug, Valid: true}, CustomDomainID: platformHost}
 	require.Equal(t, &mcpendpoints.AliasMove{From: legacyalias.Alias{Slug: pgtype.Text{String: slug, Valid: true}, CustomDomainID: domain}, To: moved}, result.AliasMove)
 	require.Equal(t, moved, f.alias(t, ctx, toolset), "the alias leaves the deleted domain for the new platform endpoint")
+
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, f.ti.conn, audit.ActionToolsetMoveLegacyAlias, toolset.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, string(urn.PrincipalTypeSystem), record.ActorType)
+	require.Equal(t, mcpendpoints.AliasBackfillActor, record.ActorID)
+	var before, after audit.ToolsetLegacyAliasAddress
+	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
+	require.Equal(t, audit.ToolsetLegacyAliasAddress{Slug: slug, CustomDomainID: &domain.UUID}, before)
+	require.Equal(t, audit.ToolsetLegacyAliasAddress{Slug: slug, CustomDomainID: nil}, after)
 }
 
 func TestAliasBackfillKeepsUnprefixedPlatformSlug(t *testing.T) {
@@ -486,7 +498,7 @@ func TestAliasBackfillSkipsOrganizationDrift(t *testing.T) {
 
 	result, err := mcpendpoints.BackfillAliasEndpoints(ctx, f.ti.conn, testenv.NewLogger(t), audit.NewLogger(audit.WithoutOutbox()), mcpendpoints.AliasBackfillCandidate{
 		ToolsetID: toolset.ID, ProjectID: toolset.ProjectID, OrganizationID: "org-" + uuid.NewString(),
-	}, true)
+	}, true, nil)
 	require.NoError(t, err)
 	requireOutcomes(t, result.Rows, aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillSkip, reason: "toolset or project organization changed; rerun", platform: false})
 	require.Empty(t, f.endpoints(t, ctx, toolset.ID))
@@ -584,4 +596,45 @@ func TestCanonicalHostingAdvertisesLiveCustomDomainFirst(t *testing.T) {
 	require.NoError(t, err)
 	_, address := hostingstate.Derive(uuid.NullUUID{UUID: uuid.Nil, Valid: false}, hostingstate.For(rows, toolset.ID))
 	require.Equal(t, hostingstate.Address{Slug: pgtype.Text{String: domainSlug, Valid: true}, CustomDomainID: domain}, address)
+}
+
+func TestAliasBackfillRecordsIntentBeforeCommit(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	toolset := f.aliasedServer(t, ctx, f.slug("intent"), platformHost)
+	candidate := mcpendpoints.AliasBackfillCandidate{ToolsetID: toolset.ID, ProjectID: toolset.ProjectID, OrganizationID: f.authCtx.ActiveOrganizationID}
+
+	_, err := mcpendpoints.BackfillAliasEndpoints(ctx, f.ti.conn, testenv.NewLogger(t), audit.NewLogger(audit.WithoutOutbox()), candidate, true,
+		func(mcpendpoints.AliasBackfillResult) error { return errors.New("journal full") })
+	require.ErrorIs(t, err, mcpendpoints.ErrAliasBackfillNotRecorded)
+	require.Empty(t, f.endpoints(t, ctx, toolset.ID), "nothing commits when its intent is not recorded")
+
+	var recorded mcpendpoints.AliasBackfillResult
+	result, err := mcpendpoints.BackfillAliasEndpoints(ctx, f.ti.conn, testenv.NewLogger(t), audit.NewLogger(audit.WithoutOutbox()), candidate, true,
+		func(pending mcpendpoints.AliasBackfillResult) error {
+			recorded = pending
+			require.Empty(t, f.endpoints(t, ctx, toolset.ID), "the intent is recorded before the commit")
+			return nil
+		})
+	require.NoError(t, err)
+	require.Equal(t, result, recorded)
+	endpoints := f.endpoints(t, ctx, toolset.ID)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, recorded.Rows[0].EndpointID.UUID, endpoints[0].ID, "the recorded endpoint id is the committed one")
+}
+
+func TestAliasBackfillCancelledCommitIsUnknown(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	toolset := f.aliasedServer(t, ctx, f.slug("cancelled"), platformHost)
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	_, err := mcpendpoints.BackfillAliasEndpoints(runCtx, f.ti.conn, testenv.NewLogger(t), audit.NewLogger(audit.WithoutOutbox()), mcpendpoints.AliasBackfillCandidate{
+		ToolsetID: toolset.ID, ProjectID: toolset.ProjectID, OrganizationID: f.authCtx.ActiveOrganizationID,
+	}, true, func(mcpendpoints.AliasBackfillResult) error {
+		cancel()
+		return nil
+	})
+	require.ErrorIs(t, err, mcpendpoints.ErrAliasBackfillCommitUnknown)
 }

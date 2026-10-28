@@ -115,10 +115,37 @@ type legacyAliasJournalAddress struct {
 	CustomDomainID *uuid.UUID `json:"custom_domain_id"`
 }
 
-// legacyAliasJournalEntry records one write, enough to find and undo it.
+// legacyAliasJournalEndpoint is one endpoint a server's transaction creates.
+type legacyAliasJournalEndpoint struct {
+	// EndpointID is the created mcp_endpoints row.
+	EndpointID uuid.UUID `json:"endpoint_id"`
+
+	// Address is the endpoint's address.
+	Address legacyAliasJournalAddress `json:"address"`
+}
+
+// legacyAliasJournalMove is an alias move a server's transaction makes.
+type legacyAliasJournalMove struct {
+	// From is the alias before the move.
+	From legacyAliasJournalAddress `json:"from"`
+
+	// To is the alias after the move.
+	To legacyAliasJournalAddress `json:"to"`
+}
+
+// Journal entry statuses. A server's pending entry is written and flushed before its commit; one of the others
+// follows once the commit's outcome is known.
+const (
+	legacyAliasJournalPending        = "pending"
+	legacyAliasJournalCommitted      = "committed"
+	legacyAliasJournalRolledBack     = "rolled_back"
+	legacyAliasJournalOutcomeUnknown = "commit_outcome_unknown"
+)
+
+// legacyAliasJournalEntry records one server's writes, enough to undo them.
 type legacyAliasJournalEntry struct {
-	// Kind is "endpoint_created" or "alias_moved".
-	Kind string `json:"kind"`
+	// Status is pending, committed, rolled_back or commit_outcome_unknown.
+	Status string `json:"status"`
 
 	// McpServerID is the canonical server, equal to the toolset id.
 	McpServerID uuid.UUID `json:"mcp_server_id"`
@@ -126,17 +153,11 @@ type legacyAliasJournalEntry struct {
 	// ProjectID is the server's project.
 	ProjectID uuid.UUID `json:"project_id"`
 
-	// EndpointID is the created endpoint; set for endpoint_created.
-	EndpointID *uuid.UUID `json:"endpoint_id,omitempty"`
+	// Endpoints are the endpoints the transaction creates; set on the pending entry.
+	Endpoints []legacyAliasJournalEndpoint `json:"endpoints,omitempty"`
 
-	// Address is the created endpoint's address; set for endpoint_created.
-	Address *legacyAliasJournalAddress `json:"address,omitempty"`
-
-	// AliasFrom is the alias before the move; set for alias_moved.
-	AliasFrom *legacyAliasJournalAddress `json:"alias_from,omitempty"`
-
-	// AliasTo is the alias after the move; set for alias_moved.
-	AliasTo *legacyAliasJournalAddress `json:"alias_to,omitempty"`
+	// AliasMove is the alias move the transaction makes; set on the pending entry when there is one.
+	AliasMove *legacyAliasJournalMove `json:"alias_move,omitempty"`
 }
 
 // legacyAliasJournal is where applied writes are recorded; *os.File satisfies it.
@@ -145,16 +166,33 @@ type legacyAliasJournal interface {
 	Sync() error
 }
 
-func journalAddress(slug string, domain uuid.NullUUID) *legacyAliasJournalAddress {
+func journalAddress(slug string, domain uuid.NullUUID) legacyAliasJournalAddress {
 	var domainID *uuid.UUID
 	if domain.Valid {
 		domainID = &domain.UUID
 	}
-	return &legacyAliasJournalAddress{Slug: slug, CustomDomainID: domainID}
+	return legacyAliasJournalAddress{Slug: slug, CustomDomainID: domainID}
 }
 
-func journalAliasAddress(alias legacyalias.Alias) *legacyAliasJournalAddress {
+func journalAliasAddress(alias legacyalias.Alias) legacyAliasJournalAddress {
 	return journalAddress(alias.Slug.String, alias.CustomDomainID)
+}
+
+// pendingJournalEntry is the intent of a server's transaction, or nil when it writes nothing.
+func pendingJournalEntry(candidate mcpendpoints.AliasBackfillCandidate, result mcpendpoints.AliasBackfillResult) *legacyAliasJournalEntry {
+	entry := legacyAliasJournalEntry{Status: legacyAliasJournalPending, McpServerID: candidate.ToolsetID, ProjectID: candidate.ProjectID, Endpoints: nil, AliasMove: nil}
+	for _, row := range result.Rows {
+		if row.Action == mcpendpoints.AliasBackfillCreate {
+			entry.Endpoints = append(entry.Endpoints, legacyAliasJournalEndpoint{EndpointID: row.EndpointID.UUID, Address: journalAddress(row.Slug, row.CustomDomainID)})
+		}
+	}
+	if move := result.AliasMove; move != nil {
+		entry.AliasMove = &legacyAliasJournalMove{From: journalAliasAddress(move.From), To: journalAliasAddress(move.To)}
+	}
+	if len(entry.Endpoints) == 0 && entry.AliasMove == nil {
+		return nil
+	}
+	return &entry
 }
 
 func appendLegacyAliasJournal(journal legacyAliasJournal, entry legacyAliasJournalEntry) error {
@@ -183,8 +221,8 @@ type legacyAliasEndpointsRun struct {
 	// list returns the next page of candidates after the given toolset id.
 	list func(after uuid.UUID) ([]mcpendpoints.AliasBackfillCandidate, error)
 
-	// backfill runs one candidate's transaction.
-	backfill func(candidate mcpendpoints.AliasBackfillCandidate) (mcpendpoints.AliasBackfillResult, error)
+	// backfill runs one candidate's transaction, calling beforeCommit with its writes before committing them.
+	backfill func(candidate mcpendpoints.AliasBackfillCandidate, beforeCommit func(mcpendpoints.AliasBackfillResult) error) (mcpendpoints.AliasBackfillResult, error)
 
 	// apply reports whether the run writes.
 	apply bool
@@ -222,19 +260,42 @@ func (r legacyAliasEndpointsRun) execute() (legacyAliasEndpointsTotals, error) {
 }
 
 func (r legacyAliasEndpointsRun) one(candidate mcpendpoints.AliasBackfillCandidate, totals legacyAliasEndpointsTotals) error {
-	result, err := r.backfill(candidate)
+	var pending *legacyAliasJournalEntry
+	beforeCommit := func(result mcpendpoints.AliasBackfillResult) error {
+		pending = pendingJournalEntry(candidate, result)
+		if pending == nil || r.journal == nil {
+			return nil
+		}
+		return appendLegacyAliasJournal(r.journal, *pending)
+	}
+	outcome := func(status string) error {
+		if pending == nil || r.journal == nil {
+			return nil
+		}
+		return appendLegacyAliasJournal(r.journal, legacyAliasJournalEntry{Status: status, McpServerID: candidate.ToolsetID, ProjectID: candidate.ProjectID, Endpoints: nil, AliasMove: nil})
+	}
+
+	result, err := r.backfill(candidate, beforeCommit)
 	switch {
 	case errors.Is(err, mcpendpoints.ErrAliasBackfillCommitUnknown):
 		totals[legacyAliasLabelCommitOutcomeUnknown]++
 		_, _ = fmt.Fprintf(r.stdout, "toolset=%s project=%s action=%s reason=%q\n", candidate.ToolsetID, candidate.ProjectID, legacyAliasLabelCommitOutcomeUnknown, err.Error())
-		return nil
+		return outcome(legacyAliasJournalOutcomeUnknown)
+	case errors.Is(err, mcpendpoints.ErrAliasBackfillNotRecorded):
+		totals[legacyAliasLabelFailed]++
+		_, _ = fmt.Fprintf(r.stdout, "toolset=%s project=%s action=%s reason=%q\n", candidate.ToolsetID, candidate.ProjectID, legacyAliasLabelFailed, err.Error())
+		return fmt.Errorf("journal unavailable: %w", err)
 	case errors.Is(err, context.Canceled):
 		return fmt.Errorf("interrupted: %w", err)
 	case err != nil:
 		totals[legacyAliasLabelFailed]++
 		_, _ = fmt.Fprintf(r.stdout, "toolset=%s project=%s action=%s reason=%q\n", candidate.ToolsetID, candidate.ProjectID, legacyAliasLabelFailed, err.Error())
-		return nil
+		return outcome(legacyAliasJournalRolledBack)
 	}
+	if err := outcome(legacyAliasJournalCommitted); err != nil {
+		return err
+	}
+
 	for _, row := range result.Rows {
 		label := string(row.Action)
 		if row.Action == mcpendpoints.AliasBackfillCreate {
@@ -250,15 +311,6 @@ func (r legacyAliasEndpointsRun) one(candidate mcpendpoints.AliasBackfillCandida
 		}
 		_, _ = fmt.Fprintf(r.stdout, "toolset=%s project=%s address=%s platform_for_custom_domain=%t action=%s endpoint=%s reason=%q\n",
 			row.ToolsetID, row.ProjectID, legacyAliasAddressText(row.Slug, row.CustomDomainID), row.PlatformForCustomDomain, label, endpoint, row.Reason)
-		if r.journal == nil || row.Action != mcpendpoints.AliasBackfillCreate {
-			continue
-		}
-		if err := appendLegacyAliasJournal(r.journal, legacyAliasJournalEntry{
-			Kind: "endpoint_created", McpServerID: row.ToolsetID, ProjectID: row.ProjectID, EndpointID: &row.EndpointID.UUID,
-			Address: journalAddress(row.Slug, row.CustomDomainID), AliasFrom: nil, AliasTo: nil,
-		}); err != nil {
-			return err
-		}
 	}
 	if move := result.AliasMove; move != nil {
 		label := legacyAliasLabelWouldMoveAlias
@@ -268,14 +320,6 @@ func (r legacyAliasEndpointsRun) one(candidate mcpendpoints.AliasBackfillCandida
 		totals[label]++
 		_, _ = fmt.Fprintf(r.stdout, "toolset=%s project=%s action=%s alias_from=%s alias_to=%s\n", candidate.ToolsetID, candidate.ProjectID, label,
 			legacyAliasAddressText(move.From.Slug.String, move.From.CustomDomainID), legacyAliasAddressText(move.To.Slug.String, move.To.CustomDomainID))
-		if r.journal != nil {
-			if err := appendLegacyAliasJournal(r.journal, legacyAliasJournalEntry{
-				Kind: "alias_moved", McpServerID: candidate.ToolsetID, ProjectID: candidate.ProjectID, EndpointID: nil, Address: nil,
-				AliasFrom: journalAliasAddress(move.From), AliasTo: journalAliasAddress(move.To),
-			}); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
@@ -355,12 +399,9 @@ func runLegacyAliasEndpoints(args []string, stdout io.Writer, getenv func(string
 			}
 			return candidates, nil
 		},
-		backfill: func(candidate mcpendpoints.AliasBackfillCandidate) (mcpendpoints.AliasBackfillResult, error) {
-			result, err := mcpendpoints.BackfillAliasEndpoints(ctx, pool, logger, auditLogger, candidate, cfg.apply)
-			switch {
-			case err != nil && ctx.Err() != nil:
-				return result, fmt.Errorf("backfill candidate: %w", ctx.Err())
-			case err != nil:
+		backfill: func(candidate mcpendpoints.AliasBackfillCandidate, beforeCommit func(mcpendpoints.AliasBackfillResult) error) (mcpendpoints.AliasBackfillResult, error) {
+			result, err := mcpendpoints.BackfillAliasEndpoints(ctx, pool, logger, auditLogger, candidate, cfg.apply, beforeCommit)
+			if err != nil {
 				return result, fmt.Errorf("backfill candidate: %w", err)
 			}
 			return result, nil

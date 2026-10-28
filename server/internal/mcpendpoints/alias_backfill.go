@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -29,6 +30,9 @@ const AliasBackfillActor = "legacy-alias-endpoint-backfill"
 
 // ErrAliasBackfillCommitUnknown marks a server whose commit failed in a way that leaves its outcome unknown.
 var ErrAliasBackfillCommitUnknown = errors.New("commit outcome unknown")
+
+// ErrAliasBackfillNotRecorded marks a server rolled back because its pending writes could not be recorded.
+var ErrAliasBackfillNotRecorded = errors.New("pending writes not recorded; rolled back")
 
 // AliasBackfillAction is what the alias endpoint backfill does, or would do, for one address.
 type AliasBackfillAction string
@@ -107,9 +111,10 @@ type AliasBackfillResult struct {
 // BackfillAliasEndpoints gives a legacy toolset's canonical server an endpoint at every address its alias serves that
 // no live endpoint holds, in one transaction under the hosted endpoint create path's locks and rules, except the
 // organization slug prefix: the alias already serves each address, so its slug is kept as clients hold it. Without
-// apply it runs the same transaction and rolls it back. Audit rows are written through auditLogger. A failed commit
-// returns the planned result with ErrAliasBackfillCommitUnknown.
-func BackfillAliasEndpoints(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, auditLogger *audit.Logger, candidate AliasBackfillCandidate, apply bool) (AliasBackfillResult, error) {
+// apply it runs the same transaction and rolls it back. Audit rows are written through auditLogger. With apply,
+// beforeCommit receives the writes about to commit; an error from it rolls them back and returns
+// ErrAliasBackfillNotRecorded. A failed commit returns the planned result with ErrAliasBackfillCommitUnknown.
+func BackfillAliasEndpoints(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, auditLogger *audit.Logger, candidate AliasBackfillCandidate, apply bool, beforeCommit func(AliasBackfillResult) error) (AliasBackfillResult, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return AliasBackfillResult{Rows: nil, AliasMove: nil}, fmt.Errorf("begin transaction: %w", err)
@@ -122,6 +127,11 @@ func BackfillAliasEndpoints(ctx context.Context, db *pgxpool.Pool, logger *slog.
 	}
 	if !apply {
 		return result, nil
+	}
+	if beforeCommit != nil {
+		if err := beforeCommit(result); err != nil {
+			return result, fmt.Errorf("%w: %w", ErrAliasBackfillNotRecorded, err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return result, fmt.Errorf("%w: %w", ErrAliasBackfillCommitUnknown, err)
@@ -268,10 +278,30 @@ func backfillAliasEndpointsInTx(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	if err != nil {
 		return result, fmt.Errorf("reload alias: %w", err)
 	}
-	if after != before {
-		result.AliasMove = &AliasMove{From: before, To: after}
+	if after == before {
+		return result, nil
 	}
+	toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: candidate.ToolsetID, ProjectID: candidate.ProjectID})
+	if err != nil {
+		return result, fmt.Errorf("load toolset: %w", err)
+	}
+	if err := auditLogger.LogToolsetMoveLegacyAlias(ctx, tx, audit.LogToolsetMoveLegacyAliasEvent{
+		OrganizationID: candidate.OrganizationID, ProjectID: candidate.ProjectID, Actor: urn.NewSystemPrincipal(AliasBackfillActor),
+		ActorDisplayName: nil, ActorSlug: nil, ToolsetURN: urn.NewToolset(toolset.ID), ToolsetName: toolset.Name, ToolsetSlug: toolset.Slug,
+		LegacyAliasSnapshotBefore: auditAliasAddress(before), LegacyAliasSnapshotAfter: auditAliasAddress(after),
+	}); err != nil {
+		return result, fmt.Errorf("audit alias move: %w", err)
+	}
+	result.AliasMove = &AliasMove{From: before, To: after}
 	return result, nil
+}
+
+func auditAliasAddress(alias legacyalias.Alias) *audit.ToolsetLegacyAliasAddress {
+	address := &audit.ToolsetLegacyAliasAddress{Slug: alias.Slug.String, CustomDomainID: nil}
+	if alias.CustomDomainID.Valid {
+		address.CustomDomainID = &alias.CustomDomainID.UUID
+	}
+	return address
 }
 
 // loosePlatformSkipReason reports why the platform host does not serve a custom-domain alias, or "" when it does.

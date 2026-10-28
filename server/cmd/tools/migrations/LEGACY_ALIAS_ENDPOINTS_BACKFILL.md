@@ -36,14 +36,14 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations legacy-alias-endpoints \
   -journal=/secure/path/legacy-alias-endpoints-<ENVIRONMENT>-<DATE>.jsonl
 ```
 
-`-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL`. `-journal` must name a new file; it is created with mode 0600 and receives one JSON object per write, flushed after each server commits:
+`-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL`. `-journal` must name a new file; it is created with mode 0600. For each server that writes, the run appends and flushes a `pending` entry with the full intent before committing, then an outcome entry once the commit returns. If the pending entry cannot be written, the server is rolled back and the run stops.
 
-- `{"kind":"endpoint_created","mcp_server_id":…,"project_id":…,"endpoint_id":…,"address":{"slug":…,"custom_domain_id":…}}`
-- `{"kind":"alias_moved","mcp_server_id":…,"project_id":…,"alias_from":{…},"alias_to":{…}}`
+- `{"status":"pending","mcp_server_id":…,"project_id":…,"endpoints":[{"endpoint_id":…,"address":{"slug":…,"custom_domain_id":…}}],"alias_move":{"from":{…},"to":{…}}}`
+- `{"status":"committed|rolled_back|commit_outcome_unknown","mcp_server_id":…,"project_id":…}`
 
-Each server's transaction takes the hosted endpoint create path's locks in its order: the organization's network ingress lock and the project's admission lock, the toolset row, the custom domain rows (the alias's domain and the organization's domain, so the lockdown read is locked), the server row, then each address's slug scope lock. Each created endpoint gets an `mcp-endpoint:create` audit row by `system:legacy-alias-endpoint-backfill`; no webhook events are published. The backfill does not attach servers to the default plugin or request plugin publication.
+Each server's transaction takes the hosted endpoint create path's locks in its order: the organization's network ingress lock and the project's admission lock, the toolset row, the custom domain rows (the alias's domain and the organization's domain, so the lockdown read is locked), the server row, then each address's slug scope lock. Each created endpoint gets an `mcp-endpoint:create` audit row and each alias move a `toolset:move_legacy_alias` audit row (before and after snapshots hold the old and new alias address), both by `system:legacy-alias-endpoint-backfill` and in the same transaction; no webhook events are published. The backfill does not attach servers to the default plugin or request plugin publication.
 
-After creating endpoints, the alias follows the server's endpoints by the rule every endpoint write applies, but only when its own address now has an endpoint or its custom domain was deleted. In practice it moves only for an alias on a deleted domain, onto the new platform endpoint, which the platform host already served it at. It never leaves a pending, unverified, foreign or ingress-rejected custom domain. Every move is printed and journaled.
+After creating endpoints, the alias follows the server's endpoints by the rule every endpoint write applies, but only when its own address now has an endpoint or its custom domain was deleted. In practice it moves only for an alias on a deleted domain, onto the new platform endpoint, which the platform host already served it at. It never leaves a pending, unverified, foreign or ingress-rejected custom domain. Every move is printed, journaled and audited.
 
 The run is idempotent: a rerun reports every address it created as `already_held` and writes nothing.
 
@@ -62,7 +62,7 @@ One line per address, then totals:
 - `conflict`: another server's endpoint, or another toolset's alias, holds the address. It is never taken; the alias does not serve that address today either.
 - `skip`: the address is not served, or a hosted address rule rejects it. Review every rule-based skip before the alias is removed: its URL stops working then. Skips ending in "rerun" mean the toolset changed during the run.
 - `failed`: the server's transaction failed and rolled back. Rerun.
-- `commit_outcome_unknown`: the commit failed, so the server's writes may or may not have landed and are not journaled. Find any endpoints it created from the audit log (`action = 'mcp-endpoint:create'`, `actor_type = 'system'`, `actor_id = 'legacy-alias-endpoint-backfill'`, `project_id = '<PROJECT_ID>'`) and add them to the journal by hand, then rerun.
+- `commit_outcome_unknown`: the commit failed or was interrupted, so the server's writes may or may not have landed. Its journal entries are `pending` followed by `commit_outcome_unknown`. Reconcile them as described under Rollback, then rerun.
 
 The command exits non-zero while any server failed or has an unknown commit outcome.
 
@@ -76,9 +76,11 @@ After applying:
 
 ## Rollback
 
-Use the journal. Before removing anything, check that no later `mcp-endpoint:update` or `mcp-endpoint:delete` audit event names a journaled endpoint; leave any that a user has changed since.
+Use the journal. Group entries by `mcp_server_id`. A `pending` entry followed by `committed` landed; one followed by `rolled_back` did not. A `pending` entry with no outcome (the run crashed) or followed by `commit_outcome_unknown` must be reconciled against the database: its writes landed if the endpoint ids exist in `mcp_endpoints` and audit rows by `system:legacy-alias-endpoint-backfill` name them (`mcp-endpoint:create` with that endpoint id as subject, `toolset:move_legacy_alias` with the server id as subject). The audit rows alone also reconstruct every write, including an alias's old address.
 
-For each `endpoint_created` entry, remove the endpoint only while it still has the journaled address:
+Before removing anything, check that no later `mcp-endpoint:update` or `mcp-endpoint:delete` audit event names a journaled endpoint; leave any that a user has changed since.
+
+For each endpoint of a landed `pending` entry, remove it only while it still has the journaled address:
 
 ```sql
 BEGIN;
@@ -95,15 +97,15 @@ WHERE id = '<ENDPOINT_ID>'
 COMMIT;
 ```
 
-For each `alias_moved` entry, restore the alias only while it still has the journaled `alias_to`:
+For each `alias_move` of a landed `pending` entry, restore the alias only while it still has the journaled `to` address:
 
 ```sql
 UPDATE toolsets
-SET mcp_slug = '<ALIAS_FROM_SLUG>', custom_domain_id = <ALIAS_FROM_CUSTOM_DOMAIN_ID_OR_NULL>::uuid, updated_at = clock_timestamp()
+SET mcp_slug = '<FROM_SLUG>', custom_domain_id = <FROM_CUSTOM_DOMAIN_ID_OR_NULL>::uuid, updated_at = clock_timestamp()
 WHERE id = '<MCP_SERVER_ID>'
   AND project_id = '<PROJECT_ID>'
-  AND mcp_slug = '<ALIAS_TO_SLUG>'
-  AND custom_domain_id IS NOT DISTINCT FROM <ALIAS_TO_CUSTOM_DOMAIN_ID_OR_NULL>::uuid
+  AND mcp_slug = '<TO_SLUG>'
+  AND custom_domain_id IS NOT DISTINCT FROM <TO_CUSTOM_DOMAIN_ID_OR_NULL>::uuid
   AND deleted IS FALSE;
 ```
 
