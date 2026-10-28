@@ -117,14 +117,11 @@ infra:
   - "infra/**"
   - "buf.yaml"
   - "buf.gen.yaml"
-  - "buf.gen.local.yaml"
-  - "mise.toml"
-  - "mise.lock"
   - "uv.lock"
   - "pyproject.toml"
   - ".mise-tasks/lint/infra.sh"
   - ".mise-tasks/test/infra.sh"
-  - ".mise-tasks/gen/infra*.sh"
+  - ".mise-tasks/gen/infra.sh"
 
 pystreams:
   - ".github/**"

@@ -3,8 +3,6 @@
 #MISE dir="{{ config_root }}"
 #MISE description="Generate the Pub/Sub topology Helm values consumed by the gram-infra chart"
 
-#USAGE flag "--local" help="Use pinned local plugins without contacting the BSR"
-
 set -euo pipefail
 
 # Codegen binaries are throwaway; skip VCS stamping.
@@ -19,11 +17,7 @@ export GOFLAGS="-buildvcs=false ${GOFLAGS:-}"
 # touch. (-not -path rather than -prune: -delete implies -depth, which
 # disables -prune.)
 find ./infra/ -not -path "*/.venv/*" \( -name "*.pb.go" -o -name "*_pb2.py" -o -name "*_pb2.pyi" \) -delete
-if [[ "${usage_local:-false}" == "true" ]]; then
-  buf generate --template buf.gen.local.yaml
-else
-  buf generate
-fi
+buf generate
 
 buf build -o ./infra/gen/descriptors.pb
 cat > ./infra/gen/descriptors.go <<EOF
@@ -46,11 +40,7 @@ go run ./infra/main.go gen-topics
 go run ./infra/main.go gen-storage
 
 # Exercise the full mapping without provisioning test subscriptions in production.
-if [[ "${usage_local:-false}" == "true" ]]; then
-  mise run gen:infra-storage-fixtures --local
-else
-  mise run gen:infra-storage-fixtures
-fi
+mise run gen:infra-storage-fixtures
 
 # Regenerate the Pub/Sub topology diagram from the freshly built descriptors.
 mise run gen:infra-diagrams
