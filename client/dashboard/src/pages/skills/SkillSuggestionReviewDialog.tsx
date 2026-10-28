@@ -12,7 +12,7 @@ const SkillTextDiff = lazy(() => import("./SkillTextDiff"));
  */
 export function SkillSuggestionReviewDialog({
   suggestion,
-  currentContent,
+  baseLabel,
   changeCount,
   open,
   onOpenChange,
@@ -22,7 +22,7 @@ export function SkillSuggestionReviewDialog({
   onDismiss,
 }: {
   suggestion: SkillEditSuggestion;
-  currentContent: string;
+  baseLabel: string;
   changeCount: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -35,7 +35,7 @@ export function SkillSuggestionReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl">
+      <Dialog.Content className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl">
         <Dialog.Header>
           <Dialog.Title>Apply all changes</Dialog.Title>
           <Dialog.Description>
@@ -46,9 +46,9 @@ export function SkillSuggestionReviewDialog({
         <div className="min-h-0 overflow-y-auto pr-1">
           <Suspense fallback={<Skeleton className="h-64 w-full" />}>
             <SkillTextDiff
-              oldContent={currentContent}
+              oldContent={suggestion.baseContent}
               newContent={suggestion.proposedContent}
-              oldLabel="Current SKILL.md"
+              oldLabel={baseLabel}
               newLabel="Proposed SKILL.md"
             />
           </Suspense>

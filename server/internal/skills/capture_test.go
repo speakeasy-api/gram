@@ -112,8 +112,84 @@ func TestCaptureSkillContent_DedupesManualWithoutOriginAndPreservesPresentation(
 	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: result.SkillID})
 	require.NoError(t, err)
 	require.Equal(t, "manual-skill", skill.DisplayName)
-	// The newly captured version became current, so the summary follows it.
-	require.Equal(t, "Captured replacement.", skill.Summary.String)
+	// The uploaded version stays current, so the summary keeps following it.
+	require.Equal(t, "Manual summary.", skill.Summary.String)
+}
+
+func TestCapturedVersionDoesNotBecomeCurrentOverUploadedVersion(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	manual := createSkill(t, ctx, ti, "current-over-capture", "Manual.")
+	link, err := ti.service.Share(ctx, &gen.SharePayload{SkillID: manual.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("current-over-capture", "Captured.", "newer"))
+	require.NoError(t, err)
+	require.True(t, captured.CreatedVersion)
+
+	got, err := ti.service.Get(ctx, &gen.GetPayload{ID: manual.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, manual.Version.ID, *got.Skill.LatestVersionID)
+	require.Equal(t, manual.Version.ID, got.LatestVersion.ID)
+	require.False(t, got.LatestVersion.Captured)
+	require.Equal(t, int64(2), got.Skill.VersionCount)
+	require.Equal(t, "Manual.", *got.Skill.Summary)
+
+	listed, err := ti.service.List(ctx, &gen.ListPayload{Limit: 20, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Skills, 1)
+	require.Equal(t, manual.Version.ID, *listed.Skills[0].LatestVersionID)
+
+	shared, err := ti.service.GetShared(ctx, &gen.GetSharedPayload{Token: link.Token})
+	require.NoError(t, err)
+	require.Equal(t, manual.Version.Content, shared.Content)
+
+	history, err := ti.service.ListVersions(ctx, &gen.ListVersionsPayload{ID: manual.Skill.ID, Limit: 20, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, history.Versions, 2)
+	capturedByID := map[string]bool{}
+	for _, version := range history.Versions {
+		capturedByID[version.ID] = version.Captured
+	}
+	require.Equal(t, map[string]bool{manual.Version.ID: false, captured.SkillVersionID.String(): true}, capturedByID)
+
+	// A write that read the uploaded version as current is not stale.
+	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: manual.Skill.ID, Content: skillManifest("current-over-capture", "Edited.", "edited"),
+		ExpectedLatestVersionID: &manual.Version.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+}
+
+func TestPurelyCapturedSkillReportsCapturedVersionAsCurrent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("captured-current", "Captured.", "body"))
+	require.NoError(t, err)
+
+	got, err := ti.service.Get(ctx, &gen.GetPayload{ID: captured.SkillID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, captured.SkillVersionID.String(), *got.Skill.LatestVersionID)
+	require.True(t, got.LatestVersion.Captured)
+	require.Equal(t, "Captured.", *got.Skill.Summary)
+}
+
+func TestUploadMatchingCapturedVersionSyncsSummaryWhenItBecomesCurrent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	manual := createSkill(t, ctx, ti, "upload-captured", "Manual.")
+	content := capturedManifest("upload-captured", "Captured.", "newer")
+	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+
+	uploaded, err := ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: manual.Skill.ID, Content: content, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.False(t, uploaded.CreatedVersion)
+	require.Equal(t, captured.SkillVersionID.String(), uploaded.Version.ID)
+	require.False(t, uploaded.Version.Captured)
+	require.Equal(t, captured.SkillVersionID.String(), *uploaded.Skill.LatestVersionID)
+	require.Equal(t, "Captured.", *uploaded.Skill.Summary)
 }
 
 func TestCaptureSkillContent_ReusesRenamedSkillByRawHash(t *testing.T) {

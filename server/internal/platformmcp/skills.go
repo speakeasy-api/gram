@@ -156,6 +156,10 @@ type SkillVersionSummary struct {
 	CreatedAt        string   `json:"created_at"`
 	Content          string   `json:"content,omitempty"`
 	ContentTruncated bool     `json:"content_truncated,omitempty"`
+
+	// Captured marks a version seen on someone's machine rather than uploaded.
+	// Plugins do not ship it while an uploaded version exists.
+	Captured bool `json:"captured,omitempty"`
 }
 
 // SkillAuthoringResult is what create and version writes return.
@@ -1277,6 +1281,7 @@ func buildSkillVersionSummary(version *types.SkillVersion, includeContent bool) 
 		CreatedAt:        version.CreatedAt,
 		Content:          "",
 		ContentTruncated: false,
+		Captured:         version.Captured,
 	}
 	for _, validationError := range version.ValidationErrors {
 		if validationError == nil {

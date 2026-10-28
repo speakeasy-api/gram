@@ -21,6 +21,10 @@ export type SkillVersion = {
    */
   canonicalSha256: string;
   /**
+   * Whether this version was captured from an agent's machine rather than uploaded. Captured versions rank below uploaded ones, so plugins only ship one after it is promoted or no uploaded version exists.
+   */
+  captured: boolean;
+  /**
    * The exact uploaded SKILL.md content.
    */
   content: string;
@@ -87,6 +91,7 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
   z.pipe(
     z.object({
       canonical_sha256: z.string(),
+      captured: z.boolean(),
       content: z.string(),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),

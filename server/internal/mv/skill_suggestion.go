@@ -56,6 +56,7 @@ func BuildSkillEditSuggestionView(suggestion repo.SkillEditSuggestion, evidence 
 		SkillName:            evidence.SkillName,
 		SkillDisplayName:     evidence.SkillDisplayName,
 		BaseVersionID:        suggestion.BaseVersionID.String(),
+		BaseContent:          evidence.BaseContent,
 		Changes:              changes,
 		ProposedContent:      proposedContent,
 		AppliesCleanly:       appliesCleanly,

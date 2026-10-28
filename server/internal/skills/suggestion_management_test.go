@@ -79,6 +79,8 @@ func TestSkillsListSuggestionsOpenOnlyPaginationCountAndFilter(t *testing.T) {
 	require.Len(t, first.Suggestions[0].Changes, 1)
 	require.Equal(t, suggestionChanges(t, ctx, ti, betaSuggestion.ID)[0].ProposedDiff, first.Suggestions[0].Changes[0].ProposedDiff)
 	require.Equal(t, skillManifest(beta.Skill.Name, "Beta proposed.", "beta proposal"), first.Suggestions[0].ProposedContent)
+	require.Equal(t, beta.Version.ID, first.Suggestions[0].BaseVersionID)
+	require.Equal(t, beta.Version.Content, first.Suggestions[0].BaseContent)
 	require.True(t, first.Suggestions[0].AppliesCleanly)
 	require.Equal(t, betaSuggestion.Rationale, first.Suggestions[0].Rationale)
 

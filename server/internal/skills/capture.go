@@ -114,14 +114,19 @@ func CaptureSkillContent(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 		}); err != nil {
 			return nil, fmt.Errorf("record captured skill version origin: %w", err)
 		}
-		// The captured version becomes the skill's current version, so the
-		// registry summary follows its manifest description — same step as the
-		// manual record-version flow.
-		skill, err = queries.SyncSkillSummary(ctx, repo.SyncSkillSummaryParams{
-			ProjectID: projectID, ID: skill.ID, Summary: conv.PtrToPGText(parsed.Description),
-		})
+		state, err := loadDerivedSkillState(ctx, queries, projectID, skill.ID)
 		if err != nil {
-			return nil, fmt.Errorf("sync captured skill summary: %w", err)
+			return nil, fmt.Errorf("load skill state after capture: %w", err)
+		}
+		// Captured versions rank below uploaded ones, so the registry summary
+		// only follows the capture when no uploaded version outranks it.
+		if state.LatestVersionID == version.ID {
+			skill, err = queries.SyncSkillSummary(ctx, repo.SyncSkillSummaryParams{
+				ProjectID: projectID, ID: skill.ID, Summary: conv.PtrToPGText(parsed.Description),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("sync captured skill summary: %w", err)
+			}
 		}
 		if err := ReplayOpenSuggestionOntoBase(ctx, queries, projectID, skill.ID); err != nil {
 			return nil, err

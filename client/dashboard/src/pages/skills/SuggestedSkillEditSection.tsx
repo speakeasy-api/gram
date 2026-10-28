@@ -58,12 +58,12 @@ export function SuggestedSkillEditSection({
     return suggestion.changes.flatMap((change) => {
       const anchor = changeAnchor(
         change,
-        latestVersion.content,
+        suggestion.baseContent,
         suggestion.proposedContent,
       );
       return anchor ? [anchor] : [];
     });
-  }, [suggestion, latestVersion.content]);
+  }, [suggestion]);
 
   // The suggestion shrinks as changes are taken, so the batch only ever
   // counts changes the diff still shows.
@@ -72,6 +72,20 @@ export function SuggestedSkillEditSection({
     .filter((id) => selectedChanges.has(id));
 
   if (!review.isPending && !review.loadError && !suggestion) return null;
+
+  // The proposal applies to the version plugins ship, which is the current
+  // version unless a newer upload is invalid.
+  const baseLabel =
+    suggestion?.baseVersionId === latestVersion.id
+      ? "Current SKILL.md"
+      : "Shipped SKILL.md";
+  const canBatch = !!suggestion?.appliesCleanly && anchors.length > 1;
+  const changeCount = suggestion?.changes.length ?? 0;
+  let toolbarSummary =
+    changeCount === 1 ? "1 change proposed" : `${changeCount} changes proposed`;
+  if (canBatch) {
+    toolbarSummary = `${selectedIds.length} of ${anchors.length} changes selected`;
+  }
 
   const toggleChange = (changeId: string): void => {
     setOpenChanges((current) => toggled(current, changeId));
@@ -164,7 +178,7 @@ export function SuggestedSkillEditSection({
               )}
             </div>
           )}
-          {suggestion?.appliesCleanly && anchors.length > 1 && (
+          {suggestion && (
             <RequireScope
               scope="skill:write"
               resourceId={project.id}
@@ -173,28 +187,40 @@ export function SuggestedSkillEditSection({
             >
               <div className="border-border bg-card flex flex-wrap items-center justify-between gap-3 border px-4 py-3">
                 <Text small muted>
-                  {`${selectedIds.length} of ${anchors.length} changes selected`}
+                  {toolbarSummary}
                 </Text>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
-                    variant="secondary"
+                    variant="tertiary"
                     disabled={review.actionsDisabled}
-                    onClick={() => setReviewOpen(true)}
+                    onClick={() => void review.dismiss()}
                   >
-                    Apply all
+                    {review.dismissing ? "Dismissing..." : "Dismiss"}
                   </Button>
-                  <Button
-                    size="sm"
-                    disabled={
-                      review.actionsDisabled || selectedIds.length === 0
-                    }
-                    onClick={() => void review.approve(selectedIds)}
-                  >
-                    {review.approving
-                      ? "Applying..."
-                      : `Apply selected (${selectedIds.length})`}
-                  </Button>
+                  {canBatch && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={review.actionsDisabled}
+                        onClick={() => setReviewOpen(true)}
+                      >
+                        Apply all
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={
+                          review.actionsDisabled || selectedIds.length === 0
+                        }
+                        onClick={() => void review.approve(selectedIds)}
+                      >
+                        {review.approving
+                          ? "Applying..."
+                          : `Apply selected (${selectedIds.length})`}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </RequireScope>
@@ -202,9 +228,9 @@ export function SuggestedSkillEditSection({
           {suggestion?.appliesCleanly && (
             <Suspense fallback={<Skeleton className="h-80 w-full" />}>
               <SkillTextDiff
-                oldContent={latestVersion.content}
+                oldContent={suggestion.baseContent}
                 newContent={suggestion.proposedContent}
-                oldLabel="Current SKILL.md"
+                oldLabel={baseLabel}
                 newLabel="Proposed SKILL.md"
                 lineAnnotations={anchors.map((anchor) => ({
                   side: anchor.side,
@@ -223,7 +249,7 @@ export function SuggestedSkillEditSection({
         <>
           <SkillSuggestionReviewDialog
             suggestion={suggestion}
-            currentContent={latestVersion.content}
+            baseLabel={baseLabel}
             changeCount={anchors.length}
             open={reviewOpen}
             onOpenChange={setReviewOpen}

@@ -951,8 +951,9 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("first_seen_at", String, "When this exact version was first activated.", func() { Format(FormatDateTime) })
 	Attribute("last_seen_at", String, "When this exact version was most recently activated.", func() { Format(FormatDateTime) })
 	Attribute("seen_count", Int64, "The number of activations attributed to this exact version.")
+	Attribute("captured", Boolean, "Whether this version was captured from an agent's machine rather than uploaded. Captured versions rank below uploaded ones, so plugins only ship one after it is promoted or no uploaded version exists.")
 
-	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "spec_valid", "validation_errors", "created_at", "created_by_user_id", "seen_count")
+	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "spec_valid", "validation_errors", "created_at", "created_by_user_id", "seen_count", "captured")
 })
 
 var SkillEditSuggestion = Type("SkillEditSuggestion", func() {
@@ -964,6 +965,7 @@ var SkillEditSuggestion = Type("SkillEditSuggestion", func() {
 	Attribute("skill_name", String, "The canonical skill name.")
 	Attribute("skill_display_name", String, "The user-facing skill name.")
 	Attribute("base_version_id", String, "The version the suggestion was generated from.", func() { Format(FormatUUID) })
+	Attribute("base_content", String, "The SKILL.md content of the base version, which the proposed changes apply to.")
 	Attribute("changes", ArrayOf(SkillEditSuggestionChange), "The separate changes proposed, each reviewable on its own.")
 	Attribute("proposed_content", String, "The complete SKILL.md content produced by taking every proposed change.")
 	Attribute("applies_cleanly", Boolean, "Whether every proposed change still applies to the base version.")
@@ -977,7 +979,7 @@ var SkillEditSuggestion = Type("SkillEditSuggestion", func() {
 	Attribute("created_at", String, "When the suggestion was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the suggestion was last updated.", func() { Format(FormatDateTime) })
 
-	Required("id", "skill_id", "skill_name", "skill_display_name", "base_version_id", "changes", "proposed_content", "applies_cleanly", "rationale", "status", "feedback_count", "feedback_session_count", "scored_session_count", "created_at", "updated_at")
+	Required("id", "skill_id", "skill_name", "skill_display_name", "base_version_id", "base_content", "changes", "proposed_content", "applies_cleanly", "rationale", "status", "feedback_count", "feedback_session_count", "scored_session_count", "created_at", "updated_at")
 })
 
 var SkillEditSuggestionChange = Type("SkillEditSuggestionChange", func() {

@@ -250,7 +250,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_skill_versions",
 		Title:       "List Skill Versions",
-		Description: "List a skill's versions, newest first. A version is a fixed snapshot of the instructions: it is never edited in place, so a correction is recorded as a new version with add_skill_version.",
+		Description: "List a skill's versions, newest first. A version is a fixed snapshot of the instructions: it is never edited in place, so a correction is recorded as a new version with add_skill_version. A captured version was seen on someone's machine rather than uploaded; plugins keep shipping the latest uploaded version instead.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillVersionsToolInput) (*mcp.CallToolResult, ListSkillVersionsOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (ListSkillVersionsOutput, error) {

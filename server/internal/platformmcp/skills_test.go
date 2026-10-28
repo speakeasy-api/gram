@@ -432,6 +432,29 @@ func TestGetSkillWithholdsManifestContentUntilAskedFor(t *testing.T) {
 	require.Equal(t, content, included.LatestVersion.Content)
 }
 
+func TestListSkillVersionsMarksCapturedVersions(t *testing.T) {
+	t.Parallel()
+
+	uploaded := testSkillVersion("")
+	captured := testSkillVersion("")
+	captured.ID = "00000000-0000-0000-0000-0000000000c1"
+	captured.Captured = true
+	skills := &recordingSkillsManagement{
+		skill:           testSkill(),
+		listVersionsOut: &genskills.ListSkillVersionsResult{Versions: []*types.SkillVersion{captured, uploaded}, NextCursor: nil},
+	}
+	service := testSkillsService(t, skills)
+
+	out, err := service.ListSkillVersions(t.Context(), testPrincipal(), ListSkillVersionsInput{
+		ProjectSlug: testSkillProjectSlug,
+		SkillID:     testSkillID,
+	})
+	require.NoError(t, err)
+	require.Len(t, out.Versions, 2)
+	require.True(t, out.Versions[0].Captured)
+	require.False(t, out.Versions[1].Captured)
+}
+
 func TestGetSkillTruncatesContentAtTheReadCeiling(t *testing.T) {
 	t.Parallel()
 

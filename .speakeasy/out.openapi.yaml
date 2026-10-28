@@ -111694,6 +111694,9 @@ components:
         approved_by_user_id:
           type: string
           description: The user that approved the suggestion, when present.
+        base_content:
+          type: string
+          description: The SKILL.md content of the base version, which the proposed changes apply to.
         base_version_id:
           type: string
           description: The version the suggestion was generated from.
@@ -111758,6 +111761,7 @@ components:
         - skill_name
         - skill_display_name
         - base_version_id
+        - base_content
         - changes
         - proposed_content
         - applies_cleanly
@@ -112402,6 +112406,9 @@ components:
         canonical_sha256:
           type: string
           description: The SHA-256 manifest digest derived from canonicalized SKILL.md content.
+        captured:
+          type: boolean
+          description: Whether this version was captured from an agent's machine rather than uploaded. Captured versions rank below uploaded ones, so plugins only ship one after it is promoted or no uploaded version exists.
         content:
           type: string
           description: The exact uploaded SKILL.md content.
@@ -112472,6 +112479,7 @@ components:
         - created_at
         - created_by_user_id
         - seen_count
+        - captured
     SkillVersionInsight:
       type: object
       properties:

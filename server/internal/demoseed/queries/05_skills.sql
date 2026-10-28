@@ -44,12 +44,13 @@ VALUES (@id::uuid, @project_id::uuid,
 
 -- The diff MUST carry ---/+++ file headers: gitdiff.Parse yields zero file
 -- fragments for a bare hunk, skilldiff.Apply then fails and the dashboard
--- retires the suggestion as "no longer lines up with the manifest".
+-- retires the suggestion as "no longer lines up with the manifest". The last
+-- line needs its newline too, or the final context line does not match.
 -- name: SkillsInsertEditSuggestionChange :exec
 INSERT INTO skill_edit_suggestion_changes (project_id, suggestion_id, proposed_diff, rationale, position)
 VALUES
   (@project_id::uuid, @suggestion_id::uuid,
-E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount with the customer.\n+1a. If the customer pastes a card number, stop and ask them to remove it.\n 2. Use the process_refund tool with the confirmed amount.',
+E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount with the customer.\n+1a. If the customer pastes a card number, stop and ask them to remove it.\n 2. Use the process_refund tool with the confirmed amount.\n',
    'Make the PCI guardrail the first checkpoint instead of a trailing note.', 1);
 
 -- Runbook v2: the base runbook content plus an on-call paging step.
@@ -62,6 +63,25 @@ SELECT @id::uuid, @skill_id::uuid, c,
        'Add on-call paging step', TRUE, @created_by_user_id::text,
        now() - interval '3 days', now() - interval '3 days'
 FROM (SELECT @base_content::text || E'- page the on-call before any manual failover.\n' AS c) s;
+
+-- A rewrite of the refunds skill captured from a teammate's machine. It is
+-- newer than the uploaded version but ranks below it, so plugins keep
+-- shipping the uploaded version and the open suggestion stays based on it
+-- until someone promotes the capture.
+-- name: SkillsInsertCapturedRefundsVersion :exec
+WITH captured_version AS (
+  INSERT INTO skill_versions (id, skill_id, content, canonical_sha256, raw_sha256,
+                              description, spec_valid, created_by_user_id, created_at)
+  SELECT @id::uuid, @skill_id::uuid, c,
+         encode(sha256(convert_to(c, 'UTF8')), 'hex'),
+         encode(sha256(convert_to(c, 'UTF8')), 'hex'),
+         'How to process customer refunds safely.', TRUE, 'system', now() - interval '2 days'
+  FROM (SELECT @content::text AS c) s
+  RETURNING id, skill_id
+)
+INSERT INTO skill_version_origins (skill_version_id, skill_id, project_id, origin)
+SELECT captured_version.id, captured_version.skill_id, @project_id::uuid, 'captured'
+FROM captured_version;
 
 -- name: SkillsInsertVersionLineage :exec
 INSERT INTO skill_version_lineages (skill_version_id, skill_id, derived_from_version_id)

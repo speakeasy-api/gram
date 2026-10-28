@@ -97,6 +97,15 @@ func (s *seeder) seedSkills(ctx context.Context) error {
 		return fmt.Errorf("insert demo skill edit suggestion change: %w", err)
 	}
 
+	if err := s.q.SkillsInsertCapturedRefundsVersion(ctx, repo.SkillsInsertCapturedRefundsVersionParams{
+		ID:        s.fixed("0000-4000-a000-0000000052c1"),
+		SkillID:   s.skillID(1),
+		Content:   skillContentRefundsCaptured,
+		ProjectID: proj,
+	}); err != nil {
+		return fmt.Errorf("insert demo captured refunds version: %w", err)
+	}
+
 	// Skill efficacy, activations, and drift.
 	// Activations: 1-3 reconciled skill_observations per odd (Claude) chat,
 	// with metrics_synced_at/efficacy_enqueued_at stamped so the metrics-sync

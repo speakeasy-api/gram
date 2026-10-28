@@ -134,8 +134,10 @@ function VersionHistory({
       <SettingsSection.Header>
         <SettingsSection.Title>Version history</SettingsSection.Title>
         <SettingsSection.Description>
-          Versions are ordered by creation date, newest first. After a rollback,
-          the current version may appear below newer versions.
+          Versions are ordered by creation date, newest first. The current
+          version is what plugins ship, so it can sit below newer versions after
+          a rollback, or when a newer version was captured from someone&apos;s
+          machine and has not been promoted.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -243,6 +245,18 @@ function versionColumns({
           </span>
           {version.id === currentVersionId && (
             <Badge variant="information">Current</Badge>
+          )}
+          {version.captured && (
+            <Badge
+              variant="neutral"
+              title={
+                version.id === currentVersionId
+                  ? "Captured from someone's machine. No uploaded version exists, so plugins ship this one."
+                  : "Captured from someone's machine. Plugins do not ship it until it is promoted."
+              }
+            >
+              Captured
+            </Badge>
           )}
           {version.derivedFromVersionId && (
             <Badge variant="neutral" title={version.derivedFromVersionId}>

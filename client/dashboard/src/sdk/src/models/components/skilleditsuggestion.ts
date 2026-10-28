@@ -47,6 +47,10 @@ export type SkillEditSuggestion = {
    */
   approvedByUserId?: string | undefined;
   /**
+   * The SKILL.md content of the base version, which the proposed changes apply to.
+   */
+  baseContent: string;
+  /**
    * The version the suggestion was generated from.
    */
   baseVersionId: string;
@@ -121,6 +125,7 @@ export const SkillEditSuggestion$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     approved_by_user_id: z.optional(z.string()),
+    base_content: z.string(),
     base_version_id: z.string(),
     changes: z.array(SkillEditSuggestionChange$inboundSchema),
     created_at: z.pipe(
@@ -147,6 +152,7 @@ export const SkillEditSuggestion$inboundSchema: z.ZodMiniType<
       "applies_cleanly": "appliesCleanly",
       "approved_at": "approvedAt",
       "approved_by_user_id": "approvedByUserId",
+      "base_content": "baseContent",
       "base_version_id": "baseVersionId",
       "created_at": "createdAt",
       "feedback_count": "feedbackCount",
