@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 const toolSearchUnavailableMessage = "tool search is temporarily unavailable; try again later"
@@ -30,7 +29,7 @@ func TestMCPWithoutTemporalServesStaticRequestsAndFailsFastOnStaleDynamicIndex(t
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "no-temporal-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "no-temporal-"+uuid.NewString()[:8])
 	addHTTPTools(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "static_tool")
 
 	initialize, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)

@@ -124,7 +124,9 @@ func TestPublicClientOnlyDynamicRegistrationInspectorVersusAttachment(t *testing
 	t.Parallel()
 
 	metadata := map[string]any{"registration_endpoint": "https://issuer.example.com/register", "token_endpoint_auth_methods_supported": []any{"none"}}
-	require.Equal(t, oauthDiscoveryAvailableDCR, directRemoteAutomaticRegistration(metadata))
+	discovery, attachable := directRemoteAutomaticRegistration(metadata)
+	require.Equal(t, oauthDiscoveryAvailableDCR, discovery)
+	require.False(t, attachable)
 
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

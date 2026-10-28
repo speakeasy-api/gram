@@ -102,6 +102,47 @@ func TestCatalogRegistrationToolReAddsBrowserCatalogServerAfterDashboardDelete(t
 	})
 	require.NoError(t, err)
 	require.NotEqual(t, first.RegistrationID, second.RegistrationID, "the stale registration must be replaced, not reused")
+	require.False(t, second.AlreadyRegistered, "a server re-added after deletion is new")
 	require.Equal(t, "continue_dashboard_setup", second.NextAction)
 	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings#authentication$`, second.DashboardSetupURL)
+}
+
+func TestCatalogRegistrationToolReportsAServerAlreadyInTheProject(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_catalog_already_registered")
+	require.NoError(t, err)
+
+	providerKey := "browser-catalog-registry-" + uuid.NewString()
+	principal, project, reg := newBrowserCatalogRegistrationHarness(t, ctx, conn, providerKey)
+	callCtx := ContextWithPrincipal(ctx, principal)
+	register := func(key string) RegisterCatalogMCPToolOutput {
+		out, err := invokeTool[RegisterCatalogMCPToolOutput](t, callCtx, reg, "register_catalog_mcp", map[string]any{
+			"project_slug":    project.Slug,
+			"provider_key":    providerKey,
+			"catalog_ref":     "app.example/mcp",
+			"idempotency_key": key,
+		})
+		require.NoError(t, err)
+		return out
+	}
+
+	first := register("catalog-already-first")
+	require.False(t, first.AlreadyRegistered)
+	require.False(t, first.Replayed)
+
+	again := register("catalog-already-second")
+	require.Equal(t, first.RegistrationID, again.RegistrationID)
+	require.True(t, again.AlreadyRegistered)
+	require.False(t, again.Replayed)
+
+	retry := register("catalog-already-first")
+	require.Equal(t, first.RegistrationID, retry.RegistrationID)
+	require.True(t, retry.Replayed)
+	require.False(t, retry.AlreadyRegistered, "a retry reports the original outcome")
+
+	retryAgain := register("catalog-already-second")
+	require.True(t, retryAgain.Replayed)
+	require.True(t, retryAgain.AlreadyRegistered, "a retry reports the original outcome")
 }
