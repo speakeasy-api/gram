@@ -12,6 +12,7 @@ import (
 	testidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	admingen "github.com/speakeasy-api/gram/server/gen/admin_assets"
 	"github.com/speakeasy-api/gram/server/gen/assets"
+	orggen "github.com/speakeasy-api/gram/server/gen/organization_assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -195,10 +196,42 @@ func TestService_UploadPlatformImage_UnsupportedContentType(t *testing.T) {
 	_, err := ti.service.UploadPlatformImage(adminCtx, &admingen.UploadPlatformImageForm{
 		SessionToken:  nil,
 		ContentType:   "application/zip",
-		ContentLength: 100,
+		ContentLength: int64(len("fake zip content")),
 	}, io.NopCloser(strings.NewReader("fake zip content")))
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnsupportedMedia, oopsErr.Code)
+}
+
+func TestService_UploadPlatformImage_InvalidSVGAndLengths(t *testing.T) {
+	ctx, ti := newTestAssetsService(t)
+	svg := `<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L1 1"/></svg>`
+	for _, tc := range []struct {
+		name, body, mime string
+		size             int64
+	}{
+		{"empty", "", "image/svg+xml", 0},
+		{"short", svg, "image/svg+xml", int64(len(svg) - 1)},
+		{"long", svg, "image/svg+xml", int64(len(svg) + 1)},
+		{"oversize", strings.Repeat("x", 4*1024*1024+1), "image/svg+xml", 4*1024*1024 + 1},
+		{"forged", "not SVG", "image/svg+xml", 7},
+		{"hostile raster MIME", `<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>`, "image/png", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.size == 0 && tc.body != "" {
+				tc.size = int64(len(tc.body))
+			}
+			result, err := ti.service.UploadPlatformImage(withAdmin(t, ctx), &admingen.UploadPlatformImageForm{ContentType: tc.mime, ContentLength: tc.size}, io.NopCloser(strings.NewReader(tc.body)))
+			require.Error(t, err)
+			require.Nil(t, result)
+		})
+	}
+	_, err := ti.service.UploadImage(ctx, &assets.UploadImageForm{ContentType: "image/svg+xml", ContentLength: int64(len(svg))}, io.NopCloser(strings.NewReader(svg)))
+	var unsupported *oops.ShareableError
+	require.ErrorAs(t, err, &unsupported)
+	require.Equal(t, oops.CodeUnsupportedMedia, unsupported.Code)
+	_, err = ti.service.UploadOrganizationImage(ctx, &orggen.UploadOrganizationImageForm{ContentType: "image/svg+xml", ContentLength: int64(len(svg))}, io.NopCloser(strings.NewReader(svg)))
+	require.ErrorAs(t, err, &unsupported)
+	require.Equal(t, oops.CodeUnsupportedMedia, unsupported.Code)
 }

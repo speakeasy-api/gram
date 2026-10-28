@@ -38,6 +38,8 @@ func platformAssetMethods() {
 				Header("last_modified:Last-Modified")
 				Header("access_control_allow_origin:Access-Control-Allow-Origin")
 				Header("cross_origin_resource_policy:Cross-Origin-Resource-Policy")
+				Header("content_security_policy:Content-Security-Policy")
+				Header("x_content_type_options:X-Content-Type-Options")
 			})
 			SkipResponseBodyEncodeDecode()
 		})

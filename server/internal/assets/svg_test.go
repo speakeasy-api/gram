@@ -28,6 +28,11 @@ func TestSanitizeSVG(t *testing.T) {
 			require.Equal(t, clean, again)
 			require.Contains(t, string(clean), `xmlns="http://www.w3.org/2000/svg"`)
 			require.NotContains(t, string(clean), "<!--")
+			for _, attribute := range []string{`width="3"`, `r="3"`, `fill="none"`, `stroke="currentColor"`, `opacity="0.5"`, `transform="translate(1,2) scale(2) rotate(30 1 2) skewX(3) skewY(4) matrix(1 0 0 1 0 0)"`} {
+				if strings.Contains(s, attribute) {
+					require.Contains(t, string(clean), attribute)
+				}
+			}
 			var root struct{ XMLName xml.Name }
 			require.NoError(t, xml.Unmarshal(clean, &root))
 			require.Equal(t, "http://www.w3.org/2000/svg", root.XMLName.Space)

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -42,8 +43,8 @@ const (
 )
 
 // PlatformImageTypes are the image types accepted for platform-tier assets.
-// SVG is excluded because it can carry script.
-var PlatformImageTypes = []string{"image/png", "image/jpeg", "image/gif", "image/webp"}
+// SVG is accepted only after validation of the static subset.
+var PlatformImageTypes = []string{"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}
 
 // PlatformImageUploads issues single-use upload tokens that store one platform
 // image each, for clients that cannot send the dashboard's session cookie.
@@ -153,11 +154,21 @@ func (u *PlatformImageUploads) Handler() http.Handler {
 			writeUploadJSON(w, http.StatusBadRequest, map[string]string{"error": "the upload body could not be read; request a new token and try again"})
 			return
 		}
+		if r.ContentLength >= 0 && r.ContentLength != int64(len(data)) {
+			writeUploadJSON(w, http.StatusBadRequest, map[string]string{"error": "image content length mismatch"})
+			return
+		}
 		// Trust the bytes, not the request's Content-Type: curl sends a form
 		// type by default.
 		contentType := http.DetectContentType(data)
-		if len(data) == 0 || !slices.Contains(PlatformImageTypes, contentType) {
-			writeUploadJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "upload a PNG, JPEG, GIF or WebP image"})
+		// Explicit SVG must not disguise raster bytes; other MIME declarations
+		// remain advisory for shell clients.
+		if declared, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); declared == "image/svg+xml" {
+			contentType = declared
+		}
+		data, contentType, err = canonicalPlatformImage(data, contentType)
+		if err != nil || len(data) == 0 || !slices.Contains(PlatformImageTypes, contentType) {
+			writeUploadJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "upload a PNG, JPEG, GIF, WebP or static SVG image"})
 			return
 		}
 		logger := u.logger.With(attr.SlogAuthUserEmail(grant.OperatorEmail))
@@ -179,7 +190,7 @@ func (u *PlatformImageUploads) Handler() http.Handler {
 		}
 		// The staff record of this direct write: who published which image.
 		logger.InfoContext(r.Context(), "staff platform image uploaded", attr.SlogAssetID(assetID.String()))
-		writeUploadJSON(w, http.StatusOK, StoredPlatformImage{AssetID: assetID.String(), URL: ServeImageURL(u.siteURL, assetID), SHA256: stored.Asset.Sha256, ContentType: contentType, Size: int64(len(data))})
+		writeUploadJSON(w, http.StatusOK, StoredPlatformImage{AssetID: assetID.String(), URL: ServeImageURL(u.siteURL, assetID), SHA256: stored.Asset.Sha256, ContentType: stored.Asset.ContentType, Size: stored.Asset.ContentLength})
 	})
 }
 

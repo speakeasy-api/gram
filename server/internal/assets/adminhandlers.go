@@ -1,11 +1,13 @@
 package assets
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"mime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +46,23 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 // StorePlatformImage stores a publicly served platform-tier image. Callers
 // must already have authorized a platform-wide staff write for operatorEmail.
 func (s *Service) StorePlatformImage(ctx context.Context, logger *slog.Logger, operatorEmail string, reader io.Reader, contentLength int64, contentType string) (*admingen.UploadImageResult, error) {
+	// Bound and validate the original bytes before canonicalization changes their size.
+	if contentLength <= 0 || contentLength > MaxFileSizeImage {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid image content length")
+	}
+	data, err := io.ReadAll(io.LimitReader(reader, MaxFileSizeImage+1))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "read image")
+	}
+	if int64(len(data)) != contentLength {
+		return nil, oops.E(oops.CodeBadRequest, nil, "image content length mismatch")
+	}
+	data, contentType, err = canonicalPlatformImage(data, contentType)
+	if err != nil {
+		return nil, err
+	}
+	contentLength = int64(len(data))
+	reader = bytes.NewReader(data)
 	result, err := s.downloadAuthorizedAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: contentLength,
@@ -85,7 +104,7 @@ func (s *Service) StorePlatformImage(ctx context.Context, logger *slog.Logger, o
 	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
 		contentLength: contentLength,
 		inputMimeType: inContentType,
-		allowedTypes:  []string{"image/png", "image/jpeg", "image/gif", "image/webp"},
+		allowedTypes:  PlatformImageTypes,
 	})
 	if err != nil {
 		return nil, err
@@ -158,4 +177,21 @@ func NewPlatformService(logger *slog.Logger, tp trace.TracerProvider, policy *gu
 		storage:        storage,
 		repo:           repo.New(db),
 	}
+}
+
+// canonicalPlatformImage validates XML candidates regardless of their declared MIME.
+// Raster declarations retain the existing upload behavior.
+func canonicalPlatformImage(data []byte, contentType string) ([]byte, string, error) {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return nil, "", oops.E(oops.CodeBadRequest, err, "error parsing content type")
+	}
+	if mediaType == "image/svg+xml" || strings.HasPrefix(strings.TrimSpace(string(data)), "<") {
+		clean, err := sanitizeSVG(data)
+		if err != nil {
+			return nil, "", oops.E(oops.CodeUnsupportedMedia, err, "invalid SVG image")
+		}
+		return clean, "image/svg+xml", nil
+	}
+	return data, mediaType, nil
 }

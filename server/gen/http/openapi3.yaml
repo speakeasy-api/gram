@@ -35,6 +35,9 @@ paths:
                             schema:
                                 format: int64
                                 type: integer
+                        Content-Security-Policy:
+                            schema:
+                                type: string
                         Content-Type:
                             schema:
                                 type: string
@@ -42,6 +45,9 @@ paths:
                             schema:
                                 type: string
                         Last-Modified:
+                            schema:
+                                type: string
+                        X-Content-Type-Options:
                             schema:
                                 type: string
                 "400":
@@ -20683,6 +20689,9 @@ paths:
                             schema:
                                 format: int64
                                 type: integer
+                        Content-Security-Policy:
+                            schema:
+                                type: string
                         Content-Type:
                             schema:
                                 type: string
@@ -20690,6 +20699,9 @@ paths:
                             schema:
                                 type: string
                         Last-Modified:
+                            schema:
+                                type: string
+                        X-Content-Type-Options:
                             schema:
                                 type: string
                 "400":
@@ -121665,11 +121677,15 @@ components:
                 content_length:
                     type: integer
                     format: int64
+                content_security_policy:
+                    type: string
                 content_type:
                     type: string
                 cross_origin_resource_policy:
                     type: string
                 last_modified:
+                    type: string
+                x_content_type_options:
                     type: string
             required:
                 - content_type

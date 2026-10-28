@@ -3080,6 +3080,8 @@ type ServeImageResult struct {
 	LastModified              string
 	AccessControlAllowOrigin  *string
 	CrossOriginResourcePolicy string
+	ContentSecurityPolicy     *string
+	XContentTypeOptions       *string
 }
 
 // SetInferenceKeyMonthlyLimitPayload is the payload type of the admin service
