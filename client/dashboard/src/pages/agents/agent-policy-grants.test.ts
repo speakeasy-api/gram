@@ -42,6 +42,8 @@ describe("agent policy scope catalog", () => {
       "mcp:connect",
       "mcp:read",
       "mcp:write",
+      "org:device_agent_sync",
+      "org:hooks_ingest",
       "project:read",
       "project:write",
       "risk_policy:evaluate",
@@ -53,7 +55,8 @@ describe("agent policy scope catalog", () => {
   it("never offers a scope outside the safe set", () => {
     for (const scope of AGENT_POLICY_SCOPES) {
       expect(scope.slug).not.toMatch(/blocked_/);
-      expect(scope.slug.split(":")[0]).not.toBe("org");
+      expect(scope.slug).not.toBe("org:read");
+      expect(scope.slug).not.toBe("org:admin");
       expect(scope.slug.split(":")[0]).not.toBe("chat");
       expect(scope.slug.split(":")[0]).not.toBe("agent");
       expect(scope.slug).not.toBe("risk_policy:bypass");
@@ -93,6 +96,26 @@ describe("agent policy draft to grants", () => {
         effect: "allow",
         scope: "skill:read",
         selector: { resourceKind: "skill", resourceId: "*" },
+      },
+    ]);
+  });
+
+  it("sends device agent permissions as organization-wide org grants", () => {
+    expect(
+      agentPolicyGrantsFromDraft({
+        "org:device_agent_sync": null,
+        "org:hooks_ingest": null,
+      }),
+    ).toEqual([
+      {
+        effect: "allow",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+      {
+        effect: "allow",
+        scope: "org:hooks_ingest",
+        selector: { resourceKind: "org", resourceId: "*" },
       },
     ]);
   });
@@ -370,6 +393,36 @@ describe("stored constraints the editor cannot show", () => {
       expect(view.draft).toEqual({});
     },
   );
+
+  it("keeps a hook events grant narrowed to one project exactly as stored", () => {
+    const stored = [
+      storedGrant("grant_hooks", "org:hooks_ingest", {
+        resourceKind: "org",
+        resourceId: "*",
+        projectId: "project_one",
+      }),
+    ];
+    const view = agentPolicyViewFromGrants(stored);
+    expect(isAgentPolicyGrantRepresentable(stored[0]!)).toBe(false);
+    expect(view.preserved).toEqual(stored);
+    expect(view.preservedScopes).toEqual(["org:hooks_ingest"]);
+    expect(view.draft).toEqual({});
+  });
+
+  it("edits an organization-wide device agent grant and writes it back unchanged", () => {
+    const stored = [
+      storedGrant("grant_sync", "org:device_agent_sync", {
+        resourceKind: "org",
+        resourceId: "*",
+      }),
+    ];
+    const view = agentPolicyViewFromGrants(stored);
+    expect(view.preservedScopes).toEqual([]);
+    expect(view.draft).toEqual({ "org:device_agent_sync": null });
+    expect(
+      diffAgentPolicyGrants(stored, agentPolicyGrantsFromDraft(view.draft)),
+    ).toEqual({ create: [], remove: [] });
+  });
 
   it("leaves a preserved grant untouched while an unrelated permission is added", () => {
     const preserved = riskGrant("grant_risk", {

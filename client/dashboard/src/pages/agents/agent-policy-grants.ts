@@ -120,6 +120,24 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
     description: "Evaluate risk policies.",
     agentEligible: true,
   },
+  // The only safe org scopes: what a device agent running as this agent needs.
+  // Neither implies any other scope.
+  {
+    slug: "org:device_agent_sync",
+    resourceType: "org",
+    visibility: "user_visible",
+    description:
+      "Fetch the plugins assigned to this agent from a device agent.",
+    agentEligible: true,
+  },
+  {
+    slug: "org:hooks_ingest",
+    resourceType: "org",
+    visibility: "user_visible",
+    description:
+      "Send AI-tool hook events and telemetry to any project in the organization.",
+    agentEligible: true,
+  },
 ];
 
 /**
@@ -154,12 +172,14 @@ export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
  * `ResourceKindForScope` in server/internal/authz/selector.go, which derives it
  * from the scope; `ValidateSelector` rejects a selector that disagrees.
  * mcp:auth grants are deliberately unrepresentable here until the auth client
- * editor exists, so stored ones are preserved and locked.
+ * editor exists, so stored ones are preserved and locked. So are org:hooks_ingest
+ * grants narrowed to a project, since the draft has no project dimension for org.
  */
 const RESOURCE_KIND_BY_SCOPE_FAMILY: Record<
   string,
   AgentPolicySelectorResourceKind
 > = {
+  org: "org",
   project: "project",
   mcp: "mcp",
   environment: "environment",

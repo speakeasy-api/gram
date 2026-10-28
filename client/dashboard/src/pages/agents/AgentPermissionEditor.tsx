@@ -239,7 +239,9 @@ export function AgentPermissionEditor({
             if (!resource || !isAgentPolicyNarrowable(resource.resourceType))
               return (
                 <Text small muted>
-                  All resources
+                  {resource?.resourceType === "org"
+                    ? "Whole organization"
+                    : "All resources"}
                 </Text>
               );
             return (
