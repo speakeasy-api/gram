@@ -75,6 +75,7 @@ import { SettingsTab } from "./tabs/settings/SettingsTab";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GuardrailsTab } from "./tabs/guardrails/GuardrailsTab";
+import { RemoteSkillsTabRoute } from "./tabs/skills/RemoteSkillsTab";
 import { MCPSkillsTabRoute } from "../MCPSkillsTab";
 
 export default function MCPServerDetails(): JSX.Element | null {
@@ -258,12 +259,19 @@ export default function MCPServerDetails(): JSX.Element | null {
           )
         );
       case "skills":
-        // Only hosted servers get here; the route checks the flag before the
-        // scope, so a disabled tab always redirects to the overview.
+        // Hosted servers list their own links; remote-backed servers list
+        // theirs with a note on how agents load them. The routes check the
+        // flag before the scope, and any other server lands on the overview.
         return (
-          mcpServer && (
+          mcpServer &&
+          (hosted ? (
             <MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug={idOrSlug} />
-          )
+          ) : (
+            <RemoteSkillsTabRoute
+              mcpServer={mcpServer}
+              mcpServerSlug={idOrSlug}
+            />
+          ))
         );
       case "team-access":
         return (

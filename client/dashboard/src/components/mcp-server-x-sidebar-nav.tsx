@@ -473,10 +473,12 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     !!mcpServer &&
     hasScope("org:read", organization.id) &&
     hasScope("mcp:read", grantResourceId);
-  // Same check as the Skills tab route: skill read on this project. Only
-  // hosted servers have the tab.
+  // Same check as the Skills tab routes: skill read on this project. Only
+  // hosted and remote-backed servers have the tab.
   const canViewSkills =
-    skillsOverMcp && hosted && hasScope("skill:read", project.id, project.id);
+    skillsOverMcp &&
+    (hosted || isRemoteBacked) &&
+    hasScope("skill:read", project.id, project.id);
 
   // Guardrails police traffic that passes through Speakeasy, so unproxied servers
   // (which never do) have none. Admin-only, like the policies it manages.
