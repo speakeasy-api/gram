@@ -30,14 +30,17 @@ var cardShellHTML string
 
 // cardTemplate is the markup shared by every card. html/template escapes each
 // value for its context and replaces any URL that is not http(s) or mailto.
+// The one exception is Logo: a data: image URI that cardLogoDataURI builds
+// only from stored bytes it has checked, typed as template.URL so the filter
+// lets it through.
 //
 // Every card is one header row — a leading tile, the title and a secondary
 // line, and one trailing action — with optional label and value rows below a
 // divider. A card without detail rows is the compact variant.
 var cardTemplate = template.Must(template.New("card").Parse(`<article class="card">` +
 	`<div class="head">` +
-	`<div class="tile{{if .Initials}} tile-initials{{end}}">` +
-	`{{if .Initials}}<span aria-hidden="true">{{.Initials}}</span>{{else}}` + cardServerIcon + `{{end}}` +
+	`<div class="tile{{if .Logo}} tile-logo{{else if .Initials}} tile-initials{{end}}">` +
+	`{{if .Logo}}<img class="logo" src="{{.Logo}}" alt="">{{else if .Initials}}<span aria-hidden="true">{{.Initials}}</span>{{else}}` + cardServerIcon + `{{end}}` +
 	`{{with .Badge}}<span class="badge badge-{{.Tone}}" role="img" aria-label="{{.Label}}">{{if eq .Tone "done"}}` + cardCheckIcon + `{{else}}!{{end}}</span>{{end}}` +
 	`</div>` +
 	`<div class="text"><div class="title"><h1>{{.Title}}</h1>{{with .Pill}}<span class="pill pill-{{.Tone}}">{{.Label}}</span>{{end}}</div>` +
@@ -55,10 +58,14 @@ const cardServerIcon = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"
 // cardCheckIcon is the check inside a done badge.
 const cardCheckIcon = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 6.2 5 8.2 9 4"/></svg>`
 
-// resultCard is what one card shows. Every value is plain text; the template
-// escapes it.
+// resultCard is what one card shows. Every value except Logo is plain text;
+// the template escapes it.
 type resultCard struct {
 	Title string
+	// Logo is the MCP server's logo as a data: URI built by cardLogoDataURI
+	// from stored, validated bytes. When it is set it fills the tile in place
+	// of the initials or the server icon.
+	Logo template.URL
 	// Initials fill a dark tile, as on a sign-in card. Without them the tile
 	// shows the MCP server icon.
 	Initials string
@@ -189,7 +196,7 @@ const (
 
 // serverCard describes an MCP server just added to a project and its next
 // step. serverURL is the address the server was added by, when there is one.
-func serverCard(serverName string, project ResolvedProject, nextAction, dashboardSetupURL string, alreadyRegistered bool, serverURL string) resultCard {
+func serverCard(serverName string, logo template.URL, project ResolvedProject, nextAction, dashboardSetupURL string, alreadyRegistered bool, serverURL string) resultCard {
 	projectName := project.Name
 	if projectName == "" {
 		projectName = project.Slug
@@ -200,6 +207,7 @@ func serverCard(serverName string, project ResolvedProject, nextAction, dashboar
 	}
 	card := resultCard{
 		Title:    cardTitle(serverName),
+		Logo:     logo,
 		Initials: "",
 		Badge:    &cardStatus{Label: "Added", Tone: cardToneDone},
 		Pill:     pill,
@@ -243,9 +251,10 @@ func serverCard(serverName string, project ResolvedProject, nextAction, dashboar
 }
 
 // signInCard offers the one sign-in step after a provider is connected.
-func signInCard(serverName, authorizationURL string) resultCard {
+func signInCard(serverName string, logo template.URL, authorizationURL string) resultCard {
 	card := resultCard{
 		Title:    "Sign in",
+		Logo:     logo,
 		Initials: cardInitials(serverName),
 		Badge:    nil,
 		Pill:     nil,
