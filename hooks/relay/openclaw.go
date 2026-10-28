@@ -13,47 +13,54 @@ import (
 // before the model call of a run. Its event carries the run's user prompt.
 const openclawLLMInputHook = "llm_input"
 
-// openclawRequestHeader introduces the user's own text in the prompt that
-// OpenClaw's Codex app-server harness sends to the model, and so in its
-// llm_input. Runtime context (the workspace files) and delivery metadata come
-// before it.
-const openclawRequestHeader = "Current user request:\n"
-
-// openclawDecorationPrefixes open the sections the Codex app-server harness
-// places before the request header. A prompt that opens with neither was not
-// decorated, so it is the user's text as written.
-var openclawDecorationPrefixes = []string{
-	"OpenClaw runtime context for this turn:",
-	"OpenClaw delivery metadata:",
-}
-
-// openclawUserRequest returns the user's text from an llm_input prompt. The
-// Codex app-server harness prepends workspace context, often several
-// kilobytes of it, which is OpenClaw's input to the model rather than what the
-// user asked.
+// The Codex app-server harness decorates the prompt it sends the model, and so
+// the prompt in its llm_input, as up to three sections joined by a blank line
+// (prependCodexOpenClawPromptContext in OpenClaw's codex extension):
 //
-// The request is the last section, so the last header marks it. A request
-// that itself contains the header keeps only its final part, which beats
-// reporting the workspace files as the prompt.
+//	OpenClaw runtime context for this turn:   workspace files, free text
+//	OpenClaw delivery metadata:               a fixed routing hint
+//	Current user request:                     what the user typed
+//
+// A prompt with no context and no delivery hint is sent undecorated.
+const (
+	openclawContextHeader  = "OpenClaw runtime context for this turn:\n"
+	openclawDeliveryHeader = "OpenClaw delivery metadata:\n"
+	openclawRequestHeader  = "Current user request:\n"
+)
+
+// openclawUserRequest returns the text the user typed from an llm_input
+// prompt, without the workspace context, often several kilobytes, that the
+// harness puts before it.
+//
+// The delivery section holds only OpenClaw's fixed hints, so the first request
+// header after it is the boundary, and a request that quotes the header stays
+// whole. Runtime context is free text that can hold anything, so without a
+// delivery section the last header is the boundary: a request containing a
+// header line loses the text before that line, but workspace files never pass
+// as the prompt. An undecorated prompt is the user's text as typed.
 func openclawUserRequest(prompt string) string {
-	if request, ok := strings.CutPrefix(prompt, openclawRequestHeader); ok {
-		return request
+	separator := "\n\n" + openclawRequestHeader
+	if strings.HasPrefix(prompt, openclawDeliveryHeader) {
+		return textAfter(prompt, separator, strings.Index(prompt, separator))
 	}
-	decorated := false
-	for _, prefix := range openclawDecorationPrefixes {
-		if strings.HasPrefix(prompt, prefix) {
-			decorated = true
-			break
+	if !strings.HasPrefix(prompt, openclawContextHeader) {
+		return prompt
+	}
+	if delivery := strings.LastIndex(prompt, "\n\n"+openclawDeliveryHeader); delivery >= 0 {
+		if i := strings.Index(prompt[delivery:], separator); i >= 0 {
+			return textAfter(prompt, separator, delivery+i)
 		}
 	}
-	if !decorated {
-		return prompt
-	}
-	i := strings.LastIndex(prompt, "\n\n"+openclawRequestHeader)
+	return textAfter(prompt, separator, strings.LastIndex(prompt, separator))
+}
+
+// textAfter returns s after the separator found at index i, or all of s when
+// the separator was not found.
+func textAfter(s, separator string, i int) string {
 	if i < 0 {
-		return prompt
+		return s
 	}
-	return prompt[i+len("\n\n"+openclawRequestHeader):]
+	return s[i+len(separator):]
 }
 
 // openclawPromptRunsCap bounds how many OpenClaw runs the relay remembers as

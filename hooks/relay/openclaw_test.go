@@ -281,14 +281,31 @@ func TestOpenClawLLMInputReportsOnlyTheUserRequest(t *testing.T) {
 
 func TestOpenclawUserRequest(t *testing.T) {
 	t.Parallel()
+	const (
+		context  = "OpenClaw runtime context for this turn:\nfiles\n\n## /work/NOTES.md\n\nnotes"
+		delivery = "OpenClaw delivery metadata:\nThis delivery metadata is runtime routing guidance, not the user's request.\nhint"
+	)
 	for name, tc := range map[string]struct{ prompt, want string }{
-		"plain prompt":           {"summarize the repo", "summarize the repo"},
-		"header only":            {"Current user request:\nsummarize the repo", "summarize the repo"},
-		"runtime context":        {"OpenClaw runtime context for this turn:\nfiles\n\nCurrent user request:\nsummarize the repo", "summarize the repo"},
-		"delivery metadata only": {"OpenClaw delivery metadata:\nchannel: cli\n\nCurrent user request:\nhi", "hi"},
-		"user quotes the header": {"please explain what \"Current user request:\" means", "please explain what \"Current user request:\" means"},
-		"context without header": {"OpenClaw runtime context for this turn:\nfiles only", "OpenClaw runtime context for this turn:\nfiles only"},
-		"multi-line request":     {"OpenClaw runtime context for this turn:\nfiles\n\nCurrent user request:\nline one\nline two", "line one\nline two"},
+		"plain prompt":               {"summarize the repo", "summarize the repo"},
+		"undecorated header is text": {"Current user request:\nsummarize the repo", "Current user request:\nsummarize the repo"},
+		"runtime context":            {context + "\n\nCurrent user request:\nsummarize the repo", "summarize the repo"},
+		"delivery metadata only":     {delivery + "\n\nCurrent user request:\nhi", "hi"},
+		"context and delivery":       {context + "\n\n" + delivery + "\n\nCurrent user request:\nhi", "hi"},
+		"request quotes the header after delivery": {
+			delivery + "\n\nCurrent user request:\nfix this\n\nCurrent user request:\nlog line",
+			"fix this\n\nCurrent user request:\nlog line",
+		},
+		"request quotes the header after context and delivery": {
+			context + "\n\n" + delivery + "\n\nCurrent user request:\nfix this\n\nCurrent user request:\nlog line",
+			"fix this\n\nCurrent user request:\nlog line",
+		},
+		"workspace file quotes the header": {
+			"OpenClaw runtime context for this turn:\nCurrent user request:\nold\n\nCurrent user request:\nnew",
+			"new",
+		},
+		"user mentions the header inline": {context + "\n\nCurrent user request:\nwhat does \"Current user request:\" mean", "what does \"Current user request:\" mean"},
+		"context without header":          {context, context},
+		"multi-line request":              {context + "\n\nCurrent user request:\nline one\nline two", "line one\nline two"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
