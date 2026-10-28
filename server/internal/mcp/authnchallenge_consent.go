@@ -960,8 +960,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// Preflight on a plain Get: everything that can fail for retryable
 	// reasons (validation, inventory snapshot, client lookup, selection
 	// parsing) runs BEFORE the challenge is consumed, so a transient failure
-	// leaves the page usable. The consuming GetAndDelete below re-validates
-	// against the consumed value, which stays the single-use authority.
+	// leaves the page usable. CompareAndDelete below consumes only this exact
+	// state, so a concurrent callback leaves the updated challenge retryable.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return consentChallengeCacheError(ctx, logger, err)
@@ -1272,14 +1272,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 
-	// Atomic GETDEL: a consent approval consumes the authn-challenge state
-	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
-	// and get "not found or expired", so only one grant is ever minted per
-	// authorization request. The consumed value is the authority — re-run
-	// the guards against it in case the preflighted copy went stale.
-	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
+	// Claim only the preflighted state. A callback may publish renewal choices
+	// while inventory checks run; those choices must survive for review.
+	claimed, err := s.authnChallengeCache.CompareAndDelete(ctx, challengeState)
 	if err != nil {
 		return consentChallengeCacheError(ctx, logger, err)
+	}
+	if !claimed {
+		return oops.E(oops.CodeConflict, nil, "consent changed; reload before approving access").LogWarn(ctx, logger)
 	}
 	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)
