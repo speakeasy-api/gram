@@ -592,6 +592,11 @@
       function connectionUsable(session) {
         if (!session) return false;
         if (
+          session.AuthorizationExpiresAt &&
+          !(new Date(session.AuthorizationExpiresAt).getTime() > Date.now())
+        )
+          return false;
+        if (
           session.HasRefreshToken &&
           (!session.RefreshExpiresAt ||
             new Date(session.RefreshExpiresAt).getTime() > Date.now())

@@ -41,6 +41,7 @@ function page(withProvider = true, initialize = true) {
       sessionStorage,
       URLSearchParams,
       fetch: fetchMock,
+      Date,
     });
   return document.querySelector<HTMLButtonElement>("form button")!;
 }
@@ -78,6 +79,49 @@ afterEach(() => {
 });
 
 describe("consent agent connections", () => {
+  it.each([-1, 0, 1])(
+    "honors authorization expiry at offset %sms despite valid access and refresh credentials",
+    async (offset) => {
+      const now = Date.parse("2026-01-01T12:00:00Z");
+      const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+      try {
+        const account = {
+          ID: "owned-session",
+          RemoteSessionClientID: "client-a",
+          HasRefreshToken: true,
+          AuthorizationExpiresAt: new Date(now + offset).toISOString(),
+          AccessExpiresAt: new Date(now + 60_000).toISOString(),
+          RefreshExpiresAt: new Date(now + 120_000).toISOString(),
+        };
+        fetchMock.mockResolvedValue(
+          reply({
+            candidates: [],
+            bindings: [
+              {
+                ID: "binding-a",
+                RemoteSessionClientID: "client-a",
+                RemoteSessionID: account.ID,
+                RemoteSession: account,
+              },
+            ],
+          }),
+        );
+        const approve = page();
+        select("agent-a");
+        await waitFor(() =>
+          expect(
+            document.querySelector("[data-agent-access]")!.textContent,
+          ).toContain(
+            offset > 0 ? "Available to agent" : "Agent access unavailable",
+          ),
+        );
+        expect(approve.disabled).toBe(offset <= 0);
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
+
   it("shows the agent setup hint only in Agent mode", () => {
     page(false);
     const hint = document.querySelector<HTMLElement>("[data-agent-setup]")!;
@@ -751,6 +795,9 @@ describe("existing agent connection renewal", () => {
     )!;
     mode("agent");
     expect(section.hidden).toBe(true);
+    expect(
+      document.querySelector<HTMLElement>("[data-delegation-fallback]")!.hidden,
+    ).toBe(true);
     expect(approve.disabled).toBe(true);
     expect(fireEvent.submit(form)).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -777,6 +824,9 @@ describe("existing agent connection renewal", () => {
       document.querySelector<HTMLElement>("[data-delegation-form]")!.hidden,
     ).toBe(false);
     expect(master.checked).toBe(false);
+    expect(
+      document.querySelector<HTMLElement>("[data-delegation-fallback]")!.hidden,
+    ).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
