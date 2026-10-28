@@ -1,0 +1,118 @@
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 12,62-63,65-68,74-84,157,190,205-206,366,374-375,380-382,384,436,503,571-573,581
+  s_20283d10d6aa21::t_82f700000db68c 55-56,59-61,193-194,368,370-373,376,383
+server/internal/risk/enforcereply/dispatch_test.go
+  h_e404c1a6a54184 248-278,417,450-456,460-478,806-810,817,819,821-822,847,856-858,860,862-865,876-880
+  s_20283d10d6aa21::t_0e277facd5d4f8 800-805,811-818,820,823-846
+  s_dc89ea5159cdcf::t_be7b160446ab35 457-459
+pystreams/src/pystreams/risk/presidio_enforce_handler.py
+  s_ad2d0c24ceb8da::t_a74e6f641d9204 46-48,188,192,193-195,215,255-256
+  h_e404c1a6a54184 115-119,189-191,208-211
+pystreams/tests/test_risk_enforce.py
+  s_ad2d0c24ceb8da::t_133ea7767eb68e 669,671,673-675,679,687
+  h_e404c1a6a54184 630-632,635-644,650,655-657,660-668,676
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_ad2d0c24ceb8da::t_6fdbcedf4d1d40 22,41-43,48-52,54-57,81-83,93-97,99-102,122,128-129,132,134,178-179
+  h_e404c1a6a54184 53,88-91,98,109-112,114,116,123-127,171
+  s_dc89ea5159cdcf::t_bc80a0532f2f02 29
+  s_dc89ea5159cdcf::t_af818fd00d1924 28
+server/cmd/gram/streams.go
+  h_e404c1a6a54184 612,626,662
+server/internal/scanners/customruleanalyzer/enforce_handler.go
+  h_e404c1a6a54184 11,32,47,54,61-63,64-67,78,112-116,122,144,150
+  s_20283d10d6aa21::t_d561417a920c33 24-26
+  s_dc89ea5159cdcf::t_03df32a8b3a023 27
+server/internal/scanners/customruleanalyzer/enforce_handler_test.go
+  h_e404c1a6a54184 10,13,30,33,35-38,48,51,78-106,111,116,133
+server/internal/scanners/enforcement/helpers.go
+  h_e404c1a6a54184 4,16-17,28,29-33,34-37,38-41,42-50,126
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  h_e404c1a6a54184 308,325,328,339-340
+server/internal/scanners/promptinjection/enforce_handler.go
+  h_e404c1a6a54184 11,50,57,64-66,67-70,81,166
+  s_76c3405050eb46::t_894d7ee68a1cf7 18,26-28,117-118,120-123,129-130
+  s_dc89ea5159cdcf::t_6741c33033d701 31
+  s_dc89ea5159cdcf::t_497520bb311d01 29-30,131-137
+server/internal/scanners/promptinjection/enforce_handler_test.go
+  h_e404c1a6a54184 11-12,14,19,45-65,102-104,107,110,137,181,186,203,205-218
+  s_dc89ea5159cdcf::t_abaa05ed654df0 5,66-96
+server/internal/scanners/promptpolicy/enforce_handler.go
+  h_e404c1a6a54184 11,50,57,64-66,67-70,81,105,160
+  s_20283d10d6aa21::t_dce20997360db6 18,26-28,118-119,121-123
+  s_dc89ea5159cdcf::t_962996fd998b9c 31
+  s_dc89ea5159cdcf::t_f6d5543bb1dee7 29-30,131-138
+server/internal/scanners/promptpolicy/enforce_handler_test.go
+  h_e404c1a6a54184 5,11,16,52,55,94-125,126-156
+  s_dc89ea5159cdcf::t_c8e2996e5a9cf7 157-189
+server/internal/risk/enforcereply/inbox.go
+  h_e404c1a6a54184 67
+server/cmd/gram/mcp_risk.go
+  h_e404c1a6a54184 61-63
+server/cmd/tools/enforceproto/main.go
+  h_e404c1a6a54184 121-125
+infra/gen/gram/risk/v1/enforcement_reply.pb.go
+  h_e404c1a6a54184 500-502,970-971
+infra/proto/gram/risk/v1/enforcement_reply.proto
+  h_e404c1a6a54184 36-38,59-60
+server/internal/scanners/enforcement/helpers_test.go
+  h_e404c1a6a54184 1-22
+server/internal/judgemessage/payload.go
+  s_dc89ea5159cdcf::t_61cf4256285620 102-103,105-107,109-114
+  h_e404c1a6a54184 100-101,104,108
+server/internal/judgemessage/payload_test.go
+  s_dc89ea5159cdcf::t_2b2a8abd2d942e 8,25-30,33-34
+  h_e404c1a6a54184 31-32
+server/internal/scanners/customruleanalyzer/scanner.go
+  h_e404c1a6a54184 67-77,80,84,95,97
+server/internal/scanners/llmanalyzer/enforce_handler.go
+  h_e404c1a6a54184 225-227
+server/internal/scanners/llmanalyzer/enforce_handler_test.go
+  h_e404c1a6a54184 48,115,203
+server/internal/scanners/customruleanalyzer/scanner_test.go
+  s_dc89ea5159cdcf::t_fcb17ff8306abd 231-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f255334a6f201863ef2d4b8a0f34d76e6c259501",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_20283d10d6aa21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c404e67-472e-45bb-9c72-3542f703d4e8",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_76c3405050eb46": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fe58aad0-7dc7-4ef8-86b5-4c74def17a2e",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_dc89ea5159cdcf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "104c7732-7201-4b08-b421-6c1ef3104d36",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

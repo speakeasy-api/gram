@@ -1,0 +1,23 @@
+server/internal/risk/chrepo/overview.go
+  s_ad2d0c24ceb8da::t_9e9c8aecb1563e 4,7,11,241-321
+server/internal/risk/impl.go
+  s_ad2d0c24ceb8da::t_c88e36661076fc 1933-1958,1963,1971,1974,1976,1984
+server/internal/risk/overview_ch_test.go
+  s_ad2d0c24ceb8da::t_468bae55ded8b6 15,346-419
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c7e6d6a3c0dd76269cf7c2934979d499abfd2970",
+  "prompts": {},
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

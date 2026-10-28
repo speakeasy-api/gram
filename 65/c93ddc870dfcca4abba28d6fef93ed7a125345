@@ -1,0 +1,23 @@
+server/internal/risk/chrepo/finding_groups.go
+  s_ad2d0c24ceb8da::t_5ed59e9220073d 155
+server/internal/risk/chrepo/list.go
+  s_ad2d0c24ceb8da::t_cb055319d2acaa 168-177,301
+server/internal/risk/chrepo/overview.go
+  s_ad2d0c24ceb8da::t_1910ceaf7d1a94 42-49,57-59,123,130-136,138,143,151,156,256,262-266,272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "65c93ddc870dfcca4abba28d6fef93ed7a125345",
+  "prompts": {},
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

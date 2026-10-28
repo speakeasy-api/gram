@@ -1,0 +1,18 @@
+server/cmd/gram/mcp_risk.go
+  h_e404c1a6a54184 61-63
+server/cmd/tools/enforceproto/main.go
+  h_e404c1a6a54184 121-125
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 70-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae098338d9c56010ae035c9e8f4aa7eb530f229f",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

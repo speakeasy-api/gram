@@ -1,0 +1,19 @@
+server/internal/feature/flags.go
+  s_a69d7a78738f37::t_1df37ef5044a7a 47-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fdba094e3684a1eac518774b4b0c2e1f5c0799a8",
+  "prompts": {},
+  "sessions": {
+    "s_a69d7a78738f37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ababb1a6bc67c8f14",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

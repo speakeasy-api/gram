@@ -1,0 +1,44 @@
+server/internal/background/activities/risk_analysis/scan_llm.go
+  s_ad2d0c24ceb8da::t_c53edd9297dd03 104
+server/internal/background/activities/risk_analysis/publish_only.go
+  s_ad2d0c24ceb8da::t_3ecb1da83c31be 57-58,60,92,97,103,109
+server/internal/background/activities/risk_analysis/scan_account_identity.go
+  s_ad2d0c24ceb8da::t_6538927b23e9af 113
+server/internal/background/activities/risk_analysis/batch_messages_test.go
+  s_ad2d0c24ceb8da::t_1c91bcba073621 146-150,300
+server/internal/background/activities/risk_analysis/scan_tool_calls.go
+  s_ad2d0c24ceb8da::t_eaa9bc0be2b697 87-88,101,104,123
+server/internal/background/activities/risk_analysis/scan_presidio.go
+  s_ad2d0c24ceb8da::t_8421271b106172 43
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_ad2d0c24ceb8da::t_dc1b06c7849321 106,141,178
+server/internal/background/activities/risk_analysis/scan_gitleaks.go
+  s_ad2d0c24ceb8da::t_bb3b2a693bdf8d 33
+server/internal/background/activities/risk_analysis/risk_result_writer.go
+  s_ad2d0c24ceb8da::t_8f638c0f95ec94 311-312
+server/internal/background/activities/risk_analysis/scan_custom_rules.go
+  s_ad2d0c24ceb8da::t_0ea418b2ef4e1a 64
+server/internal/background/activities/risk_analysis/batch_scanners.go
+  s_ad2d0c24ceb8da::t_ca089cda64a9e2 210-211,219,233,250
+  s_ad2d0c24ceb8da::t_d1e9b12b8f149d 57-65,71,77,88-89,163,182,187,209
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_ad2d0c24ceb8da::t_f0d8de65de927f 985-1052
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_ad2d0c24ceb8da::t_4c03bc4bae5f12 53,74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e040a0519437cbef39ba23afa6efb6709b6f7182",
+  "prompts": {},
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,105 @@
+.changeset/ais-810-clickhouse-findings-only.md
+  s_ad2d0c24ceb8da::t_a5e4c73658bbcd 1-5
+.agents/skills/feature-flag/SKILL.md
+  s_ad2d0c24ceb8da::t_b87f10ec72b5b2 140
+server/cmd/gram/deps.go
+  s_ad2d0c24ceb8da::t_61adf25397e82a 539-541
+server/cmd/gram/platform_mcp.go
+  s_ad2d0c24ceb8da::t_d848f5e2fc08f9 142-143,145-146,536,556,1243,1277
+server/cmd/gram/start.go
+  s_ad2d0c24ceb8da::t_0ed8568c171049 1261
+server/cmd/gram/streams.go
+  s_ad2d0c24ceb8da::t_45560bc238b8e1 607,620,943
+server/cmd/tools/internal/falsepositivesweep/apply.go
+  s_ad2d0c24ceb8da::t_49e1fe4392bec8 17-18,25,34,45,48,51-52,54
+server/cmd/tools/sweep_builtin_presets/main.go
+  s_ad2d0c24ceb8da::t_5ea5822591681e 23-25,27,436,546,614,618
+server/cmd/tools/sweep_false_positives/main.go
+  s_ad2d0c24ceb8da::t_529aea8a24982e 29-31,33,377
+server/internal/chat/impl.go
+  s_ad2d0c24ceb8da::t_d2e1b0206d2e1e 100-101,308-311,313-316,318-320,350-369,384-398,411,419-428,435,1120-1122,1131,1143,1166-1172,1243-1248,1430-1434,1451-1454
+server/internal/chat/list_chats_test.go
+  s_ad2d0c24ceb8da::t_21e2a713b55fbe 78-80,93-95,133-135,149-151,796,819,845-848,873,1219
+server/internal/chat/load_chat_overview_test.go
+  s_ad2d0c24ceb8da::t_622ace85861038 24
+server/internal/chat/load_chat_test.go
+  s_ad2d0c24ceb8da::t_1dc6544e0a43c3 92-94,96,101,103,105,455,485,518,590,789,832,926
+server/internal/chat/queries.sql
+  s_ad2d0c24ceb8da::t_198e495a53b688 490,588-590,644,648,663,713-716,785,789,804,1191-1192,1313-1315,1344,1354,1479,1483
+server/internal/chat/repo/queries.sql.go
+  s_ad2d0c24ceb8da::t_821a07e9c2baae 118,124,126-127,129-131,134-140,152,156-157,164-165,169,171-172,175-176,180-181,185,190-191,194,198-199,203,208,225,235-249,258-259,275,278,890,892,897,901,911,918-922,940-942,949,1956,1958,1967,1973-1976,2002,2948,2968-2969,2971-2972,2974-2976,2979-2985,2997,3001-3002,3009-3010,3014,3016-3017,3020-3021,3025-3026,3030,3035-3036,3039,3043-3044,3048,3053,3065,3070,3076,3106-3107,3139-3142,3148-3149,3165,3167,3201-3202,3205-3207,3213,3226,3259-3278,3308-3310,3322,3325,3596,3600,3615-3620,4622-4623
+server/internal/chat/setup_test.go
+  s_ad2d0c24ceb8da::t_5c5e3b4f3d186d 122
+server/internal/feature/flags.go
+  s_ad2d0c24ceb8da::t_b83dd776816308 47-50
+server/internal/platformmcp/chat_metadata.go
+  s_ad2d0c24ceb8da::t_b5a8f9440e8676 66-90,96-101,104-107,109,113-118,123,225-231,233-234,236,259-266,308-322,336-343,351,474,484
+server/internal/platformmcp/chat_metadata_clickhouse_test.go
+  s_ad2d0c24ceb8da::t_18c79b177e8328 16,60
+server/internal/platformmcp/chat_metadata_test.go
+  s_ad2d0c24ceb8da::t_3df7a6aff0f07c 17,42-67,75-80,454
+server/internal/platformmcp/error_backstop_integration_test.go
+  s_ad2d0c24ceb8da::t_10847307cc153a 31-32,107-109,133,187
+server/internal/platformmcp/risk_finding_false_positive_mutations_integration_test.go
+  s_ad2d0c24ceb8da::t_1784c95ff5e8d7 90,103,117-119,162-164,196,198-202
+server/internal/platformmcp/session_recall.go
+  s_ad2d0c24ceb8da::t_51bbb80dbc8a72 80-86,89-90,101-107,112,208,424,427-431
+server/internal/platformmcp/session_recall_integration_test.go
+  s_ad2d0c24ceb8da::t_981bcd67ecd830 28-30,32-34,37,104-106,115-134,174,232,262,338,349,370,401,439,469
+server/internal/platformmcp/tool_session_recall_test.go
+  s_ad2d0c24ceb8da::t_7c6ec232bf520c 346,361,367,369,377-434,439,441,443,447,450-488
+server/internal/risk/false_positive.go
+  s_ad2d0c24ceb8da::t_3437dc454f2f52 35,64,67,70,96,113,117,151,155,183,186,207
+server/internal/risk/false_positive_test.go
+  s_ad2d0c24ceb8da::t_bae06597e3e8f0 60,100-101,141,178-182
+server/internal/risk/finding_webhooks.go
+  s_ad2d0c24ceb8da::t_f0e0b556a12bc9 15,17,29,31,35-36,39,47
+server/internal/risk/finding_webhooks_test.go
+  s_ad2d0c24ceb8da::t_e23cf61a8002d6 22,29,54,56
+server/internal/risk/list_ch.go
+  s_ad2d0c24ceb8da::t_8ae00f6335dd82 74-76
+server/internal/risk/queries.sql
+  s_ad2d0c24ceb8da::t_00215709a9adad 1394-1395
+server/internal/risk/repo/queries.sql.go
+  s_ad2d0c24ceb8da::t_bb2f2337a15cdc 4746-4747
+server/internal/risk/results_test.go
+  s_ad2d0c24ceb8da::t_8e22ff92fef0d4 178,180,208,219,222-228
+server/internal/risk/resultsbychat_test.go
+  s_ad2d0c24ceb8da::t_31421e27763fa6 54-55,60-79,84-86,88,101
+server/internal/risk/sensitive_content_test.go
+  s_ad2d0c24ceb8da::t_202ed84186cf41 149-163,165-176,178-197,199-204
+server/internal/scanners/promptinjection/handler.go
+  s_ad2d0c24ceb8da::t_dc8f098448dccb 25,29,34,49-50,60,65,100,104
+server/internal/scanners/promptinjection/handler_test.go
+  s_ad2d0c24ceb8da::t_68ba4651a948c6 90,118,140,178,202,229
+server/internal/scanners/promptpolicy/handler.go
+  s_ad2d0c24ceb8da::t_a3d4063d7b392b 24,28,33,49-50,60,93,97
+server/internal/scanners/promptpolicy/handler_test.go
+  s_ad2d0c24ceb8da::t_49aa7040d24fa9 98,122,160,187,219
+server/internal/risk/impl.go
+  s_a69d7a78738f37::t_f07da3c489a21c 1360-1363,1517,1762
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8ae7f9c6c140ea1bb2a139df6d722c233195a4f",
+  "prompts": {},
+  "sessions": {
+    "s_a69d7a78738f37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ababb1a6bc67c8f14",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

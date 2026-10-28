@@ -1,0 +1,25 @@
+server/internal/scanners/customruleanalyzer/enforce_handler.go
+  s_dc89ea5159cdcf::t_90aaaafe7c7226 27-28
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_dc89ea5159cdcf::t_bc80a0532f2f02 29-31
+server/internal/scanners/promptinjection/enforce_handler.go
+  s_dc89ea5159cdcf::t_6741c33033d701 29-31
+server/internal/scanners/promptpolicy/enforce_handler.go
+  s_dc89ea5159cdcf::t_962996fd998b9c 29-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9573c1e7f40cb6d67b5d898b01d763a0f1084f4c",
+  "prompts": {},
+  "sessions": {
+    "s_dc89ea5159cdcf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "104c7732-7201-4b08-b421-6c1ef3104d36",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

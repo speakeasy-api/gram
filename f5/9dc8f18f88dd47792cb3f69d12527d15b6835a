@@ -1,0 +1,49 @@
+server/internal/background/activities/risk_analysis/publish_only.go
+  s_ad2d0c24ceb8da::t_71e63e717a3a6a 22-138
+  s_ad2d0c24ceb8da::t_70bef66914fa8a 1-21,139
+server/internal/background/activities/risk_analysis/batch_scanners.go
+  s_ad2d0c24ceb8da::t_e7fb27057ecf4f 57-66,72-73,75-80
+  s_ad2d0c24ceb8da::t_ca089cda64a9e2 171-259,276-277,381
+  s_ad2d0c24ceb8da::t_3931429a8a959a 154
+  s_ad2d0c24ceb8da::t_6fd461456a00b1 288-290,293-294,302-303,308,321,343,347,408,412
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_ad2d0c24ceb8da::t_c043acda64d0a0 28,44-47,253-268,309,311,316,321
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_ad2d0c24ceb8da::t_1a21df21ed957b 2306-2372,2384-2408,2412-2443
+server/internal/background/activities/risk_analysis/batch_messages_test.go
+  s_ad2d0c24ceb8da::t_58c1a38b9f4870 117,143-144,146-150,300
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_ad2d0c24ceb8da::t_04a5721f1388de 92,101,106,116,141,155-168,170-173,177,182-183,195,220
+server/internal/background/activities/risk_analysis/risk_result_writer.go
+  s_ad2d0c24ceb8da::t_ff41c8d6e12576 309-311,392-396
+server/internal/background/activities/risk_analysis/scan_account_identity.go
+  s_ad2d0c24ceb8da::t_096bcffe941ccb 45,50,95-130
+server/internal/background/activities/risk_analysis/scan_custom_rules.go
+  s_ad2d0c24ceb8da::t_7d0f03ea51ef0a 64-65,77
+server/internal/background/activities/risk_analysis/scan_gitleaks.go
+  s_ad2d0c24ceb8da::t_8594eb6d5a0aab 33-34,36
+server/internal/background/activities/risk_analysis/scan_llm.go
+  s_ad2d0c24ceb8da::t_921cd5b03ced69 104-105,109
+server/internal/background/activities/risk_analysis/scan_presidio.go
+  s_ad2d0c24ceb8da::t_0bacf24f90716b 43-44,68
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_ad2d0c24ceb8da::t_3624e5e3f87cf0 17,27,53,63-66,70,74-75,87,113
+server/internal/background/activities/risk_analysis/scan_tool_calls.go
+  s_ad2d0c24ceb8da::t_62394b5ba7145b 123-124,127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f59dc8f18f88dd47792cb3f69d12527d15b6835a",
+  "prompts": {},
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

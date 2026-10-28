@@ -1,0 +1,22 @@
+infra/gen/gram/risk/v1/enforcement_reply.pb.go
+  h_e404c1a6a54184 500-502
+infra/proto/gram/risk/v1/enforcement_reply.proto
+  h_e404c1a6a54184 36-38
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 65-68
+server/internal/scanners/enforcement/helpers.go
+  h_e404c1a6a54184 126
+server/internal/scanners/enforcement/helpers_test.go
+  h_e404c1a6a54184 1-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "81ae22e7b4e7adb52e3e1959d307dfe44137b776",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
