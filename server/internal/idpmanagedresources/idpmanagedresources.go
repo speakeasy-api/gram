@@ -1,6 +1,6 @@
-// Package managedrows refuses organization-tier writes to rows an identity
-// provider connection provisioned.
-package managedrows
+// Package idpmanagedresources guards resources owned by identity provider connections
+// against direct modification through organization-level APIs.
+package idpmanagedresources
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/managedrows/repo"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
