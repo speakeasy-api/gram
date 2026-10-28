@@ -65,6 +65,10 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		return none, fmt.Errorf("resolve attached connection owner: %w", err)
 	case !attached:
 		return none, nil
+	case conn.RemoteSessionID == uuid.Nil:
+		// A zero connection would disable the pin that binds tokens to
+		// the checked connection, so it is never an owner.
+		return none, errors.New("resolve attached connection owner: attachment names no connection")
 	}
 	return authClientConnectionOwner{owner: conn.OwnerUserID, attachedSession: conn.RemoteSessionID}, nil
 }
@@ -94,8 +98,8 @@ func (s *Service) attachedConnectionLookup() attachedConnectionLookup {
 
 // pinAttachedSession keeps only tokens from the exact connection an attached
 // agent's permit was decided for. A binding that moved to another connection
-// after the check serves nothing; without skipUnusable that is a missing
-// token, never an anonymous call.
+// after the check serves nothing; without skipUnusable that, or no token at
+// all, is a missing token, never an anonymous call.
 func pinAttachedSession(tokens map[uuid.UUID]remotesessions.UpstreamToken, session uuid.UUID, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	if session == uuid.Nil {
 		return tokens, nil
@@ -106,7 +110,7 @@ func pinAttachedSession(tokens map[uuid.UUID]remotesessions.UpstreamToken, sessi
 			pinned[issuerID] = token
 		}
 	}
-	if len(pinned) != len(tokens) && !skipUnusable {
+	if (len(pinned) != len(tokens) || len(pinned) == 0) && !skipUnusable {
 		return nil, remotesessions.ErrNoValidToken
 	}
 	return pinned, nil

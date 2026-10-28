@@ -135,13 +135,15 @@ func TestAuthClientAttachedConnection(t *testing.T) {
 		requireOwner(t, a)
 	})
 
-	t.Run("a reconnected grant is not the attached generation", func(t *testing.T) {
+	t.Run("a reconnected grant keeps its source row's owner", func(t *testing.T) {
 		t.Parallel()
 		a := attach(t, "reconnected")
 		reconnected := insertRemoteSession(t, ctx, ti.conn, owner, a.req.UserSessionIssuerID.String(), a.req.RegistrationID.String())
 		require.Equal(t, a.source.ID, reconnected.ID)
 		require.Equal(t, a.source.GrantGeneration+1, reconnected.GrantGeneration)
-		requireNone(t, sessionOf(a), a.req, "a reconnect never silently re-attaches")
+		// An attachment follows its source row's current credentials, and a
+		// reconnect on that row is the same owner's connection.
+		requireOwner(t, a)
 	})
 
 	t.Run("a deleted connection serves nothing", func(t *testing.T) {

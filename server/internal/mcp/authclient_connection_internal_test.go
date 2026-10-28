@@ -145,6 +145,14 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		require.Equal(t, map[string]int64{"deny/no_policy": 1}, authClientShadowOutcomes(t, reader))
 	})
 
+	t.Run("an attachment naming no connection fails closed", func(t *testing.T) {
+		t.Parallel()
+		lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.Nil, OwnerUserID: "user_1"}, attached: true, err: nil, asked: nil}
+		f, selector, _, agent := setup(t, lookup)
+		_, err := f.service.resolveAuthClientForServing(sessionContext(t, f.orgID, personalAuthGrant()), selector, f.serverID, f.projectID, agent)
+		require.ErrorContains(t, err, "attachment names no connection", "a zero connection would leave tokens unpinned")
+	})
+
 	t.Run("no usable attachment fails closed", func(t *testing.T) {
 		t.Parallel()
 		lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.Nil, OwnerUserID: ""}, attached: false, err: nil, asked: nil}
@@ -207,6 +215,9 @@ func TestPinAttachedSessionServesOnlyThePermittedConnection(t *testing.T) {
 
 	_, err = pinAttachedSession(tokens, permitted, false)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "a binding that moved after the check is a missing token, never an anonymous call")
+
+	_, err = pinAttachedSession(map[uuid.UUID]remotesessions.UpstreamToken{}, permitted, false)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "no token for the checked connection is missing, never an anonymous call")
 
 	unpinned, err := pinAttachedSession(tokens, uuid.Nil, false)
 	require.NoError(t, err)
@@ -465,11 +476,13 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 					tokens.bound = uuid.New()
 				}
 				served, err := choices.tokens(ctx, member)
-				require.NoError(t, err)
 				if replaced {
+					var memberErr *metaMemberError
+					require.ErrorAs(t, err, &memberErr, "the member fails rather than dialing anonymously or chaining")
 					require.Empty(t, served, "the replacement never reaches the upstream")
 					return
 				}
+				require.NoError(t, err)
 				require.Equal(t, "token-"+checked.String(), served[f.issuerID].Token)
 			})
 		}

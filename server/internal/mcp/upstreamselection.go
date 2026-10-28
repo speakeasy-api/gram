@@ -448,7 +448,8 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, enforced bool, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	// Under enforcement the connection a member's permit was decided
 	// for binds its tokens, typed or handed back to the upstream
-	// client choice.
+	// client choice. Without its token the member fails: an empty
+	// resolution would dial anonymously or chain another identity.
 	pinned := uuid.Nil
 	if enforced && member.authClient != nil {
 		pinned = member.authClient.attachedSession
@@ -465,7 +466,7 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *Resol
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 		}
-		return pinAttachedSession(tokens, pinned, true)
+		return pinAttachedSession(tokens, pinned, false)
 	}
 	tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
 	switch {
@@ -474,7 +475,7 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *Resol
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	}
-	return pinAttachedSession(tokens, pinned, true)
+	return pinAttachedSession(tokens, pinned, false)
 }
 
 // apply rewrites each proxied member's routing identity from the credential's
@@ -644,6 +645,8 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 	switch {
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		err = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
+	case errors.Is(err, remotesessions.ErrNoValidToken):
+		err = &metaMemberError{message: fmt.Sprintf("server %q's attached connection is no longer available; it must be attached again", member.slug)}
 	case err != nil:
 		err = &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
 	}
