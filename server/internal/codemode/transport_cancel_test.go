@@ -144,9 +144,6 @@ func TestCallbackReplyCarriesExactlyOneResult(t *testing.T) {
 	}
 }
 
-func (idleHost) ConnectionStatus(context.Context, string) (*ConnectionStatus, error) {
-	return nil, ErrToolUnavailable
-}
 func (idleHost) Connect(context.Context, string) (*ConnectionAction, error) {
 	return nil, ErrToolUnavailable
 }

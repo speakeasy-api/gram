@@ -123,7 +123,7 @@ denial, allocator/time/output limits, cancellation, deadlines, framing, duplicat
 IDs, authentication and multiplexing against real Monty subprocesses. This
 runner layer does not expose a public MCP tool or change management settings.
 
-Protocol 2 adds the `connection_status` and `connect` Python helpers. Both use
-the bounded host callback channel; OAuth credentials remain in the gateway.
+Protocol 2 adds the `connect` Python helper; `servers` includes connection state.
+Both use the bounded host callback channel; OAuth credentials remain in the gateway.
 Protocol 1 peers are refused before a program is submitted. Deploy the new
 runner image with the matching server version.

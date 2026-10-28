@@ -28,8 +28,6 @@ type Host interface {
 	Search(context.Context, SearchArgs) (*SearchPage, error)
 	// Describe returns the original definition of one exact qualified name.
 	Describe(context.Context, string) (*Description, error)
-	// ConnectionStatus reports visible members without granting tool access.
-	ConnectionStatus(context.Context, string) (*ConnectionStatus, error)
 	// Connect returns a browser handoff for one visible member.
 	Connect(context.Context, string) (*ConnectionAction, error)
 	// Call invokes one member tool without changing the execution's identity.
@@ -56,12 +54,14 @@ type SearchArgs struct {
 	Cursor string `json:"cursor,omitempty"`
 }
 
-// Server is the public projection of a permitted gateway member.
+// Server is a discoverable gateway member; visibility does not grant tool access.
 type Server struct {
 	// Slug is the exact member prefix, without the qualification separator.
 	Slug string `json:"slug"`
 	// Name is the configured display name.
 	Name string `json:"name"`
+	// Connection reports known access state without probing the upstream.
+	Connection *ConnectionState `json:"connection,omitempty"`
 }
 
 // ServerPage is a bounded member inventory.
@@ -142,18 +142,11 @@ type ToolResult struct {
 	Error string `json:"error,omitempty"`
 }
 
-// ConnectionStatus describes recoverable access separately from callable tools.
-type ConnectionStatus struct {
-	Servers []ConnectionState `json:"servers"`
-}
-
 // ConnectionState never treats stored consent as proof of upstream access.
 type ConnectionState struct {
-	Server       string `json:"server"`
-	Name         string `json:"name"`
-	Status       string `json:"status"`
-	Reason       string `json:"reason,omitempty"`
-	Instructions string `json:"instructions,omitempty"`
+	Consent        string `json:"consent"`
+	Authentication string `json:"authentication"`
+	Instructions   string `json:"instructions"`
 }
 
 // ConnectionAction contains no credentials. The URL starts a browser login.

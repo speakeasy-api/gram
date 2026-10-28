@@ -248,7 +248,7 @@ func (b *metaCodeBackend) Members(ctx context.Context) ([]codemode.Server, codem
 	}
 	servers := make([]codemode.Server, 0, len(members))
 	for _, member := range members {
-		servers = append(servers, codemode.Server{Slug: member.slug, Name: member.name})
+		servers = append(servers, codemode.Server{Slug: member.slug, Name: member.name, Connection: nil})
 	}
 	list := func(callCtx context.Context, slug string) (*codemode.Catalog, error) {
 		bound, cancel := boundToCallback(ctx, callCtx)

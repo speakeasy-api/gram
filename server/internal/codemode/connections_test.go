@@ -13,9 +13,9 @@ type recoveryFixture struct {
 	connects int
 }
 
-func (b *recoveryFixture) ConnectionStatus(context.Context, string) (*ConnectionStatus, error) {
+func (b *recoveryFixture) DiscoveryServers(context.Context) ([]Server, error) {
 	b.lookups++
-	return &ConnectionStatus{Servers: []ConnectionState{{Server: "tracker", Status: "needs_consent"}}}, nil
+	return []Server{{Slug: "tracker", Connection: &ConnectionState{Consent: "required", Authentication: "unknown"}}}, nil
 }
 func (b *recoveryFixture) Connect(context.Context, string) (*ConnectionAction, error) {
 	b.connects++
@@ -26,9 +26,9 @@ func TestConnectionHelpersDoNotWidenToolAllowlist(t *testing.T) {
 	backend := &recoveryFixture{}
 	host, err := NewHost(t.Context(), backend, "scope", []string{})
 	require.NoError(t, err)
-	status, err := host.ConnectionStatus(t.Context(), "tracker")
+	status, err := host.Servers(t.Context(), PageArgs{})
 	require.NoError(t, err)
-	require.Equal(t, "needs_consent", status.Servers[0].Status)
+	require.Equal(t, "required", status.Items[0].Connection.Consent)
 	action, err := host.Connect(t.Context(), "tracker")
 	require.NoError(t, err)
 	require.NotEmpty(t, action.AuthorizationURL)
@@ -46,7 +46,7 @@ func TestConnectionCallbacksUseStrictArguments(t *testing.T) {
 	host, err := NewHost(t.Context(), &recoveryFixture{}, "scope", nil)
 	require.NoError(t, err)
 	state := &executionState{}
-	for _, method := range []string{"connect", "connection_status"} {
+	for _, method := range []string{"connect"} {
 		result, err := state.callback(t.Context(), host, runnerMessage{Method: method, Arguments: []byte(`{"server":"tracker"}`)})
 		require.NoError(t, err)
 		require.NotEmpty(t, result)
@@ -54,4 +54,22 @@ func TestConnectionCallbacksUseStrictArguments(t *testing.T) {
 		require.Error(t, err)
 	}
 	require.Empty(t, state.calls, "recovery never dispatches a business tool")
+}
+
+func TestCodeServerPaginationIgnoresConnectionChanges(t *testing.T) {
+	t.Parallel()
+	servers := []Server{{Slug: "a", Name: "A", Connection: &ConnectionState{Consent: "required"}}, {Slug: "b", Name: "B", Connection: &ConnectionState{Consent: "required"}}}
+	first, err := PaginateServers("scope", PageArgs{Limit: 1}, servers)
+	require.NoError(t, err)
+	servers[1].Connection.Consent = "approved"
+	next, err := PaginateServers("scope", PageArgs{Limit: 1, Cursor: first.NextCursor}, servers)
+	require.NoError(t, err)
+	require.Equal(t, "b", next.Items[0].Slug)
+	require.Equal(t, "approved", next.Items[0].Connection.Consent)
+	servers[1].Slug = "c"
+	_, err = PaginateServers("scope", PageArgs{Limit: 1, Cursor: first.NextCursor}, servers)
+	require.Error(t, err, "membership changes must invalidate the cursor")
+	servers[1].Slug = "b"
+	_, err = PaginateServers("different-scope", PageArgs{Limit: 1, Cursor: first.NextCursor}, servers)
+	require.Error(t, err, "cursor cannot cross authorization scope")
 }

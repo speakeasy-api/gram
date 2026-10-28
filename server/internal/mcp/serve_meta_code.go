@@ -40,20 +40,24 @@ Next run: use the described path and inputSchema. Example, if tracker--list_issu
     r = await tools.call("tracker--list_issues", {"state": "open"})
     r["data"] if r["ok"] else r
 
-Search returns summaries; describe returns full definitions. Exact paths: server--tool. search(query="", server=None, limit=10, cursor=None), max limit 50; server omits "--"; empty query lists tools. tools.servers(limit=10, cursor=None) lists prefixes. Both paginate via next_cursor. Search incomplete/failed_members means discovery missed unavailable members; reason consent_required means this connection needs new consent.
+Search returns summaries; describe returns full definitions. Exact paths: server--tool. search(query="", server=None, limit=10, cursor=None), max limit 50; server omits "--"; empty query lists tools. tools.servers(limit=10, cursor=None) lists visible prefixes and connection state. Both paginate via next_cursor. Search incomplete/failed_members means discovery missed unavailable members; reason consent_required means this connection needs new consent.
 
 Inspect or repair access inside Python, even when no member tools are callable:
 
-    await tools.connection_status(server="tracker")
-    await tools.connect(server="tracker")
+    page = await tools.servers()
+    action = None
+    for server in page["items"]:
+        if server["slug"] == "tracker" and server["connection"]["consent"] == "required":
+            action = await tools.connect(server=server["slug"])
+    {"servers": page, "action": action}
 
-connection_status(server="") lists visible member status; omit server for all. connect(server) requires an exact member slug and returns authorization_url, expires_at, instructions and client_reconnect_required. Show the returned URL and instructions to the user, then finish this execution. Wait for the user to complete browser sign-in. If client_reconnect_required is true, the user must also reconnect this gateway in their MCP client and approve the member; upstream login alone does not update the connection's consent. Then use a fresh execution for status, search, describe and the intended call. Never poll for human login inside Python or replay an earlier program automatically. Helpers never grant access or expose credentials.
+servers() lists visible members with connection.consent (approved, required, not_required, unknown), connection.authentication (unknown, verified_at_consent, not_required) and instructions, without upstream probes or credential refresh. Unknown authentication does not mean disconnected; try permitted tools first. Consent-time verification does not guarantee current upstream access. connect(server) requires an exact member slug and returns authorization_url, expires_at, instructions and client_reconnect_required. Show the returned URL and instructions to the user, then finish this execution. Wait for the user to complete browser sign-in. If client_reconnect_required is true, the user must also reconnect this gateway in their MCP client and approve the member; upstream login alone does not update the connection's consent. Then use a fresh execution for status, search, describe and the intended call. Never poll for human login inside Python or replay an earlier program automatically. Helpers never grant access or expose credentials.
 
 Calls return {ok, data, content, outcome, error?}; check ok. data preserves structuredContent; None when absent. A server refusing the call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and its reason in content: describe the tool and fix the call. Disallowed paths and non-object arguments raise RuntimeError.
 
 Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment access, direct network or sleep. Limits: 64 KiB source, 64 MiB heap, 30 s wall, 2 s active Python (tool waits excluded), 64 helper attempts, 8 concurrent helpers, 1 MiB per reply/8 MiB total, 256 KiB result, 16 KiB printed output (truncated). Output printed before a Python error, limit or timeout is still returned.
 
-Optional tools argument restricts tool discovery and invocation to exact paths; omit = all permitted, [] = none. connection_status and connect remain available for visible members but never widen that tool allowlist.
+Optional tools argument restricts tool discovery and invocation to exact paths; omit = all permitted, [] = none. servers and connect remain available for visible members but never widen that tool allowlist.
 
 Errors/cancellation never undo writes. Unknown outcome: check state; never replay automatically.
 
@@ -92,7 +96,7 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	case len(members) == 0 && len(gate.hiddenMembers) > 0 && gate.connectURL != "":
 		fmt.Fprintf(&description, "The user hid every server on this gateway. The user can show one again at %s.\n", gate.connectURL)
 	case len(members) == 0:
-		description.WriteString("No member tools are currently callable. Use tools.connection_status() to inspect access and tools.connect(server=...) to get a browser sign-in link.\n")
+		description.WriteString("No member tools are currently callable. Use tools.servers() to inspect access and tools.connect(server=...) to get a browser sign-in link.\n")
 	case len(gate.hiddenMembers) == 1:
 		description.WriteString("The user hid 1 more server, which is not available.\n")
 	case len(gate.hiddenMembers) > 1:
