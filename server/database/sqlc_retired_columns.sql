@@ -6,10 +6,3 @@
 -- column.
 
 ALTER TABLE okta_identity_provider_connections DROP COLUMN issuer_url_override_reason;
-
--- The toolset MCP hosting columns (AIM-671). The canonical hosted MCP server owns hosting state.
-ALTER TABLE toolsets DROP COLUMN mcp_slug;
-ALTER TABLE toolsets DROP COLUMN mcp_is_public;
-ALTER TABLE toolsets DROP COLUMN mcp_enabled;
-ALTER TABLE toolsets DROP COLUMN custom_domain_id;
-ALTER TABLE toolsets DROP COLUMN user_session_issuer_id;
