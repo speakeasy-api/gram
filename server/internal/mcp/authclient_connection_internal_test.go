@@ -3,14 +3,17 @@ package mcp
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -143,9 +146,16 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		t.Parallel()
 		lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.Nil, OwnerUserID: ""}, attached: false, err: nil, asked: nil}
 		f, selector, reader, agent := setup(t, lookup)
+		_, err := f.service.resolveAuthClientForServing(sessionContext(t, f.orgID, personalAuthGrant()), selector, f.serverID, f.projectID, agent)
+		require.ErrorContains(t, err, "missing connection_owner", "an ownerless personal check is refused as invalid, as before, never allowed")
+		require.Empty(t, authClientShadowOutcomes(t, reader))
+
+		// Before enforcement, the connect-equivalent rule still decides and
+		// the shadow keeps skipping a check it has no owner for.
+		f.service.authClientPermitter = connectPermitter{}
 		res, err := f.service.resolveAuthClientForServing(sessionContext(t, f.orgID, personalAuthGrant()), selector, f.serverID, f.projectID, agent)
 		require.NoError(t, err)
-		require.Equal(t, authClientNoAccess, res.outcome)
+		require.Equal(t, authClientResolved, res.outcome)
 		require.Equal(t, uuid.Nil, res.attachedSession)
 		require.Equal(t, map[string]int64{"skipped/" + mandatoryReasonNoConnectionOwner: 1}, authClientShadowOutcomes(t, reader), "without an owner the shadow keeps skipping")
 	})
@@ -154,9 +164,8 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		t.Parallel()
 		lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.New(), OwnerUserID: "user_1"}, attached: true, err: remotesessions.ErrInvalidAuthorizationRequest, asked: nil}
 		f, selector, _, agent := setup(t, lookup)
-		res, err := f.service.resolveAuthClientForServing(sessionContext(t, f.orgID, personalAuthGrant()), selector, f.serverID, f.projectID, agent)
-		require.NoError(t, err)
-		require.Equal(t, authClientNoAccess, res.outcome)
+		_, err := f.service.resolveAuthClientForServing(sessionContext(t, f.orgID, personalAuthGrant()), selector, f.serverID, f.projectID, agent)
+		require.ErrorContains(t, err, "missing connection_owner", "a refused lookup names no owner, so nothing is allowed")
 	})
 
 	t.Run("a failed attachment lookup is an error, never an allow", func(t *testing.T) {
@@ -223,7 +232,7 @@ func TestMandatoryPermitterKeepsAUsersOwnConnectionWhenUnresolved(t *testing.T) 
 
 	req.Subject = urn.NewAgentSubject(uuid.New())
 	allowed, err = permitter.Permitted(ctx, req)
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "missing connection_owner")
 	require.False(t, allowed, "an agent's owner is never assumed")
 
 	req.ConnectionOwner = "user_2"
@@ -231,4 +240,87 @@ func TestMandatoryPermitterKeepsAUsersOwnConnectionWhenUnresolved(t *testing.T) 
 	allowed, err = permitter.Permitted(ctx, req)
 	require.NoError(t, err)
 	require.False(t, allowed, "a resolved owner wins over the subject")
+}
+
+// admittedAgentContext is an agent API key caller as authentication admits it:
+// principal authorization mode, the agent as the actor, and the user it acts
+// for as the credential's authorizer. The engine re-admits it through admit.
+func admittedAgentContext(t *testing.T, orgID string, agentID uuid.UUID) context.Context {
+	t.Helper()
+	return contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: orgID, APIKeyID: uuid.NewString()},
+		urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: "user_owner"})
+}
+
+// An agent admitted through its own credential path is checked against the
+// owner of the exact connection attached to it, while the user it represents
+// stays its authorizer: that user's attachment serves only under every
+// admitted policy, and an owner block or another lender's connection refuses.
+func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_admitted_agent")
+	require.NoError(t, err)
+
+	personal := personalAuthGrant()
+	cases := []struct {
+		name       string
+		owner      string
+		ownerGrant func(client uuid.UUID) []authz.Grant
+		authorizer []authz.Grant
+		outcome    authClientOutcome
+		shadow     string
+	}{
+		{"the represented user's attachment serves", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{personal}, authClientResolved, "allow"},
+		{"an owner block on that connection refuses", "user_owner", func(client uuid.UUID) []authz.Grant {
+			return []authz.Grant{personal, authz.NewGrantWithSelector(authz.ScopeMCPBlockedAuth, authz.Selector{
+				authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: client.String(),
+				authz.SelectorKeyClientType: authz.AuthClientTypeRemoteSession, authz.SelectorKeyConnectionOwner: "user_owner",
+			})}
+		}, []authz.Grant{personal}, authClientNoAccess, "deny"},
+		{"another lender's attachment refuses", "user_lender", func(uuid.UUID) []authz.Grant {
+			return []authz.Grant{personal, authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)}
+		}, []authz.Grant{personal, authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)}, authClientNoAccess, "deny"},
+		{"the represented user's own policy must allow", "user_owner", func(uuid.UUID) []authz.Grant { return []authz.Grant{personal} }, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}, authClientNoAccess, "deny"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newAuthClientFixture(t, pool)
+			client := f.oauthClient(authClientTypeRemoteSession)
+			selector := f.choose(validUUID(client))
+			selector.userSessionIssuerID = uuid.New()
+			reader := enforcedShadowService(t, f)
+			f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+				AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+					return authz.PrincipalCredentialAdmission{
+						OwnerUserID: "user_owner", Credential: []authz.Grant{personal}, Agent: []authz.Grant{personal}, Owner: tc.ownerGrant(client),
+						Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: tc.authorizer}, LegacyAuthCeiling: false,
+					}, nil
+				},
+			})
+			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
+			session := uuid.New()
+			lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: tc.owner}, attached: true, err: nil, asked: nil}
+			f.service.attachedConnections = lookup
+			agentID := uuid.New()
+			agent := urn.NewAgentSubject(agentID)
+
+			ctx := admittedAgentContext(t, f.orgID, agentID)
+			authorization, err := f.service.authz.PrepareMandatory(ctx)
+			require.NoError(t, err)
+			require.Equal(t, authz.MandatoryCallerAgent, authorization.Caller(), "the caller is admitted as the agent")
+			require.Equal(t, "user_owner", authorization.RepresentedUserID(), "the represented user is the credential's authorizer")
+
+			res, err := f.service.resolveAuthClientForServing(ctx, selector, f.serverID, f.projectID, agent)
+			require.NoError(t, err)
+			require.Equal(t, tc.outcome, res.outcome)
+			require.Len(t, lookup.asked, 1)
+			require.Equal(t, agent, lookup.asked[0].Subject, "the admitted subject is unchanged")
+			outcomes := map[string]int64{}
+			for key, n := range authClientShadowOutcomes(t, reader) {
+				outcomes[strings.SplitN(key, "/", 2)[0]] += n
+			}
+			require.Equal(t, map[string]int64{tc.shadow: 1}, outcomes, "the shadow decides the same check")
+		})
+	}
 }
