@@ -1,0 +1,33 @@
+# Experiment: reach a Speakeasy MCP server from GitHub Actions through workload
+# identity federation (RFC 7523 jwt-bearer), with no stored secret. Runs on
+# pull_request so the OIDC token's sub is repo:speakeasy-api/gram:pull_request,
+# which the admission rule matches. Pull requests from forks get no id-token and
+# are skipped.
+name: WIF GitHub experiment
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/wif-github-experiment.yml
+      - .github/scripts/wif-github-exchange.sh
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  exchange:
+    name: exchange
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checks out the script
+      id-token: write # mints the GitHub OIDC token the script exchanges
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Exchange the GitHub OIDC token and call the MCP server
+        run: bash .github/scripts/wif-github-exchange.sh
