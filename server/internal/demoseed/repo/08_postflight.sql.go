@@ -323,22 +323,18 @@ func (q *Queries) PostflightCountHTTPTools(ctx context.Context, projectID uuid.U
 const postflightCountHostedToolsetDrift = `-- name: PostflightCountHostedToolsetDrift :one
 SELECT count(*)
 FROM toolsets t
-LEFT JOIN mcp_servers s
+JOIN mcp_servers s
   ON s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
 WHERE t.project_id = $1::uuid AND t.deleted IS FALSE
-  AND (t.mcp_slug IS NOT NULL OR t.mcp_enabled OR t.mcp_is_public
-       OR t.custom_domain_id IS NOT NULL OR t.user_session_issuer_id IS NOT NULL
-       OR (s.id IS NOT NULL AND (
-             s.name IS DISTINCT FROM t.name
-             OR s.tool_variations_group_id IS DISTINCT FROM t.tool_variations_group_id
-             OR NOT EXISTS (
-               SELECT 1 FROM mcp_endpoints e
-               WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE))))
+  AND (s.name IS DISTINCT FROM t.name
+       OR s.tool_variations_group_id IS DISTINCT FROM t.tool_variations_group_id
+       OR NOT EXISTS (
+         SELECT 1 FROM mcp_endpoints e
+         WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE))
 `
 
-// Hosted toolsets keep their hosting state on the canonical wrapper only:
-// the toolset hosting columns stay unset, the wrapper mirrors the toolset's
-// name and tool variations group, and it serves from at least one endpoint.
+// A hosted toolset's canonical wrapper mirrors the toolset's name and tool
+// variations group, and serves from at least one endpoint.
 func (q *Queries) PostflightCountHostedToolsetDrift(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountHostedToolsetDrift, projectID)
 	var count int64

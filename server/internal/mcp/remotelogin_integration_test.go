@@ -35,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -69,7 +68,7 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        result.Toolset.McpSlug.String,
+			McpSlug:        result.McpSlug,
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
 		ClientID:            "test-mcp-client",
@@ -113,7 +112,7 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:        result.Toolset.McpSlug.String,
+			McpSlug:        result.McpSlug,
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
 		ClientID:            "test-mcp-client",
@@ -132,9 +131,9 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	// With a single unlinked service the page has nothing left to ask, so that
 	// path ends in a redirect straight to the provider rather than a rendered
 	// page — the auto-connect this endpoint exists to perform.
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+result.Toolset.McpSlug.String+"/connect?state="+parentID, nil)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+result.McpSlug+"/connect?state="+parentID, nil)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", result.Toolset.McpSlug.String)
+	rctx.URLParams.Add("mcpSlug", result.McpSlug)
 	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
@@ -206,7 +205,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 		UpstreamMetadata:             idp.OAuth21Metadata(t),
 		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
 	})
-	result.Toolset, _ = attachCustomDomainToToolset(t, ctx, ti, authCtx, result.Toolset, "remote-login-custom.example.com")
+	_, _ = attachCustomDomainToToolset(t, ctx, ti, authCtx, hostedToolset{Toolset: result.Toolset, McpSlug: pgtype.Text{String: result.McpSlug, Valid: true}}, "remote-login-custom.example.com")
 
 	mgr, _ := buildChallengeManagerForTest(t, ti)
 	clients, err := mgr.ListClients(ctx, result.Toolset.ProjectID, result.Toolset.OrganizationID, result.UserSessionIssuer.ID)
@@ -220,7 +219,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 		OrganizationID:      result.Toolset.OrganizationID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             &userSubject,
-		McpSlug:             result.Toolset.McpSlug.String,
+		McpSlug:             result.McpSlug,
 		FinalRedirectURI:    "",
 	}, clients[0])
 	require.NoError(t, err)
@@ -270,7 +269,7 @@ func runRemoteLoginRoundTrip(
 		OrganizationID:      result.Toolset.OrganizationID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             expectedSubject,
-		McpSlug:             result.Toolset.McpSlug.String,
+		McpSlug:             result.McpSlug,
 		FinalRedirectURI:    finalRedirectURI,
 	}
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
@@ -296,7 +295,7 @@ func runRemoteLoginRoundTrip(
 	if finalRedirectURI != "" {
 		require.Equal(t, finalRedirectURI, cbW.Header().Get("Location"))
 	} else {
-		require.Contains(t, cbW.Header().Get("Location"), "/mcp/"+result.Toolset.McpSlug.String+"/connect")
+		require.Contains(t, cbW.Header().Get("Location"), "/mcp/"+result.McpSlug+"/connect")
 		require.Contains(t, cbW.Header().Get("Location"), parentChallengeID)
 	}
 
@@ -334,9 +333,9 @@ func attachCustomDomainToToolset(
 	ctx context.Context,
 	ti *testInstance,
 	authCtx *contextvalues.AuthContext,
-	toolset toolsets_repo.Toolset,
+	toolset hostedToolset,
 	domainName string,
-) (toolsets_repo.Toolset, customdomains_repo.CustomDomain) {
+) (hostedToolset, customdomains_repo.CustomDomain) {
 	t.Helper()
 
 	domainsRepo := customdomains_repo.New(ti.conn)

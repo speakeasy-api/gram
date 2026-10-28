@@ -51,7 +51,7 @@ func newMockExternalMCPServer(t *testing.T, transportType externalmcp_types.Tran
 
 // externalMCPConfig contains configuration for setting up external MCP in tests
 type externalMCPConfig struct {
-	toolset      toolsets_repo.Toolset
+	toolset      hostedToolset
 	deploymentID uuid.UUID
 	attachmentID uuid.UUID
 	toolDefID    uuid.UUID
@@ -121,7 +121,7 @@ func setupToolsetWithExternalMCP(
 
 	// Create toolset with MCP enabled
 	mcpSlug := "external-mcp-" + slug
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         orgID,
 		ProjectID:              projectID,
 		Name:                   "External MCP Test Toolset",
@@ -130,7 +130,7 @@ func setupToolsetWithExternalMCP(
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, mcpSlug, "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, mcpSlug, "private", noIssuer())
 
 	// Make the toolset public
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})

@@ -44,7 +44,9 @@ type IssuerGatedToolsetOpts struct {
 
 // IssuerGatedToolsetResult holds the rows created by CreateIssuerGatedToolset.
 type IssuerGatedToolsetResult struct {
-	Toolset             toolsets_repo.Toolset
+	Toolset toolsets_repo.Toolset
+	// McpSlug is the toolset's legacy /mcp/<slug> alias, which serves it.
+	McpSlug             string
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer
 	RemoteSessionIssuer remotesessions_repo.RemoteSessionIssuer
 	RemoteSessionClient remotesessions_repo.RemoteSessionClient
@@ -157,6 +159,7 @@ func CreateIssuerGatedToolset(
 
 	return IssuerGatedToolsetResult{
 		Toolset:             toolset,
+		McpSlug:             slug,
 		UserSessionIssuer:   usi,
 		RemoteSessionIssuer: rsi,
 		RemoteSessionClient: rsc,

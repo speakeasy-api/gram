@@ -61,7 +61,7 @@ func TestOAuthWithoutTemporalServesAuthorizationMetadata(t *testing.T) {
 		IsPublic: true,
 		Metadata: nil,
 	})
-	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, external.Toolset.McpSlug.String)
+	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, external.McpSlug)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 }

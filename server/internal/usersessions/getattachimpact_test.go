@@ -137,9 +137,7 @@ func TestGetAttachImpactCanonicalServer(t *testing.T) {
 	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-canonical-domain")
 	require.False(t, preview().AuthorizationServerChanges)
 
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
-		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
-	}))
+	testenv.SetLegacyAlias(t, ctx, ti.conn, projectID, toolset.ID, "", uuid.NullUUID{UUID: domainID, Valid: true})
 	require.False(t, preview().AuthorizationServerChanges)
 
 	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "impact-canonical-platform")

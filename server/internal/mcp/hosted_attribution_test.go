@@ -94,7 +94,7 @@ func TestServePublic_HostedEndpoint_AttributesServerAndEndpoint(t *testing.T) {
 			projectID := *authCtx.ProjectID
 			slug := "attr-" + uuid.NewString()[:8]
 			toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
-			server := hostedEndpointServer(t, ctx, ti, toolset, slug, legacy)
+			server := hostedEndpointServer(t, ctx, ti, toolset.Toolset, slug, legacy)
 			addHTTPTools(t, ctx, ti, toolset.ID, projectID, authCtx.ActiveOrganizationID, "attr_tool")
 			endpointID := mcpEndpointIDForServer(t, ctx, ti, projectID, server.ID)
 
