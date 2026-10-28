@@ -121,6 +121,48 @@ func TestLegacyFallback_DeletedProjectSlugNotTakenOverByCustomDomainToolset(t *t
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 
+// Custom-domain aliases sharing a slug across tenants are ambiguous on the platform host, so neither is served there.
+func TestLegacyFallback_AmbiguousCustomDomainAliasNotServedOnPlatform(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	otherOrgID := newLiveWorkloadOrganization(t, ti.conn)
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other tenant", Slug: "other-" + uuid.NewString()[:8], OrganizationID: otherOrgID})
+	require.NoError(t, err)
+	otherAuth := *authCtx
+	otherAuth.ActiveOrganizationID = otherOrgID
+	otherAuth.ProjectID = &other.ID
+
+	slug := "ambiguous-cd-" + uuid.NewString()[:8]
+	_, mine := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, authCtx, slug, slug+".a.example.com")
+	_, theirs := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, &otherAuth, slug, slug+".b.example.com")
+
+	_, err = servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	for _, domain := range []struct {
+		orgID string
+		name  string
+		id    uuid.UUID
+	}{{authCtx.ActiveOrganizationID, mine.Domain, mine.ID}, {otherOrgID, theirs.Domain, theirs.ID}} {
+		customCtx := customdomains.WithContext(context.Background(), &customdomains.Context{OrganizationID: domain.orgID, Domain: domain.name, DomainID: domain.id})
+		w, err := servePublicHTTP(t, customCtx, ti, slug, makeInitializeBody(), "", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	}
+
+	// With the other tenant's project deleted, one candidate is left and the platform host serves it again.
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, other.ID)
+	require.NoError(t, err)
+	w, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
 // A custom-domain toolset in a deleted project is unknown on its own domain too.
 func TestLegacyFallback_DeletedProjectCustomDomainToolset(t *testing.T) {
 	t.Parallel()

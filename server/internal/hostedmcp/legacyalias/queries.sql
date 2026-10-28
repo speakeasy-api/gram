@@ -2,20 +2,27 @@
 -- are the only queries that name toolsets.mcp_slug and toolsets.custom_domain_id; every other sqlc package reads
 -- toolsets through sqlc_retired_columns.sql, which drops the toolset hosting columns.
 
--- name: FindToolsetByAlias :one
--- Loose platform lookup: prefers a platform alias but accepts a custom-domain alias with the slug.
--- A winning row in a deleted project still owns the slug, so it yields no row rather than a fallback.
-SELECT id, project_id, mcp_slug, custom_domain_id
-FROM toolsets
-WHERE id = (
-    SELECT t.id
-    FROM toolsets t
-    WHERE t.mcp_slug = @mcp_slug
-      AND t.deleted IS FALSE
-    ORDER BY (t.custom_domain_id IS NULL) DESC
-    LIMIT 1
+-- name: FindToolsetByAlias :many
+-- Loose platform lookup: a platform alias wins over custom-domain aliases with the slug, and one in a deleted project
+-- still owns the slug, so it yields no row rather than a fallback. Without a platform alias, every live-project
+-- custom-domain alias with the slug is a candidate; the caller refuses more than one, since they span tenants.
+SELECT t.id, t.project_id, t.mcp_slug, t.custom_domain_id
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
+WHERE t.mcp_slug = @mcp_slug
+  AND t.deleted IS FALSE
+  AND (
+    t.custom_domain_id IS NULL
+    OR NOT EXISTS (
+      SELECT 1
+      FROM toolsets pa
+      WHERE pa.mcp_slug = @mcp_slug
+        AND pa.custom_domain_id IS NULL
+        AND pa.deleted IS FALSE
+    )
   )
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE);
+ORDER BY t.id
+LIMIT 2;
 
 -- name: FindToolsetByPlatformAlias :one
 SELECT id, project_id, mcp_slug, custom_domain_id
@@ -60,7 +67,8 @@ WHERE project_id = @project_id
 
 -- name: AliasTaken :one
 -- Whether a live toolset alias holds the slug in the namespace (platform when custom_domain_id is NULL). Not
--- project-scoped, mirroring the partial unique index. exclude_toolset_id discounts that toolset's alias;
+-- project-scoped, mirroring the partial unique index. A platform alias in a deleted project still holds its slug, as
+-- the loose lookup refuses to fall back past it; a custom-domain alias holds its address only in a live project. exclude_toolset_id discounts that toolset's alias;
 -- exclude_mcp_server_id discounts the toolset backing that server. On the platform, a custom-domain alias in a
 -- live project also holds the slug while no platform alias does, since FindToolsetByAlias serves it there; only
 -- that toolset or its canonical server may claim it.
@@ -70,6 +78,10 @@ SELECT (EXISTS (
   WHERE t.mcp_slug = @slug
     AND t.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
     AND t.deleted IS FALSE
+    AND (
+      sqlc.narg('custom_domain_id')::uuid IS NULL
+      OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE)
+    )
     AND (sqlc.narg('exclude_toolset_id')::uuid IS NULL OR t.id <> sqlc.narg('exclude_toolset_id')::uuid)
     AND (
       sqlc.narg('exclude_mcp_server_id')::uuid IS NULL
@@ -92,7 +104,7 @@ SELECT (EXISTS (
   AND EXISTS (
     SELECT 1
     FROM toolsets t
-    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+    JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
     WHERE t.mcp_slug = @slug
       AND t.custom_domain_id IS NOT NULL
       AND t.deleted IS FALSE
@@ -111,24 +123,26 @@ SELECT (EXISTS (
 ))::boolean AS taken;
 
 -- name: ListTakenAliases :many
--- Which of the given addresses, keyed "<slug>|<custom domain id or empty for the platform>", a live toolset alias holds.
+-- Which of the given addresses, keyed "<slug>|<custom domain id or empty for the platform>", a live-project toolset alias
+-- holds.
 -- The platform host also serves a custom-domain alias in a live project.
 SELECT DISTINCT (t.mcp_slug || '|' || COALESCE(t.custom_domain_id::text, ''))::text AS address_key
 FROM toolsets t
+JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
 WHERE t.mcp_slug = ANY(@slugs::text[])
   AND (t.mcp_slug || '|' || COALESCE(t.custom_domain_id::text, '')) = ANY(@address_keys::text[])
   AND t.deleted IS FALSE
 UNION
 SELECT (t.mcp_slug || '|')::text AS address_key
 FROM toolsets t
-JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
 WHERE t.mcp_slug = ANY(@slugs::text[])
   AND (t.mcp_slug || '|') = ANY(@address_keys::text[])
   AND t.custom_domain_id IS NOT NULL
   AND t.deleted IS FALSE;
 
 -- name: ListPlatformServedAliases :many
--- Canonical hosted servers whose toolset alias sits on a custom domain and is the only alias with its slug, with no
+-- Canonical hosted servers whose toolset alias sits on a custom domain and is the only live-project alias with its slug, with no
 -- live platform endpoint holding it: the loose legacy lookup serves that alias on the platform host too.
 SELECT t.id AS mcp_server_id, t.mcp_slug::text AS slug
 FROM toolsets t
@@ -161,6 +175,7 @@ WHERE t.id = ANY(@mcp_server_ids::uuid[])
       AND o.custom_domain_id IS NOT NULL
       AND o.id <> t.id
       AND o.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM projects op WHERE op.id = o.project_id AND op.organization_id = o.organization_id AND op.deleted IS FALSE)
   )
   AND NOT EXISTS (
     SELECT 1
@@ -185,7 +200,7 @@ SELECT (
   AND EXISTS (
     SELECT 1
     FROM toolsets t
-    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+    JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
     WHERE t.mcp_slug = @slug
       AND t.custom_domain_id IS NOT NULL
       AND t.deleted IS FALSE

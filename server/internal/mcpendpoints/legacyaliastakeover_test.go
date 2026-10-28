@@ -132,6 +132,34 @@ func TestCustomDomainAliasInDeletedProjectFreesPlatformSlug(t *testing.T) {
 	require.False(t, taken[platform])
 }
 
+// A custom-domain alias in a deleted project no longer holds its own custom-domain address.
+func TestCustomDomainAliasInDeletedProjectFreesItsAddress(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID, toolset, _ := seedCustomDomainAliasInOtherProject(t, ctx, ti)
+	alias, err := legacyalias.Get(ctx, ti.conn, projectID, toolset.ID)
+	require.NoError(t, err)
+	require.True(t, alias.CustomDomainID.Valid)
+	check := legacyalias.TakenCheck{Slug: alias.Slug.String, CustomDomainID: alias.CustomDomainID, ExcludeToolsetID: uuid.NullUUID{}, ExcludeMcpServerID: uuid.NullUUID{}}
+
+	held, err := legacyalias.Taken(ctx, ti.conn, check)
+	require.NoError(t, err)
+	require.True(t, held)
+	taken, err := legacyalias.TakenAddresses(ctx, ti.conn, []legacyalias.Alias{alias})
+	require.NoError(t, err)
+	require.True(t, taken[alias])
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, projectID)
+	require.NoError(t, err)
+	held, err = legacyalias.Taken(ctx, ti.conn, check)
+	require.NoError(t, err)
+	require.False(t, held)
+	taken, err = legacyalias.TakenAddresses(ctx, ti.conn, []legacyalias.Alias{alias})
+	require.NoError(t, err)
+	require.False(t, taken[alias])
+}
+
 func TestPlatformAliasOwnerIsNotBlockedByCustomDomainAlias(t *testing.T) {
 	t.Parallel()
 
