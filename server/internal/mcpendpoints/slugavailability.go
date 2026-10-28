@@ -6,13 +6,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 )
 
-// SlugAvailabilityCheck probes the unified MCP slug namespace spanning
-// mcp_endpoints.slug and the legacy toolset alias; see CheckEndpointSlugAvailability
-// in queries.sql and legacyalias.Taken for the semantics of each field.
+// SlugAvailabilityCheck probes the MCP slug namespace of mcp_endpoints.slug;
+// see CheckEndpointSlugAvailability in queries.sql for the semantics of each
+// field.
 type SlugAvailabilityCheck struct {
 	// Slug is the candidate address slug, already lowercased by the caller.
 	Slug string
@@ -28,9 +27,6 @@ type SlugAvailabilityCheck struct {
 	// ExcludeToolsetID is set when validating a toolset's own address.
 	ExcludeToolsetID uuid.NullUUID
 
-	// ExcludeMcpServerID is set when validating an endpoint of a server.
-	ExcludeMcpServerID uuid.NullUUID
-
 	// SkipDomainOwnershipCheck skips the domain liveness/ownership guard, for
 	// callers probing a scope the toolset already holds (which may reference a
 	// soft-deleted domain).
@@ -38,7 +34,7 @@ type SlugAvailabilityCheck struct {
 }
 
 // CheckSlugAvailable reports whether an MCP address slug is free in its scope
-// across both mcp_endpoints.slug and the legacy toolset alias. Write paths must call
+// among mcp_endpoints.slug. Write paths must call
 // LockSlugScope first, in the same transaction.
 func CheckSlugAvailable(ctx context.Context, db repo.DBTX, check SlugAvailabilityCheck) (bool, error) {
 	available, err := repo.New(db).CheckEndpointSlugAvailability(ctx, repo.CheckEndpointSlugAvailabilityParams{
@@ -51,16 +47,7 @@ func CheckSlugAvailable(ctx context.Context, db repo.DBTX, check SlugAvailabilit
 	if err != nil {
 		return false, fmt.Errorf("check unified mcp slug availability: %w", err)
 	}
-	if !available.Bool {
-		return false, nil
-	}
-	taken, err := legacyalias.Taken(ctx, db, legacyalias.TakenCheck{
-		Slug: check.Slug, CustomDomainID: check.CustomDomainID, ExcludeToolsetID: check.ExcludeToolsetID, ExcludeMcpServerID: check.ExcludeMcpServerID,
-	})
-	if err != nil {
-		return false, fmt.Errorf("check mcp slug alias availability: %w", err)
-	}
-	return !taken, nil
+	return available.Bool, nil
 }
 
 // LockSlugScope serializes competing claims on one (scope, slug) address for

@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -100,7 +99,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 	available, err := CheckSlugAvailable(ctx, tx, SlugAvailabilityCheck{
 		Slug: input.Slug, CustomDomainID: input.CustomDomainID, OrganizationID: authCtx.ActiveOrganizationID,
-		ExcludeToolsetID: uuid.NullUUID{}, ExcludeMcpServerID: input.McpServerID,
+		ExcludeToolsetID: uuid.NullUUID{},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability")
@@ -125,11 +124,6 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		ActorSlug: nil, McpEndpointURN: urn.NewMcpEndpoint(created.ID), Slug: created.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation")
-	}
-	if hostedServer != nil {
-		if err := legacyalias.FollowAlias(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServer.ID); err != nil {
-			return nil, err //nolint:wrapcheck // oops errors pass through.
-		}
 	}
 	return mv.BuildMcpEndpointView(created), nil
 }
@@ -243,7 +237,7 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 		available, err := CheckSlugAvailable(ctx, tx, SlugAvailabilityCheck{
 			Slug: input.Slug, CustomDomainID: input.CustomDomainID,
 			OrganizationID:   authCtx.ActiveOrganizationID,
-			ExcludeToolsetID: uuid.NullUUID{}, ExcludeMcpServerID: existing.McpServerID,
+			ExcludeToolsetID: uuid.NullUUID{},
 		})
 		if err != nil {
 			return nil, nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability")

@@ -883,7 +883,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// selection is bound to another endpoint's resource — rejected at use
 		// time anyway, but failing the redemption is cheaper than a
 		// 200-then-401 loop.
-		if toolPolicy.Resource != endpointToolSelectionResource(endpoint) {
+		if !endpointAcceptsToolSelectionResource(endpoint, toolPolicy.Resource) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "tool_selection_resource_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return rejectGrant("authorization code is bound to a different MCP endpoint")
@@ -1157,7 +1157,7 @@ func (s *Service) rotateRefreshToken(
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) {
 		selection, selectionErr := toolfilter.ParseSessionPolicy(refreshSession.ToolSelection)
-		selectionMatches := selectionErr == nil && (selection == nil || selection.Resource == endpointToolSelectionResource(endpoint))
+		selectionMatches := selectionErr == nil && (selection == nil || endpointAcceptsToolSelectionResource(endpoint, selection.Resource))
 		if selectionMatches {
 			credential, admissionErr := loadAgentSessionCredential(
 				endpoint, refreshSession.SubjectUrn, refreshSession.SubjectUrn, refreshSession.OrganizationID,
@@ -1362,7 +1362,7 @@ func (s *Service) rotateRefreshToken(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_malformed")
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
 	}
-	if oldSelection != nil && oldSelection.Resource != endpointToolSelectionResource(endpoint) {
+	if oldSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, oldSelection.Resource) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_resource_mismatch")
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
 	}

@@ -82,16 +82,16 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	}
 	outcome.Action = candidate.Action
 	if candidate.Action == ActionDelete {
-		outcome.McpSlug = candidate.Alias.Slug.String
-		err := m.deleteInTx(ctx, tx, actor, toolset, candidate.Alias.Slug, &outcome)
+		outcome.McpSlug = candidate.Row.EndpointSlug
+		err := m.deleteInTx(ctx, tx, actor, toolset, candidate.Row.EndpointSlug, &outcome)
 		return outcome, err
 	}
-	outcome.McpSlug = candidate.Alias.Slug.String
+	outcome.McpSlug = candidate.Row.EndpointSlug
 	outcome.Warnings = append(outcome.Warnings, candidate.Warnings...)
 
 	// Lock order matches hostedmcp: custom domains, then the server's
 	// endpoints, then the server row, which the switch locks as it updates it.
-	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, candidate.Alias.CustomDomainID); err != nil {
+	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, candidate.Row.EndpointCustomDomainID); err != nil {
 		return outcome, fmt.Errorf("lock custom domain: %w", err)
 	}
 	serverID, err := queries.GetToolsetServerID(ctx, repo.GetToolsetServerIDParams{ToolsetID: conv.ToNullUUID(toolset.ID), ProjectID: projectID})

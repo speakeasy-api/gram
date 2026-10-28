@@ -155,11 +155,6 @@ export function ServerUrlSection({
     isError: privateUrlsError,
   } = usePrivateMcpServerUrls(mcpServer, endpoints);
 
-  // A custom-domain alias the Speakeasy domain still serves for existing clients.
-  const legacyPlatformSlug =
-    hostedServerId && mcpServer && "legacyPlatformSlug" in mcpServer
-      ? mcpServer.legacyPlatformSlug
-      : undefined;
   const platformEndpoints = useMemo(
     () => endpoints.filter((e) => !e.customDomainId),
     [endpoints],
@@ -277,9 +272,6 @@ export function ServerUrlSection({
               {/* Hosted (platform) addresses. */}
               <Field>
                 <FieldLabel>Hosted Address</FieldLabel>
-                {legacyPlatformSlug && (
-                  <LegacyAddressRow slug={legacyPlatformSlug} />
-                )}
                 {platformEndpoints.map((endpoint) => (
                   <AddressRow
                     key={endpoint.id}
@@ -290,7 +282,7 @@ export function ServerUrlSection({
                     onSaved={followHostedServer}
                   />
                 ))}
-                {platformEndpoints.length > 0 || legacyPlatformSlug ? (
+                {platformEndpoints.length > 0 ? (
                   addingPlatform ? (
                     <NewPlatformAddressRow
                       backend={backend}
@@ -659,25 +651,6 @@ function AddressRow({
         onClose={() => setConfirmRemoveOpen(false)}
         onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
       />
-    </Field>
-  );
-}
-
-function LegacyAddressRow({ slug }: { slug: string }): JSX.Element {
-  const url = `${getServerURL()}/mcp/${slug}`;
-  return (
-    <Field className="gap-2">
-      <div className="border-border flex items-center gap-2 border px-3 py-2">
-        <Text className="min-w-0 flex-1 break-all font-mono text-sm">
-          {url}
-        </Text>
-        <CopyButton text={url} size="xs" tooltip="Copy hosted address" />
-      </div>
-      <Text muted small>
-        An older Speakeasy address with the same name as your custom address.
-        Clients that already use it connect here while this server is enabled
-        and public access is on.
-      </Text>
     </Field>
   );
 }

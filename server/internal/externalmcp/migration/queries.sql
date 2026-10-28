@@ -149,8 +149,9 @@ SELECT
     JOIN mcp_servers AS ms ON ms.id = me.mcp_server_id AND ms.project_id = me.project_id
     WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE AND me.deleted IS FALSE
   )::bigint AS endpoint_count,
-  -- The caller checks the legacy alias (legacyalias) is one of this server's endpoints.
-  COALESCE(wrapper.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS wrapper_id,
+  -- The server's oldest live endpoint: its address while endpoint_count is one.
+  COALESCE(ep.slug, '')::text AS endpoint_slug,
+  ep.custom_domain_id AS endpoint_custom_domain_id,
   EXISTS (SELECT 1 FROM toolset_prompts AS tp WHERE tp.toolset_id = t.id)::boolean AS has_prompts,
   EXISTS (SELECT 1 FROM slack_app_toolsets AS sat WHERE sat.toolset_id = t.id)::boolean AS has_slack_apps,
   EXISTS (SELECT 1 FROM user_oauth_tokens AS uot WHERE uot.toolset_id = t.id AND uot.deleted IS FALSE)::boolean AS has_user_oauth_tokens,
@@ -253,6 +254,13 @@ LEFT JOIN LATERAL (
   ORDER BY (ms.id = t.id) DESC, ms.id
   LIMIT 1
 ) AS wrapper ON TRUE
+LEFT JOIN LATERAL (
+  SELECT me.slug, me.custom_domain_id
+  FROM mcp_endpoints AS me
+  WHERE me.mcp_server_id = wrapper.id AND me.project_id = t.project_id AND me.deleted IS FALSE
+  ORDER BY me.created_at, me.id
+  LIMIT 1
+) AS ep ON TRUE
 ORDER BY organization_name, p.name, t.name, t.id;
 
 -- name: ListHeaderDefinitions :many

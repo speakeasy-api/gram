@@ -142,7 +142,6 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 	})
 	require.NoError(t, err)
 	mcpSlug := opts.slug + "-mcp"
-	testenv.SetLegacyAlias(t, ctx, ti.conn, ti.projectID, toolset.ID, mcpSlug, uuid.NullUUID{})
 	toolURNs := []urn.Tool{toolURN}
 	if opts.otherTool {
 		toolURNs = append(toolURNs, urn.NewTool(urn.ToolKindHTTP, opts.slug, "extra"))

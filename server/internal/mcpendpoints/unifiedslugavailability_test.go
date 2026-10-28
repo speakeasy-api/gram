@@ -13,21 +13,16 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// seedHostedToolset inserts a toolsets row carrying a live mcp_slug, the
-// legacy representation of a hosted MCP server's address.
-func seedHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, mcpSlug string) toolsetsrepo.Toolset {
+// seedToolset inserts a toolsets row whose slug is slug.
+func seedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, slug string) toolsetsrepo.Toolset {
 	t.Helper()
 
-	slug := "fixture-" + uuid.NewString()[:8]
 	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID:         organizationID,
 		ProjectID:              projectID,
@@ -37,19 +32,8 @@ func seedHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	testenv.SetLegacyAlias(t, ctx, conn, projectID, toolset.ID, mcpSlug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-	toolset, err = toolsetsrepo.New(conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: projectID})
-	require.NoError(t, err)
 
 	return toolset
-}
-
-// bindToolsetCustomDomain moves a fixture toolset's alias at mcpSlug into a
-// custom domain's address namespace.
-func bindToolsetCustomDomain(t *testing.T, ctx context.Context, conn *pgxpool.Pool, toolset toolsetsrepo.Toolset, mcpSlug string, customDomainID uuid.UUID) {
-	t.Helper()
-
-	testenv.SetLegacyAlias(t, ctx, conn, toolset.ProjectID, toolset.ID, mcpSlug, uuid.NullUUID{UUID: customDomainID, Valid: true})
 }
 
 // seedToolsetBackedMcpServer wraps a toolset in an mcp_servers row, the way
@@ -87,76 +71,6 @@ func seedToolsetBackedMcpServerWithID(t *testing.T, ctx context.Context, conn *p
 	return server.ID
 }
 
-func seedCustomDomain(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) uuid.UUID {
-	t.Helper()
-
-	domain, err := customdomainsrepo.New(conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
-		OrganizationID: organizationID,
-		Domain:         "custom-" + uuid.NewString() + ".example.com",
-		IngressName:    pgtype.Text{String: "", Valid: false},
-		CertSecretName: pgtype.Text{String: "", Valid: false},
-		IpAllowlist:    []string{},
-	})
-	require.NoError(t, err)
-
-	return domain.ID
-}
-
-func TestCheckSlugAvailable_ToolsetPlatformSlugBlocksEndpoint(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := "unified-taken-" + uuid.NewString()[:8]
-	seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-
-	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               slug,
-		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	require.NoError(t, err)
-	require.False(t, available)
-
-	// The mcpEndpoints RPC sees the same unified namespace.
-	rpcAvailable, err := ti.service.CheckMcpEndpointSlugAvailability(ctx, &gen.CheckMcpEndpointSlugAvailabilityPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Slug:             types.McpEndpointSlug(slug),
-		CustomDomainID:   nil,
-	})
-	require.NoError(t, err)
-	require.False(t, rpcAvailable)
-}
-
-func TestCheckSlugAvailable_ToolsetCustomDomainSlugBlocksEndpoint(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	domainID := seedCustomDomain(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
-	slug := "unified-domain-" + uuid.NewString()[:8]
-	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, slug, domainID)
-
-	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               slug,
-		CustomDomainID:     uuid.NullUUID{UUID: domainID, Valid: true},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	require.NoError(t, err)
-	require.False(t, available)
-}
-
 func TestCheckSlugAvailable_EndpointSlugBlocksToolsetValidation(t *testing.T) {
 	t.Parallel()
 
@@ -177,13 +91,12 @@ func TestCheckSlugAvailable_EndpointSlugBlocksToolsetValidation(t *testing.T) {
 
 	// A toolset validating this slug for itself (owner exclusion set to an
 	// unrelated toolset id) finds it taken by the endpoint.
-	unrelatedToolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "unrelated-"+uuid.NewString()[:8])
+	unrelatedToolset := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "unrelated-"+uuid.NewString()[:8])
 	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               slug,
-		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: unrelatedToolset.ID, Valid: true},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:             slug,
+		CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ExcludeToolsetID: uuid.NullUUID{UUID: unrelatedToolset.ID, Valid: true},
 	})
 	require.NoError(t, err)
 	require.False(t, available)
@@ -197,7 +110,7 @@ func TestCheckSlugAvailable_OwnerExclusionToolset(t *testing.T) {
 	require.True(t, ok)
 
 	slug := authCtx.OrganizationSlug + "-own-address"
-	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
+	toolset := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 	wrapperID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
 	_, err := repo.New(ti.conn).CreateMCPEndpoint(ctx, repo.CreateMCPEndpointParams{
 		ProjectID:       *authCtx.ProjectID,
@@ -208,26 +121,22 @@ func TestCheckSlugAvailable_OwnerExclusionToolset(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Without the exclusion the toolset's own row and its wrapper's endpoint
-	// both count.
+	// Without the exclusion the wrapper's endpoint counts.
 	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               slug,
-		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:             slug,
+		CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 	require.False(t, available)
 
-	// With the exclusion, neither the toolset's own row nor its wrapper's
-	// endpoint counts against it.
+	// With the exclusion, the wrapper's endpoint does not count against the toolset.
 	available, err = mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               slug,
-		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:             slug,
+		CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ExcludeToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
 	})
 	require.NoError(t, err)
 	require.True(t, available)
@@ -239,7 +148,7 @@ func TestToolsetWrapperLookups_PreferCanonicalWrapper(t *testing.T) {
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-lookup")
+	toolset := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-lookup")
 	servers := mcpserversrepo.New(ti.conn)
 
 	memberID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
@@ -258,130 +167,16 @@ func TestToolsetWrapperLookups_PreferCanonicalWrapper(t *testing.T) {
 	require.Equal(t, canonicalID, enabled[0].ID)
 }
 
-func TestCheckSlugAvailable_OwnerExclusionMcpServer(t *testing.T) {
+// A toolset's own slug holds no address: only endpoints do.
+func TestCreateMcpEndpoint_ToolsetSlugDoesNotHoldAddress(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	slug := authCtx.OrganizationSlug + "-backing-toolset"
-	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-	wrapperID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
-
-	// Without the exclusion the backing toolset's slug counts.
-	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               slug,
-		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	require.NoError(t, err)
-	require.False(t, available)
-
-	// The toolset backing the server being validated does not count against
-	// that server.
-	available, err = mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               slug,
-		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: wrapperID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.True(t, available)
-}
-
-func TestCheckSlugAvailable_CustomDomainToolsetHoldsPlatformSlugEndpointDoesNot(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	domainID := seedCustomDomain(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
-	slug := "scoped-" + uuid.NewString()[:8]
-	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-	bindToolsetCustomDomain(t, ctx, ti.conn, toolset, slug, domainID)
-
-	// The platform host serves a custom-domain alias too, so it holds the
-	// platform slug.
-	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               slug,
-		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	require.NoError(t, err)
-	require.False(t, available)
-
-	// A custom-domain endpoint does not block the same slug on the platform.
-	endpointSlug := "scoped-endpoint-" + uuid.NewString()[:8]
-	_, err = repo.New(ti.conn).CreateMCPEndpoint(ctx, repo.CreateMCPEndpointParams{
-		ProjectID:      *authCtx.ProjectID,
-		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true},
-		McpServerID:    uuid.NullUUID{UUID: seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID), Valid: true},
-		Slug:           endpointSlug,
-	})
-	require.NoError(t, err)
-	available, err = mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               endpointSlug,
-		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	require.NoError(t, err)
-	require.True(t, available)
-
-	// And a platform toolset address does not block the same slug under a
-	// custom domain.
-	platformSlug := "scoped-platform-" + uuid.NewString()[:8]
-	seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, platformSlug)
-	available, err = mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               platformSlug,
-		CustomDomainID:     uuid.NullUUID{UUID: domainID, Valid: true},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	require.NoError(t, err)
-	require.True(t, available)
-}
-
-func TestCreateMcpEndpoint_ConflictsWithToolsetMcpSlug(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := authCtx.OrganizationSlug + "-legacy-address"
-	seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-	mcpServerID := seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-
-	_, err := ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		CustomDomainID:   nil,
-		McpServerID:      conv.PtrEmpty(mcpServerID),
-		Slug:             types.McpEndpointSlug(slug),
-	})
-	requireOopsCode(t, err, oops.CodeConflict)
-}
-
-func TestUpdateMcpEndpoint_ConflictsWithToolsetMcpSlug(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	takenSlug := authCtx.OrganizationSlug + "-legacy-taken"
-	seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, takenSlug)
+	slug := authCtx.OrganizationSlug + "-toolset-slug"
+	seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 	mcpServerID := seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
@@ -390,21 +185,10 @@ func TestUpdateMcpEndpoint_ConflictsWithToolsetMcpSlug(t *testing.T) {
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
 		McpServerID:      conv.PtrEmpty(mcpServerID),
-		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-free-slug"),
+		Slug:             types.McpEndpointSlug(slug),
 	})
 	require.NoError(t, err)
-
-	_, err = ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               created.ID,
-		CustomDomainID:   nil,
-		McpServerID:      conv.PtrEmpty(mcpServerID),
-		MetaMcpServerID:  nil,
-		Slug:             types.McpEndpointSlug(takenSlug),
-	})
-	requireOopsCode(t, err, oops.CodeConflict)
+	require.Equal(t, slug, string(created.Slug))
 }
 
 func TestGetMCPServerByToolsetID_PrefersEnabledServer(t *testing.T) {
@@ -424,12 +208,12 @@ func TestGetMCPServerByToolsetID_PrefersEnabledServer(t *testing.T) {
 		return got.ID
 	}
 
-	shadowed := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, authCtx.OrganizationSlug+"-shadowed")
+	shadowed := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, authCtx.OrganizationSlug+"-shadowed")
 	seedDisabled(shadowed.ID, shadowed.ID)
 	fresh := seedToolsetBackedMcpServer(t, ctx, ti.conn, projectID, shadowed.ID)
 	require.Equal(t, fresh, lookup(shadowed.ID), "a disabled canonical wrapper must not hide an enabled server")
 
-	allOff := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, authCtx.OrganizationSlug+"-all-off")
+	allOff := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, authCtx.OrganizationSlug+"-all-off")
 	allOffCanonical := seedDisabled(allOff.ID, allOff.ID)
 	seedDisabled(allOff.ID, uuid.Must(uuid.NewV7()))
 	require.Equal(t, allOffCanonical, lookup(allOff.ID), "among disabled servers the canonical wrapper still wins")

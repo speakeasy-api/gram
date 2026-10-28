@@ -23,12 +23,10 @@ type hostedToolset struct {
 	UserSessionIssuerID uuid.NullUUID
 }
 
-// hostLegacyToolset gives a toolset its legacy alias at slug and a canonical MCP server without endpoints, so it is
-// served through the legacy slug fallback. The server gets no slug of its own, so tests can reuse slug for other servers.
-func hostLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, slug, visibility string, issuerID uuid.NullUUID) hostedToolset {
+// hostToolset gives a toolset a canonical MCP server with one platform endpoint at slug.
+func hostToolset(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, slug, visibility string, issuerID uuid.NullUUID) hostedToolset {
 	t.Helper()
 
-	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                    toolset.ID,
 		ProjectID:             toolset.ProjectID,
@@ -45,6 +43,7 @@ func hostLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, tool
 		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Slug: slug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 
 	toolset, err = toolsets_repo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	require.NoError(t, err)
@@ -65,17 +64,6 @@ func createUnhostedToolset(t *testing.T, ctx context.Context, ti *testInstance, 
 	})
 	require.NoError(t, err)
 	return toolset
-}
-
-// hostedEndpointServer is the server a hosted endpoint test calls through: a separate wrapper at slug, or with legacy
-// the canonical server exposed at another slug so slug reaches it through the legacy fallback.
-func hostedEndpointServer(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, slug string, legacy bool) mcpserversrepo.McpServer {
-	t.Helper()
-
-	if legacy {
-		return exposeCanonicalWrapper(t, ctx, ti, toolset.ProjectID, toolset.ID, slug+"-wrapper", "public")
-	}
-	return createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
 }
 
 // exposeCanonicalWrapper gives the toolset's canonical MCP server one platform endpoint at slug and returns the server.

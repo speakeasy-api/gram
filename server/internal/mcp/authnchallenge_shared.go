@@ -372,7 +372,7 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 		return nil, sharedResourceMalformed, nil
 	}
 
-	endpoint, err := s.loadResolvedMcpEndpointBySlug(resourceCtx, logger, slug, routeBase, mcpmetrics.LegacyFallbackSharedResource)
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(resourceCtx, logger, slug, routeBase)
 	if err != nil {
 		var shareable *oops.ShareableError
 		if errors.As(err, &shareable) && shareable.Code == oops.CodeNotFound {

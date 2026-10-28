@@ -363,12 +363,10 @@ func setTestToolsetVisibility(t *testing.T, ctx context.Context, conn *pgxpool.P
 	testenv.SetHostedMCP(t, ctx, conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: visibility, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{}})
 }
 
-// createUnwrappedTestToolset creates a toolset with no MCP server that still carries a legacy /mcp/<slug> alias.
+// createUnwrappedTestToolset creates a toolset with no MCP server.
 func createUnwrappedTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
-	ts := createRawTestToolset(t, ctx, conn, name)
-	testenv.SetLegacyAlias(t, ctx, conn, ts.ProjectID, ts.ID, ts.Slug, uuid.NullUUID{})
-	return ts
+	return createRawTestToolset(t, ctx, conn, name)
 }
 
 // createRawTestToolset creates a bare toolset row; callers address it at its slug.

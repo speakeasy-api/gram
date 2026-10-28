@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	endpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -181,8 +180,8 @@ func Ensure(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *
 func createEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, serverID uuid.UUID) (string, error) {
 	noDomain := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	for _, slug := range endpointSlugCandidates(authCtx.OrganizationSlug, *authCtx.ProjectSlug, serverID) {
-		// The same lock and unified slug check the endpoints service uses, so
-		// the slug cannot collide with an endpoint or a toolset's MCP slug.
+		// The same lock and slug check the endpoints service uses, so the slug
+		// cannot collide with another endpoint.
 		endpoints := endpointsrepo.New(tx)
 		if err := endpoints.LockSlugScope(ctx, endpointsrepo.LockSlugScopeParams{CustomDomainID: noDomain, Slug: slug}); err != nil {
 			return "", fmt.Errorf("lock approvals endpoint slug: %w", err)
@@ -197,13 +196,7 @@ func createEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, a
 		if err != nil {
 			return "", fmt.Errorf("check approvals endpoint slug: %w", err)
 		}
-		aliasTaken, err := legacyalias.Taken(ctx, tx, legacyalias.TakenCheck{
-			Slug: slug, CustomDomainID: noDomain, ExcludeToolsetID: noDomain, ExcludeMcpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
-		})
-		if err != nil {
-			return "", fmt.Errorf("check approvals endpoint slug: %w", err)
-		}
-		if !available.Bool || aliasTaken {
+		if !available.Bool {
 			continue
 		}
 		endpoint, err := endpoints.CreateMCPEndpoint(ctx, endpointsrepo.CreateMCPEndpointParams{

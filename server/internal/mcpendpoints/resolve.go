@@ -44,8 +44,7 @@ type ResolutionInput struct {
 
 // ResolutionResult distinguishes a genuine address miss from an authoritative
 // endpoint result. An authoritative denial must terminate the request even
-// though its public HTTP representation is 404; callers must not continue into
-// legacy toolset fallback.
+// though its public HTTP representation is 404.
 type ResolutionResult struct {
 	Endpoint   *repo.McpEndpoint
 	Server     *mcpservers_repo.McpServer
@@ -215,8 +214,8 @@ func IsPolicyDenied(err error) bool {
 	return errors.Is(err, ErrPolicyDenied)
 }
 
-// IsAddressMiss reports whether an error is a genuine address miss that may
-// fall back to legacy toolset lookup rather than an authoritative policy denial.
+// IsAddressMiss reports whether an error is a genuine address miss rather than
+// an authoritative policy denial.
 func IsAddressMiss(err error) bool {
 	var shareErr *oops.ShareableError
 	return errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound && !IsPolicyDenied(err)

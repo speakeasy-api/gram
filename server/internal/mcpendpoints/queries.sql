@@ -155,8 +155,7 @@ RETURNING *;
 
 -- name: CheckEndpointSlugAvailability :one
 -- True when no live mcp_endpoints.slug holds the slug in the namespace
--- (platform when custom_domain_id is NULL, else that domain). Callers also
--- check the legacy toolset alias (legacyalias.Taken).
+-- (platform when custom_domain_id is NULL, else that domain).
 -- Not project-scoped, mirroring the partial unique index. exclude_toolset_id
 -- discounts the endpoints of servers backed by that toolset. Unless
 -- skip_domain_check, a supplied domain must be live and owned by
@@ -192,7 +191,7 @@ SELECT (
 -- Serializes competing claims on one (namespace, slug) address for the rest of
 -- the caller's transaction; the per-table unique indexes cannot see
 -- cross-table collisions. The platform lock comes first, also for a
--- custom-domain claim, since the platform host serves custom-domain aliases.
+-- custom-domain claim, so every claim takes the locks in one order.
 SELECT
   pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0)),
   pg_advisory_xact_lock(hashtextextended(

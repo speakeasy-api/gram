@@ -38,7 +38,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -411,7 +410,7 @@ func TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) 
 
 	mcpSlug := "cd-install-" + uuid.New().String()[:8]
 	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
-		name: "Custom Domain Install Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset linked to a custom domain", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, legacyAlias: true,
+		name: "Custom Domain Install Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset linked to a custom domain", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 	})
 
 	// Create a different domain belonging to another organization.
@@ -487,7 +486,7 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 
 	mcpSlug := "cd-correct-" + uuid.New().String()[:8]
 	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
-		name: "Correct Domain Install Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset linked to a custom domain", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, legacyAlias: true,
+		name: "Correct Domain Install Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset linked to a custom domain", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 	})
 
 	// Request through the correct custom domain context.
@@ -518,7 +517,8 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 // TestServeInstallPage_CustomDomain_PlatformDomainStillWorks verifies that a
 // toolset linked to a custom domain can still be accessed via the platform
 // domain (i.e. when no custom domain context is present in the request).
-func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
+// A custom-domain endpoint's install page is not served on the platform host.
+func TestServeInstallPage_CustomDomain_PlatformDomainNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
 
@@ -549,11 +549,9 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 
 	mcpSlug := "cd-platform-" + uuid.New().String()[:8]
 	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
-		name: "Platform Domain Install Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset linked to a custom domain", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, legacyAlias: true,
+		name: "Platform Domain Install Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset linked to a custom domain", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 	})
 
-	// Request via the platform domain — no custom domain in context. The stored
-	// custom-domain binding remains lookup compatibility, not URL authority.
 	platformCtx := requestorigin.WithContext(context.Background(), requestorigin.Origin{
 		Surface: requestorigin.SurfacePlatform, BaseURL: testInstance.serverURL.String(),
 	})
@@ -566,10 +564,7 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 	err = testInstance.service.ServeInstallPage(rr, req)
 
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, rr.Code)
-	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
-	require.Contains(t, rr.Body.String(), testInstance.serverURL.String()+"/mcp/"+mcpSlug)
-	require.NotContains(t, rr.Body.String(), "https://"+domain.Domain+"/mcp/"+mcpSlug)
+	require.Equal(t, http.StatusNotFound, rr.Code)
 }
 
 // TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound verifies that
@@ -610,7 +605,7 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	sharedMCPSlug := "shared-slug-" + uuid.New().String()[:8]
 
 	toolsetA := createServedToolset(t, ctx, testInstance, servedToolsetOptions{
-		name: "Org A Toolset", slug: "org-a-" + sharedMCPSlug, mcpSlug: sharedMCPSlug, description: "toolset on org A, will be deleted", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domainA.ID, Valid: true}, legacyAlias: true,
+		name: "Org A Toolset", slug: "org-a-" + sharedMCPSlug, mcpSlug: sharedMCPSlug, description: "toolset on org A, will be deleted", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domainA.ID, Valid: true},
 	})
 
 	// --- Org B: the active toolset's org ---
@@ -650,7 +645,7 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	require.NoError(t, err)
 
 	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
-		name: "Org B Toolset", slug: "org-b-" + sharedMCPSlug, mcpSlug: sharedMCPSlug, description: "toolset on org B, stays active", organizationID: orgBID, projectID: projectBID, visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domainB.ID, Valid: true}, legacyAlias: true,
+		name: "Org B Toolset", slug: "org-b-" + sharedMCPSlug, mcpSlug: sharedMCPSlug, description: "toolset on org B, stays active", organizationID: orgBID, projectID: projectBID, visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domainB.ID, Valid: true},
 	})
 
 	// Soft-delete toolset A.
@@ -944,7 +939,7 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	mcpSlug := "no-domain-" + uuid.New().String()[:8]
 	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
 		name: "No Domain Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset with no custom domain",
-		visibility: mcpservers.VisibilityPublic, legacyAlias: true,
+		visibility: mcpservers.VisibilityPublic,
 	})
 
 	// Build a request through the platform domain (no custom domain context)
@@ -1756,7 +1751,7 @@ func TestServeInstallPage_PrivateNetworkUsesControlPlanePage(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, pendingResult.Code)
 }
 
-func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
+func TestServeInstallPage_PrivateOnlyEndpointNotFoundPublicly(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
 
@@ -1764,9 +1759,6 @@ func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
 		name: "Private Only Install", visibility: mcpservers.VisibilityPublic,
 		endpointSlug: mcpSlug, networkAccessMode: networkaccess.ModePrivateOnly,
-	})
-	createServedToolset(t, ctx, ti, servedToolsetOptions{
-		name: "Legacy Install Fallback", slug: "legacy-" + mcpSlug, mcpSlug: mcpSlug, description: "must not render", visibility: mcpservers.VisibilityPublic, legacyAlias: true,
 	})
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
@@ -1776,7 +1768,6 @@ func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	rr := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeInstallPage(rr, req))
 	require.Equal(t, http.StatusNotFound, rr.Code)
-	require.NotContains(t, rr.Body.String(), "Legacy Install Fallback")
 }
 
 // metaEndpointFixtureOptions configures seedMetaBackedEndpoint. Zero values
@@ -1789,8 +1780,7 @@ type metaEndpointFixtureOptions struct {
 }
 
 // seedMetaBackedEndpoint creates a gateway (meta_mcp_servers) with a
-// platform-domain endpoint at mcpSlug, plus a public legacy toolset sharing
-// the same mcp_slug that must never shadow the gateway.
+// platform-domain endpoint at mcpSlug.
 func seedMetaBackedEndpoint(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug string, opts metaEndpointFixtureOptions) metamcp_repo.MetaMcpServer {
 	t.Helper()
 
@@ -1820,10 +1810,6 @@ func seedMetaBackedEndpoint(t *testing.T, ctx context.Context, ti *testInstance,
 		Slug:            mcpSlug,
 	})
 	require.NoError(t, err)
-
-	createServedToolset(t, ctx, ti, servedToolsetOptions{
-		name: "Legacy Same-Slug Toolset", slug: "legacy-" + mcpSlug, mcpSlug: mcpSlug, description: "legacy toolset that must not shadow the meta endpoint", visibility: mcpservers.VisibilityPublic, legacyAlias: true,
-	})
 
 	return meta
 }
@@ -2258,12 +2244,6 @@ func TestServeInstallPage_DisabledServerBackend_ReturnsNotFound(t *testing.T) {
 		endpointSlug: mcpSlug,
 	})
 
-	// A public legacy toolset shares the slug; a wrongly-falling-through
-	// legacy lookup would render it instead of the not-found page.
-	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
-		name: "Shadowing Legacy Toolset", slug: "legacy-" + mcpSlug, mcpSlug: mcpSlug, description: "must not shadow the disabled wrapper", visibility: mcpservers.VisibilityPublic, legacyAlias: true,
-	})
-
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", mcpSlug)
@@ -2273,7 +2253,6 @@ func TestServeInstallPage_DisabledServerBackend_ReturnsNotFound(t *testing.T) {
 	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
-	assert.NotContains(t, rr.Body.String(), "Shadowing Legacy Toolset")
 }
 
 // TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs verifies that a public
@@ -2513,33 +2492,42 @@ func installTargetTemplateHTML(t *testing.T, body, target string) string {
 	}
 }
 
-// Legacy install pages must enforce the same canonical-wrapper gate as serving.
-func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
+// Install pages enforce the same canonical-server gate as serving, and a toolset slug no endpoint holds is not found.
+func TestServeInstallPage_CanonicalServerGate(t *testing.T) {
 	t.Parallel()
-	const wrapperless = "no-wrapper"
-	for _, visibility := range []string{mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled, wrapperless} {
+	const (
+		wrapperless = "no-wrapper"
+		retired     = "retired-endpoint"
+	)
+	for _, visibility := range []string{mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled, wrapperless, retired} {
 		t.Run(visibility, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPMetadataService(t)
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			require.NotNil(t, authCtx.ProjectID)
-			slug := "legacy-install-" + uuid.NewString()
-			if visibility == wrapperless {
-				toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			slug := "install-gate-" + uuid.NewString()
+			switch visibility {
+			case wrapperless:
+				_, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 					OrganizationID:         authCtx.ActiveOrganizationID,
 					ProjectID:              *authCtx.ProjectID,
-					Name:                   "Legacy Install Fixture",
+					Name:                   "Install Gate Fixture",
 					Slug:                   slug,
 					Description:            pgtype.Text{String: "", Valid: false},
 					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 				})
 				require.NoError(t, err)
-				testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-			} else {
-				// No endpoint row: force lookup through the legacy slug.
+			case retired:
+				toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
+					name: "Install Gate Fixture", slug: slug, mcpSlug: slug, visibility: mcpservers.VisibilityPublic,
+				})
+				require.NoError(t, testrepo.New(ti.conn).RetireHostedToolsetEndpointsFixture(ctx, testrepo.RetireHostedToolsetEndpointsFixtureParams{
+					ID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: toolset.ProjectID,
+				}))
+			default:
 				createServedToolset(t, ctx, ti, servedToolsetOptions{
-					name: "Legacy Install Fixture", slug: slug, mcpSlug: slug, visibility: visibility, legacyAlias: true,
+					name: "Install Gate Fixture", slug: slug, mcpSlug: slug, visibility: visibility,
 				})
 			}
 			req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/install", nil)
@@ -2552,9 +2540,9 @@ func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
 			case mcpservers.VisibilityPublic:
 				require.Equal(t, http.StatusOK, rr.Code)
 			case mcpservers.VisibilityPrivate:
-				require.Equal(t, http.StatusFound, rr.Code, "a private wrapper sends the visitor to sign in")
+				require.Equal(t, http.StatusFound, rr.Code, "a private server sends the visitor to sign in")
 			default:
-				require.Equal(t, http.StatusNotFound, rr.Code, "a toolset without an enabled canonical server is not hosted")
+				require.Equal(t, http.StatusNotFound, rr.Code, "a toolset without an enabled canonical server endpoint is not hosted")
 			}
 		})
 	}

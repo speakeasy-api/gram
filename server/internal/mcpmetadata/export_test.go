@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -80,8 +79,8 @@ func TestService_ExportMcpMetadata_McpNotEnabled(t *testing.T) {
 	require.Error(t, err, "should return error for toolset with MCP disabled")
 	require.Contains(t, err.Error(), "MCP server not found", "error should indicate server not found")
 
-	// A legacy alias without a canonical server is not hosted.
-	wrapperless, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	// A toolset without a canonical server is not hosted at its slug.
+	_, err = toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Test Wrapperless Toolset",
@@ -90,9 +89,8 @@ func TestService_ExportMcpMetadata_McpNotEnabled(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err, "create toolset")
-	testenv.SetLegacyAlias(t, ctx, ti.conn, wrapperless.ProjectID, wrapperless.ID, "wrapperless-mcp-slug", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: new(types.Slug("wrapperless-mcp-slug")),
+		McpSlug: new(types.Slug("test-wrapperless-mcp")),
 	})
 	require.Error(t, err, "should return error for toolset without a canonical server")
 	require.Contains(t, err.Error(), "MCP server not found", "error should indicate server not found")
@@ -158,10 +156,10 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 	})
 	require.NoError(t, err, "activate custom domain")
 
-	// A platform-domain legacy alias is exported under the organization's custom domain.
+	// An endpoint on the custom domain is exported under it.
 	createServedToolset(t, ctx, ti, servedToolsetOptions{
 		name: "Test Custom Domain Export", slug: "test-custom-domain", mcpSlug: "custom-domain-mcp",
-		description: "A toolset with custom domain", legacyAlias: true,
+		description: "A toolset with custom domain", customDomainID: uuid.NullUUID{UUID: customDomain.ID, Valid: true},
 	})
 
 	// Export the MCP metadata

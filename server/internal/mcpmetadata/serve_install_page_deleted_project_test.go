@@ -25,7 +25,7 @@ func TestServeInstallPage_LegacyToolsetInDeletedProjectReturnsNotFound(t *testin
 
 	slug := "deleted-proj-install-" + uuid.NewString()[:8]
 	createServedToolset(t, ctx, ti, servedToolsetOptions{
-		name: "Deleted Project Install Fixture", slug: slug, mcpSlug: slug, visibility: mcpservers.VisibilityPublic, legacyAlias: true,
+		name: "Deleted Project Install Fixture", slug: slug, mcpSlug: slug, visibility: mcpservers.VisibilityPublic,
 	})
 
 	serve := func() int {

@@ -40,7 +40,7 @@ func TestApplyIssuerGate_AgentAPIKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 	endpoint := mcp.ResolvedMcpEndpoint{
-		AudienceURN: urn.NewToolset(fx.toolset.ID).String(), OrganizationID: fx.orgID,
+		AudienceURN: urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String(), OrganizationID: fx.orgID,
 		ProjectID: fx.target.ProjectID, RouteBase: mcproute.MCP, Slug: fx.toolset.McpSlug.String,
 		ToolsetID: uuid.NullUUID{UUID: fx.toolset.ID, Valid: true}, UserSessionIssuerID: fx.target.UserSessionIssuerID,
 	}
