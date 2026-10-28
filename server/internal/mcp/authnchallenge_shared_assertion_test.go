@@ -422,48 +422,36 @@ func TestSharedAuthorizationServer_IDJAGWithoutResourceOrClaimIsInvalidRequest(t
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 
-// Shared metadata omits the ID-JAG grant for a trusted issuer without a usable jwks_uri.
-func TestSharedAuthorizationServer_MetadataOmitsIDJAGWithoutTrustedIssuerJWKS(t *testing.T) {
+// Shared metadata omits the ID-JAG grant without a usable jwks_uri or with admission disabled.
+func TestSharedAuthorizationServer_MetadataOmitsIDJAG(t *testing.T) {
 	t.Parallel()
-	for name, jwksURL := range map[string]string{"missing": "", "plain_http": "http://idp.example.com/jwks"} {
+	for name, tc := range map[string]struct {
+		jwksURL          string
+		disableAdmission bool
+	}{
+		"missing_jwks":       {jwksURL: ""},
+		"plain_http_jwks":    {jwksURL: "http://idp.example.com/jwks"},
+		"admission_disabled": {jwksURL: "https://identity.example.test/keys", disableAdmission: true},
+	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			assertSharedMetadataOmitsIDJAG(t, jwksURL)
+			ctx, ti, _, _ := newIDJAGTestService(t)
+			issuer := createTrustedIDJAGIssuer(t, ctx, ti, requireProjectAuthContext(t, ctx).ActiveOrganizationID, sharedTestUpstreamIssuer, tc.jwksURL)
+			setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
+			if tc.disableAdmission {
+				setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeDisabled)
+			}
+			issuerURL := ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String()
+			w := httptest.NewRecorder()
+			require.NoError(t, ti.service.HandleSharedAuthorizationServerMetadata(w, sharedRequest(ctx, http.MethodGet, issuerURL+"/.well-known/oauth-authorization-server", issuer.ID.String(), nil)))
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			var metadata struct {
+				GrantTypes []string `json:"grant_types_supported"`
+				Profiles   []string `json:"authorization_grant_profiles_supported"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+			require.NotContains(t, metadata.GrantTypes, oauthwire.GrantTypeJWTBearer)
+			require.NotContains(t, metadata.Profiles, oauthwire.GrantProfileIDJAG)
 		})
 	}
-}
-
-func TestSharedAuthorizationServer_MetadataOmitsIDJAGWhenAdmissionDisabled(t *testing.T) {
-	t.Parallel()
-	ctx, ti, _, _ := newIDJAGTestService(t)
-	issuer := createTrustedIDJAGIssuer(t, ctx, ti, requireProjectAuthContext(t, ctx).ActiveOrganizationID, sharedTestUpstreamIssuer, "https://identity.example.test/keys")
-	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
-	setOrganizationIssuerAdmissionMode(t, ctx, ti, issuer, admission.ModeDisabled)
-	issuerURL := ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String()
-	w := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleSharedAuthorizationServerMetadata(w, sharedRequest(ctx, http.MethodGet, issuerURL+"/.well-known/oauth-authorization-server", issuer.ID.String(), nil)))
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	var metadata struct {
-		Profiles []string `json:"authorization_grant_profiles_supported"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-	require.NotContains(t, metadata.Profiles, oauthwire.GrantProfileIDJAG)
-}
-
-func assertSharedMetadataOmitsIDJAG(t *testing.T, jwksURL string) {
-	t.Helper()
-	ctx, ti, _, _ := newIDJAGTestService(t)
-	issuer := createTrustedIDJAGIssuer(t, ctx, ti, requireProjectAuthContext(t, ctx).ActiveOrganizationID, sharedTestUpstreamIssuer, jwksURL)
-	setIssuerMode(t, ctx, ti, issuer.ID, "shared", "")
-	issuerURL := ti.serverURL.String() + "/oauth/usi/" + issuer.ID.String()
-	w := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleSharedAuthorizationServerMetadata(w, sharedRequest(ctx, http.MethodGet, issuerURL+"/.well-known/oauth-authorization-server", issuer.ID.String(), nil)))
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	var metadata struct {
-		GrantTypes []string `json:"grant_types_supported"`
-		Profiles   []string `json:"authorization_grant_profiles_supported"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-	require.NotContains(t, metadata.GrantTypes, oauthwire.GrantTypeJWTBearer)
-	require.NotContains(t, metadata.Profiles, oauthwire.GrantProfileIDJAG)
 }
