@@ -432,9 +432,9 @@ const (
 )
 
 // platformMCPSkillsFS is the single source for reviewed skills distributed with
-// every Platform MCP package. Add skills as
-// platform_mcp_skills/<canonical-name>/SKILL.md; loadPlatformMCPSkills validates
-// directory/frontmatter names before any package is generated.
+// every Platform MCP package and served over MCP by the platform toolset. Add
+// skills as platform_mcp_skills/<canonical-name>/SKILL.md; PlatformMCPSkills
+// validates directory/frontmatter names before any package is generated.
 //
 //go:embed platform_mcp_skills/*/SKILL.md
 var platformMCPSkillsFS embed.FS
@@ -3006,7 +3006,12 @@ func platformMCPManifestVersion(cfg GenerateConfig) string {
 	return "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0")
 }
 
-func loadPlatformMCPSkills() (map[string][]byte, error) {
+// PlatformMCPSkills returns the reviewed skills embedded in the server, keyed
+// by skill name, each the exact SKILL.md bytes the Platform MCP packages ship
+// and the platform toolset serves. Every skill is validated against the
+// Agent Skills specification with its directory name as the required name, so
+// a caller can rely on frontmatter.name matching the key.
+func PlatformMCPSkills() (map[string][]byte, error) {
 	entries, err := platformMCPSkillsFS.ReadDir("platform_mcp_skills")
 	if err != nil {
 		return nil, fmt.Errorf("read embedded Platform MCP skills: %w", err)
@@ -3032,7 +3037,7 @@ func loadPlatformMCPSkills() (map[string][]byte, error) {
 }
 
 func emitPlatformMCPSkills(files map[string][]byte) error {
-	skills, err := loadPlatformMCPSkills()
+	skills, err := PlatformMCPSkills()
 	if err != nil {
 		return err
 	}
@@ -3150,7 +3155,7 @@ func generatePlatformMCPOpenCodePackage(cfg GenerateConfig, platformURL string) 
 	if err := generateOpenCodePluginInDir(files, "", plugin, cfg); err != nil {
 		return nil, fmt.Errorf("generate Platform MCP OpenCode package: %w", err)
 	}
-	skills, err := loadPlatformMCPSkills()
+	skills, err := PlatformMCPSkills()
 	if err != nil {
 		return nil, err
 	}
