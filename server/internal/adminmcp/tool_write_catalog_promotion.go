@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/setupguides"
 )
 
 // catalogPromotionMutator shares the same transactional rules as the admin UI.
@@ -225,12 +226,24 @@ func (w *catalogPromotionWriter) view(proposal Proposal) (proposalView, error) {
 			{Setting: "Public endpoint", Before: "", After: request.Public.URL},
 			{Setting: "Public documentation", Before: "", After: request.Public.DocumentationURL},
 			{Setting: "Guide slug", Before: "", After: request.Public.DocsSlug},
+			existingSetupGuideChange(request.Public.DocsSlug),
 			{Setting: "Authentication", Before: "", After: request.Public.AuthMode},
 			{Setting: "Advertised authentication setup", Before: "", After: request.AuthDiscovery.AuthSetup},
 			{Setting: "Authentication discovery", Before: "", After: request.AuthDiscovery.Status},
 		},
-		SideEffects: "Publishes the reviewed fields to the Speakeasy catalogue, visible under the existing catalogue rollout. Queues a public setup-docs guide draft. Guide publication retains the setup-docs repository's merge review. Source credentials and configuration are excluded.",
+		SideEffects: "Publishes the reviewed fields to the Speakeasy catalogue, visible under the existing catalogue rollout. Requests a public setup-docs guide unless one already exists or is in review for the guide slug. Guide publication retains the setup-docs repository's merge review. Source credentials and configuration are excluded.",
 	}, nil
+}
+
+// existingSetupGuideChange shows staff whether the guide slug is already taken
+// in the pinned setup-docs export, matching the dashboard review form. It is
+// advice only: delivery rechecks the docs repository before requesting a guide.
+func existingSetupGuideChange(slug string) proposalViewChange {
+	after := "None in the setup guides released to Speakeasy (" + setupguides.PinnedVersion + "). A guide is requested unless delivery finds one."
+	if guide, ok := setupguides.Lookup(slug); ok {
+		after = guide.Title + " already uses this slug. Publishing links to that guide and requests no new one; keep this slug only for the same provider."
+	}
+	return proposalViewChange{Setting: "Existing setup guide", Before: "", After: after}
 }
 
 func (w *catalogPromotionWriter) execution(authority writeAuthority) ProposalExecution {
@@ -266,7 +279,7 @@ func (w *catalogPromotionWriter) registerPrepare(server *mcp.Server) {
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(true), Title: ""},
 		Name:        "prepare_registry_promotion", Title: "Prepare Catalogue Promotion",
-		Description: "Prepare publication of a remote MCP source using exact organization, project, server and current source and curation revisions. Supply independently reviewed public metadata only. Set override_eligibility only for explicit staff permission to promote if health evidence is insufficient, failed, or unavailable; source safety checks still apply. Creates a stored preview for same-staff browser approval; execute_admin_proposal publishes and queues setup docs. Requires admin:write. Does not publish during preparation.",
+		Description: "Prepare publication of a remote MCP source using exact organization, project, server and current source and curation revisions. Supply independently reviewed public metadata only. Set override_eligibility only for explicit staff permission to promote if health evidence is insufficient, failed, or unavailable; source safety checks still apply. Creates a stored preview for same-staff browser approval; the preview shows whether the guide slug already has a setup guide. execute_admin_proposal publishes and requests a setup guide unless one already exists or is in review. Requires admin:write. Does not publish during preparation.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareCatalogPromotionInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err

@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/setupguides"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,6 +86,7 @@ func TestCatalogPromotionApprovalAndReplay(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, view.SideEffects, "setup-docs")
 	require.Contains(t, view.Changes, proposalViewChange{Setting: "Allow health eligibility override", Before: "", After: "No"})
+	require.Contains(t, view.Changes, existingSetupGuideChange("example"))
 	stored, err := storedCatalogPromotion(p)
 	require.NoError(t, err)
 	require.False(t, stored.OverrideEligibility)
@@ -108,6 +110,17 @@ func TestCatalogPromotionApprovalAndReplay(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Replay)
 	require.Equal(t, int32(1), mutator.calls.Load())
+}
+
+func TestCatalogPromotionPreviewWarnsWhenTheGuideSlugIsTaken(t *testing.T) {
+	t.Parallel()
+	taken := existingSetupGuideChange("slack")
+	require.Equal(t, "Existing setup guide", taken.Setting)
+	require.Contains(t, taken.After, "already uses this slug")
+	require.Contains(t, taken.After, "Slack")
+
+	free := existingSetupGuideChange("example-mcp")
+	require.Contains(t, free.After, "None in the setup guides released to Speakeasy ("+setupguides.PinnedVersion+")")
 }
 
 func TestCatalogPromotionRejectsChangedHealthAtExecution(t *testing.T) {

@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/setupguides"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	delivery "github.com/speakeasy-api/gram/server/internal/thirdparty/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -136,6 +137,11 @@ func (s *Service) GetCandidate(ctx context.Context, target Target) (Candidate, e
 	result.SourceName = current.SourceName
 	if row.CurationStatus == "active" && !row.PromotedAt.Valid {
 		result.SuggestedMetadata = suggestedMetadata(current)
+		result.SetupGuides = setupguides.List()
+		result.SetupGuidesVersion = setupguides.PinnedVersion
+		if guide, ok := setupguides.ForEndpoint(result.SuggestedMetadata.URL); ok {
+			result.EndpointGuideSlug = guide.Slug
+		}
 	}
 	return result, nil
 }
