@@ -9,7 +9,7 @@ import {
 } from "./search-docs-result";
 
 const excerpt = {
-  uri: "gram://platform-mcp/setup/acme/provider_setup",
+  uri: "speakeasy://platform-mcp/setup/acme/provider_setup",
   title: "Acme — provider setup",
   heading: "Generate OAuth credentials",
   excerpt: "Register an OAuth app and copy the client id.",
@@ -57,7 +57,7 @@ describe("findDocsExcerpts", () => {
       findDocsExcerpts({ docs: [{ path: "/docs/guides/github" }] }),
     ).toEqual([]);
     expect(
-      findDocsExcerpts("read gram://platform-mcp/setup/acme/provider_setup"),
+      findDocsExcerpts("read speakeasy://platform-mcp/setup/acme/provider_setup"),
     ).toEqual([]);
     expect(findDocsExcerpts(undefined)).toEqual([]);
   });
@@ -69,20 +69,20 @@ describe("findDocsExcerpts", () => {
     const composed = {
       search: { excerpts: [excerpt] },
       read: {
-        uri: "gram://platform-mcp/setup/github/provider_setup",
+        uri: "speakeasy://platform-mcp/setup/github/provider_setup",
         title: "GitHub — provider setup",
         text: "# GitHub\n\nRegister an OAuth app.",
       },
     };
     expect(findReadDocs(composed).map((d) => d.uri)).toEqual([
-      "gram://platform-mcp/setup/github/provider_setup",
+      "speakeasy://platform-mcp/setup/github/provider_setup",
     ]);
     expect(findDocsExcerpts(composed)).toEqual([excerpt]);
     expect(findReadDocs({ excerpts: [excerpt] })).toEqual([]);
     // A withheld guide answers with a code and no text, so nothing was read.
     expect(
       findReadDocs({
-        uri: "gram://platform-mcp/setup/github/provider_setup",
+        uri: "speakeasy://platform-mcp/setup/github/provider_setup",
         code: "guide_unavailable",
       }),
     ).toEqual([]);
@@ -145,13 +145,13 @@ describe("excerptFromReadDoc", () => {
 
   it("recovers the citation from the guide's own header", () => {
     const built = excerptFromReadDoc({
-      uri: "gram://platform-mcp/setup/github/provider_setup",
+      uri: "speakeasy://platform-mcp/setup/github/provider_setup",
       title: "GitHub — provider setup",
       text,
     });
 
     expect(built).toMatchObject({
-      uri: "gram://platform-mcp/setup/github/provider_setup",
+      uri: "speakeasy://platform-mcp/setup/github/provider_setup",
       title: "GitHub — provider setup",
       heading: "Generate the OAuth credentials",
       source: "mcp-setup-docs/go@v0.3.0",
@@ -198,7 +198,7 @@ describe("citation link safety", () => {
 
   it("only accepts absolute https links", () => {
     const built = excerptFromReadDoc({
-      uri: "gram://platform-mcp/setup/github/provider_setup",
+      uri: "speakeasy://platform-mcp/setup/github/provider_setup",
       text: [
         "# GitHub",
         "",
