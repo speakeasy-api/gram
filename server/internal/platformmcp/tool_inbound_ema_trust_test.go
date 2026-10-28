@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -570,12 +571,13 @@ func TestInboundEMATrustGetNextStepExplainsDisabledAdmissionBlocksIDJAG(t *testi
 	require.NoError(t, err)
 	require.Len(t, output.Issuers, 1)
 	require.Equal(t, "disabled", output.Issuers[0].ClientIDMetadataAdmissionMode)
-	require.Contains(t, output.NextStep, "ID-JAG sign-in cannot work until admission")
+	require.Contains(t, output.NextStep, "ID-JAG sign-in cannot work until its admission mode is presets or open")
 
 	f.users.issuers[f.issuerID].ClientIDMetadataAdmissionMode = "presets"
 	output, err = f.service.Get(t.Context(), f.principal)
 	require.NoError(t, err)
-	require.NotContains(t, output.NextStep, "cannot work until admission")
+	require.NotContains(t, output.NextStep, "cannot work until")
+	require.Contains(t, output.NextStep, "must be in preset_clients or custom_client_urls")
 }
 
 func TestInboundEMATrustGetNextStepKeepsAudienceGuidanceWithDisabledAdmission(t *testing.T) {
@@ -591,7 +593,8 @@ func TestInboundEMATrustGetNextStepKeepsAudienceGuidanceWithDisabledAdmission(t 
 	output, err := f.service.Get(t.Context(), f.principal)
 	require.NoError(t, err)
 	require.Contains(t, output.NextStep, "no single audience")
-	require.Contains(t, output.NextStep, "ID-JAG sign-in cannot work until admission")
+	require.Contains(t, output.NextStep, "ID-JAG sign-in cannot work until its admission mode is presets or open")
+	require.Contains(t, output.NextStep, "organizationUserSessionIssuers.updateIssuer")
 	require.Equal(t, 1, strings.Count(output.NextStep, "Issuer "+output.Issuers[0].Slug+":"))
 }
 
@@ -622,7 +625,37 @@ func TestInboundEMATrustGetListsCustomClientURLsInPresetsMode(t *testing.T) {
 		if view.UserSessionIssuerID == issuer.ID.String() {
 			require.Equal(t, []string{customURL}, view.CustomClientURLs)
 		} else {
+			require.NotNil(t, view.CustomClientURLs, "custom_client_urls is always emitted")
 			require.Empty(t, view.CustomClientURLs, "custom URLs are listed in presets mode only")
 		}
+		require.False(t, view.CustomClientURLsTruncated)
 	}
+}
+
+func TestInboundEMATrustGetTruncatesCustomClientURLs(t *testing.T) {
+	t.Parallel()
+	f := newInboundEMAFixture(t, 1)
+	q := usersessionsrepo.New(f.conn)
+	issuer, err := q.CreateOrganizationUserSessionIssuer(t.Context(), usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:     conv.ToPGText(f.principal.OrganizationID),
+		Slug:               "presets-" + uuid.NewString(),
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	for i := range clientAdmissionCustomURLLimit + 1 {
+		_, err = q.CreateOrganizationUserSessionIssuerCimdClient(t.Context(), usersessionsrepo.CreateOrganizationUserSessionIssuerCimdClientParams{
+			ClientIDMetadataUri: fmt.Sprintf("https://client-%d.example.test/oauth/client.json", i),
+			UserSessionIssuerID: issuer.ID,
+			OrganizationID:      f.principal.OrganizationID,
+		})
+		require.NoError(t, err)
+	}
+	f.users.issuers = map[string]*types.UserSessionIssuer{issuer.ID.String(): {ID: issuer.ID.String(), Slug: issuer.Slug, AuthorizationServerMode: "shared", ClientIDMetadataAdmissionMode: "presets"}}
+
+	output, err := f.service.Get(t.Context(), f.principal)
+	require.NoError(t, err)
+	require.Len(t, output.Issuers, 1)
+	require.Len(t, output.Issuers[0].CustomClientURLs, clientAdmissionCustomURLLimit)
+	require.True(t, output.Issuers[0].CustomClientURLsTruncated)
 }

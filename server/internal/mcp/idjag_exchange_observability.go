@@ -3,11 +3,13 @@ package mcp
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 )
 
@@ -71,5 +73,40 @@ func (s *Service) recordSharedIDJAGResourceRejection(ctx context.Context, logger
 	exchange := &idJAGExchange{metrics: s.metrics, logger: logger, issuerID: issuerID.String(), outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}
 	attrs := exchange.reject(reason, nil)
 	s.recordSharedResourceRejectionAs(ctx, logger, "oauth ID-JAG token request rejected", issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources, attrs...)
+	exchange.record(ctx)
+}
+
+// rejectTokenClient logs one refusal of the client a token request presents.
+// On the ID-JAG grant that line is the exchange's single rejection line, and
+// the exchange is counted under idJAGReason.
+func (s *Service) rejectTokenClient(ctx context.Context, logger *slog.Logger, r *http.Request, endpoint *ResolvedMcpEndpoint, grantType, clientID, authMethod, reason string, idJAGReason mcpmetrics.IDJAGRejectionReason) {
+	if grantType != oauthwire.GrantTypeJWTBearer {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, authMethod, grantType, reason)
+		return
+	}
+	exchange, logger := s.startIDJAGExchange(endpoint, logger)
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientID, authMethod, grantType, reason, exchange.reject(idJAGReason, nil)...)
+	exchange.record(ctx)
+}
+
+// failTokenClientMetadata logs a client metadata document fetch that failed
+// for a token request; on the ID-JAG grant it is counted as a failed exchange.
+func (s *Service) failTokenClientMetadata(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, grantType string, err error) {
+	if grantType != oauthwire.GrantTypeJWTBearer {
+		logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+		return
+	}
+	issuerID := endpoint.UserSessionIssuerID.String()
+	reason := mcpmetrics.IDJAGRejectionClientMetadataUnavailable
+	logger.With(attr.SlogUserSessionIssuerID(issuerID)).InfoContext(ctx, "oauth ID-JAG token request failed", attr.SlogOAuthIDJAGOutcome(string(mcpmetrics.IDJAGExchangeError)), attr.SlogOAuthIDJAGRejectionReason(reason), attr.SlogError(err))
+	s.metrics.RecordIDJAGExchange(ctx, issuerID, mcpmetrics.IDJAGExchangeError, reason)
+}
+
+// recordSharedIDJAGAssertionRejection records an ID-JAG exchange the shared
+// token endpoint refused before the grant handler because the assertion could
+// not be read. logger already carries the issuer.
+func (s *Service) recordSharedIDJAGAssertionRejection(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, err error) {
+	exchange := &idJAGExchange{metrics: s.metrics, logger: logger, issuerID: issuerID.String(), outcome: mcpmetrics.IDJAGExchangeError, reason: mcpmetrics.IDJAGRejectionNone}
+	logger.LogAttrs(ctx, slog.LevelInfo, "oauth ID-JAG token request rejected", exchange.rejectAssertion(err)...)
 	exchange.record(ctx)
 }

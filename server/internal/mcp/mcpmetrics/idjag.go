@@ -33,6 +33,12 @@ const (
 	IDJAGRejectionInvalidRequest IDJAGRejectionReason = "invalid_request"
 	// IDJAGRejectionClientNotAllowed: the client may not use the ID-JAG grant.
 	IDJAGRejectionClientNotAllowed IDJAGRejectionReason = "client_not_allowed"
+	// IDJAGRejectionClientNotAdmitted: the issuer's client policy refused the client.
+	IDJAGRejectionClientNotAdmitted IDJAGRejectionReason = "client_not_admitted"
+	// IDJAGRejectionClientInvalid: the client is unknown, invalid, or failed authentication.
+	IDJAGRejectionClientInvalid IDJAGRejectionReason = "client_invalid"
+	// IDJAGRejectionClientMetadataUnavailable: the client's metadata document could not be fetched; recorded with the error outcome.
+	IDJAGRejectionClientMetadataUnavailable IDJAGRejectionReason = "client_metadata_unavailable"
 	// IDJAGRejectionResourceMismatch: a resource indicator named another server.
 	IDJAGRejectionResourceMismatch IDJAGRejectionReason = "resource_mismatch"
 	// IDJAGRejectionSubjectNotAuthorized: the resolved user lacks access.
@@ -84,8 +90,8 @@ func IDJAGRejectionFromValidator(reason idjag.Reason) IDJAGRejectionReason {
 	return IDJAGRejectionAssertionOther
 }
 
-// RecordIDJAGExchange records one ID-JAG token exchange. reason is set only
-// for a rejection. The client ID is deliberately not a dimension: it may be a
+// RecordIDJAGExchange records one ID-JAG token exchange. reason is set for a
+// rejection, and for a failure whose cause is bounded. The client ID is deliberately not a dimension: it may be a
 // client metadata document URL chosen by the caller.
 func (m *Metrics) RecordIDJAGExchange(ctx context.Context, issuerID string, outcome IDJAGExchangeOutcome, reason IDJAGRejectionReason) {
 	if m == nil || m.oauthIDJAGExchangeCounter == nil {

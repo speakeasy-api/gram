@@ -431,7 +431,7 @@ func (s *Service) authenticateTokenClient(
 	presentedAuthMethod := creds.method
 	clientID, reason := resolvePresentedClientID(creds)
 	if reason != "" {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
+		s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, reason, mcpmetrics.IDJAGRejectionClientInvalid)
 		return nil, writeInvalidClientError(ctx, w, r, logger, "client_id is required")
 	}
 	// Only a grant that resolves CIMD would fetch a client_id naming this
@@ -442,26 +442,26 @@ func (s *Service) authenticateTokenClient(
 			return nil, oops.E(oops.CodeUnexpected, err, "check client_id against endpoint URLs").LogError(ctx, logger)
 		}
 		if namesEndpoint {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, clientIDNamesEndpointReason)
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, clientIDNamesEndpointReason, mcpmetrics.IDJAGRejectionClientInvalid)
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientIDNamesEndpointDescription)
 		}
 	}
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_denied")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_admission_denied", mcpmetrics.IDJAGRejectionClientNotAdmitted)
 			return nil, writeInvalidClientError(ctx, w, r, logger, admissionErr.Description())
 		}
 		if _, ok := errors.AsType[*oauthwire.Error](err); ok {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_metadata_invalid")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_metadata_invalid", mcpmetrics.IDJAGRejectionClientInvalid)
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		if errors.Is(err, errCIMDFetchFailed) {
-			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+			s.failTokenClientMetadata(ctx, logger, endpoint, grantType, err)
 			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "unknown_client_id", mcpmetrics.IDJAGRejectionClientInvalid)
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
@@ -493,7 +493,7 @@ func (s *Service) authenticateTokenClient(
 			)
 		}
 		if mode == admission.ModeDisabled {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_disabled")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_admission_disabled", mcpmetrics.IDJAGRejectionClientNotAdmitted)
 			return nil, writeTokenPolicyError(ctx, w, logger, grantType, "this server does not accept client ID metadata documents")
 		}
 	}
@@ -505,7 +505,7 @@ func (s *Service) authenticateTokenClient(
 		return nil, oops.E(oops.CodeUnexpected, err, "build authorization server URLs").LogError(ctx, logger)
 	}
 	if reason := s.authenticateOAuthClient(ctx, logger, endpoint.UserSessionIssuerID, urls, clientAssertionAtToken, clientRow, creds); reason != "" {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
+		s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, reason, mcpmetrics.IDJAGRejectionClientInvalid)
 		return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authenticated", clientID, presentedAuthMethod, grantType, "")
@@ -521,7 +521,7 @@ func (s *Service) authenticateTokenClient(
 	// disabled case (AIS-406).
 	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, clientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "ai_tool_blocked")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "ai_tool_blocked", mcpmetrics.IDJAGRejectionClientNotAdmitted)
 			// This refusal ends an authorization-code exchange before the grant
 			// handler that records token-stage failures is reached, so the
 			// failure is recorded here. Refresh grants stay excluded, as they

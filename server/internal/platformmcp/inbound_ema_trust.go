@@ -140,11 +140,14 @@ type InboundEMAIssuer struct {
 
 	// ClientIDMetadataAdmissionMode is the issuer's effective client ID
 	// metadata document admission mode: disabled, presets, or open.
-	ClientIDMetadataAdmissionMode string `json:"client_id_metadata_admission_mode" jsonschema:"the client gate ID-JAG exchanges share with sign-in: open admits any valid client ID metadata document, presets admits preset_clients and custom_client_urls, disabled admits none"`
+	ClientIDMetadataAdmissionMode string `json:"client_id_metadata_admission_mode" jsonschema:"the effective client ID metadata document admission mode, the client gate ID-JAG exchanges share with sign-in: open (and the legacy reporting) admits any valid client ID metadata document, presets admits preset_clients and custom_client_urls, disabled admits none"`
 
 	// CustomClientURLs are the client ID metadata document URLs this issuer
 	// admits beyond the presets, listed in presets mode only.
-	CustomClientURLs []string `json:"custom_client_urls,omitempty"`
+	CustomClientURLs []string `json:"custom_client_urls"`
+
+	// CustomClientURLsTruncated reports more custom URLs than were listed.
+	CustomClientURLsTruncated bool `json:"custom_client_urls_truncated"`
 
 	// OrganizationGatewayURL is the organization gateway, set when it signs
 	// users in through this issuer.
@@ -323,14 +326,9 @@ func (s *InboundEMATrustService) Get(ctx context.Context, principal Principal) (
 		if issuer == nil || issuer.ProjectID != "" {
 			continue
 		}
-		view, err := s.issuerState(ctx, issuer, gateway)
+		view, err := s.issuerState(ctx, principal.OrganizationID, issuer, gateway)
 		if err != nil {
 			return GetInboundEMATrustOutput{}, err
-		}
-		if admission.Mode(view.ClientIDMetadataAdmissionMode) == admission.ModePresets {
-			if view.CustomClientURLs, err = s.customClientURLs(ctx, principal.OrganizationID, issuer.ID); err != nil {
-				return GetInboundEMATrustOutput{}, err
-			}
 		}
 		output.Issuers = append(output.Issuers, view)
 	}
@@ -402,7 +400,7 @@ func (s *InboundEMATrustService) Trust(ctx context.Context, principal Principal,
 		if err != nil {
 			return TrustInboundEMAIdentityProviderOutput{}, err
 		}
-		output.Issuer, err = s.issuerState(ctx, current, gateway)
+		output.Issuer, err = s.issuerState(ctx, principal.OrganizationID, current, gateway)
 		if err != nil {
 			return TrustInboundEMAIdentityProviderOutput{}, err
 		}
@@ -433,7 +431,7 @@ func (s *InboundEMATrustService) Trust(ctx context.Context, principal Principal,
 	if err != nil {
 		return TrustInboundEMAIdentityProviderOutput{}, err
 	}
-	output.Issuer, err = s.issuerState(ctx, committed, gateway)
+	output.Issuer, err = s.issuerState(ctx, principal.OrganizationID, committed, gateway)
 	if err != nil {
 		return TrustInboundEMAIdentityProviderOutput{}, err
 	}
@@ -521,7 +519,7 @@ func (s *InboundEMATrustService) Untrust(ctx context.Context, principal Principa
 	if err != nil {
 		return UntrustInboundEMAIdentityProviderOutput{}, err
 	}
-	state, err := s.issuerState(ctx, current, gateway)
+	state, err := s.issuerState(ctx, principal.OrganizationID, current, gateway)
 	if err != nil {
 		return UntrustInboundEMAIdentityProviderOutput{}, err
 	}
@@ -543,7 +541,7 @@ func (s *InboundEMATrustService) Untrust(ctx context.Context, principal Principa
 	if err != nil {
 		return UntrustInboundEMAIdentityProviderOutput{}, err
 	}
-	output.Issuer, err = s.issuerState(ctx, committed, gateway)
+	output.Issuer, err = s.issuerState(ctx, principal.OrganizationID, committed, gateway)
 	if err != nil {
 		return UntrustInboundEMAIdentityProviderOutput{}, err
 	}
@@ -615,13 +613,20 @@ func (s *InboundEMATrustService) organizationGateway(ctx context.Context, princi
 	return gateway.servingIssuer(ctx, principal.OrganizationID)
 }
 
-func (s *InboundEMATrustService) issuerState(ctx context.Context, issuer *types.UserSessionIssuer, gateway organizationGatewayIssuer) (InboundEMAIssuer, error) {
+func (s *InboundEMATrustService) issuerState(ctx context.Context, organizationID string, issuer *types.UserSessionIssuer, gateway organizationGatewayIssuer) (InboundEMAIssuer, error) {
 	state := InboundEMAIssuer{
 		UserSessionIssuerID:           issuer.ID,
 		Slug:                          issuer.Slug,
 		AuthorizationServerMode:       issuer.AuthorizationServerMode,
 		FederatedBrowserSignIn:        issuer.TrustedRemoteSessionClientID != nil,
 		ClientIDMetadataAdmissionMode: issuer.ClientIDMetadataAdmissionMode,
+		CustomClientURLs:              []string{},
+	}
+	if admission.Mode(issuer.ClientIDMetadataAdmissionMode) == admission.ModePresets {
+		var err error
+		if state.CustomClientURLs, state.CustomClientURLsTruncated, err = s.customClientURLs(ctx, organizationID, issuer.ID); err != nil {
+			return InboundEMAIssuer{}, err
+		}
 	}
 	switch {
 	case authserver.Mode(issuer.AuthorizationServerMode) != authserver.ModeShared:
@@ -788,32 +793,42 @@ func inboundEMAPresetClients() []InboundEMAClient {
 	return clients
 }
 
-func (s *InboundEMATrustService) customClientURLs(ctx context.Context, organizationID, rawIssuerID string) ([]string, error) {
+// customClientURLs lists an issuer's custom URLs, reporting whether more
+// exist than clientAdmissionCustomURLLimit.
+func (s *InboundEMATrustService) customClientURLs(ctx context.Context, organizationID, rawIssuerID string) ([]string, bool, error) {
 	issuerID, err := uuid.Parse(rawIssuerID)
 	if err != nil {
-		return nil, fmt.Errorf("parse user session issuer id: %w", err)
+		return nil, false, fmt.Errorf("parse user session issuer id: %w", err)
 	}
 	rows, err := usersessionsrepo.New(s.db).ListOrganizationUserSessionIssuerCimdClientsByIssuerID(ctx, usersessionsrepo.ListOrganizationUserSessionIssuerCimdClientsByIssuerIDParams{
 		OrganizationID:      organizationID,
 		UserSessionIssuerID: issuerID,
 		Cursor:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		LimitValue:          clientAdmissionCustomURLLimit,
+		LimitValue:          clientAdmissionCustomURLLimit + 1,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list issuer custom client urls: %w", err)
+		return nil, false, fmt.Errorf("list issuer custom client urls: %w", err)
+	}
+	truncated := len(rows) > clientAdmissionCustomURLLimit
+	if truncated {
+		rows = rows[:clientAdmissionCustomURLLimit]
 	}
 	urls := make([]string, 0, len(rows))
 	for _, row := range rows {
 		urls = append(urls, row.ClientIDMetadataUri)
 	}
-	return urls, nil
+	return urls, truncated, nil
 }
 
-// inboundEMAAdmissionNote explains an admission mode that refuses every
-// accepted client, or is empty.
+// inboundEMAAdmissionNote explains what an issuer's admission mode means for
+// ID-JAG clients, or is empty when it admits any valid client.
 func inboundEMAAdmissionNote(issuer InboundEMAIssuer) string {
-	if admission.Mode(issuer.ClientIDMetadataAdmissionMode) != admission.ModeDisabled {
+	switch admission.Mode(issuer.ClientIDMetadataAdmissionMode) {
+	case admission.ModeDisabled:
+		return "Client ID metadata documents are disabled for this issuer, so ID-JAG sign-in cannot work until its admission mode is presets or open. Change it with the organizationUserSessionIssuers.updateIssuer management API (client_id_metadata_admission_mode); set_mcp_client_admission only changes project issuers."
+	case admission.ModePresets:
+		return "This issuer admits only listed clients: the client the identity provider issues ID-JAGs to must be in preset_clients or custom_client_urls."
+	default:
 		return ""
 	}
-	return "Client ID metadata documents are disabled for this issuer, so ID-JAG sign-in cannot work until admission is set to presets or open."
 }
