@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   cancelOrganizationFetches,
+  invalidateOrganizationDetails,
+  invalidateOrganizationStats,
   invalidateOrganizations,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import {
   errorMessage,
+  GramAdminError,
   setAdoptionDashboardUrl,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -23,20 +26,23 @@ export function AdoptionDashboardLink({
   org: AdminOrganization;
 }): JSX.Element {
   const qc = useQueryClient();
-  const { announce, showFailure } = useWriteReport();
-  const inputID = useId();
+  const { announce } = useWriteReport();
   const messageID = useId();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(org.adoption_dashboard_url ?? "");
+  // A problem with the link itself marks the field invalid; a failed save
+  // does not, because the link may be fine and only needs a retry.
   const [problem, setProblem] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: setAdoptionDashboardUrl,
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (updated) => {
       writeOrganizationToCache(qc, updated);
-      void invalidateOrganizations(qc);
-      showFailure(null);
+      // The link is not on list rows or in the stats, so only the detail
+      // record needs to be read again.
+      invalidateOrganizationDetails(qc, updated);
       announce(
         updated.adoption_dashboard_url
           ? "Adoption dashboard link saved"
@@ -45,15 +51,28 @@ export function AdoptionDashboardLink({
       setEditing(false);
     },
     onError: (error) => {
+      // onMutate cancelled in-flight organization reads; restart them. When
+      // the write may have landed anyway, refetch the records so a server-side
+      // success is not hidden behind the stale cached link.
+      invalidateOrganizationStats(qc);
+      if (
+        !(error instanceof GramAdminError) ||
+        error.status === 404 ||
+        error.status === 409 ||
+        error.status >= 500
+      ) {
+        void invalidateOrganizations(qc);
+      }
       const text = `Couldn't save the adoption dashboard link: ${errorMessage(error)}`;
       announce(text);
-      setProblem(text);
+      setSaveError(text);
     },
   });
 
   const startEditing = () => {
     setDraft(org.adoption_dashboard_url ?? "");
     setProblem(null);
+    setSaveError(null);
     setEditing(true);
   };
 
@@ -61,6 +80,7 @@ export function AdoptionDashboardLink({
     event.preventDefault();
     const found = adoptionDashboardUrlProblem(draft);
     setProblem(found);
+    setSaveError(null);
     if (found) {
       return;
     }
@@ -73,13 +93,13 @@ export function AdoptionDashboardLink({
   if (editing) {
     return (
       <form
+        noValidate
         onSubmit={onSubmit}
         className="flex flex-col gap-1.5"
         aria-label="Adoption Dashboard Link"
       >
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            id={inputID}
             type="url"
             inputMode="url"
             autoFocus
@@ -87,7 +107,7 @@ export function AdoptionDashboardLink({
             placeholder="https://claude.ai/artifact/…"
             aria-label="Adoption Dashboard Link"
             aria-invalid={problem ? true : undefined}
-            aria-describedby={problem ? messageID : undefined}
+            aria-describedby={problem || saveError ? messageID : undefined}
             disabled={mutation.isPending}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -110,9 +130,9 @@ export function AdoptionDashboardLink({
             Cancel
           </Button>
         </div>
-        {problem ? (
+        {problem || saveError ? (
           <p id={messageID} className="text-destructive text-xs">
-            {problem}
+            {problem ?? saveError}
           </p>
         ) : (
           <p className="text-muted-foreground text-xs">

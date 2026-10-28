@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
@@ -18,7 +19,9 @@ import (
 const maxAdoptionDashboardURLLength = 2048
 
 // normalizeAdoptionDashboardURL returns nil for an empty value, which clears
-// the link, and otherwise requires an absolute https URL.
+// the link, and otherwise requires an absolute https URL with a host. The
+// length limit counts characters, matching the API's MaxLength and the
+// database's char_length check.
 func normalizeAdoptionDashboardURL(raw *string) (*string, error) {
 	if raw == nil {
 		return nil, nil
@@ -27,11 +30,11 @@ func normalizeAdoptionDashboardURL(raw *string) (*string, error) {
 	if value == "" {
 		return nil, nil
 	}
-	if len(value) > maxAdoptionDashboardURLLength {
+	if utf8.RuneCountInString(value) > maxAdoptionDashboardURLLength {
 		return nil, oops.E(oops.CodeBadRequest, nil, "adoption dashboard URL must be at most 2048 characters")
 	}
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "adoption dashboard URL must be an https URL")
 	}
 	return &value, nil

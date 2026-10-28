@@ -65,6 +65,10 @@ func TestSetAdoptionDashboardURL_RejectsNonHTTPS(t *testing.T) {
 		"javascript:alert(1)",
 		"claude.ai/artifact/example",
 		"https://user:pass@claude.ai/artifact/example",
+		"https://:443",
+		"https://:443/path",
+		"https:example.com",
+		"https:/example.com",
 		"https://" + strings.Repeat("a", maxAdoptionDashboardURLLength),
 	} {
 		_, err := svc.SetAdoptionDashboardURL(ctx, &gen.SetAdoptionDashboardURLPayload{
@@ -73,6 +77,31 @@ func TestSetAdoptionDashboardURL_RejectsNonHTTPS(t *testing.T) {
 		})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
+}
+
+func TestSetAdoptionDashboardURL_LengthCountsCharacters(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_adopt_long", name: "Long Co", slug: "long-co", whitelisted: true})
+
+	// 2048 two-byte characters: over the limit in bytes, at the limit in
+	// characters, and accepted by the database's char_length check.
+	prefix := "https://example.com/"
+	link := prefix + strings.Repeat("é", maxAdoptionDashboardURLLength-len(prefix))
+	res, err := svc.SetAdoptionDashboardURL(ctx, &gen.SetAdoptionDashboardURLPayload{
+		OrganizationID:       "org_adopt_long",
+		AdoptionDashboardURL: conv.PtrEmpty(link),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res.AdoptionDashboardURL)
+	require.Equal(t, link, *res.AdoptionDashboardURL)
+
+	_, err = svc.SetAdoptionDashboardURL(ctx, &gen.SetAdoptionDashboardURLPayload{
+		OrganizationID:       "org_adopt_long",
+		AdoptionDashboardURL: conv.PtrEmpty(link + "é"),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestSetAdoptionDashboardURL_UnknownOrganization(t *testing.T) {

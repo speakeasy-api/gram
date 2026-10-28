@@ -35,6 +35,7 @@ import {
   MIN_TRIAL_REARM_DAYS,
   MIN_TRIAL_START_DAYS,
   resumeStripeSubscription,
+  setAdoptionDashboardUrl,
   setInferenceKeyMonthlyLimit,
   setStripeCustomer,
   toSearchParams,
@@ -376,6 +377,26 @@ describe("organization billing endpoints", () => {
           organization_id: "org_1",
           key_type: "internal",
           monthly_credits: 750,
+        }),
+      }),
+    );
+  });
+
+  it("posts the adoption dashboard link to the organization endpoint", async () => {
+    const fetch = stubFetch();
+
+    await setAdoptionDashboardUrl({
+      organization_id: "org_1",
+      adoption_dashboard_url: "https://example.com/adoption",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setAdoptionDashboardUrl",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          adoption_dashboard_url: "https://example.com/adoption",
         }),
       }),
     );
