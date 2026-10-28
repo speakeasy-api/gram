@@ -23655,6 +23655,7 @@ func marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigra
 		SelectionsComplete:       v.SelectionsComplete,
 		PendingSelectionMappings: v.PendingSelectionMappings,
 		PendingGrants:            v.PendingGrants,
+		AttachmentsWaiting:       v.AttachmentsWaiting,
 		SelectionGapCount:        v.SelectionGapCount,
 	}
 	if v.UnresolvedAssociations != nil {

@@ -2632,6 +2632,14 @@ FROM upstream_client_selections AS sel
 WHERE sel.organization_id = $1::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
+  -- A choice for a deleted server is kept as history but is never served
+  -- again, so it is not live coverage.
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_servers AS live_server
+    WHERE live_server.id = sel.mcp_server_id
+      AND live_server.deleted IS FALSE
+  )
   AND sel.id > $2::uuid
   AND ($3::uuid IS NULL OR sel.id = $3::uuid)
 ORDER BY sel.id
@@ -2663,9 +2671,9 @@ type ListSelectionMappingsRow struct {
 	EmaGatewayIssuerIds    []uuid.UUID
 }
 
-// Every live user session choice in the organization after the cursor, or the
-// one named by only_id, with what mapping it onto a typed auth client decides
-// from.
+// Every live user session choice for a live server in the organization after
+// the cursor, or the one named by only_id, with what mapping it onto a typed
+// auth client decides from.
 //
 // What the upstream client choice reads today (GetUpstreamClientSelection):
 // whether the server has any upstream OAuth client association, whether the
@@ -4941,6 +4949,15 @@ WHERE id = (SELECT remote_session_issuer_id FROM remote_session_clients WHERE re
 
 func (q *Queries) SoftDeleteIssuerOfClientFixture(ctx context.Context, clientID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeleteIssuerOfClientFixture, clientID)
+	return err
+}
+
+const softDeleteMCPServerFixture = `-- name: SoftDeleteMCPServerFixture :exec
+UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteMCPServerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteMCPServerFixture, id)
 	return err
 }
 

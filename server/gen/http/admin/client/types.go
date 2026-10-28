@@ -23616,6 +23616,9 @@ type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	// agents and API keys are missing, which a run adds. Enforcement needs them,
 	// so existing callers keep their access.
 	PendingGrants *int64 `form:"pending_grants,omitempty" json:"pending_grants,omitempty" xml:"pending_grants,omitempty"`
+	// Agent attachments whose grants a run does not write while the organization's
+	// upstream selector writes are not allowed. While any wait, complete is false.
+	AttachmentsWaiting *int64 `form:"attachments_waiting,omitempty" json:"attachments_waiting,omitempty" xml:"attachments_waiting,omitempty"`
 	// Credential choice coverage for each credential class.
 	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClassResponseBody `form:"selection_classes,omitempty" json:"selection_classes,omitempty" xml:"selection_classes,omitempty"`
 	// The first live credential choices left without a usable auth client.
