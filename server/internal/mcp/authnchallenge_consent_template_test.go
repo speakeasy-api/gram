@@ -1011,13 +1011,13 @@ func TestConsentTemplateDelegationReplacesActorChoice(t *testing.T) {
 	var page bytes.Buffer
 	require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
 		ClientName: "Example client", SubjectDisplay: "Example person", ConsentEnabled: true,
-		Delegation: &postLoginDelegationData{HasPreviousScopes: true, PreviousScopes: []string{"tools:read"}, Scopes: []delegationScope{{Name: "tools:read"}, {Name: "tools:write", Added: true}}, Options: []delegationOption{{ID: "example-agent", Name: "Example agent"}}},
+		Delegation: &postLoginDelegationData{HasPreviousScopes: true, PreviousScopes: []string{"tools:read"}, Scopes: []delegationScope{{Name: "tools:read"}, {Name: "tools:write", Added: true}}, Options: []delegationOption{{ID: "example-agent", Name: "Example agent", Scopes: []delegationScope{{Name: "tools:write", Added: true}}}}},
 	}))
 	html := page.String()
-	require.Contains(t, html, "Also give agents access (optional)")
+	require.Contains(t, html, "Grant access to agents")
 	require.Contains(t, html, "tools:write")
 	require.Contains(t, html, "· Added")
 	require.Contains(t, html, `data-approve-form`)
 	require.NotContains(t, html, `name="consent_actor"`)
-	require.NotContains(t, html, `checked`)
+	require.NotContains(t, html, `value="example-agent" data-binding-id="" checked`)
 }

@@ -300,6 +300,11 @@ type ChallengeManager struct {
 // RemoteGrant is a grant the remote login callback committed, keyed to the
 // consent challenge it belongs to.
 type RemoteGrant struct {
+	// ExpiresAt is the fixed deadline of the committed grant, if supplied.
+	ExpiresAt *time.Time `json:"expires_at"`
+	// PreviousExpiresAt is the previous grant's fixed deadline, if the provider supplied one.
+	PreviousExpiresAt *time.Time `json:"previous_expires_at"`
+
 	// Scopes is the effective scope set committed for this exact grant.
 	Scopes []string `json:"scopes"`
 	// PreviousScopes is the scope set immediately before this sign-in replaced it.
@@ -1895,6 +1900,8 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			Scopes:                 slices.Clone(storedSession.Scopes),
 			PreviousScopes:         slices.Clone(previous.Scopes),
 			PreviousGeneration:     previous.GrantGeneration,
+			PreviousExpiresAt:      remoteGrantDeadline(previous),
+			ExpiresAt:              remoteGrantDeadline(storedSession),
 			UpstreamDisplayName:    storedSession.UpstreamDisplayName.String,
 			UpstreamEmail:          storedSession.UpstreamEmail.String,
 			ConnectionPopup:        state.ConnectionPopup,
@@ -2321,3 +2328,18 @@ type tokenExchangeUnavailableError struct{ err error }
 
 func (e *tokenExchangeUnavailableError) Error() string { return e.err.Error() }
 func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }
+
+// remoteGrantDeadline excludes access-token expiry when a refresh token can renew it.
+func remoteGrantDeadline(session remotesessions_repo.RemoteSession) *time.Time {
+	var deadline *time.Time
+	candidates := []pgtype.Timestamptz{session.AuthorizationExpiresAt, session.RefreshExpiresAt}
+	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
+		candidates = append(candidates, session.AccessExpiresAt)
+	}
+	for _, candidate := range candidates {
+		if candidate.Valid && (deadline == nil || candidate.Time.Before(*deadline)) {
+			deadline = new(candidate.Time)
+		}
+	}
+	return deadline
+}

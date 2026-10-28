@@ -320,6 +320,9 @@ type remoteSessionCard struct {
 
 	// ConnectedAs is upstream-supplied text, rendered escaped as a secondary line.
 	ConnectedAs string
+
+	// Scopes contains permissions granted by the upstream connection.
+	Scopes []string
 	// AccountChips is upstream-supplied provider context (workspace, team, login), rendered escaped on its own line.
 	AccountChips []string
 	// IdentityCaveat qualifies ConnectedAs when it was not recorded as the grant's identity; rendered as a hover note.
@@ -380,6 +383,17 @@ type cardPanel struct {
 
 	// ShowDetails is whether the disclosure renders at all: any line above.
 	ShowDetails bool
+}
+
+// ScopeSummary keeps the connection's permissions compact while preserving exact scope names.
+func (c remoteSessionCard) ScopeSummary() string {
+	if len(c.Scopes) <= 2 {
+		return strings.Join(c.Scopes, ", ")
+	}
+	if len(c.Scopes) == 3 {
+		return strings.Join(c.Scopes[:2], ", ") + " & 1 other"
+	}
+	return fmt.Sprintf("%s & %d others", strings.Join(c.Scopes[:2], ", "), len(c.Scopes)-2)
 }
 
 // Panel decides the detail lines from the card's state.
@@ -1940,6 +1954,7 @@ func (s *Service) buildRemoteSessionCards(
 			AuthorizationExpiresIn: authorizationExpiresIn,
 			AutoRefreshChecked:     checked,
 			ConnectedAs:            state.ConnectedAs,
+			Scopes:                 state.Scopes,
 			AccountChips:           state.AccountChips,
 			IdentityCaveat:         state.IdentityCaveat,
 			TokenActive:            tokenActive,

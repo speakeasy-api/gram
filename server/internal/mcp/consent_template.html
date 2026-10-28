@@ -81,7 +81,7 @@
 
         {{if .Delegation}}
         <div data-delegation-form data-integrated-delegation data-action-url="{{.Delegation.ActionURL}}" class="border-b">
-          <h2 class="px-6 pt-6 text-sm font-semibold sm:px-8">Also give agents access (optional)</h2>
+          <h2 class="px-6 pt-6 text-sm font-semibold sm:px-8">Grant access to agents</h2>
           {{template "agentDelegationFields" .Delegation}}
           <p role="alert" data-delegation-error class="px-6 pb-4 text-sm sm:px-8" hidden></p>
         </div>
@@ -368,7 +368,16 @@
               </form>
 
               </div>
-              {{$panel := .Panel}} {{if $panel.ShowDetails}}
+              {{$panel := .Panel}} {{if .Scopes}}
+                <div class="mt-1 text-xs text-muted-foreground">
+                  Permissions: <button type="button" class="text-left underline underline-offset-4" popovertarget="connection-scopes-{{.ClientID}}" data-permission-details>{{.ScopeSummary}}</button>
+                  <div id="connection-scopes-{{.ClientID}}" popover class="bg-card text-foreground fixed m-0 max-h-64 w-80 overflow-y-auto border p-4 shadow-lg">
+                    <h3 class="text-sm font-semibold">Connection permissions</h3>
+                    <ul class="mt-2 space-y-1 text-xs">{{range .Scopes}}<li class="break-words font-mono">{{.}}</li>{{end}}</ul>
+                  </div>
+                </div>
+                {{end}}
+                {{if $panel.ShowDetails}}
                 {{/* The descriptive detail, collapsed by default; Panel decides
                 which lines a state shows. Native details keeps it
                 keyboard-reachable and working without the page script. */}}

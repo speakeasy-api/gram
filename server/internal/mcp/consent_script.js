@@ -20,6 +20,22 @@
 (function () {
   "use strict";
 
+  document
+    .querySelectorAll("[data-permission-details]")
+    .forEach(function (button) {
+      button.addEventListener("click", function () {
+        var popover = document.getElementById(
+          button.getAttribute("popovertarget"),
+        );
+        var rect = button.getBoundingClientRect();
+        popover.style.left =
+          Math.max(12, Math.min(rect.left, window.innerWidth - 332)) + "px";
+        popover.style.top =
+          Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 280)) +
+          "px";
+      });
+    });
+
   var delegationForm = document.querySelector("[data-delegation-form]");
   if (delegationForm) {
     var integratedDelegation = delegationForm.hasAttribute(
@@ -118,6 +134,7 @@
       skipButton.addEventListener("click", function () {
         finishDelegation(false);
       });
+    updateDelegationSelection();
     if (!integratedDelegation) return;
   }
 

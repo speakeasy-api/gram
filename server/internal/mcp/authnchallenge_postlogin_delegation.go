@@ -11,9 +11,9 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
-	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 //go:embed postlogin_delegation_template.html
@@ -36,6 +37,14 @@ type exactGrantDelegator interface {
 type delegationOption struct {
 	ID, Name, BindingID, Detail string
 	Disabled                    bool
+	Existing                    bool
+	Selected                    bool
+	Expiry                      string
+	ExpiryExact                 string
+	PermissionSummary           string
+	PreviousScopes              []string
+	Scopes                      []delegationScope
+	ComparisonKnown             bool
 }
 type delegationScope struct {
 	Name  string
@@ -81,10 +90,11 @@ func (s *Service) loadPostLoginDelegation(r *http.Request, endpoint *ResolvedMcp
 	if err != nil {
 		return nil, fmt.Errorf("list delegation agents: %w", err)
 	}
-	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(r.Context(), endpoint.OrganizationID)
+	client, err := remotesessionsrepo.New(s.db).GetRemoteSessionClientByID(r.Context(), remotesessionsrepo.GetRemoteSessionClientByIDParams{ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID, ID: state.PendingDelegation.RemoteSessionClientID})
 	if err != nil {
-		return nil, fmt.Errorf("load delegation organization: %w", err)
+		return nil, fmt.Errorf("load delegation connection type: %w", err)
 	}
+	sharedCredential := remotesessions.CredentialOwner(client.RemoteSessionClient.CredentialOwner) == remotesessions.CredentialOwnerSelf
 	options := make([]delegationOption, 0)
 	for _, agent := range candidates {
 		if !agent.ProjectID.Valid || agent.ProjectID.UUID != endpoint.ProjectID {
@@ -93,27 +103,51 @@ func (s *Service) loadPostLoginDelegation(r *http.Request, endpoint *ResolvedMcp
 		if agent.OwnerUserID != human.userID && !authz.GrantsSatisfy(human.grants, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
 			continue
 		}
-		ctx := consentBindingContext(r.Context(), endpoint, human.userID, agent.ID, organization.Slug)
-		bindings, err := s.consentBindings.ListBindings(ctx, &gen.ListBindingsPayload{SessionToken: nil, ProjectSlugInput: nil, PrincipalID: agent.ID.String(), UserSessionIssuerID: endpoint.UserSessionIssuerID.String()})
+		bindings, err := remotesessionsrepo.New(s.db).ListPrincipalRemoteSessionBindings(r.Context(), remotesessionsrepo.ListPrincipalRemoteSessionBindingsParams{ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: endpoint.UserSessionIssuerID})
 		if err != nil {
 			return nil, fmt.Errorf("load agent assignments: %w", err)
 		}
-		option := delegationOption{ID: agent.ID.String(), Name: agent.Name, BindingID: "", Detail: "Give this agent access to your new connection", Disabled: false}
-		for _, binding := range bindings.Items {
-			if binding.RemoteSessionClientID != state.PendingDelegation.RemoteSessionClientID.String() {
+		option := delegationOption{ID: agent.ID.String(), Name: agent.Name, BindingID: "", Detail: "New connection", Disabled: false, Existing: false, Selected: false, Expiry: "", ExpiryExact: "", PermissionSummary: "", PreviousScopes: nil, Scopes: nil, ComparisonKnown: true}
+		for _, binding := range bindings {
+			if binding.RemoteSessionClientID != state.PendingDelegation.RemoteSessionClientID {
 				continue
 			}
-			option.BindingID = binding.ID
-			if binding.RemoteSessionID != state.PendingDelegation.RemoteSessionID.String() {
+			option.BindingID = binding.ID.String()
+			if binding.RemoteSessionID != state.PendingDelegation.RemoteSessionID {
 				option.Disabled = true
-				option.Detail = "Another connection is assigned. Manage replacements in the agent editor."
-			} else if binding.RemoteSession != nil {
+				option.Detail = "Another user's connection"
+				if binding.SubjectDisplayName.Valid && binding.SubjectDisplayName.String != "" {
+					option.Detail = binding.SubjectDisplayName.String + "'s connection"
+				} else if binding.SubjectEmail.Valid && binding.SubjectEmail.String != "" {
+					option.Detail = "Connection granted by " + binding.SubjectEmail.String
+				}
+			} else if binding.GrantGeneration == state.PendingDelegation.GrantGeneration {
+				option.Existing = true
+				option.Selected = true
+				option.PreviousScopes = state.PendingDelegation.Scopes
+				option.Expiry, option.ExpiryExact = delegationExpiry(state.PendingDelegation.ExpiresAt, time.Now())
 				option.Disabled = true
 				option.Detail = "Already using this connection"
 			} else {
-				option.Detail = "Renew this agent's previous connection"
+				option.Existing = true
+				option.Selected = true
+				option.Detail = "Your connection"
+				option.ComparisonKnown = binding.GrantGeneration == state.PendingDelegation.PreviousGeneration
+				if option.ComparisonKnown {
+					option.PreviousScopes = state.PendingDelegation.PreviousScopes
+					option.Expiry, option.ExpiryExact = delegationExpiry(state.PendingDelegation.PreviousExpiresAt, time.Now())
+				} else {
+					option.Expiry = "Previous expiry unavailable"
+				}
 			}
 		}
+		if sharedCredential {
+			option.Detail = "Shared credential"
+			option.Existing = false
+			option.Selected = false
+			option.Disabled = true
+		}
+		describeDelegationPermissions(&option, state.PendingDelegation.Scopes)
 		options = append(options, option)
 	}
 	sort.SliceStable(options, func(i, j int) bool {
@@ -219,4 +253,49 @@ func (s *Service) servePostLoginDelegationAction(w http.ResponseWriter, r *http.
 		return fmt.Errorf("write delegation result: %w", err)
 	}
 	return nil
+}
+
+func delegationExpiry(deadline *time.Time, now time.Time) (string, string) {
+	if deadline == nil {
+		return "Never expires", "No fixed expiration"
+	}
+	exact := deadline.UTC().Format("2 Jan 2006 at 15:04 UTC")
+	if !deadline.After(now) {
+		return "Expired", exact
+	}
+	hours := int(deadline.Sub(now).Hours())
+	if hours < 1 {
+		return "Expires in less than 1 hour", exact
+	}
+	if hours == 1 {
+		return "Expires in 1 hour", exact
+	}
+	if hours < 24 {
+		return fmt.Sprintf("Expires in %d hours", hours), exact
+	}
+	if hours < 48 {
+		return "Expires in 1 day", exact
+	}
+	return fmt.Sprintf("Expires in %d days", hours/24), exact
+}
+
+func describeDelegationPermissions(option *delegationOption, scopes []string) {
+	added := 0
+	for _, scope := range scopes {
+		isAdded := option.ComparisonKnown && !slices.Contains(option.PreviousScopes, scope)
+		if isAdded {
+			added++
+		}
+		option.Scopes = append(option.Scopes, delegationScope{Name: scope, Added: isAdded})
+	}
+	switch {
+	case !option.ComparisonKnown:
+		option.PermissionSummary = "Review permissions"
+	case added == 1:
+		option.PermissionSummary = "Grant 1 extra permission"
+	case added > 1:
+		option.PermissionSummary = fmt.Sprintf("Grant %d extra permissions", added)
+	default:
+		option.PermissionSummary = "No extra permissions"
+	}
 }

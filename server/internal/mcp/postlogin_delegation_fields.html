@@ -1,11 +1,22 @@
+{{define "delegationAgentRow"}}
+<li class="has-[:checked]:bg-accent flex items-start gap-3 border-t px-6 py-4 sm:px-8">
+  <label class="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+    <input class="mt-1 shrink-0" type="checkbox" name="agent_id" value="{{.ID}}" data-binding-id="{{.BindingID}}" {{if .Selected}}checked{{end}} {{if .Disabled}}disabled{{end}} />
+    <span class="min-w-0"><span class="block text-sm font-medium">{{.Name}}</span><span class="mt-1 block text-xs text-muted-foreground">{{.Detail}}{{if .Expiry}} · {{.Expiry}}{{end}}</span></span>
+  </label>
+  {{if not .Disabled}}<button type="button" class="shrink-0 text-xs underline underline-offset-4" popovertarget="permissions-{{.ID}}" data-permission-details>{{.PermissionSummary}}</button>{{end}}
+  <div id="permissions-{{.ID}}" popover class="bg-card text-foreground fixed m-0 w-80 border p-4 shadow-lg">
+    <h3 class="text-sm font-semibold">{{.Name}}</h3>
+    {{if .ExpiryExact}}<p class="mt-2 text-xs text-muted-foreground">Previous connection: {{.ExpiryExact}}</p>{{end}}
+    {{if .ComparisonKnown}}<p class="mt-3 text-xs font-medium">Previous permissions</p><p class="mt-1 break-words font-mono text-xs">{{range .PreviousScopes}}{{.}} {{else}}None{{end}}</p>{{else}}<p class="mt-3 text-xs text-muted-foreground">The scopes for this agent's older assignment are unavailable. Review all permissions before renewing.</p>{{end}}
+    <p class="mt-3 text-xs font-medium">Permissions after approval</p>
+    <ul class="mt-1 space-y-1 text-xs">{{range .Scopes}}<li class="break-words font-mono">{{.Name}}{{if .Added}} <span class="font-sans font-semibold">· Added</span>{{end}}</li>{{else}}<li>No named scopes reported</li>{{end}}</ul>
+  </div>
+</li>
+{{end}}
 {{define "agentDelegationFields"}}
-<div class="border-b px-6 py-6 sm:px-8"><p class="text-sm font-semibold">New upstream account</p><p class="mt-2 text-sm">{{if .AccountName}}{{.AccountName}}{{else}}The provider did not share an account name{{end}}</p>{{if .AccountEmail}}<p class="text-sm text-muted-foreground">{{.AccountEmail}}</p>{{end}}</div>
-<div class="border-b px-6 py-6 sm:px-8"><h2 class="text-sm font-semibold">Upstream permissions</h2>
-{{if .HasPreviousScopes}}<p class="mt-3 text-sm text-muted-foreground">Previous connection</p><ul class="mt-2 flex flex-wrap gap-2">{{range .PreviousScopes}}<li class="border px-2 py-1 font-mono text-xs">{{.}}</li>{{else}}<li class="text-sm text-muted-foreground">No scopes recorded</li>{{end}}</ul>{{end}}
-<p class="mt-3 text-sm text-muted-foreground">New connection</p><ul class="mt-2 flex flex-wrap gap-2">{{range .Scopes}}<li class="border px-2 py-1 font-mono text-xs {{if .Added}}bg-accent font-semibold{{end}}">{{.Name}}{{if .Added}} <span class="font-sans">· Added</span>{{end}}</li>{{else}}<li class="text-sm text-muted-foreground">No scopes recorded</li>{{end}}</ul>
-<p class="mt-3 text-sm text-muted-foreground">Selected agents receive the new connection's permissions.</p></div>
+<div class="px-6 py-4 sm:px-8"><p class="text-sm">{{if .AccountName}}{{.AccountName}}{{else}}Your upstream account{{end}}{{if .AccountEmail}} <span class="text-xs text-muted-foreground">({{.AccountEmail}})</span>{{end}}</p><p class="mt-1 text-xs text-muted-foreground">Agents already using your connection are selected. Changes apply when you approve.</p></div>
 <input type="hidden" name="state" value="{{.State}}"/><input type="hidden" name="csrf_token" value="{{.CSRF}}"/><input type="hidden" name="remote_session_id" value="{{.SessionID}}"/><input type="hidden" name="grant_generation" value="{{.Generation}}"/>
-<div class="px-6 py-6 sm:px-8"><h2 class="text-sm font-semibold">Choose agents</h2><p class="mt-2 text-sm text-muted-foreground">Nothing is selected automatically. Existing assignments are kept unless you choose to renew your own.</p></div>
-<ul class="m-0 max-h-64 list-none overflow-y-auto p-0">{{range .Options}}<li class="border-t"><label class="flex items-start gap-3 px-6 py-4 sm:px-8"><input type="checkbox" name="agent_id" value="{{.ID}}" data-binding-id="{{.BindingID}}" {{if .Disabled}}disabled{{end}}/><span><span class="text-sm font-semibold">{{.Name}}</span><span class="mt-2 block text-sm text-muted-foreground">{{.Detail}}</span></span></label></li>{{end}}</ul>
-
+<ul class="m-0 list-none p-0">{{range .Options}}{{if .Existing}}{{template "delegationAgentRow" .}}{{end}}{{end}}</ul>
+<details class="border-t"><summary class="cursor-pointer px-6 py-3 text-sm sm:px-8">Add other agents</summary><ul class="m-0 max-h-64 list-none overflow-y-auto p-0">{{range .Options}}{{if not .Existing}}{{template "delegationAgentRow" .}}{{end}}{{end}}</ul></details>
 {{end}}
