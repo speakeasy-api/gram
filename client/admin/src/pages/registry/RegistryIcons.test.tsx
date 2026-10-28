@@ -46,7 +46,7 @@ function Harness({
   );
 }
 function select(name = "Upload primary logo") {
-  fireEvent.change(screen.getByLabelText(name), {
+  fireEvent.change(screen.getByLabelText(`${name} file`), {
     target: {
       files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
     },
@@ -86,7 +86,7 @@ it("uploads only accepted assets and locks concurrent actions", async () => {
   render(<Harness initial="{}" />);
   select();
   expect(
-    (screen.getByLabelText("Upload dark-mode logo") as HTMLInputElement)
+    (screen.getByLabelText("Upload dark-mode logo file") as HTMLInputElement)
       .disabled,
   ).toBe(true);
   expect(screen.queryAllByRole("img")).toHaveLength(0);
@@ -144,14 +144,15 @@ it("preserves prior draft on rejection and ignores late completion after close",
 it("disables writes for invalid JSON or parent busy state", () => {
   const view = render(<Harness disabled />);
   expect(
-    (screen.getByLabelText("Replace primary logo") as HTMLInputElement)
+    (screen.getByLabelText("Replace primary logo file") as HTMLInputElement)
       .disabled,
   ).toBe(true);
   view.unmount();
   render(<Harness initial="{" />);
   expect(screen.getByText("Fix the JSON before editing icons.")).toBeTruthy();
   expect(
-    (screen.getByLabelText("Upload primary logo") as HTMLInputElement).disabled,
+    (screen.getByLabelText("Upload primary logo file") as HTMLInputElement)
+      .disabled,
   ).toBe(true);
 });
 it("never previews raw SVG data or blob URLs from JSON", () => {
@@ -189,3 +190,15 @@ it.each([
     );
   },
 );
+
+it("opens hidden file pickers from the styled upload and replace buttons", () => {
+  render(<Harness />);
+  for (const name of ["Replace primary logo", "Upload dark-mode logo"]) {
+    const input = screen.getByLabelText(`${name} file`) as HTMLInputElement;
+    expect(input.hidden).toBe(true);
+    const click = vi.spyOn(input, "click").mockImplementation(() => {});
+    fireEvent.click(screen.getByRole("button", { name }));
+    expect(click).toHaveBeenCalledOnce();
+    click.mockRestore();
+  }
+});

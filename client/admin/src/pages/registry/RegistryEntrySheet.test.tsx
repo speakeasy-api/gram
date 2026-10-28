@@ -657,7 +657,7 @@ it("locks JSON and Save during upload and saves icons with the same draft after 
   const editor = (await screen.findByLabelText(
     "Record JSON",
   )) as HTMLTextAreaElement;
-  fireEvent.change(screen.getByLabelText("Upload primary logo"), {
+  fireEvent.change(screen.getByLabelText("Upload primary logo file"), {
     target: {
       files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
     },
@@ -675,17 +675,20 @@ it("locks JSON and Save during upload and saves icons with the same draft after 
   );
   const draft = editor.value;
   expect(draft).toContain("9007199254740993");
-  expect(draft).toContain("com.speakeasy.ai/icons");
-  expect(JSON.parse(draft)._meta["com.speakeasy.ai/icons"].default.src).toBe(
-    "https://public.example.test/rpc/assets.serveImage?id=accepted",
+  expect(draft).not.toContain("com.speakeasy.ai/icons");
+  expect(screen.getByAltText("Light preview").getAttribute("src")).toContain(
+    "id=accepted",
   );
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByText("Temporary save failure");
   expect(editor.value).toBe(draft);
-  mutations.save.mockResolvedValueOnce({ ...entry, dataJson: draft });
+  const fullDraft = mutations.save.mock.calls[0]![0].request.dataJson;
+  expect(fullDraft).toContain("9007199254740993");
+  expect(fullDraft).toContain("com.speakeasy.ai/icons");
+  mutations.save.mockResolvedValueOnce({ ...entry, dataJson: fullDraft });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(mutations.save).toHaveBeenCalledTimes(2));
-  expect(mutations.save.mock.calls[1]![0].request.dataJson).toBe(draft);
+  expect(mutations.save.mock.calls[1]![0].request.dataJson).toBe(fullDraft);
 });
 
 it("retains icon draft on conflict and keeps Save locked until reload", async () => {
@@ -700,7 +703,7 @@ it("retains icon draft on conflict and keeps Save locked until reload", async ()
   const editor = (await screen.findByLabelText(
     "Record JSON",
   )) as HTMLTextAreaElement;
-  fireEvent.change(screen.getByLabelText("Upload primary logo"), {
+  fireEvent.change(screen.getByLabelText("Upload primary logo file"), {
     target: {
       files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
     },
@@ -714,4 +717,127 @@ it("retains icon draft on conflict and keeps Save locked until reload", async ()
     (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
       .disabled,
   ).toBe(true);
+});
+
+const managedRecord =
+  '{"server":{"name":"example.test/demo"},"future":9007199254740993,"_meta":{"com.speakeasy.ai/icons":{"default":{"src":"https://public.example.test/rpc/assets.serveImage?id=existing","mimeType":"image/svg+xml","sizes":["any"]}},"com.speakeasy.ai/registry":{"published":false,"future":9007199254740995},"com.speakeasy.ai/catalog":{"name":"editable"}}}';
+
+it("hides managed namespaces, keeps them when _meta is removed, and accepts a clean save", async () => {
+  client.setQueryData(registryEntryQuery(id).queryKey, {
+    ...entry,
+    dataJson: managedRecord,
+  });
+  mutations.save.mockImplementation(async ({ request }) => ({
+    ...entry,
+    dataJson: request.dataJson,
+  }));
+  await mount();
+  const editor = (await screen.findByLabelText(
+    "Record JSON",
+  )) as HTMLTextAreaElement;
+  expect(editor.value).not.toContain("com.speakeasy.ai/icons");
+  expect(editor.value).not.toContain("com.speakeasy.ai/registry");
+  expect(editor.value).toContain("com.speakeasy.ai/catalog");
+  expect(
+    screen.getByText("Icons and publication metadata are managed separately."),
+  ).toBeTruthy();
+  fireEvent.change(editor, {
+    target: {
+      value:
+        '{"server":{"name":"example.test/demo"},"future":9007199254740993}',
+    },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.save).toHaveBeenCalledOnce());
+  const saved = mutations.save.mock.calls[0]![0].request.dataJson;
+  expect(saved).toContain("id=existing");
+  expect(saved).toContain("9007199254740993");
+  expect(saved).toContain("9007199254740995");
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true),
+  );
+  expect(editor.value).not.toContain("com.speakeasy.ai/registry");
+});
+
+it.each(["com.speakeasy.ai/icons", "com.speakeasy.ai/registry"])(
+  "blocks reintroduced %s with actionable feedback",
+  async (key) => {
+    await mount();
+    const editor = await screen.findByLabelText("Record JSON");
+    fireEvent.change(editor, {
+      target: {
+        value: `{"server":{"name":"example.test/demo"},"_meta":{"${key}":{}}}`,
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      `Remove ${key} from Record JSON.`,
+    );
+    expect(mutations.save).not.toHaveBeenCalled();
+  },
+);
+
+it("removes an icon only through the shared explicit Save", async () => {
+  client.setQueryData(registryEntryQuery(id).queryKey, {
+    ...entry,
+    dataJson: managedRecord,
+  });
+  mutations.save.mockImplementation(async ({ request }) => ({
+    ...entry,
+    dataJson: request.dataJson,
+  }));
+  await mount();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Remove primary logo" }),
+  );
+  expect(mutations.save).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.save).toHaveBeenCalledOnce());
+  const saved = mutations.save.mock.calls[0]![0].request.dataJson;
+  expect(saved).not.toContain("id=existing");
+  expect(saved).toContain("com.speakeasy.ai/registry");
+  expect(saved).toContain("9007199254740995");
+});
+
+it("creates with an uploaded icon without exposing managed JSON", async () => {
+  mutations.upload.mockResolvedValue({
+    url: "https://public.example.test/rpc/assets.serveImage?id=new",
+    asset: { id: "new", contentType: "image/svg+xml" },
+  });
+  mutations.create.mockImplementation(async ({ request }) => ({
+    ...entry,
+    dataJson: request.dataJson,
+  }));
+  await renderWithApp(
+    <RegistryEntrySheet
+      id={null}
+      open
+      onOpenChange={vi.fn<(open: boolean) => void>()}
+    />,
+    { queryClient: client },
+  );
+  const editor = (await screen.findByLabelText(
+    "Record JSON",
+  )) as HTMLTextAreaElement;
+  fireEvent.change(editor, {
+    target: {
+      value: '{"server":{"name":"example.test/new"},"future":9007199254740993}',
+    },
+  });
+  fireEvent.change(screen.getByLabelText("Upload primary logo file"), {
+    target: {
+      files: [new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })],
+    },
+  });
+  await screen.findByAltText("Light preview");
+  expect(editor.value).not.toContain("com.speakeasy.ai/icons");
+  expect(mutations.create).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(mutations.create).toHaveBeenCalledOnce());
+  const saved = mutations.create.mock.calls[0]![0].request.dataJson;
+  expect(saved).toContain("id=new");
+  expect(saved).toContain("9007199254740993");
 });

@@ -200,7 +200,7 @@ func canonicalPlatformImage(data []byte, contentType string) ([]byte, string, er
 	if mediaType == "image/svg+xml" || strings.HasPrefix(candidate, "<") {
 		clean, err := sanitizeSVG(data)
 		if err != nil {
-			return nil, "", oops.E(oops.CodeUnsupportedMedia, err, "invalid SVG image")
+			return nil, "", oops.E(oops.CodeUnsupportedMedia, err, staticSVGGuidance)
 		}
 		return clean, "image/svg+xml", nil
 	}

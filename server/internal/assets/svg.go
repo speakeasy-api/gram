@@ -21,9 +21,15 @@ var svgElements = map[string]bool{
 	"svg": true, "g": true, "path": true, "rect": true,
 	"circle": true, "ellipse": true, "line": true,
 	"polyline": true, "polygon": true, "title": true, "desc": true,
+	"defs": true, "clipPath": true,
 }
 
-var errStaticSVG = errors.New("Upload a static SVG using paths and basic shapes; styles, links, and embedded content are not supported.")
+const staticSVGGuidance = "Upload a static SVG using paths, basic shapes, and local clip paths. Remove styles, links, scripts, and embedded content."
+
+var errStaticSVG = errors.New(staticSVGGuidance)
+var svgClipID = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
+var svgClipReference = regexp.MustCompile(`^url\(#[A-Za-z_][A-Za-z0-9_-]*\)$`)
+
 var svgNumber = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?`)
 var svgColor = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
 var svgDeclaration = regexp.MustCompile(`^version\s*=\s*(?:"1\.0"|'1\.0')(?:\s+encoding\s*=\s*(?:"UTF-8"|'UTF-8'))?(?:\s+standalone\s*=\s*(?:"(?:yes|no)"|'(?:yes|no)'))?\s*$`)
@@ -49,6 +55,11 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 	encoder := xml.NewEncoder(&output)
 	var stack []string
 	rooted := false
+	clipIDs := map[string]bool{}
+	clipReferences := map[string]bool{}
+	inClip := false
+	clipShapes := 0
+	defsStartCount := 0
 	for count := 0; ; count++ {
 		token, err := decoder.Token()
 		if err == io.EOF {
@@ -71,6 +82,27 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 			} else if name == "svg" || stack[len(stack)-1] == "title" || stack[len(stack)-1] == "desc" {
 				return nil, errStaticSVG
 			}
+			parent := ""
+			if len(stack) > 0 {
+				parent = stack[len(stack)-1]
+			}
+			// Only root-level definitions and direct, leaf shapes are supported.
+			if (name == "defs" && parent != "svg") ||
+				(name == "clipPath" && parent != "defs") ||
+				(parent == "defs" && name != "clipPath") ||
+				(inClip && (parent != "clipPath" || !svgStaticShape(name))) {
+				return nil, errStaticSVG
+			}
+			if name == "defs" {
+				defsStartCount = len(clipIDs)
+			}
+			if inClip {
+				clipShapes++
+			}
+			if name == "clipPath" {
+				inClip = true
+				clipShapes = 0
+			}
 			attrs := make([]xml.Attr, 0, len(t.Attr)+1)
 			if len(stack) == 0 {
 				attrs = append(attrs, xml.Attr{Name: xml.Name{Local: "xmlns"}, Value: svgNamespace})
@@ -90,12 +122,36 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 				if a.Name.Space != "" || !validSVGAttribute(name, a.Name.Local, a.Value) {
 					return nil, errStaticSVG
 				}
+				if a.Name.Local == "id" {
+					if clipIDs[a.Value] {
+						return nil, errStaticSVG
+					}
+					clipIDs[a.Value] = true
+				}
+				if a.Name.Local == "clip-path" {
+					if inClip {
+						return nil, errStaticSVG
+					}
+					clipReferences[a.Value[5:len(a.Value)-1]] = true
+				}
 				attrs = append(attrs, a)
+			}
+			if name == "clipPath" && !seen[xml.Name{Local: "id"}] {
+				return nil, errStaticSVG
 			}
 			stack = append(stack, name)
 			token = xml.StartElement{Name: xml.Name{Local: name}, Attr: attrs}
 		case xml.EndElement:
 			if len(stack) == 0 {
+				return nil, errStaticSVG
+			}
+			if t.Name.Local == "clipPath" {
+				if clipShapes == 0 {
+					return nil, errStaticSVG
+				}
+				inClip = false
+			}
+			if t.Name.Local == "defs" && len(clipIDs) == defsStartCount {
 				return nil, errStaticSVG
 			}
 			stack = stack[:len(stack)-1]
@@ -123,6 +179,12 @@ func sanitizeSVG(data []byte) ([]byte, error) {
 	}
 	if !rooted || len(stack) != 0 {
 		return nil, errStaticSVG
+	}
+	// Resolve after parsing to allow forward references, but only to clipPath IDs.
+	for id := range clipReferences {
+		if !clipIDs[id] {
+			return nil, errStaticSVG
+		}
 	}
 	if err := encoder.Flush(); err != nil {
 		return nil, errStaticSVG
@@ -157,7 +219,25 @@ func svgNumbers(s string, path bool) ([]float64, bool) {
 	return values, true
 }
 
+func svgStaticShape(name string) bool {
+	switch name {
+	case "path", "rect", "circle", "ellipse", "line", "polyline", "polygon":
+		return true
+	default:
+		return false
+	}
+}
+
 func validSVGAttribute(element, name, value string) bool {
+	if element == "defs" {
+		return false
+	}
+	if element == "clipPath" {
+		return name == "id" && svgClipID.MatchString(value)
+	}
+	if name == "clip-path" {
+		return (element == "g" || svgStaticShape(element)) && svgClipReference.MatchString(value)
+	}
 	value = strings.TrimSpace(value)
 	switch name {
 	case "fill", "stroke":

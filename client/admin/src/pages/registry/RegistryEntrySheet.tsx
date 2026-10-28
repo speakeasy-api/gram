@@ -1,4 +1,9 @@
 import { lazy, Suspense, useRef, useState, type JSX } from "react";
+import {
+  splitManagedMetadata,
+  mergeManagedMetadata,
+  managedMetadataIssues,
+} from "./registryManagedMetadata";
 import { RegistryIcons } from "./RegistryIcons.tsx";
 import { RegistryOktaCandidates } from "./RegistryOktaCandidates";
 import { addOinName } from "./registryOktaNames";
@@ -68,6 +73,8 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
   const save = useSaveRegistryEntryMutation();
   const visibility = useSetRegistryEntryPublishedMutation();
   const [baseline, setBaseline] = useState(EMPTY);
+  const [managed, setManaged] = useState("{}");
+  const [managedBaseline, setManagedBaseline] = useState("{}");
   const [text, setText] = useState(id ? "" : EMPTY);
   const [serverIssues, setServerIssues] = useState<ValidationIssue[]>([]);
   const [edited, setEdited] = useState(false);
@@ -81,14 +88,16 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
   const opener = useRef(document.activeElement as HTMLElement | null);
   if (id && !base && detail.data) {
     setBase(detail.data);
-    const formatted =
-      formatRegistryJson(detail.data.dataJson) ?? detail.data.dataJson;
+    const split = splitManagedMetadata(detail.data.dataJson);
+    const formatted = formatRegistryJson(split.text) ?? split.text;
+    setManaged(split.managed);
+    setManagedBaseline(split.managed);
     setBaseline(formatted);
     setText(formatted);
   }
 
   const loaded = id === null || base !== null;
-  const dirty = loaded && text !== baseline;
+  const dirty = loaded && (text !== baseline || managed !== managedBaseline);
   useBlocker({
     shouldBlockFn: () =>
       busy || (dirty && !window.confirm("Discard unsaved registry edits?")),
@@ -109,7 +118,10 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
     });
     queryClient.setQueryData(registryEntryQuery(entry.id).queryKey, entry);
     setBase(entry);
-    const formatted = formatRegistryJson(entry.dataJson) ?? entry.dataJson;
+    const split = splitManagedMetadata(entry.dataJson);
+    const formatted = formatRegistryJson(split.text) ?? split.text;
+    setManaged(split.managed);
+    setManagedBaseline(split.managed);
     setBaseline(formatted);
     setText(formatted);
     setIssues([]);
@@ -132,7 +144,10 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
   ): Promise<void> => {
     if (inFlight.current || iconInFlight.current) return;
     if (kind === "save") {
-      const checked = validateRegistryText(text, base ?? undefined);
+      const checked = [
+        ...validateRegistryText(text, base ?? undefined),
+        ...managedMetadataIssues(text),
+      ];
       setIssues(checked);
       if (checked.length > 0) return;
     }
@@ -153,8 +168,10 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
         if (result.error) throw result.error;
         if (result.data) {
           setBase(result.data);
-          const formatted =
-            formatRegistryJson(result.data.dataJson) ?? result.data.dataJson;
+          const split = splitManagedMetadata(result.data.dataJson);
+          const formatted = formatRegistryJson(split.text) ?? split.text;
+          setManaged(split.managed);
+          setManagedBaseline(split.managed);
           setBaseline(formatted);
           setText(formatted);
           setIssues([]);
@@ -173,16 +190,22 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
           }),
         );
       } else if (kind === "save" && loaded && !conflict) {
+        const dataJson = mergeManagedMetadata(text, managed);
+        const checked = validateRegistryText(dataJson, base ?? undefined);
+        if (checked.length > 0) {
+          setIssues(checked);
+          return;
+        }
         await accept(
           base
             ? await save.mutateAsync({
                 request: {
                   id: base.id,
-                  dataJson: text,
+                  dataJson,
                   updatedAt: base.updatedAt,
                 },
               })
-            : await create.mutateAsync({ request: { dataJson: text } }),
+            : await create.mutateAsync({ request: { dataJson } }),
         );
       }
     } catch (error) {
@@ -283,20 +306,23 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
                 />
               )}
               <RegistryIcons
-                value={text}
+                value={managed}
                 disabled={busy}
                 onBusyChange={(value) => {
                   iconInFlight.current = value;
                   setIconBusy(value);
                 }}
                 onChange={(value) => {
-                  setText(value);
+                  setManaged(value);
                   setIssues([]);
                   setServerIssues([]);
                   setEdited(true);
                   if (errorStatus(failure) === 422) setFailure(null);
                 }}
               />
+              <p className="text-muted-foreground text-xs">
+                Icons and publication metadata are managed separately.
+              </p>
               <Suspense fallback={<p role="status">Loading JSON editor…</p>}>
                 <RegistryJsonEditor
                   value={text}
@@ -308,7 +334,10 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
                     if (errorStatus(failure) === 422) setFailure(null);
                   }}
                   onBlur={() =>
-                    setIssues(validateRegistryText(text, base ?? undefined))
+                    setIssues([
+                      ...validateRegistryText(text, base ?? undefined),
+                      ...managedMetadataIssues(text),
+                    ])
                   }
                   disabled={busy}
                   invalid={issues.length > 0 || serverIssues.length > 0}

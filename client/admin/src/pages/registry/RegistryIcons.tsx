@@ -21,6 +21,9 @@ export function RegistryIcons({
   onBusyChange,
 }: RegistryIconsProps): JSX.Element {
   const id = useId();
+  const fileInputs = useRef<Partial<Record<IconSlot, HTMLInputElement | null>>>(
+    {},
+  );
   const active = useRef(true);
   const uploading = useRef(false);
   const latest = useRef(value);
@@ -115,7 +118,7 @@ export function RegistryIcons({
         ).map(([theme, icon]) => (
           <div
             key={theme}
-            className={`flex h-20 items-center justify-center gap-3 rounded border p-2 ${theme === "Dark" ? "bg-zinc-950 text-white" : "bg-white text-zinc-950"}`}
+            className={`relative flex h-20 items-center justify-center rounded border p-2 ${theme === "Dark" ? "bg-zinc-950 text-white" : "bg-white text-zinc-950"}`}
           >
             {icon && safePreview(icon.src) ? (
               <img
@@ -126,12 +129,14 @@ export function RegistryIcons({
             ) : (
               <span className="text-xs">No logo</span>
             )}
-            <div className="text-xs">
+            <span className="absolute top-2 right-2 rounded border border-current/20 px-1.5 py-0.5 text-[10px] font-medium">
               {theme}
-              {theme === "Dark" && !icons.dark && icons.default && (
-                <div>Using primary</div>
-              )}
-            </div>
+            </span>
+            {theme === "Dark" && !icons.dark && icons.default && (
+              <span className="absolute right-2 bottom-1 text-[10px] opacity-70">
+                Using primary
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -168,10 +173,13 @@ export function RegistryIcons({
             </div>
             <input
               id={`${id}-${slot}`}
-              className="max-w-52 text-xs"
+              hidden
+              ref={(element) => {
+                fileInputs.current[slot] = element;
+              }}
               type="file"
               accept=".svg,image/svg+xml"
-              aria-label={`${icon ? "Replace" : "Upload"} ${name}`}
+              aria-label={`${icon ? "Replace" : "Upload"} ${name} file`}
               disabled={locked}
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -179,6 +187,16 @@ export function RegistryIcons({
                 if (file) void upload(slot, file);
               }}
             />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label={`${icon ? "Replace" : "Upload"} ${name}`}
+              disabled={locked}
+              onClick={() => fileInputs.current[slot]?.click()}
+            >
+              {icon ? "Replace" : "Upload"}
+            </Button>
             {icon && (
               <Button
                 type="button"
