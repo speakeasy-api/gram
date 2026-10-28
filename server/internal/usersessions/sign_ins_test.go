@@ -734,8 +734,8 @@ func TestRecord_AFirstSignInInAnotherOrganizationWaitsForARevocation(t *testing.
 		done <- err
 	}()
 	select {
-	case <-done:
-		t.Fatal("a first-ever recording in another organization ran while the revocation held the user lock")
+	case err := <-done:
+		t.Fatalf("a first-ever recording in another organization ran while the revocation held the user lock: %v", err)
 	case <-time.After(300 * time.Millisecond):
 	}
 	require.NoError(t, tx.Commit(ctx))
