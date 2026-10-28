@@ -19,6 +19,9 @@ func TestPostLoginDelegationPreselectsExistingConnections(t *testing.T) {
 	require.NotContains(t, html, "Add other agents")
 	require.Contains(t, html, "data-grant-agents")
 	require.Contains(t, html, ">Skip</button>")
+	require.Contains(t, html, `type="submit" name="browser_redirect" value="1" data-skip-delegation`)
+	require.Contains(t, html, `name="action" value="finish_delegation"`)
+	require.Contains(t, html, "data-delegation-fallback")
 	require.NotContains(t, html, `value="other"`)
 }
 

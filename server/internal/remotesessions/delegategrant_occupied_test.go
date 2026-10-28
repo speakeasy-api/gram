@@ -25,7 +25,7 @@ func TestDelegateGrantRequiresExplicitReplacementOfAnotherEditorsAssignment(t *t
 	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
 	// Both callers have agent editing permission; source ownership must still apply.
 	ti.service.SetBindingAuthorizer(func(context.Context, pgx.Tx, uuid.UUID, bool) error { return nil })
-	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Delegation example"})
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, Name: "Delegation example"})
 	require.NoError(t, err)
 	issuer := createRemoteIssuer(t, ctx, ti, "occupied-provider", "")
 	config := createUserSessionIssuer(t, ctx, ti.conn, "occupied-config")

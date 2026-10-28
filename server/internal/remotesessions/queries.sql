@@ -4460,7 +4460,7 @@ RETURNING id, principal_id, user_session_issuer_id, remote_session_client_id, re
 -- Keep unavailable bindings discoverable for explicit detach, but return no
 -- source identity. The handler adds a canonical view only for an eligible
 -- candidate whose grant generation still matches this exact attachment.
-SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, s.subject_urn AS connection_subject, u.display_name AS subject_display_name, u.email AS subject_email
+SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, u.display_name AS subject_display_name, u.email AS subject_email
 FROM principal_remote_session_bindings AS b
 JOIN remote_sessions AS s ON s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
@@ -6280,3 +6280,38 @@ WHERE s.id = @id AND s.remote_session_client_id = @remote_session_client_id
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
   AND (s.access_expires_at IS NULL OR s.access_expires_at > now() OR (s.refresh_token_encrypted IS NOT NULL AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())))
 FOR UPDATE OF s;
+
+-- name: ListAgentConnectionRenewals :many
+-- Renewal candidates are existing assignments owned by the signing-in user.
+-- Old source rows remain usable for ownership checks after reauthentication;
+-- the mutation separately validates the new grant and locks the current binding.
+SELECT sqlc.embed(b), a.name AS agent_name, a.owner_user_id AS agent_owner_user_id
+FROM principal_remote_session_bindings b
+JOIN agents a ON a.id = b.principal_id AND a.organization_id = b.organization_id AND a.project_id = b.project_id
+JOIN users owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+JOIN organization_user_relationships membership ON membership.organization_id = a.organization_id AND membership.user_id = owner.id AND membership.deleted_at IS NULL
+JOIN remote_sessions s ON s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
+WHERE b.project_id = @project_id AND b.organization_id = @organization_id
+  AND b.user_session_issuer_id = @user_session_issuer_id
+  AND b.remote_session_client_id = @remote_session_client_id
+  AND b.revoked_at IS NULL AND s.subject_urn = @subject_urn
+  AND b.attached_by_subject_id = @subject_urn
+  AND NOT a.deleted AND a.suspended_at IS NULL AND a.revoked_at IS NULL
+  AND a.owner_reassignment_required_at IS NULL
+ORDER BY LOWER(a.name), a.id;
+
+-- name: GetOrganizationUserRemoteSessionForClient :one
+-- Organization gateway callbacks have no project; only organization/global
+-- registrations and consent provenance from this organization are admitted.
+SELECT s.* FROM remote_sessions s
+JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+JOIN user_session_issuers u ON u.id = s.user_session_issuer_id
+LEFT JOIN projects up ON up.id = u.project_id
+JOIN organization_metadata org ON org.id = @organization_id AND org.disabled_at IS NULL
+JOIN users person ON s.subject_urn = 'user:' || person.id AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+JOIN organization_user_relationships membership ON membership.organization_id = org.id AND membership.user_id = person.id AND NOT membership.deleted AND membership.deleted_at IS NULL
+WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_session_client_id AND NOT s.deleted
+  AND c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = org.id)
+  AND i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = org.id)
+  AND (up.organization_id = org.id OR (u.project_id IS NULL AND u.organization_id = org.id));

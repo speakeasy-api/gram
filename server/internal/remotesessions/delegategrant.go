@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -24,19 +25,22 @@ func (s *Service) DelegateGrant(ctx context.Context, principal uuid.UUID, grant 
 	if grant.Subject != op.subject || grant.GrantGeneration <= 0 || expectedBinding == uuid.Nil {
 		return oops.C(oops.CodeForbidden)
 	}
-	var old *repo.PrincipalRemoteSessionBinding
-	if expectedBinding != uuid.Nil {
-		binding, err := op.queries.LockPrincipalBindingForRefresh(ctx, repo.LockPrincipalBindingForRefreshParams{ID: expectedBinding, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String()})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeConflict, err, "assignment changed; review the agent's connection")
-		}
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "lock existing delegation")
-		}
-		if binding.RemoteSessionClientID != grant.RemoteSessionClientID {
-			return oops.C(oops.CodeConflict)
-		}
-		old = &binding
+	agent, err := agentrepo.New(op.tx).GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: op.organizationID, ID: op.principalID})
+	if err != nil {
+		return oops.E(oops.CodeForbidden, err, "agent is unavailable")
+	}
+	if !agent.ProjectID.Valid || agent.ProjectID.UUID != op.projectID {
+		return oops.C(oops.CodeForbidden)
+	}
+	old, err := op.queries.LockPrincipalBindingForRefresh(ctx, repo.LockPrincipalBindingForRefreshParams{ID: expectedBinding, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String()})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeConflict, err, "assignment changed; review the agent's connection")
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock existing delegation")
+	}
+	if old.RemoteSessionClientID != grant.RemoteSessionClientID {
+		return oops.C(oops.CodeConflict)
 	}
 	source, err := op.queries.LockRemoteSessionGrantForBindingRefresh(ctx, repo.LockRemoteSessionGrantForBindingRefreshParams{ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID, ID: grant.RemoteSessionID, RemoteSessionClientID: grant.RemoteSessionClientID, SubjectUrn: op.subject, GrantGeneration: grant.GrantGeneration})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -45,16 +49,14 @@ func (s *Service) DelegateGrant(ctx context.Context, principal uuid.UUID, grant 
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock newly authorized connection")
 	}
-	if old != nil {
-		if old.RemoteSessionID == grant.RemoteSessionID && old.GrantGeneration == grant.GrantGeneration {
-			return nil
-		}
-		if _, err := op.queries.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ID: old.ID, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "replace previous delegation")
-		}
-		if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, old.ID, old.RemoteSessionID, old.RemoteSessionClientID, old.GrantGeneration); err != nil {
-			return err
-		}
+	if old.RemoteSessionID == grant.RemoteSessionID && old.GrantGeneration == grant.GrantGeneration {
+		return nil
+	}
+	if _, err := op.queries.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ID: old.ID, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "replace previous delegation")
+	}
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, old.ID, old.RemoteSessionID, old.RemoteSessionClientID, old.GrantGeneration); err != nil {
+		return err
 	}
 	attached, err := op.queries.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(), RemoteSessionID: source.RemoteSession.ID})
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -995,6 +995,16 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
 	}
 
+	if action != "deny" && challengeState.PendingDelegation != nil {
+		delegation, err := s.loadPostLoginDelegation(r, endpoint, challengeState)
+		if err != nil {
+			return err
+		}
+		if delegation != nil {
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
+	}
 	reuse := action == "reuse"
 	if reuse {
 		if !consentReuseEligible(endpoint, challengeState) || !consentBrowserMatches(r, challengeState, time.Now()) {

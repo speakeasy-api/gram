@@ -1848,12 +1848,17 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// The client lock keeps concurrent callbacks from changing the previous
 	// grant between this snapshot and the write below. Never read another
 	// organization's connection merely because it uses the same client.
-	previous, previousErr := txQueries.GetTenantUserRemoteSessionForClient(ctx, remotesessions_repo.GetTenantUserRemoteSessionForClientParams{
-		ProjectID:             state.ProjectID,
-		OrganizationID:        state.OrganizationID,
-		SubjectUrn:            *state.Subject,
-		RemoteSessionClientID: state.RemoteSessionClientID,
-	})
+	var previous remotesessions_repo.RemoteSession
+	var previousErr error
+	if state.ProjectID == uuid.Nil {
+		previous, previousErr = txQueries.GetOrganizationUserRemoteSessionForClient(ctx, remotesessions_repo.GetOrganizationUserRemoteSessionForClientParams{
+			OrganizationID: state.OrganizationID, SubjectUrn: *state.Subject, RemoteSessionClientID: state.RemoteSessionClientID,
+		})
+	} else {
+		previous, previousErr = txQueries.GetTenantUserRemoteSessionForClient(ctx, remotesessions_repo.GetTenantUserRemoteSessionForClientParams{
+			ProjectID: state.ProjectID, OrganizationID: state.OrganizationID, SubjectUrn: *state.Subject, RemoteSessionClientID: state.RemoteSessionClientID,
+		})
+	}
 	if previousErr != nil && !errors.Is(previousErr, pgx.ErrNoRows) {
 		return none, oops.E(oops.CodeUnexpected, previousErr, "read previous connection scopes").LogError(ctx, logger)
 	}

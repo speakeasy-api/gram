@@ -20,7 +20,7 @@ import (
 
 func TestDelegateGrantExactAuthorization(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"new", "renew", "replacement session", "later grant", "wrong person", "wrong source", "permission revoked", "changed assignment"} {
+	for _, scenario := range []string{"new", "renew", "replacement session", "later grant", "wrong person", "wrong source", "wrong project", "permission revoked", "changed assignment"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestService(t)
@@ -43,14 +43,18 @@ func TestDelegateGrantExactAuthorization(t *testing.T) {
 				}
 				return nil
 			})
-			agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Delegation example"})
+			agentProject := uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}
+			if scenario == "wrong project" {
+				agentProject = uuid.NullUUID{}
+			}
+			agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, ProjectID: agentProject, Name: "Delegation example"})
 			require.NoError(t, err)
 			issuer := createRemoteIssuer(t, ctx, ti, "delegation-provider", "")
 			config := createUserSessionIssuer(t, ctx, ti.conn, "delegation-config")
 			client := createRemoteClient(t, ctx, ti, issuer, config.String(), "delegation-client")
 			mine := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
 			expected := uuid.Nil
-			if scenario == "renew" || scenario == "replacement session" || scenario == "changed assignment" {
+			if scenario != "new" {
 				binding, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: mine.ID.String()})
 				require.NoError(t, err)
 				expected = uuid.MustParse(binding.ID)
@@ -67,7 +71,9 @@ func TestDelegateGrantExactAuthorization(t *testing.T) {
 			case "wrong person":
 				grant.Subject = urn.NewUserSubject("another-person")
 			case "wrong source":
-				other := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("another-person"), config.String(), client)
+				otherIssuer := createRemoteIssuer(t, ctx, ti, "other-provider", "")
+				otherClient := createRemoteClient(t, ctx, ti, otherIssuer, config.String(), "other-client")
+				other := insertRemoteSession(t, ctx, ti.conn, mine.SubjectUrn, config.String(), otherClient)
 				grant.RemoteSessionID = other.ID
 			case "permission revoked":
 				denied = true

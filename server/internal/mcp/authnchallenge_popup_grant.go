@@ -39,6 +39,12 @@ func (s *Service) recordConnectionPopupGrant(ctx context.Context, grant remotese
 			}
 		}
 		if parent.BindingRefreshAttemptID == "" && parent.ReauthenticateClientID == uuid.Nil && parent.WorkloadReconnect == nil && parent.Subject.Kind == urn.SessionSubjectKindUser && parent.AuthorizerUserID == parent.Subject.ID && parent.AuthorizerImpersonated != nil && !*parent.AuthorizerImpersonated {
+			if pending := parent.PendingDelegation; pending != nil {
+				if pending.RemoteSessionID == grant.RemoteSessionID && pending.GrantGeneration == grant.GrantGeneration && pending.RemoteSessionClientID == grant.RemoteSessionClientID {
+					return nil
+				}
+				return oops.E(oops.CodeConflict, nil, "review the pending connection before signing in again")
+			}
 			completed := parent
 			completed.PendingDelegation = &grant
 			swapped, err := s.authnChallengeCache.CompareAndSwap(ctx, parent, completed)

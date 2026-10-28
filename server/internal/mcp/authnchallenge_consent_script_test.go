@@ -229,13 +229,15 @@ const handlers = {};
 const master = { checked: true, addEventListener: (_, fn) => handlers.master = fn };
 const agents = ['One', 'Two', 'Three'].map(name => ({
   checked: true, disabled: false, value: name,
-  dataset: { agentName: name, bindingId: name }
+  dataset: { agentName: name, bindingId: 'binding-' + name }
 }));
 const header = { hidden: false };
 const choices = { hidden: false };
 const summary = {};
 const error = {};
 const requests = [];
+let releaseGrant;
+const grantButton = { disabled: true, dataset: { consentSelfReady: 'true' } };
 const approval = { addEventListener: (_, fn) => handlers.submit = fn, requestSubmit: () => {} };
 const form = {
   dataset: { actionUrl: '/delegate' },
@@ -259,12 +261,12 @@ vm.runInNewContext(source, {
     querySelector: selector => ({
       '[data-delegation-form]': form,
       '[data-approve-form]': approval,
-      '#consent-approve-button': {}
+      '#consent-approve-button': grantButton
     })[selector] || null,
     querySelectorAll: () => []
   },
   window: {},
-  fetch: async (_, options) => { requests.push(options.body); return { ok: true }; }
+  fetch: async (_, options) => { requests.push(options.body); if (requests.length === 1) await new Promise(resolve => releaseGrant = resolve); return { ok: true }; }
 });
 assert.equal(master.checked, true);
 master.checked = false;
@@ -281,13 +283,63 @@ agents[0].checked = false; handlers.change();
 assert.equal(master.checked, false);
 assert.equal(master.indeterminate, true);
 handlers.submit({ preventDefault() {}, stopImmediatePropagation() {} });
+assert.equal(master.disabled, true);
+assert.ok(agents.every(a => a.disabled));
+assert.equal(grantButton.disabled, true);
+releaseGrant();
 setImmediate(() => {
   assert.deepEqual(requests.filter(b => b.get('action') === 'delegate_grant').map(b => b.get('agent_id')), ['Two', 'Three']);
+  assert.deepEqual(requests.filter(b => b.get('action') === 'delegate_grant').map(b => b.get('binding_id')), ['binding-Two', 'binding-Three']);
   assert.equal(requests.at(-1).get('action'), 'finish_delegation');
+  assert.equal(master.disabled, false);
+  assert.equal(agents[0].disabled, false);
+  assert.equal(agents[1].disabled, true);
+  assert.equal(agents[2].disabled, true);
   assert.equal(header.hidden, false);
 });
 `)
 	cmd.Stdin = bytes.NewReader(consentScriptData)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "consent selection: %s", out)
+}
+
+func TestConsentScriptPermissionPopoverFitsViewport(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, node, "-e", `
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const source = require('node:fs').readFileSync(0, 'utf8');
+for (const width of [320, 400, 1280]) {
+  let click, position;
+  const popover = { style: {}, getBoundingClientRect: () => ({
+    width: parseFloat(popover.style.width), height: parseFloat(popover.style.maxHeight)
+  }) };
+  const button = {
+    addEventListener: (_, fn) => click = fn,
+    getAttribute: () => 'permissions',
+    getBoundingClientRect: () => ({ left: width - 30, bottom: 220 })
+  };
+  vm.runInNewContext(source, {
+    document: {
+      body: { hasAttribute: () => false },
+      querySelector: () => null,
+      querySelectorAll: selector => selector === '[data-permission-details]' ? [button] : [],
+      getElementById: () => popover
+    },
+    window: { innerWidth: width, innerHeight: 240, requestAnimationFrame: fn => position = fn }
+  });
+  click(); position();
+  assert.ok(parseFloat(popover.style.left) >= 12);
+  assert.ok(parseFloat(popover.style.left) + parseFloat(popover.style.width) <= width - 12);
+  assert.ok(parseFloat(popover.style.top) + parseFloat(popover.style.maxHeight) <= 228);
+  assert.equal(popover.style.overflowY, 'auto');
+}
+`)
+	cmd.Stdin = bytes.NewReader(consentScriptData)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "permission popover layout: %s", out)
 }

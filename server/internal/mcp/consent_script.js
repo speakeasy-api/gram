@@ -27,12 +27,30 @@
         var popover = document.getElementById(
           button.getAttribute("popovertarget"),
         );
-        var rect = button.getBoundingClientRect();
-        popover.style.left =
-          Math.max(12, Math.min(rect.left, window.innerWidth - 332)) + "px";
-        popover.style.top =
-          Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 280)) +
-          "px";
+        var margin = 12;
+        popover.style.width =
+          Math.max(0, Math.min(320, window.innerWidth - margin * 2)) + "px";
+        popover.style.maxHeight =
+          Math.max(0, window.innerHeight - margin * 2) + "px";
+        popover.style.overflowY = "auto";
+        function positionPopover() {
+          var rect = button.getBoundingClientRect();
+          var bounds = popover.getBoundingClientRect();
+          popover.style.left =
+            Math.max(
+              margin,
+              Math.min(rect.left, window.innerWidth - bounds.width - margin),
+            ) + "px";
+          popover.style.top =
+            Math.max(
+              margin,
+              Math.min(
+                rect.bottom + 8,
+                window.innerHeight - bounds.height - margin,
+              ),
+            ) + "px";
+        }
+        window.requestAnimationFrame(positionPopover);
       });
     });
 
@@ -138,25 +156,36 @@
     }
     async function finishDelegation(grant) {
       if (delegationBusy) return;
+      var editableAgents = Array.from(
+        delegationForm.querySelectorAll(
+          'input[name="agent_id"]:not(:disabled)',
+        ),
+      );
+      var selected = grant
+        ? editableAgents.filter(function (agent) {
+            return agent.checked;
+          })
+        : [];
+      var completedAgents = new Set();
+      var approvalDisabled = grantButton.disabled;
       delegationBusy = true;
       updateDelegationSelection();
+      editableAgents.forEach(function (agent) {
+        agent.disabled = true;
+      });
+      if (delegationEnabled) delegationEnabled.disabled = true;
+      grantButton.disabled = true;
       delegationError.hidden = true;
       try {
-        if (grant) {
-          var selected = Array.from(
-            delegationForm.querySelectorAll(
-              'input[name="agent_id"]:checked:not(:disabled)',
-            ),
-          );
-          for (var agent of selected) {
-            await delegationRequest("delegate_grant", agent);
-            agent.checked = false;
-            agent.disabled = true;
-          }
+        for (var agent of selected) {
+          await delegationRequest("delegate_grant", agent);
+          completedAgents.add(agent);
+          agent.checked = false;
         }
         await delegationRequest("finish_delegation");
         if (integratedDelegation) {
           delegationFinished = true;
+          grantButton.disabled = approvalDisabled;
           approvalForm.requestSubmit(grantButton);
         } else {
           window.location.assign(delegationForm.dataset.continueUrl);
@@ -166,6 +195,11 @@
         delegationError.hidden = false;
       } finally {
         delegationBusy = false;
+        editableAgents.forEach(function (agent) {
+          agent.disabled = completedAgents.has(agent);
+        });
+        if (delegationEnabled) delegationEnabled.disabled = false;
+        if (integratedDelegation) grantButton.disabled = approvalDisabled;
         updateDelegationSelection();
       }
     }
@@ -189,10 +223,18 @@
       true,
     );
     if (skipButton)
-      skipButton.addEventListener("click", function () {
+      skipButton.addEventListener("click", function (event) {
+        event.preventDefault();
         finishDelegation(false);
       });
     updateDelegationSelection();
+    delegationForm
+      .querySelectorAll("[data-delegation-fallback]")
+      .forEach(function (fallback) {
+        fallback.hidden = true;
+      });
+    if (integratedDelegation && grantButton.dataset.consentSelfReady === "true")
+      grantButton.disabled = false;
     if (!integratedDelegation) return;
   }
 

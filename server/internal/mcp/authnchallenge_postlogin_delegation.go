@@ -9,13 +9,11 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -109,9 +107,12 @@ func (s *Service) loadPostLoginDelegation(r *http.Request, endpoint *ResolvedMcp
 	if err != nil {
 		return nil, consentAgentAuthorizationError(err, "connection delegation is unavailable")
 	}
-	candidates, err := agentsrepo.New(s.db).ListActiveAgentsForAuthorization(r.Context(), endpoint.OrganizationID)
+	candidates, err := remotesessionsrepo.New(s.db).ListAgentConnectionRenewals(r.Context(), remotesessionsrepo.ListAgentConnectionRenewalsParams{
+		ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		RemoteSessionClientID: state.PendingDelegation.RemoteSessionClientID, SubjectUrn: state.PendingDelegation.Subject,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("list delegation agents: %w", err)
+		return nil, fmt.Errorf("list connection renewals: %w", err)
 	}
 	client, err := remotesessionsrepo.New(s.db).GetRemoteSessionClientByID(r.Context(), remotesessionsrepo.GetRemoteSessionClientByIDParams{ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID, ID: state.PendingDelegation.RemoteSessionClientID})
 	if err != nil {
@@ -119,76 +120,22 @@ func (s *Service) loadPostLoginDelegation(r *http.Request, endpoint *ResolvedMcp
 	}
 	sharedCredential := remotesessions.CredentialOwner(client.RemoteSessionClient.CredentialOwner) == remotesessions.CredentialOwnerSelf
 	options := make([]delegationOption, 0)
-	for _, agent := range candidates {
-		if !agent.ProjectID.Valid || agent.ProjectID.UUID != endpoint.ProjectID {
+	for _, candidate := range candidates {
+		binding := candidate.PrincipalRemoteSessionBinding
+		if sharedCredential || (candidate.AgentOwnerUserID != human.userID && !authz.GrantsSatisfy(human.grants, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: binding.PrincipalID.String(), Dimensions: nil})) {
 			continue
 		}
-		if agent.OwnerUserID != human.userID && !authz.GrantsSatisfy(human.grants, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
+		if binding.RemoteSessionID == state.PendingDelegation.RemoteSessionID && binding.GrantGeneration == state.PendingDelegation.GrantGeneration {
 			continue
 		}
-		bindings, err := remotesessionsrepo.New(s.db).ListPrincipalRemoteSessionBindings(r.Context(), remotesessionsrepo.ListPrincipalRemoteSessionBindingsParams{ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: endpoint.UserSessionIssuerID})
-		if err != nil {
-			return nil, fmt.Errorf("load agent assignments: %w", err)
-		}
-		option := delegationOption{ID: agent.ID.String(), Name: agent.Name, BindingID: "", Detail: "New connection", Disabled: false, Existing: false, Selected: false, Expiry: "", ExpiryExact: "", PermissionSummary: "", PreviousScopes: nil, Scopes: nil, ComparisonKnown: true}
-		for _, binding := range bindings {
-			if binding.RemoteSessionClientID != state.PendingDelegation.RemoteSessionClientID {
-				continue
-			}
-			option.BindingID = binding.ID.String()
-			if binding.RemoteSessionID != state.PendingDelegation.RemoteSessionID {
-				option.Detail = "Another user's connection"
-				if binding.SubjectDisplayName.Valid && binding.SubjectDisplayName.String != "" {
-					option.Detail = binding.SubjectDisplayName.String + "'s connection"
-				} else if binding.SubjectEmail.Valid && binding.SubjectEmail.String != "" {
-					option.Detail = "Connection granted by " + binding.SubjectEmail.String
-				}
-
-				if binding.ConnectionSubject == state.PendingDelegation.Subject {
-					option.Existing = true
-					option.Selected = true
-					option.Detail = "Your connection"
-				}
-				option.ComparisonKnown = false
-				option.Expiry = "Previous expiry unavailable"
-			} else if binding.GrantGeneration == state.PendingDelegation.GrantGeneration {
-				option.Existing = true
-				option.Selected = true
-				option.PreviousScopes = state.PendingDelegation.Scopes
-				option.Expiry, option.ExpiryExact = delegationExpiry(state.PendingDelegation.ExpiresAt, time.Now())
-				option.Disabled = true
-				option.Detail = "Already using this connection"
-			} else {
-				option.Existing = true
-				option.Selected = true
-				option.Detail = "Your connection"
-				option.ComparisonKnown = binding.GrantGeneration == state.PendingDelegation.PreviousGeneration
-				if option.ComparisonKnown {
-					option.PreviousScopes = state.PendingDelegation.PreviousScopes
-					option.Expiry, option.ExpiryExact = delegationExpiry(state.PendingDelegation.PreviousExpiresAt, time.Now())
-				} else {
-					option.Expiry = "Previous expiry unavailable"
-				}
-			}
-		}
-		if sharedCredential {
-			option.Detail = "Shared credential"
-			option.Existing = false
-			option.Selected = false
-			option.Disabled = true
-		}
-		if !option.Existing || option.Disabled {
-			continue
+		option := delegationOption{ID: binding.PrincipalID.String(), Name: candidate.AgentName, BindingID: binding.ID.String(), Detail: "Your connection", Disabled: false, Existing: true, Selected: true, Expiry: "Previous expiry unavailable", ExpiryExact: "", PermissionSummary: "", PreviousScopes: nil, Scopes: nil, ComparisonKnown: binding.RemoteSessionID == state.PendingDelegation.RemoteSessionID && binding.GrantGeneration == state.PendingDelegation.PreviousGeneration}
+		if option.ComparisonKnown {
+			option.PreviousScopes = state.PendingDelegation.PreviousScopes
+			option.Expiry, option.ExpiryExact = delegationExpiry(state.PendingDelegation.PreviousExpiresAt, time.Now())
 		}
 		describeDelegationPermissions(&option, state.PendingDelegation.Scopes)
 		options = append(options, option)
 	}
-	sort.SliceStable(options, func(i, j int) bool {
-		if options[i].Disabled != options[j].Disabled {
-			return !options[i].Disabled
-		}
-		return !options[i].Disabled && options[i].BindingID != "" && options[j].BindingID == ""
-	})
 	if len(options) == 0 {
 		return nil, nil
 	}
@@ -205,6 +152,21 @@ func (s *Service) servePostLoginDelegation(w http.ResponseWriter, r *http.Reques
 	if state.PendingDelegation == nil {
 		return false, nil
 	}
+	data, err := s.loadPostLoginDelegation(r, endpoint, state)
+	if err != nil {
+		return true, err
+	}
+	if data == nil {
+		completed := state
+		completed.PendingDelegation = nil
+		if _, err := s.authnChallengeCache.CompareAndSwap(r.Context(), state, completed); err != nil {
+			return true, fmt.Errorf("clear unavailable connection delegation: %w", err)
+		}
+		// Reload even after a lost CAS so later consent writes never reuse the
+		// stale challenge and a subsequent provider can publish its own grant.
+		http.Redirect(w, r, endpoint.consentPath()+"?state="+url.QueryEscape(state.ID), http.StatusSeeOther)
+		return true, nil
+	}
 	if !state.FirstParty && !endpoint.MetaMcpServerID.Valid {
 		clients, err := s.remoteChallengeMgr.ListClients(r.Context(), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 		if err != nil {
@@ -216,13 +178,6 @@ func (s *Service) servePostLoginDelegation(w http.ResponseWriter, r *http.Reques
 		if len(clients) <= 1 {
 			return false, nil
 		}
-	}
-	data, err := s.loadPostLoginDelegation(r, endpoint, state)
-	if err != nil {
-		return true, err
-	}
-	if data == nil {
-		return false, nil
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -277,6 +232,10 @@ func (s *Service) servePostLoginDelegationAction(w http.ResponseWriter, r *http.
 		if err := delegator.DelegateGrant(ctx, agentID, *grant, bindingID); err != nil {
 			return fmt.Errorf("delegate connection: %w", err)
 		}
+	}
+	if r.PostForm.Get("action") == "finish_delegation" && r.PostForm.Get("browser_redirect") == "1" {
+		http.Redirect(w, r, endpoint.consentPath()+"?state="+url.QueryEscape(state.ID), http.StatusSeeOther)
+		return nil
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

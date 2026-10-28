@@ -24,7 +24,11 @@
 </div>
 <div class="bg-accent border-l border-r" id="delegation-agent-choices" {{if .AgentSummary}}hidden{{end}}>
 <p class="border-t px-6 py-3 text-xs text-muted-foreground sm:px-8">Using {{if .AccountName}}{{.AccountName}}{{else}}your upstream account{{end}}{{if .AccountEmail}} ({{.AccountEmail}}){{end}}.</p>
-<input type="hidden" name="state" value="{{.State}}"/><input type="hidden" name="csrf_token" value="{{.CSRF}}"/><input type="hidden" name="remote_session_id" value="{{.SessionID}}"/><input type="hidden" name="grant_generation" value="{{.Generation}}"/>
+{{template "delegationGrantFields" .}}
 <ul class="m-0 list-none p-0">{{range .Options}}{{if .Existing}}{{template "delegationAgentRow" .}}{{end}}{{end}}</ul>
 </div>
+{{end}}
+
+{{define "delegationGrantFields"}}
+<input type="hidden" name="state" value="{{.State}}"/><input type="hidden" name="csrf_token" value="{{.CSRF}}"/><input type="hidden" name="remote_session_id" value="{{.SessionID}}"/><input type="hidden" name="grant_generation" value="{{.Generation}}"/>
 {{end}}
