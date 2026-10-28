@@ -38,7 +38,7 @@ const (
 
 // RequiredOktaScopes are the Okta API scopes the connection verifies and the
 // sync relies on.
-var RequiredOktaScopes = []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}
+var RequiredOktaScopes = []string{"okta.apps.read"}
 
 // RequiredOktaAdminRoles are the admin roles the checklist asks operators to
 // assign to the service app.
