@@ -139,16 +139,14 @@ func (m *kitGKEIAM) remove(ctx context.Context, identity kitGKEIAMIdentity) erro
 	return nil
 }
 func (m *kitGKEIAM) removeRuntime(ctx context.Context, r assistantRuntimeRecord) error {
-	var metadata struct {
-		Workload *KitWorkloadBinding `json:"workload"`
-	}
+	var metadata kitGKEBackendMetadata
 	if len(r.BackendMetadataJSON) == 0 {
 		return nil
 	}
 	if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil {
 		return fmt.Errorf("decode Kit workload metadata: %w", err)
 	}
-	if metadata.Workload == nil {
+	if metadata.Workload == nil || kitGKEFailedProjectedWorkload(metadata, r, m.namespace) {
 		return nil
 	}
 	return m.remove(ctx, kitGKEIAMIdentity{subject: metadata.Workload.Subject, account: metadata.Workload.ServiceAccount, email: ""})

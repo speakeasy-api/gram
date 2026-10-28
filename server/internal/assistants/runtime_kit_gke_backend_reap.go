@@ -27,6 +27,20 @@ func (k *KitGKERuntimeBackend) ReapStoppedMachine(ctx context.Context, r assista
 	return k.reap(ctx, r, true)
 }
 func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecord, stoppedOnly bool) error {
+	if r.Retired {
+		if err := k.validate(r); err != nil {
+			return err
+		}
+		raw, err := k.config.AuthorityStore.Load(ctx, r.LifecycleTx, r)
+		if err != nil {
+			return fmt.Errorf("load retired Kit authority: %w", err)
+		}
+		var prior kitGKEBackendMetadata
+		if json.Unmarshal(raw, &prior) == nil && kitGKEFailedProjectedWorkload(prior, r, k.config.GKE.Namespace) {
+			r.BackendMetadataJSON = raw
+			return k.invalidateLegacy(ctx, r, prior)
+		}
+	}
 	state, authority, err := k.loadAuthority(ctx, r)
 	if err != nil {
 		return err

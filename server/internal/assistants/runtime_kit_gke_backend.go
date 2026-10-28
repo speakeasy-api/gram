@@ -20,6 +20,7 @@ import (
 
 	"github.com/distribution/reference"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/sandbox"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -267,7 +268,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	if !kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
 		var prior kitGKEBackendMetadata
-		if json.Unmarshal(r.BackendMetadataJSON, &prior) == nil && prior.Workload == nil && prior.RuntimeID == r.ID {
+		if json.Unmarshal(r.BackendMetadataJSON, &prior) == nil && (prior.Workload == nil || kitGKEFailedProjectedWorkload(prior, r, k.config.GKE.Namespace)) && prior.RuntimeID == r.ID {
 			if err := k.invalidateLegacy(ctx, r, prior); err != nil {
 				return RuntimeBackendEnsureResult{}, err
 			}
@@ -823,8 +824,19 @@ func kitWorkloadServiceAccount(in KitGKEProvisionInput) *unstructured.Unstructur
 // Legacy startup bearer credentials cannot be admitted as workload authority.
 // Verify every recorded UID before fencing and deleting; never discover or adopt
 // resources by name alone. The authority CAS makes a completed reset retryable.
+// Only failed pre-pool projected-token admissions can be automatically replaced.
+// Never use this path to resume an old snapshot or delete a live workload.
+func kitGKEFailedProjectedWorkload(m kitGKEBackendMetadata, r assistantRuntimeRecord, namespace string) bool {
+	return m.RuntimeID == r.ID && m.AssistantID == r.AssistantID && m.ProjectID == r.ProjectID &&
+		m.Version == 3 && m.Namespace == namespace && m.Fingerprint != "" &&
+		m.Provisioning && m.PodName == "" && m.PodUID == "" && len(m.Checkpoint) == 0 &&
+		m.WarmPoolName == "" && m.WarmPoolUID == "" && m.Workload != nil &&
+		m.Workload.ServiceAccount != "" && m.ServiceAccountUID != "" &&
+		m.Workload.Subject == "system:serviceaccount:"+namespace+":"+m.Workload.ServiceAccount
+}
+
 func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) error {
-	if m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Namespace != k.config.GKE.Namespace || m.Version != 3 || m.Fingerprint == "" {
+	if m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Namespace != k.config.GKE.Namespace || m.Version != 3 || m.Fingerprint == "" {
 		return ErrKitRuntimeBinding
 	}
 	raw, err := k.config.AuthorityStore.Load(ctx, r.LifecycleTx, r)
@@ -834,13 +846,25 @@ func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistant
 	if !kitGKEEqualMetadata(raw, r.BackendMetadataJSON) {
 		return ErrKitRuntimeBinding
 	}
+	claimGVR, templateGVR := kitClaimGVR, kitTemplateGVR
+	projected := kitGKEFailedProjectedWorkload(m, r, k.config.GKE.Namespace)
+	if projected {
+		claimGVR.Version, templateGVR.Version = "v1alpha1", "v1alpha1"
+	}
 	steps := []struct {
 		gvr  schema.GroupVersionResource
 		name string
 		uid  types.UID
 	}{
-		{kitClaimGVR, kitGKEName(r), m.ClaimUID}, {gkePodGVR, m.PodName, m.PodUID},
-		{kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID}, {kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID},
+		{claimGVR, kitGKEName(r), m.ClaimUID}, {gkePodGVR, m.PodName, m.PodUID},
+		{kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID}, {templateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID},
+	}
+	if projected {
+		steps = append(steps, struct {
+			gvr  schema.GroupVersionResource
+			name string
+			uid  types.UID
+		}{kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID})
 	}
 	for _, step := range steps {
 		if step.uid == "" {
@@ -853,9 +877,21 @@ func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistant
 		if e != nil {
 			return fmt.Errorf("read legacy Kit resource: %w", e)
 		}
+		if projected && step.gvr == claimGVR && sandbox.AssignedName(o) != "" {
+			return fmt.Errorf("refusing to reset an assigned legacy Kit claim")
+		}
 		labels := o.GetLabels()
 		if o.GetUID() != step.uid || labels["gram.ai/assistant-id"] != r.AssistantID.String() || labels["gram.ai/runtime-lineage"] != r.ID.String() || labels["gram.ai/project-id"] != r.ProjectID.String() || o.GetAnnotations()["speakeasy.com/kit-spec"] != m.Fingerprint {
 			return ErrKitRuntimeBinding
+		}
+	}
+	if projected {
+		pods, err := k.config.GKE.Dynamic.Resource(gkePodGVR).Namespace(m.Namespace).List(ctx, metav1.ListOptions{LabelSelector: gkeClaimUIDLabel + "=" + string(m.ClaimUID), Limit: 1})
+		if err != nil {
+			return fmt.Errorf("inspect legacy Kit claim pods: %w", err)
+		}
+		if len(pods.Items) != 0 || pods.GetContinue() != "" {
+			return fmt.Errorf("refusing to reset a legacy Kit claim with a pod")
 		}
 	}
 	if err = k.config.Fence(ctx, r); err != nil {

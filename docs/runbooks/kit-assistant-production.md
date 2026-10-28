@@ -103,15 +103,29 @@ Configure the server and worker consistently:
 - `GRAM_ASSISTANT_KIT_MCP_RESOURCE=https://<RESOURCE_HOST>/mcp/<SLUG>`.
 - `GRAM_ASSISTANT_KIT_MCP_ISSUER=https://<EXPECTED_ISSUER>` and
   `GRAM_ASSISTANT_KIT_MCP_ISSUER_ID=<PERSISTED_ISSUER_UUID>`.
-- Retain `GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER` as the assistant cluster issuer,
-  `https://container.googleapis.com/v1/projects/<CLUSTER_PROJECT_ID>/locations/<LOCATION>/clusters/<CLUSTER>`,
-  and retain its legacy `GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL`. Old application
-  deployments still consume these values. New metadata mode derives the cluster
-  workload-pool project from this issuer, independently of the IAM project.
-  When `GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT` is set, the new application selects
-  `https://accounts.google.com` and `https://www.googleapis.com/oauth2/v3/certs`
-  for token verification. It does not verify metadata tokens against the cluster
-  issuer/JWKS. The external issuer flags still apply directly to local mode.
+- `GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT=<CLUSTER_PROJECT_ID>`
+  (`--assistant-kit-gke-workload-pool-project`). Required Google Cloud project
+  ID owning the cluster workload pool, independently of the IAM project; no
+  project-number, issuer-URL, or IAM-project fallback is supported.
+- Remove `GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER` and
+  `GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL` from GKE deployments. These remain
+  supported only for local external assertions and are rejected in GKE mode.
+  GKE verifies metadata tokens using `https://accounts.google.com` and
+  `https://www.googleapis.com/oauth2/v3/certs`.
+
+Failed projected-token admissions are not v1beta1 warm-pool authority. On
+retry (or retirement), the application recognizes only the old, pre-pool
+projected subject with `provisioning=true`, no recorded pod, and no checkpoint.
+It verifies the persisted runtime/project/assistant binding and each object's
+UID, ownership labels, and compatibility annotation, refuses assigned claims
+or claim-owned pods, fences credentials, then
+deletes only the recorded v1alpha1 claim/template, Secret, and Kubernetes
+service account. That projected subject never had a Google IAM account.
+The authority is cleared only after cleanup succeeds; readmission provisions a
+fresh metadata-identity generation. Cleanup failures retain evidence for retry.
+Live pods, snapshots, mismatched resources, and unrecorded orphans are not swept
+or automatically reinterpreted as current authority. No manual database reset
+or bulk cluster deletion is part of this rollout.
 
 The MCP resource must be an enabled attachment of the assistant. Bootstrap
 registers a project-scoped Google issuer and a generation-specific numeric IAM
@@ -200,7 +214,7 @@ rejection can be cleared, but an uncertain result stays fenced until reconciled.
 3. Pin that published digest in `GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE` in
    infrastructure **before** promoting the new application. The old application
    ignores this new setting. Provision the dedicated IAM project, role and
-   ConfigMap/WarmPool RBAC first, retaining legacy issuer/JWKS configuration.
+   ConfigMap/WarmPool RBAC first, setting the explicit cluster workload-pool project and removing local issuer/JWKS configuration.
 4. Promote the new application only after the metadata image setting and
    permissions are deployed consistently to server and worker. Missing/invalid
    metadata image is a deliberate startup validation error; do not promote a

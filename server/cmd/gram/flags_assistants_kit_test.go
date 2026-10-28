@@ -20,6 +20,7 @@ func TestKitWorkloadAssertionFlags(t *testing.T) {
 	}
 	require.True(t, names["assistant-kit-workload-issuer"])
 	require.True(t, names["assistant-kit-gke-iam-project"])
+	require.True(t, names["assistant-kit-gke-workload-pool-project"])
 	require.True(t, names["assistant-kit-gke-metadata-image"])
 	require.True(t, names["assistant-kit-workload-jwks-url"])
 	require.True(t, names["assistant-kit-workload-subject"])
@@ -108,7 +109,7 @@ func TestKitCLIOptInAndProviderValidation(t *testing.T) {
 	require.NoError(t, installKitLocalRuntimeFromCLI(kitCLIContext(t, nil), nil, nil, nil, nil, nil))
 	c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "local"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local environment")
-	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-workload-issuer": "https://container.googleapis.com/v1/projects/cluster-project/locations/us-central1/clusters/assistants", "assistant-kit-gke-iam-project": "identity-project", "assistant-kit-gke-metadata-image": "example.invalid/runtime@sha256:" + strings.Repeat("a", 64)})
+	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-gke-workload-pool-project": "cluster-project", "assistant-kit-gke-iam-project": "identity-project", "assistant-kit-gke-metadata-image": "example.invalid/runtime@sha256:" + strings.Repeat("a", 64)})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "ingress-cidr")
 	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-workload-subject": "local-subject"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local-only")
@@ -131,7 +132,7 @@ func TestPrivateIngressRegistersAssistantRuntimeFlags(t *testing.T) {
 
 func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
+	for _, name := range []string{"assistant-kit-workload-issuer", "assistant-kit-workload-jwks-url", "assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v0.2.19", "assistant-runtime-provider": "gke", name: "local-projection-value"})
@@ -142,13 +143,24 @@ func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
 
 func TestKitGKEWorkloadPoolProject(t *testing.T) {
 	t.Parallel()
-	got, err := kitGKEWorkloadPoolProject("https://container.googleapis.com/v1/projects/cluster-project/locations/us-central1/clusters/assistants")
+	got, err := kitGKEWorkloadPoolProject("cluster-project")
 	require.NoError(t, err)
 	require.Equal(t, "cluster-project", got)
-	for _, raw := range []string{"", "https://accounts.google.com", "http://container.googleapis.com/v1/projects/cluster-project/locations/us-central1/clusters/assistants", "https://container.googleapis.com.evil.invalid/v1/projects/cluster-project/locations/us-central1/clusters/assistants", "https://container.googleapis.com/v1/projects/123456/locations/us-central1/clusters/assistants", "https://container.googleapis.com/v1/projects/cluster-project/locations/us-central1/clusters/assistants?project=other", "https://container.googleapis.com/v1/projects/cluster-project/locations/us-central1/clusters/assistants#ignored"} {
+	for _, raw := range []string{"", "123456", "bad/project", " cluster-project", "https://container.googleapis.com/v1/projects/cluster-project/locations/us-central1/clusters/assistants"} {
 		_, err := kitGKEWorkloadPoolProject(raw)
-		require.Error(t, err, raw)
+		require.ErrorContains(t, err, "assistant-kit-gke-workload-pool-project", raw)
 	}
+}
+
+func TestKitGKEWorkloadPoolProjectEnvironment(t *testing.T) {
+	t.Setenv("GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT", "cluster-project")
+	set := flag.NewFlagSet("kit", flag.ContinueOnError)
+	for _, f := range assistantKitRuntimeFlags() {
+		if f.Names()[0] == "assistant-kit-gke-workload-pool-project" {
+			require.NoError(t, f.Apply(set))
+		}
+	}
+	require.Equal(t, "cluster-project", cli.NewContext(nil, set, nil).String("assistant-kit-gke-workload-pool-project"))
 }
 
 func TestKitGKEProvisionCLIRejectsMalformedMetadataImage(t *testing.T) {

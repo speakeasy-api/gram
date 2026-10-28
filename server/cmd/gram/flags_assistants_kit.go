@@ -24,9 +24,10 @@ import (
 func assistantKitRuntimeFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{Name: "assistant-kit-workload-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL"}, Usage: "External issuer JWKS URL for local assertions; GKE Kit uses fixed Google JWKS."},
-		&cli.StringFlag{Name: "assistant-kit-workload-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER"}, Usage: "External issuer for local/legacy assertions. Managed GKE reads the cluster project from this GKE issuer URL, then uses fixed Google token verification."},
+		&cli.StringFlag{Name: "assistant-kit-workload-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER"}, Usage: "External issuer for local assertions; GKE Kit uses fixed Google token verification."},
 		&cli.StringFlag{Name: "assistant-kit-workload-subject", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_SUBJECT"}, Usage: "Local operator-projected subject, unique to one cold bootstrap. Supply a fresh external subject and assertion before restarting; subjects cannot be reused or shared between assistants."},
 		&cli.StringFlag{Name: "assistant-kit-workload-assertion-file", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ASSERTION_FILE"}, Usage: "Absolute operator-projected file named assertion in a dedicated directory. Its parent is mounted read-only outside persistent HOME to support atomic rotation."},
+		&cli.StringFlag{Name: "assistant-kit-gke-workload-pool-project", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT"}, Usage: "Google Cloud project ID owning the GKE cluster workload pool, independently of the IAM project."},
 		&cli.StringFlag{Name: "assistant-kit-gke-iam-project", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT"}, Usage: "Google Cloud project for generation-scoped managed workload service accounts."},
 		&cli.StringFlag{Name: "assistant-kit-gke-metadata-image", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE"}, Usage: "Digest-pinned assistant runtime image containing the metadata assertion sidecar."},
 		&cli.StringFlag{Name: "assistant-kit-gke-ingress-cidr", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_INGRESS_CIDR"}, Value: "", Usage: "Server source CIDR permitted to connect to Kit gateway pods."},
@@ -59,12 +60,12 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	var provision assistants.KitGKEProvisionInput
 	var workloadPoolProject string
 	if base.Provider == assistants.RuntimeProviderGKE {
-		for _, name := range []string{"assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
+		for _, name := range []string{"assistant-kit-workload-issuer", "assistant-kit-workload-jwks-url", "assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
 			if c.String(name) != "" {
 				return fmt.Errorf("%s is local-only", name)
 			}
 		}
-		workloadPoolProject, err = kitGKEWorkloadPoolProject(c.String("assistant-kit-workload-issuer"))
+		workloadPoolProject, err = kitGKEWorkloadPoolProject(c.String("assistant-kit-gke-workload-pool-project"))
 		if err != nil {
 			return err
 		}
@@ -176,16 +177,9 @@ func kitGKEProvisionFromCLI(c *cli.Context) (assistants.KitGKEProvisionInput, er
 	return out, nil
 }
 
-// The cluster issuer is retained in deployment configuration for old servers.
-// Its project identifies the cluster workload pool, not the dedicated IAM project.
-func kitGKEWorkloadPoolProject(raw string) (string, error) {
-	issuer, err := url.Parse(raw)
-	if err != nil || issuer.Scheme != "https" || issuer.Host != "container.googleapis.com" || issuer.User != nil || issuer.RawQuery != "" || issuer.Fragment != "" || issuer.RawPath != "" {
-		return "", fmt.Errorf("assistant-kit-workload-issuer must identify the assistant GKE cluster workload pool")
+func kitGKEWorkloadPoolProject(project string) (string, error) {
+	if !regexp.MustCompile(`^[a-z][a-z0-9-]{4,28}[a-z0-9]$`).MatchString(project) {
+		return "", fmt.Errorf("assistant-kit-gke-workload-pool-project must be an explicit Google Cloud project ID")
 	}
-	parts := regexp.MustCompile(`^/v1/projects/([a-z][a-z0-9-]{4,28}[a-z0-9])/locations/[a-z0-9-]+/clusters/[a-z0-9-]+$`).FindStringSubmatch(issuer.Path)
-	if len(parts) != 2 {
-		return "", fmt.Errorf("assistant-kit-workload-issuer must contain the assistant cluster project ID")
-	}
-	return parts[1], nil
+	return project, nil
 }
