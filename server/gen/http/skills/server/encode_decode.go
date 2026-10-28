@@ -6297,22 +6297,23 @@ func EncodeListLinksError(encoder func(context.Context, http.ResponseWriter) goa
 // *SkillResponseBody from a value of type *types.Skill.
 func marshalTypesSkillToSkillResponseBody(v *types.Skill) *SkillResponseBody {
 	res := &SkillResponseBody{
-		ID:              v.ID,
-		ProjectID:       v.ProjectID,
-		Name:            v.Name,
-		DisplayName:     v.DisplayName,
-		Summary:         v.Summary,
-		SourceKind:      v.SourceKind,
-		Classification:  v.Classification,
-		LatestVersionID: v.LatestVersionID,
-		VersionCount:    v.VersionCount,
-		HasValidVersion: v.HasValidVersion,
-		FirstSeenAt:     v.FirstSeenAt,
-		LastSeenAt:      v.LastSeenAt,
-		SeenCount:       v.SeenCount,
-		ShareToken:      v.ShareToken,
-		CreatedAt:       v.CreatedAt,
-		UpdatedAt:       v.UpdatedAt,
+		ID:                  v.ID,
+		ProjectID:           v.ProjectID,
+		Name:                v.Name,
+		DisplayName:         v.DisplayName,
+		Summary:             v.Summary,
+		SourceKind:          v.SourceKind,
+		Classification:      v.Classification,
+		LatestVersionID:     v.LatestVersionID,
+		VersionCount:        v.VersionCount,
+		HasValidVersion:     v.HasValidVersion,
+		FirstSeenAt:         v.FirstSeenAt,
+		LastSeenAt:          v.LastSeenAt,
+		SeenCount:           v.SeenCount,
+		LastLoadedOverMcpAt: v.LastLoadedOverMcpAt,
+		ShareToken:          v.ShareToken,
+		CreatedAt:           v.CreatedAt,
+		UpdatedAt:           v.UpdatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))
@@ -6608,19 +6609,20 @@ func marshalSkillsUnknownSkillActivationToUnknownSkillActivationResponseBody(v *
 // type *types.PluginSkillDistribution.
 func marshalTypesPluginSkillDistributionToPluginSkillDistributionResponseBody(v *types.PluginSkillDistribution) *PluginSkillDistributionResponseBody {
 	res := &PluginSkillDistributionResponseBody{
-		ID:                v.ID,
-		ProjectID:         v.ProjectID,
-		SkillID:           v.SkillID,
-		SkillName:         v.SkillName,
-		SkillDisplayName:  v.SkillDisplayName,
-		PluginID:          v.PluginID,
-		PluginName:        v.PluginName,
-		PinnedVersionID:   v.PinnedVersionID,
-		ResolvedVersionID: v.ResolvedVersionID,
-		Channel:           v.Channel,
-		CreatedByUserID:   v.CreatedByUserID,
-		CreatedAt:         v.CreatedAt,
-		UpdatedAt:         v.UpdatedAt,
+		ID:                  v.ID,
+		ProjectID:           v.ProjectID,
+		SkillID:             v.SkillID,
+		SkillName:           v.SkillName,
+		SkillDisplayName:    v.SkillDisplayName,
+		PluginID:            v.PluginID,
+		PluginName:          v.PluginName,
+		PinnedVersionID:     v.PinnedVersionID,
+		ResolvedVersionID:   v.ResolvedVersionID,
+		Channel:             v.Channel,
+		CreatedByUserID:     v.CreatedByUserID,
+		CreatedAt:           v.CreatedAt,
+		UpdatedAt:           v.UpdatedAt,
+		LastLoadedOverMcpAt: v.LastLoadedOverMcpAt,
 	}
 
 	return res

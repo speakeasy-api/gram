@@ -34,9 +34,9 @@ const (
 	// vendor-delivered.
 	observationSourceLevel = "mcp"
 
-	// idempotencyKeyPrefix namespaces MCP activation keys from the keys hook
+	// IdempotencyKeyPrefix namespaces MCP activation keys from the keys hook
 	// adapters choose, which share the per-project unique index.
-	idempotencyKeyPrefix = "mcp:"
+	IdempotencyKeyPrefix = "mcp:"
 
 	// servedSkillLimit is the most skills one resolution serves. A listing is
 	// answered in one page, so the cap bounds the work of a single call. The
@@ -268,7 +268,7 @@ func ObservationIdempotencyKey(sessionID, rawSHA256 string) string {
 	if sessionID == "" {
 		return ""
 	}
-	return idempotencyKeyPrefix + sessionID + ":" + rawSHA256
+	return IdempotencyKeyPrefix + sessionID + ":" + rawSHA256
 }
 
 // isRecipient reports whether userID is a live user holding an active
