@@ -38,7 +38,6 @@ func TestKitGKEAdmissionPermissions(t *testing.T) {
 			})
 			require.NoError(t, k.RuntimeReadyForAdmission(t.Context()))
 			expected := map[schema.GroupVersionResource][]string{
-				kitGKEIAMPendingGVR:  {"get", "create", "update", "delete"},
 				kitServiceAccountGVR: {"create", "get", "delete"},
 				kitSecretGVR:         {"create", "get", "delete"},
 				kitTemplateGVR:       {"create", "get", "delete"},

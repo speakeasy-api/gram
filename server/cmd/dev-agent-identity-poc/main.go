@@ -1,4 +1,4 @@
-// Command dev-kit-identity-poc verifies a metadata ID token with the production
+// Command dev-agent-identity-poc verifies a metadata ID token with the production
 // workload verifier. It does not provision resources or write identity records.
 package main
 
@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,8 +23,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
 
-const googleIssuer = "https://accounts.google.com"
-const googleJWKS = "https://www.googleapis.com/oauth2/v3/certs"
+// These inputs come from independently inspected project/cluster configuration.
+type identityConfig struct{ Project, Organization, Location, Cluster, Namespace, ServiceAccount string }
+
+func (c identityConfig) expected() (issuer, subject string, err error) {
+	if !regexp.MustCompile(`^[0-9]+$`).MatchString(c.Project) || (c.Organization != "" && !regexp.MustCompile(`^[0-9]+$`).MatchString(c.Organization)) {
+		return "", "", errors.New("numeric project/organization IDs required")
+	}
+	for _, part := range []string{c.Location, c.Cluster, c.Namespace, c.ServiceAccount} {
+		if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`).MatchString(part) {
+			return "", "", errors.New("invalid cluster identity component")
+		}
+	}
+	scope, id, prefix := "projects", c.Project, "proj"
+	if c.Organization != "" {
+		scope, id, prefix = "organizations", c.Organization, "org"
+	}
+	domain := "agents.global." + prefix + "-" + id + ".system.id.goog"
+	issuer = "https://sts.googleapis.com/v1/" + scope + "/" + id + "/locations/global/workloadIdentityPools/" + domain
+	subject = "spiffe://" + domain + "/resources/container/projects/" + c.Project + "/locations/" + c.Location + "/clusters/" + c.Cluster + "/ns/" + c.Namespace + "/sa/" + c.ServiceAccount
+	return issuer, subject, nil
+}
 
 type keys struct{ set jose.JSONWebKeySet }
 
@@ -54,17 +74,16 @@ type report struct {
 	Subject               string    `json:"subject"`
 	Audience              []string  `json:"audience"`
 	ExpiresAt             time.Time `json:"expires_at"`
-	CachedTokenAccepted   bool      `json:"cached_token_accepted"`
 	WrongSubjectRejected  bool      `json:"wrong_subject_rejected"`
 	WrongAudienceRejected bool      `json:"wrong_audience_rejected"`
 }
 
-func verify(ctx context.Context, raw, subject, audience string, publicKeys keys) (report, error) {
+func verify(ctx context.Context, raw, issuer, subject, audience string, publicKeys keys) (report, error) {
 	var out report
 	if subject == "" || audience == "" {
 		return out, errors.New("expected subject and audience required")
 	}
-	source, err := jwks.NewRemoteSource(googleJWKS)
+	source, err := jwks.NewRemoteSource(issuer + "/openid/jwks")
 	if err != nil {
 		return out, fmt.Errorf("create Google JWKS source: %w", err)
 	}
@@ -72,7 +91,7 @@ func verify(ctx context.Context, raw, subject, audience string, publicKeys keys)
 	if err != nil {
 		return out, fmt.Errorf("create workload verifier: %w", err)
 	}
-	expected := workload.Expectation{Issuer: googleIssuer, Subject: subject, KeySource: source, ReplayIssuer: "kit-identity-poc", ReplayParty: "google", Audiences: []string{audience}, MaxLifetime: time.Hour, AllowAssertionReuse: false}
+	expected := workload.Expectation{Issuer: issuer, Subject: subject, KeySource: source, ReplayIssuer: "agent-identity-poc", ReplayParty: "google", Audiences: []string{audience}, MaxLifetime: time.Hour, AllowAssertionReuse: false}
 	result, err := verifier.Verify(ctx, raw, expected)
 	if err != nil {
 		return out, fmt.Errorf("workload verification failed: %s", workload.ReasonOf(err))
@@ -82,13 +101,18 @@ func verify(ctx context.Context, raw, subject, audience string, publicKeys keys)
 	if err != nil {
 		return out, errors.New("invalid signed token")
 	}
-	var claims jwt.Claims
+	var claims struct {
+		jwt.Claims
+		Confirmation json.RawMessage `json:"cnf"`
+	}
 	if err = token.UnsafeClaimsWithoutVerification(&claims); err != nil {
 		return out, errors.New("invalid verified claims")
 	}
-	again, err := verifier.Verify(ctx, raw, expected)
-	if err != nil {
-		return out, errors.New("cached-token verification failed")
+	if len(claims.Confirmation) != 0 {
+		return out, errors.New("certificate-bound token unsupported; request unbound token")
+	}
+	if claims.Expiry == nil || !claims.Expiry.Time().After(time.Now()) {
+		return out, errors.New("token expired")
 	}
 	bad := expected
 	bad.Subject = subject + "-different"
@@ -101,14 +125,25 @@ func verify(ctx context.Context, raw, subject, audience string, publicKeys keys)
 	if !wrongSubject || !wrongAudience {
 		return out, errors.New("negative identity checks failed")
 	}
-	return report{Issuer: claims.Issuer, Subject: claims.Subject, Audience: claims.Audience, ExpiresAt: result.ExpiresAt, CachedTokenAccepted: again.ReusedAssertion, WrongSubjectRejected: wrongSubject, WrongAudienceRejected: wrongAudience}, nil
+	return report{Issuer: claims.Issuer, Subject: claims.Subject, Audience: claims.Audience, ExpiresAt: result.ExpiresAt, WrongSubjectRejected: wrongSubject, WrongAudienceRejected: wrongAudience}, nil
 }
 func run() error {
-	subject := flag.String("subject", "", "expected IAM service account numeric unique ID (not email)")
-	audience := flag.String("audience", "", "expected audience used in the metadata request")
+	var c identityConfig
+	flag.StringVar(&c.Project, "project-number", "", "cluster project number")
+	flag.StringVar(&c.Organization, "organization-id", "", "organization ancestor ID; empty only for standalone project")
+	flag.StringVar(&c.Location, "location", "", "control plane region or zone")
+	flag.StringVar(&c.Cluster, "cluster", "", "cluster name")
+	flag.StringVar(&c.Namespace, "namespace", "", "dedicated namespace")
+	flag.StringVar(&c.ServiceAccount, "service-account", "native-agent-probe", "dedicated Kubernetes service account")
+	audience := flag.String("audience", "", "expected audience")
+	standalone := flag.Bool("standalone-project", false, "confirm project has no organization ancestor")
 	flag.Parse()
-	if *subject == "" || *audience == "" {
-		return errors.New("-subject and -audience are required")
+	if *audience == "" || (*standalone == (c.Organization != "")) {
+		return errors.New("audience and exactly one of organization-id or standalone-project required")
+	}
+	issuer, subject, err := c.expected()
+	if err != nil {
+		return err
 	}
 	raw, err := io.ReadAll(io.LimitReader(os.Stdin, 8193))
 	if err != nil {
@@ -119,7 +154,7 @@ func run() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, googleJWKS, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, issuer+"/openid/jwks", nil)
 	if err != nil {
 		return fmt.Errorf("create Google JWKS request: %w", err)
 	}
@@ -136,7 +171,7 @@ func run() error {
 	if err = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&publicKeys.set); err != nil {
 		return errors.New("invalid Google JWKS")
 	}
-	out, err := verify(ctx, strings.TrimSpace(string(raw)), *subject, *audience, publicKeys)
+	out, err := verify(ctx, strings.TrimSpace(string(raw)), issuer, subject, *audience, publicKeys)
 	if err != nil {
 		return err
 	}

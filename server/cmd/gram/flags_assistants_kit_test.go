@@ -19,8 +19,11 @@ func TestKitWorkloadAssertionFlags(t *testing.T) {
 		}
 	}
 	require.True(t, names["assistant-kit-workload-issuer"])
-	require.True(t, names["assistant-kit-gke-iam-project"])
-	require.True(t, names["assistant-kit-gke-workload-pool-project"])
+	require.False(t, names["assistant-kit-gke-iam-project"])
+	require.False(t, names["assistant-kit-gke-workload-pool-project"])
+	for _, name := range []string{"project-number", "organization-id", "cluster-location", "cluster-name"} {
+		require.True(t, names["assistant-kit-gke-"+name])
+	}
 	require.True(t, names["assistant-kit-gke-metadata-image"])
 	require.True(t, names["assistant-kit-workload-jwks-url"])
 	require.True(t, names["assistant-kit-workload-subject"])
@@ -56,8 +59,8 @@ func kitCLIContext(t *testing.T, values map[string]string) *cli.Context {
 func TestKitGKEProvisionCLI(t *testing.T) {
 	t.Parallel()
 	c := kitCLIContext(t, map[string]string{
-		"assistant-kit-gke-ingress-cidr":      "10.1.0.0/16",
-		"assistant-kit-gke-iam-project":       "sandbox-project",
+		"assistant-kit-gke-ingress-cidr": "10.1.0.0/16",
+
 		"assistant-kit-gke-metadata-image":    "example.invalid/runtime@sha256:" + strings.Repeat("a", 64),
 		"assistant-kit-gke-snapshots-enabled": "true",
 		"assistant-kit-gke-cpu-request":       "200m",
@@ -81,7 +84,7 @@ func TestKitGKEProvisionCLI(t *testing.T) {
 func TestKitGKEProvisionCLIRejectsUnsafeConfiguration(t *testing.T) {
 	t.Parallel()
 	for name, value := range map[string]string{
-		"assistant-kit-gke-iam-project":     "",
+
 		"assistant-kit-gke-metadata-image":  "example.invalid/runtime:latest",
 		"assistant-kit-network":             "local-network",
 		"assistant-runtime-local-ca-file":   "/local/ca.pem",
@@ -95,7 +98,7 @@ func TestKitGKEProvisionCLIRejectsUnsafeConfiguration(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			values := map[string]string{"assistant-kit-gke-ingress-cidr": "10.1.0.0/16", "assistant-kit-gke-iam-project": "sandbox-project", "assistant-kit-gke-metadata-image": "example.invalid/runtime@sha256:" + strings.Repeat("a", 64)}
+			values := map[string]string{"assistant-kit-gke-ingress-cidr": "10.1.0.0/16", "assistant-kit-gke-metadata-image": "example.invalid/runtime@sha256:" + strings.Repeat("a", 64)}
 			values[name] = value
 			_, err := kitGKEProvisionFromCLI(kitCLIContext(t, values))
 			require.Error(t, err)
@@ -109,7 +112,7 @@ func TestKitCLIOptInAndProviderValidation(t *testing.T) {
 	require.NoError(t, installKitLocalRuntimeFromCLI(kitCLIContext(t, nil), nil, nil, nil, nil, nil))
 	c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "local"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local environment")
-	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-gke-workload-pool-project": "cluster-project", "assistant-kit-gke-iam-project": "identity-project", "assistant-kit-gke-metadata-image": "example.invalid/runtime@sha256:" + strings.Repeat("a", 64)})
+	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-gke-project-number": "123456789012", "assistant-kit-gke-organization-id": "987654321098", "assistant-kit-gke-cluster-location": "us-central1", "assistant-kit-gke-cluster-name": "assistants", "assistant-kit-gke-metadata-image": "example.invalid/runtime@sha256:" + strings.Repeat("a", 64)})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "ingress-cidr")
 	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-workload-subject": "local-subject"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local-only")
@@ -141,28 +144,6 @@ func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
 	}
 }
 
-func TestKitGKEWorkloadPoolProject(t *testing.T) {
-	t.Parallel()
-	got, err := kitGKEWorkloadPoolProject("cluster-project")
-	require.NoError(t, err)
-	require.Equal(t, "cluster-project", got)
-	for _, raw := range []string{"", "123456", "bad/project", " cluster-project", "https://container.googleapis.com/v1/projects/cluster-project/locations/us-central1/clusters/assistants"} {
-		_, err := kitGKEWorkloadPoolProject(raw)
-		require.ErrorContains(t, err, "assistant-kit-gke-workload-pool-project", raw)
-	}
-}
-
-func TestKitGKEWorkloadPoolProjectEnvironment(t *testing.T) {
-	t.Setenv("GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT", "cluster-project")
-	set := flag.NewFlagSet("kit", flag.ContinueOnError)
-	for _, f := range assistantKitRuntimeFlags() {
-		if f.Names()[0] == "assistant-kit-gke-workload-pool-project" {
-			require.NoError(t, f.Apply(set))
-		}
-	}
-	require.Equal(t, "cluster-project", cli.NewContext(nil, set, nil).String("assistant-kit-gke-workload-pool-project"))
-}
-
 func TestKitGKEProvisionCLIRejectsMalformedMetadataImage(t *testing.T) {
 	t.Parallel()
 	for _, image := range []string{
@@ -173,10 +154,73 @@ func TestKitGKEProvisionCLIRejectsMalformedMetadataImage(t *testing.T) {
 		t.Run(image, func(t *testing.T) {
 			t.Parallel()
 			_, err := kitGKEProvisionFromCLI(kitCLIContext(t, map[string]string{
-				"assistant-kit-gke-iam-project":    "sandbox-project",
+
 				"assistant-kit-gke-metadata-image": image,
 			}))
 			require.ErrorContains(t, err, "assistant-kit-gke-metadata-image")
 		})
 	}
+}
+
+func kitGKEIdentityCLIValues() map[string]string {
+	return map[string]string{
+		"assistant-kit-gke-project-number":   "123456789012",
+		"assistant-kit-gke-organization-id":  "987654321098",
+		"assistant-kit-gke-cluster-location": "us-central1",
+		"assistant-kit-gke-cluster-name":     "assistants",
+	}
+}
+
+func TestKitGKEIdentityCLI(t *testing.T) {
+	t.Parallel()
+	got, err := kitGKEIdentityFromCLI(kitCLIContext(t, kitGKEIdentityCLIValues()))
+	require.NoError(t, err)
+	require.Equal(t, "123456789012", got.ProjectNumber)
+	require.Equal(t, "987654321098", got.OrganizationID)
+	require.Equal(t, "us-central1", got.ClusterLocation)
+	require.Equal(t, "assistants", got.ClusterName)
+}
+
+func TestKitGKEIdentityCLIRejectsInvalidIdentity(t *testing.T) {
+	t.Parallel()
+	for name := range kitGKEIdentityCLIValues() {
+		for _, value := range []string{"", "bad/value", " value", "https://example.invalid"} {
+			t.Run(name+"/"+value, func(t *testing.T) {
+				t.Parallel()
+				values := kitGKEIdentityCLIValues()
+				values[name] = value
+				values["assistant-kit-image"] = "example.invalid/kit:v1"
+				values["assistant-runtime-provider"] = "gke"
+				require.ErrorContains(t, installKitLocalRuntimeFromCLI(kitCLIContext(t, values), nil, nil, nil, nil, nil), "identity flags")
+			})
+		}
+	}
+	for _, name := range []string{"project-number", "organization-id"} {
+		for _, value := range []string{"sandbox-project", "0", "-123", "1.5"} {
+			values := kitGKEIdentityCLIValues()
+			values["assistant-kit-gke-"+name] = value
+			_, err := kitGKEIdentityFromCLI(kitCLIContext(t, values))
+			require.Error(t, err, "%s=%s", name, value)
+		}
+	}
+}
+
+//nolint:paralleltest // t.Setenv changes process-wide state and prohibits parallel execution.
+func TestKitGKEIdentityEnvironment(t *testing.T) {
+	values := kitGKEIdentityCLIValues()
+	for name, value := range values {
+		t.Setenv("GRAM_"+strings.ToUpper(strings.ReplaceAll(name, "-", "_")), value)
+	}
+	set := flag.NewFlagSet("kit", flag.ContinueOnError)
+	for _, f := range assistantKitRuntimeFlags() {
+		if _, ok := values[f.Names()[0]]; ok {
+			require.NoError(t, f.Apply(set))
+		}
+	}
+	got, err := kitGKEIdentityFromCLI(cli.NewContext(nil, set, nil))
+	require.NoError(t, err)
+	require.Equal(t, "123456789012", got.ProjectNumber)
+	require.Equal(t, "987654321098", got.OrganizationID)
+	require.Equal(t, "us-central1", got.ClusterLocation)
+	require.Equal(t, "assistants", got.ClusterName)
 }

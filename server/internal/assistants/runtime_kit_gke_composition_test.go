@@ -30,7 +30,7 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 	issuer, err := url.Parse("https://mcp.example/oauth/issuer")
 	require.NoError(t, err)
 	valid := KitGKECompositionConfig{
-		IAMProject: "example-project", WorkloadPoolProject: "example-project",
+		KitGKEIdentityConfig: testKitGKEIdentityConfig(),
 		KitLocalCompositionConfig: KitLocalCompositionConfig{
 			Environment: "production", Image: "registry.example/kit:0.2.17", Origin: origin,
 			MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(),
@@ -39,6 +39,7 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		},
 		GKE: GKERuntimeConfig{Dynamic: fake.NewSimpleDynamicClient(runtime.NewScheme()), Namespace: "assistants", RunnerCIDRBlocks: []string{"10.0.0.0/16"}},
 	}
+	valid = kitGKENativeIssuerConfig(valid)
 	require.NoError(t, validateKitGKEComposition(valid))
 	for _, tc := range []struct {
 		name   string
@@ -71,10 +72,10 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		mutate    func(*KitGKECompositionConfig)
 		wantError string
 	}{
-		{"missing IAM project", func(c *KitGKECompositionConfig) { c.IAMProject = "" }, "requires an IAM project ID"},
-		{"missing workload pool project", func(c *KitGKECompositionConfig) { c.WorkloadPoolProject = "" }, "requires a workload pool project ID"},
-		{"invalid IAM project", func(c *KitGKECompositionConfig) { c.IAMProject = "invalid/project" }, "requires an IAM project ID"},
-		{"invalid workload pool project", func(c *KitGKECompositionConfig) { c.WorkloadPoolProject = "invalid/project" }, "requires a workload pool project ID"},
+		{"missing project", func(c *KitGKECompositionConfig) { c.ProjectNumber = "" }, "numeric project number"},
+		{"missing organization", func(c *KitGKECompositionConfig) { c.OrganizationID = "" }, "numeric project number"},
+		{"invalid project", func(c *KitGKECompositionConfig) { c.ProjectNumber = "invalid/project" }, "numeric project number"},
+		{"invalid cluster", func(c *KitGKECompositionConfig) { c.ClusterName = "invalid/cluster" }, "valid cluster location"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

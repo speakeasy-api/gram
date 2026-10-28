@@ -33,15 +33,14 @@ import (
 // All lifecycle calls require the caller's shared runtime admission lock.
 // Bootstrap retires old inference authority before minting startup credentials.
 type KitGKERuntimeConfig struct {
-	IAMProject          string
-	WorkloadPoolProject string
-	GKE                 GKERuntimeConfig
-	Provision           KitGKEProvisionInput
-	Bootstrap           func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error)
-	Protocol            func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error)
-	Fence               func(context.Context, assistantRuntimeRecord) error
-	Snapshots           KitGKECheckpointDriver
-	AuthorityStore      KitGKEAuthorityStore
+	KitGKEIdentityConfig
+	GKE            GKERuntimeConfig
+	Provision      KitGKEProvisionInput
+	Bootstrap      func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error)
+	Protocol       func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error)
+	Fence          func(context.Context, assistantRuntimeRecord) error
+	Snapshots      KitGKECheckpointDriver
+	AuthorityStore KitGKEAuthorityStore
 	// Lifecycle acquires the assistant advisory fence and reloads authoritative state.
 	Lifecycle func(context.Context, assistantRuntimeRecord, func(context.Context, assistantRuntimeRecord) error) error
 }
@@ -63,7 +62,11 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	if config.GKE.ServerURL.Scheme != "https" || config.GKE.ServerURL.Host == "" || config.GKE.ServerURL.User != nil {
 		return nil, fmt.Errorf("kit GKE requires an HTTPS management URL")
 	}
+	if err := config.validate(); err != nil {
+		return nil, err
+	}
 	p := config.Provision
+	p.KitGKEIdentityConfig = config.KitGKEIdentityConfig
 	if p.AllowInsecureHTTP {
 		return nil, fmt.Errorf("kit GKE requires HTTPS inference without insecure overrides")
 	}
@@ -127,7 +130,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	p.GatewayToken = nil
 	p.TLSCertificate, p.TLSPrivateKey = nil, nil
 	raw, err := json.Marshal(map[string]any{
-		"metadata_image": p.MetadataImage, "iam_project": config.IAMProject, "workload_pool_project": config.WorkloadPoolProject, "tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
+		"metadata_image": p.MetadataImage, "agent_identity": config.KitGKEIdentityConfig, "tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
 		"identity": p.Identity.labels(), "namespace": p.Identity.Namespace, "image": p.Image,
 		"ingress_cidr": p.IngressCIDR, "guest_port": p.GuestPort, "command": p.Command, "args": p.Args,
 		"allow_insecure_http": p.AllowInsecureHTTP, "resources": p.Resources, "work_size_limit": p.WorkSizeLimit,
@@ -189,7 +192,7 @@ func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackend
 	if err := json.Unmarshal(r.BackendMetadataJSON, &m); err != nil {
 		return m, fmt.Errorf("decode Kit GKE authority: %w", err)
 	}
-	if m.CheckpointMarker == "" || m.Workload == nil || m.Workload.ServiceAccount == "" || m.Workload.Audience == "" || m.Workload.IssuerID == uuid.Nil || m.Workload.Subject == "" || m.ServiceAccountUID == "" || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.WarmPoolName == "" || m.WarmPoolUID == "" || m.SecretUID == "" || m.SecretName == "" || (!m.Provisioning && (m.ImageDigest == "" || m.ProxyImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "")) {
+	if m.CheckpointMarker == "" || m.Workload == nil || m.Workload.ServiceAccount == "" || m.Workload.Audience == "" || m.Workload.IssuerID == uuid.Nil || m.Workload.Subject != k.config.subject(k.config.GKE.Namespace, m.Workload.ServiceAccount) || m.ServiceAccountUID == "" || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.WarmPoolName == "" || m.WarmPoolUID == "" || m.SecretUID == "" || m.SecretName == "" || (!m.Provisioning && (m.ImageDigest == "" || m.ProxyImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "")) {
 		return m, fmt.Errorf("kit GKE authority or exact compatibility mismatch; explicit fenced reset required")
 	}
 	return m, nil
@@ -808,11 +811,7 @@ func (k *KitGKERuntimeBackend) fenceColdAdmissionFailure(ctx context.Context, r 
 var kitServiceAccountGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "serviceaccounts"}
 
 func (k *KitGKERuntimeBackend) workloadServiceAccount(in KitGKEProvisionInput) *unstructured.Unstructured {
-	o := kitWorkloadServiceAccount(in)
-	if k.config.IAMProject != "" {
-		o.SetAnnotations(map[string]string{"iam.gke.io/gcp-service-account": kitGKEIAMAccount(in.WorkloadServiceAccount) + "@" + k.config.IAMProject + ".iam.gserviceaccount.com"})
-	}
-	return o
+	return kitWorkloadServiceAccount(in)
 }
 
 func kitWorkloadServiceAccount(in KitGKEProvisionInput) *unstructured.Unstructured {

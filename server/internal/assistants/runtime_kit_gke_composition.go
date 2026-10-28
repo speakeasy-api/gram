@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,7 +16,6 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
-	"google.golang.org/api/iam/v1"
 )
 
 // KitGKECompositionConfig opts new version-3 conversations into the production
@@ -23,31 +23,57 @@ import (
 // same issuer-bound workload registration as local Kit, never a user's token.
 type KitGKECompositionConfig struct {
 	KitLocalCompositionConfig
-	// IAMProject owns per-generation Google service accounts; it may equal WorkloadPoolProject.
-	// WorkloadPoolProject is the GKE cluster workload pool project, which may differ.
-	IAMProject          string
-	WorkloadPoolProject string
-	GKE                 GKERuntimeConfig
-	Provision           KitGKEProvisionInput
+	KitGKEIdentityConfig
+	GKE       GKERuntimeConfig
+	Provision KitGKEProvisionInput
 	// Snapshots optionally overrides the managed GKE driver for tests. Nil uses
 	// the concrete managed API driver when snapshot provisioning is enabled.
 	Snapshots KitGKECheckpointDriver
 }
 
-// Metadata assertions always use Google's issuer and public JWKS, independently
-// of the explicitly configured IAM and cluster workload-pool projects.
-func kitGKEGoogleIssuerConfig(c KitGKECompositionConfig) KitGKECompositionConfig {
-	c.WorkloadIssuerURL = "https://accounts.google.com"
-	c.WorkloadJWKSURL = "https://www.googleapis.com/oauth2/v3/certs"
+// KitGKEIdentityConfig independently identifies the cluster's native Agent Identity.
+// OrganizationID is required: standalone project pools are not inferred.
+type KitGKEIdentityConfig struct {
+	ProjectNumber, OrganizationID, ClusterLocation, ClusterName string
+}
+
+func (c KitGKEIdentityConfig) Validate() error {
+	for _, id := range []string{c.ProjectNumber, c.OrganizationID} {
+		if !regexp.MustCompile(`^[1-9][0-9]*$`).MatchString(id) {
+			return errors.New("native Agent Identity requires numeric project number and organization ID")
+		}
+	}
+	for _, part := range []string{c.ClusterLocation, c.ClusterName} {
+		if len(part) > 63 || !regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`).MatchString(part) {
+			return errors.New("native Agent Identity requires valid cluster location and name")
+		}
+	}
+	return nil
+}
+func (c KitGKEIdentityConfig) validate() error { return c.Validate() }
+func (c KitGKEIdentityConfig) trustDomain() string {
+	return "agents.global.org-" + c.OrganizationID + ".system.id.goog"
+}
+func (c KitGKEIdentityConfig) issuer() string {
+	return "https://sts.googleapis.com/v1/organizations/" + c.OrganizationID + "/locations/global/workloadIdentityPools/" + c.trustDomain()
+}
+func (c KitGKEIdentityConfig) subject(namespace, sa string) string {
+	return "spiffe://" + c.trustDomain() + "/resources/container/projects/" + c.ProjectNumber + "/locations/" + c.ClusterLocation + "/clusters/" + c.ClusterName + "/ns/" + namespace + "/sa/" + sa
+}
+
+func kitGKENativeIssuerConfig(c KitGKECompositionConfig) KitGKECompositionConfig {
+	c.WorkloadIssuerURL = c.issuer()
+	c.WorkloadJWKSURL = c.issuer() + "/openid/jwks"
+	c.nativeIdentity = &c.KitGKEIdentityConfig
 	return c
 }
 
 func validateKitGKEComposition(c KitGKECompositionConfig) error {
-	if !kitGKEIAMProjectPattern.MatchString(c.WorkloadPoolProject) {
-		return errors.New("kit GKE composition requires a workload pool project ID")
+	if err := c.Validate(); err != nil {
+		return err
 	}
-	if !kitGKEIAMProjectPattern.MatchString(c.IAMProject) {
-		return errors.New("kit GKE composition requires an IAM project ID")
+	if c.WorkloadIssuerURL != c.issuer() || c.WorkloadJWKSURL != c.issuer()+"/openid/jwks" {
+		return errors.New("kit GKE requires derived native Agent Identity issuer and JWKS")
 	}
 	if c.Environment == "" || c.Environment == "local" {
 		return errors.New("kit GKE composition requires an explicit non-local environment")
@@ -76,7 +102,7 @@ func validateKitGKEComposition(c KitGKECompositionConfig) error {
 // Platform MCP parity: provisioning/checkpoint operations are internal lifecycle
 // machinery, not member operations. Existing assistant tools remain unchanged.
 func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
-	c = kitGKEGoogleIssuerConfig(c)
+	c = kitGKENativeIssuerConfig(c)
 	c.WorkloadNamespace = c.GKE.Namespace
 	if err := validateKitGKEComposition(c); err != nil {
 		return err
@@ -92,34 +118,13 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	}
 	c.Provision.Image = c.Image
 	c.Provision.GuestPort = int32(c.GKE.GuestPort)
-	iamService, err := iam.NewService(context.Background())
-	if err != nil {
-		return fmt.Errorf("initialize Kit GKE IAM: %w", err)
-	}
-	manager := &kitGKEIAM{project: c.IAMProject, workloadPoolProject: c.WorkloadPoolProject, namespace: c.GKE.Namespace, service: iamService, dynamic: c.GKE.Dynamic}
 	backend, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{
-		IAMProject: c.IAMProject, WorkloadPoolProject: c.WorkloadPoolProject, GKE: c.GKE, Provision: c.Provision, Snapshots: c.Snapshots,
+		KitGKEIdentityConfig: c.KitGKEIdentityConfig, GKE: c.GKE, Provision: c.Provision, Snapshots: c.Snapshots,
 		AuthorityStore: NewKitGKEPostgresAuthorityStore(s.db),
-		Fence: func(ctx context.Context, r assistantRuntimeRecord) error {
-			if err := s.fenceKitRuntimeAlreadyLocked(ctx, r); err != nil {
-				return err
-			}
-			if err := manager.removeRuntime(ctx, r); err != nil {
-				return err
-			}
-			return manager.removePending(ctx, r)
-		},
-		Lifecycle: s.kitGKELifecycle,
+		Fence:          s.fenceKitRuntimeAlreadyLocked,
+		Lifecycle:      s.kitGKELifecycle,
 		Bootstrap: func(ctx context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
-			attempt := &kitGKEIAMAttempt{manager: manager, runtime: r}
-			ctx = context.WithValue(ctx, kitGKEIAMContextKey{}, attempt)
-			bootstrap, err := s.kitCompositionBootstrap(ctx, r, c.KitLocalCompositionConfig)
-			if err != nil {
-				cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-				defer cancel()
-				err = errors.Join(err, manager.removePending(cleanup, r))
-			}
-			return bootstrap, err
+			return s.kitCompositionBootstrap(ctx, r, c.KitLocalCompositionConfig)
 		},
 		Protocol: s.kitProtocolFactory(c.KitLocalCompositionConfig, c.GKE.RunnerCIDRBlocks),
 	})

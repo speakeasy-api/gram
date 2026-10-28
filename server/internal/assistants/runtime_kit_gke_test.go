@@ -28,10 +28,11 @@ func kitGKEInput() KitGKEProvisionInput {
 		panic(err)
 	}
 	return KitGKEProvisionInput{
-		TLSCertificate: cert, TLSPrivateKey: key,
+		KitGKEIdentityConfig: KitGKEIdentityConfig{ProjectNumber: "123456789", OrganizationID: "987654321", ClusterLocation: "us-central1", ClusterName: "test-cluster"},
+		TLSCertificate:       cert, TLSPrivateKey: key,
 		MetadataImage: "registry.example/assistant@sha256:" + strings.Repeat("a", 64),
 		Model:         "test-model", InferenceEndpoint: "https://example.invalid/inference",
-		Workload:               &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "test", ServiceAccount: "kit-workload-test", Audience: "https://example.invalid/oauth"},
+		Workload:               &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "spiffe://agents.global.org-987654321.system.id.goog/resources/container/projects/123456789/locations/us-central1/clusters/test-cluster/ns/kit-test/sa/kit-workload-test", ServiceAccount: "kit-workload-test", Audience: "https://example.invalid/oauth"},
 		WorkloadServiceAccount: "kit-workload-test", WorkloadAudience: "https://example.invalid/oauth",
 		CheckpointMarker: []byte("11111111-1111-4111-8111-111111111111"),
 		Identity:         KitGKEIdentity{Namespace: "kit-test", AssistantID: "assistant-test", Lineage: "lineage-one", CompatibilityGeneration: "generation-one"},
@@ -74,6 +75,9 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.True(t, foundBootstrap, "bootstrap volume must exist")
 	require.Equal(t, in.Identity.labels(), pod.Labels)
 	require.NotContains(t, pod.Annotations, "podsnapshot.gke.io/ps-name")
+	require.Equal(t, "spiffe://agents.global.org-987654321.system.id.goog/*", pod.Annotations["iam.gke.io/identity"])
+	require.NotContains(t, pod.Annotations, "security.cloud.google.com/inject-podcertificates")
+	require.NotContains(t, pod.Annotations, "iam.gke.io/gcp-service-account")
 	require.Equal(t, "false", pod.Annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"])
 	require.False(t, *pod.Spec.AutomountServiceAccountToken)
 	require.Equal(t, in.WorkloadServiceAccount, pod.Spec.ServiceAccountName)
@@ -87,6 +91,14 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.Equal(t, map[string]string{"sandbox.gke.io/runtime": "gvisor", "workload-type": "sandbox"}, pod.Spec.NodeSelector)
 	require.Len(t, pod.Spec.Tolerations, 2)
 	require.Len(t, pod.Spec.InitContainers, 1)
+	sidecar := pod.Spec.InitContainers[0]
+	require.Equal(t, in.MetadataImage, sidecar.Image)
+	require.Equal(t, []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs"}, sidecar.Command)
+	require.Contains(t, sidecar.Env, corev1.EnvVar{Name: "WORKLOAD_TOKEN_ISSUER", Value: in.issuer()})
+	require.Contains(t, sidecar.Env, corev1.EnvVar{Name: "WORKLOAD_TOKEN_SUBJECT", Value: in.Workload.Subject})
+	serviceAccount := kitWorkloadServiceAccount(in)
+	require.Empty(t, serviceAccount.GetAnnotations())
+	require.Equal(t, false, serviceAccount.Object["automountServiceAccountToken"])
 	require.Len(t, pod.Spec.Containers, 2)
 	main := pod.Spec.Containers[0]
 	require.Equal(t, []string{"/bin/sh", "-ec"}, main.Command)
@@ -184,7 +196,7 @@ func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 			}
 			actions := make([]k8stesting.Action, 0)
 			for _, action := range client.Actions() {
-				if action.GetVerb() == "create" && action.GetResource().Resource != "configmaps" {
+				if action.GetVerb() == "create" {
 					actions = append(actions, action)
 				}
 			}
@@ -199,6 +211,8 @@ func TestKitGKEEnsureCreateOrderingAndFailure(t *testing.T) {
 func TestKitGKEProvisionValidation(t *testing.T) {
 	t.Parallel()
 	cases := map[string]func(*KitGKEProvisionInput){
+		"missing organization":             func(in *KitGKEProvisionInput) { in.OrganizationID = "" },
+		"wrong workload subject":           func(in *KitGKEProvisionInput) { in.Workload.Subject = "wrong" },
 		"missing workload service account": func(in *KitGKEProvisionInput) { in.WorkloadServiceAccount = "" },
 		"invalid workload service account": func(in *KitGKEProvisionInput) { in.WorkloadServiceAccount = "bad/name" },
 		"missing workload audience":        func(in *KitGKEProvisionInput) { in.WorkloadAudience = "" },

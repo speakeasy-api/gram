@@ -51,9 +51,10 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 	input := kitGKEInput()
 	input.Command, input.Args = KitGatewayCommand(int(input.GuestPort))
 	fences := new(int)
-	k, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{GKE: GKERuntimeConfig{Dynamic: client, Namespace: input.Identity.Namespace, ServerURL: &url.URL{Scheme: "https", Host: "example.invalid"}}, Provision: input, AuthorityStore: newKitGKEAuthorityTestStore(),
+	k, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{KitGKEIdentityConfig: input.KitGKEIdentityConfig, GKE: GKERuntimeConfig{Dynamic: client, Namespace: input.Identity.Namespace, ServerURL: &url.URL{Scheme: "https", Host: "example.invalid"}}, Provision: input, AuthorityStore: newKitGKEAuthorityTestStore(),
 		Bootstrap: func(_ context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
-			return KitLocalBootstrap{Model: input.Model, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: input.InferenceEndpoint, Workload: &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "test-subject", ServiceAccount: "kit-workload-" + uuid.NewString(), Audience: input.WorkloadAudience}, AgentsMD: input.AgentsMD, MCPJSON: input.MCPJSON, GatewayToken: []byte(uuid.NewString())}, nil
+			serviceAccount := "kit-workload-" + uuid.NewString()
+			return KitLocalBootstrap{Model: input.Model, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: input.InferenceEndpoint, Workload: &KitWorkloadBinding{IssuerID: uuid.New(), Subject: input.subject(input.Identity.Namespace, serviceAccount), ServiceAccount: serviceAccount, Audience: input.WorkloadAudience}, AgentsMD: input.AgentsMD, MCPJSON: input.MCPJSON, GatewayToken: []byte(uuid.NewString())}, nil
 		},
 		Fence: func(context.Context, assistantRuntimeRecord) error { *fences++; return nil },
 		Protocol: func(_ context.Context, _ assistantRuntimeRecord, endpoint *url.URL) (runtimeProtocol, error) {
@@ -690,4 +691,63 @@ func TestKitGKEReapOriginalTemplateName(t *testing.T) {
 	require.NoError(t, k.Reap(t.Context(), r))
 	_, err = client.Tracker().Get(kitTemplateGVR, k.config.GKE.Namespace, kitGKEName(r))
 	require.True(t, apierrors.IsNotFound(err))
+}
+
+func TestKitGKEBackendIdentityConfiguration(t *testing.T) {
+	t.Parallel()
+	backend, _, _, _ := kitGKEBackendFixture(t)
+	for _, field := range []string{"project", "organization", "location", "cluster"} {
+		t.Run(field, func(t *testing.T) {
+			t.Parallel()
+			config := backend.config
+			switch field {
+			case "project":
+				config.ProjectNumber = "234567890"
+			case "organization":
+				config.OrganizationID = "876543210"
+			case "location":
+				config.ClusterLocation = "us-east1"
+			case "cluster":
+				config.ClusterName = "other-cluster"
+			}
+			changed, err := NewKitGKERuntimeBackend(config)
+			require.NoError(t, err)
+			require.NotEqual(t, backend.fingerprint, changed.fingerprint)
+			require.Equal(t, config.KitGKEIdentityConfig, changed.config.Provision.KitGKEIdentityConfig)
+		})
+	}
+	config := backend.config
+	config.OrganizationID = ""
+	_, err := NewKitGKERuntimeBackend(config)
+	require.Error(t, err)
+}
+
+//nolint:paralleltest,tparallel // Subtests mutate the shared runtime record and clear shared fake-client actions sequentially.
+func TestKitGKEBackendRejectsStaleWorkloadSubject(t *testing.T) {
+	t.Parallel()
+	backend, client, record, _ := kitGKEBackendFixture(t)
+	result, err := backend.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	record.BackendMetadataJSON = result.BackendMetadataJSON
+	metadata, err := backend.metadata(record)
+	require.NoError(t, err)
+	for _, subject := range []string{
+		"123456789012345678901",
+		strings.Replace(metadata.Workload.Subject, "/ns/kit-test/", "/ns/another-namespace/", 1),
+		metadata.Workload.Subject + "-old",
+		strings.Replace(metadata.Workload.Subject, "org-987654321", "org-876543210", 1),
+	} {
+		t.Run(subject, func(t *testing.T) {
+			stale := metadata
+			binding := *metadata.Workload
+			binding.Subject = subject
+			stale.Workload = &binding
+			record.BackendMetadataJSON, err = json.Marshal(stale)
+			require.NoError(t, err)
+			client.ClearActions()
+			_, err := backend.metadata(record)
+			require.ErrorContains(t, err, "explicit fenced reset required")
+			require.Empty(t, client.Actions())
+		})
+	}
 }

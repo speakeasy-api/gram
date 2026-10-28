@@ -53,6 +53,7 @@ func TestKitGKERenderMetadataRefreshSidecar(t *testing.T) {
 	require.Equal(t, input.WorkloadAudience, env["WORKLOAD_TOKEN_AUDIENCE"])
 	require.Equal(t, KitWorkloadAssertionPath, env["WORKLOAD_TOKEN_PATH"])
 	require.Equal(t, input.Workload.Subject, env["WORKLOAD_TOKEN_SUBJECT"])
+	require.Equal(t, "256Mi", sidecar.Resources.Limits.Memory().String())
 	require.Equal(t, "16Mi", sidecar.Resources.Requests.StorageEphemeral().String())
 	require.Equal(t, "64Mi", sidecar.Resources.Limits.StorageEphemeral().String())
 	require.Len(t, sidecar.VolumeMounts, 1)

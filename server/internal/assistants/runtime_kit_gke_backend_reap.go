@@ -37,7 +37,7 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		}
 		// Empty authority can mean completed legacy cleanup or a bootstrap that
 		// crashed before publishing metadata. Always finish credential fencing
-		// and pending IAM cleanup before the caller marks the row reaped.
+		// before the caller marks the row reaped.
 		if len(raw) != 0 && kitLocalUnprovisionedMetadata(raw) {
 			r.BackendMetadataJSON = raw
 			if err := k.config.Fence(ctx, r); err != nil {

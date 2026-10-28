@@ -52,7 +52,16 @@ func kitWorkloadSubject(r assistantRuntimeRecord, c KitLocalCompositionConfig, g
 	}
 	digest := sha256.Sum256([]byte(gateway))
 	sa := fmt.Sprintf("kit-%s-%x", strings.ReplaceAll(r.ID.String(), "-", ""), digest[:8])
-	return "system:serviceaccount:" + c.WorkloadNamespace + ":" + sa, sa, nil
+	if c.nativeIdentity == nil {
+		return "", "", errors.New("kit GKE requires native Agent Identity configuration")
+	}
+	if err := c.nativeIdentity.Validate(); err != nil {
+		return "", "", err
+	}
+	if c.WorkloadIssuerURL != c.nativeIdentity.issuer() || c.WorkloadJWKSURL != c.nativeIdentity.issuer()+"/openid/jwks" {
+		return "", "", ErrKitRuntimeBinding
+	}
+	return c.nativeIdentity.subject(c.WorkloadNamespace, sa), sa, nil
 }
 
 func kitWorkloadIssuerName(issuer string) string {
@@ -155,13 +164,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	admissionName := "kit-runtime-" + r.ID.String() + "-" + generation
 	project := uuid.NullUUID{UUID: r.ProjectID, Valid: true}
 	q := workloadrepo.New(db)
-	if c.Environment != "local" && c.WorkloadIssuerURL == "https://accounts.google.com" {
-		subject, err = kitGKEWorkloadSubject(ctx, sa)
-		if err != nil {
-			return nil, fmt.Errorf("provision Google workload identity: %w", err)
-		}
-	}
-	if c.Environment == "local" || c.WorkloadIssuerURL == "https://accounts.google.com" {
+	if c.Environment == "local" || c.nativeIdentity != nil {
 		// Serialize the external subject across projects before taking a project
 		// lock. A project-only lock cannot protect the organization-wide history.
 		key, err := json.Marshal([]string{"kit-local-subject", identity.OrganizationID, c.WorkloadIssuerURL, subject})
@@ -204,7 +207,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	if _, err := q.LockWorkloadIssuerForWrite(ctx, workloadrepo.LockWorkloadIssuerForWriteParams{OrganizationID: identity.OrganizationID, ID: issuer.ID}); err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	if c.Environment == "local" || c.WorkloadIssuerURL == "https://accounts.google.com" {
+	if c.Environment == "local" || c.nativeIdentity != nil {
 		// Never rebind an externally verified subject, even after withdrawal or
 		// issuer recreation. Old assertions and sessions can still be valid;
 		// changing only metadata.Generation cannot distinguish them. Query all

@@ -24,7 +24,6 @@ func (k *KitGKERuntimeBackend) preflightPermissions(ctx context.Context) error {
 		resource schema.GroupVersionResource
 		verbs    []string
 	}{
-		{kitGKEIAMPendingGVR, []string{"get", "create", "update", "delete"}},
 		{kitServiceAccountGVR, []string{"create", "get", "delete"}},
 		{kitSecretGVR, []string{"create", "get", "delete"}},
 		{kitTemplateGVR, []string{"create", "get", "delete"}},

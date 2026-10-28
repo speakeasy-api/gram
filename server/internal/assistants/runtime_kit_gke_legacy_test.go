@@ -65,10 +65,6 @@ func TestKitGKEFailedProjectedGenerationCleanup(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, k.config.AuthorityStore.Save(t.Context(), r.LifecycleTx, r, r.BackendMetadataJSON, raw))
 			r.BackendMetadataJSON = raw
-			// The legacy projected subject never had an IAM service account. No IAM API
-			// client is needed to fence this exact failed generation.
-			manager := &kitGKEIAM{namespace: m.Namespace}
-			require.NoError(t, manager.removeRuntime(t.Context(), r))
 			if mode == "fence failure" {
 				k.config.Fence = func(context.Context, assistantRuntimeRecord) error { return errors.New("fence unavailable") }
 			}

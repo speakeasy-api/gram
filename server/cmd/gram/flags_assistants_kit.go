@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"regexp"
 
 	"github.com/distribution/reference"
 	"github.com/google/uuid"
@@ -23,12 +22,14 @@ import (
 
 func assistantKitRuntimeFlags() []cli.Flag {
 	return []cli.Flag{
-		&cli.StringFlag{Name: "assistant-kit-workload-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL"}, Usage: "External issuer JWKS URL for local assertions; GKE Kit uses fixed Google JWKS."},
-		&cli.StringFlag{Name: "assistant-kit-workload-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER"}, Usage: "External issuer for local assertions; GKE Kit uses fixed Google token verification."},
+		&cli.StringFlag{Name: "assistant-kit-workload-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL"}, Usage: "External issuer JWKS URL for local assertions; GKE Kit derives its JWKS from the cluster identity."},
+		&cli.StringFlag{Name: "assistant-kit-workload-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER"}, Usage: "External issuer for local assertions; GKE Kit derives its issuer from the cluster identity."},
 		&cli.StringFlag{Name: "assistant-kit-workload-subject", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_SUBJECT"}, Usage: "Local operator-projected subject, unique to one cold bootstrap. Supply a fresh external subject and assertion before restarting; subjects cannot be reused or shared between assistants."},
 		&cli.StringFlag{Name: "assistant-kit-workload-assertion-file", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ASSERTION_FILE"}, Usage: "Absolute operator-projected file named assertion in a dedicated directory. Its parent is mounted read-only outside persistent HOME to support atomic rotation."},
-		&cli.StringFlag{Name: "assistant-kit-gke-workload-pool-project", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT"}, Usage: "Google Cloud project ID owning the GKE cluster workload pool, independently of the IAM project."},
-		&cli.StringFlag{Name: "assistant-kit-gke-iam-project", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT"}, Usage: "Google Cloud project for generation-scoped managed workload service accounts."},
+		&cli.StringFlag{Name: "assistant-kit-gke-project-number", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_PROJECT_NUMBER"}, Usage: "Required numeric Google Cloud project number owning the GKE cluster."},
+		&cli.StringFlag{Name: "assistant-kit-gke-organization-id", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_ORGANIZATION_ID"}, Usage: "Required numeric Google Cloud organization ID owning the GKE cluster."},
+		&cli.StringFlag{Name: "assistant-kit-gke-cluster-location", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_CLUSTER_LOCATION"}, Usage: "Required GKE cluster region or zone."},
+		&cli.StringFlag{Name: "assistant-kit-gke-cluster-name", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_CLUSTER_NAME"}, Usage: "Required GKE cluster name."},
 		&cli.StringFlag{Name: "assistant-kit-gke-metadata-image", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE"}, Usage: "Digest-pinned assistant runtime image containing the metadata assertion sidecar."},
 		&cli.StringFlag{Name: "assistant-kit-gke-ingress-cidr", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_INGRESS_CIDR"}, Value: "", Usage: "Server source CIDR permitted to connect to Kit gateway pods."},
 		&cli.StringFlag{Name: "assistant-kit-gke-cpu-request", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_CPU_REQUEST"}, Value: "100m", Usage: "Kit pod CPU request."},
@@ -58,14 +59,14 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		return fmt.Errorf("local Kit requires the local environment")
 	}
 	var provision assistants.KitGKEProvisionInput
-	var workloadPoolProject string
+	var identity assistants.KitGKEIdentityConfig
 	if base.Provider == assistants.RuntimeProviderGKE {
 		for _, name := range []string{"assistant-kit-workload-issuer", "assistant-kit-workload-jwks-url", "assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
 			if c.String(name) != "" {
 				return fmt.Errorf("%s is local-only", name)
 			}
 		}
-		workloadPoolProject, err = kitGKEWorkloadPoolProject(c.String("assistant-kit-gke-workload-pool-project"))
+		identity, err = kitGKEIdentityFromCLI(c)
 		if err != nil {
 			return err
 		}
@@ -124,7 +125,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		if err != nil {
 			return fmt.Errorf("build Kit assistant cluster client: %w", err)
 		}
-		err = core.InstallKitGKERuntime(assistants.KitGKECompositionConfig{KitLocalCompositionConfig: config, GKE: base.GKE, Provision: provision, Snapshots: nil, IAMProject: c.String("assistant-kit-gke-iam-project"), WorkloadPoolProject: workloadPoolProject})
+		err = core.InstallKitGKERuntime(assistants.KitGKECompositionConfig{KitLocalCompositionConfig: config, GKE: base.GKE, Provision: provision, Snapshots: nil, KitGKEIdentityConfig: identity})
 	}
 	if err != nil {
 		return fmt.Errorf("install Kit runtime: %w", err)
@@ -137,9 +138,6 @@ func kitGKEProvisionFromCLI(c *cli.Context) (assistants.KitGKEProvisionInput, er
 	var out assistants.KitGKEProvisionInput
 	if c.String("assistant-kit-network") != "" || c.String("assistant-runtime-local-ca-file") != "" || c.Bool("assistant-kit-allow-insecure-inference") {
 		return out, fmt.Errorf("kit GKE does not permit local network, CA, or insecure inference options")
-	}
-	if !regexp.MustCompile(`^[a-z][a-z0-9-]{4,28}[a-z0-9]$`).MatchString(c.String("assistant-kit-gke-iam-project")) {
-		return out, fmt.Errorf("assistant-kit-gke-iam-project must be an explicit Google Cloud project ID")
 	}
 	out.MetadataImage = c.String("assistant-kit-gke-metadata-image")
 	named, imageErr := reference.ParseNormalizedNamed(out.MetadataImage)
@@ -177,9 +175,15 @@ func kitGKEProvisionFromCLI(c *cli.Context) (assistants.KitGKEProvisionInput, er
 	return out, nil
 }
 
-func kitGKEWorkloadPoolProject(project string) (string, error) {
-	if !regexp.MustCompile(`^[a-z][a-z0-9-]{4,28}[a-z0-9]$`).MatchString(project) {
-		return "", fmt.Errorf("assistant-kit-gke-workload-pool-project must be an explicit Google Cloud project ID")
+func kitGKEIdentityFromCLI(c *cli.Context) (assistants.KitGKEIdentityConfig, error) {
+	identity := assistants.KitGKEIdentityConfig{
+		ProjectNumber:   c.String("assistant-kit-gke-project-number"),
+		OrganizationID:  c.String("assistant-kit-gke-organization-id"),
+		ClusterLocation: c.String("assistant-kit-gke-cluster-location"),
+		ClusterName:     c.String("assistant-kit-gke-cluster-name"),
 	}
-	return project, nil
+	if err := identity.Validate(); err != nil {
+		return identity, fmt.Errorf("invalid assistant-kit-gke identity flags: %w", err)
+	}
+	return identity, nil
 }

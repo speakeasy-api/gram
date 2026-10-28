@@ -61,6 +61,7 @@ func (i KitGKEIdentity) validate() error {
 // Snapshot-enabled provisioning is reserved for a caller holding the admission
 // lock with settled work and fenced prior authority. The explicit pool has zero speculative replicas.
 type KitGKEProvisionInput struct {
+	KitGKEIdentityConfig
 	Workload                                 *KitWorkloadBinding
 	InferenceEndpoint                        string
 	WorkloadServiceAccount, WorkloadAudience string
@@ -102,6 +103,9 @@ func kitObject(kind, version, name string, i KitGKEIdentity) *unstructured.Unstr
 //nolint:exhaustruct,exhaustive // Only renderer-defined Kubernetes fields and CPU/memory budgets are set; optional fields retain API defaults.
 func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	var out KitGKEObjects
+	if err := in.validate(); err != nil {
+		return out, err
+	}
 	if err := in.Identity.validate(); err != nil {
 		return out, err
 	}
@@ -139,7 +143,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return out, err
 	}
-	if in.Workload.ServiceAccount != in.WorkloadServiceAccount || in.Workload.Audience != in.WorkloadAudience {
+	if in.Workload.ServiceAccount != in.WorkloadServiceAccount || in.Workload.Audience != in.WorkloadAudience || in.Workload.Subject != in.subject(in.Identity.Namespace, in.WorkloadServiceAccount) {
 		return out, fmt.Errorf("kit workload metadata binding mismatch")
 	}
 	if _, err := tls.X509KeyPair(in.TLSCertificate, in.TLSPrivateKey); err != nil {
@@ -168,7 +172,10 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	} else if len(in.ExpectedCheckpointMarker) != 0 {
 		return out, fmt.Errorf("kit cold bootstrap cannot expect a checkpoint marker")
 	}
-	annotations := map[string]string{"cluster-autoscaler.kubernetes.io/safe-to-evict": "false"}
+	annotations := map[string]string{
+		"cluster-autoscaler.kubernetes.io/safe-to-evict": "false",
+		"iam.gke.io/identity":                            "spiffe://" + in.trustDomain() + "/*",
+	}
 	if in.Restore != nil {
 		if !in.SnapshotsEnabled || in.RestoreSource == nil || *in.RestoreSource != in.Restore.binding || in.Restore.binding.Identity != in.Identity || in.Restore.name == "" {
 			return out, fmt.Errorf("kit restore requires a verified snapshot with exact identity and snapshots enabled")
@@ -252,7 +259,8 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	metadataEnv := []corev1.EnvVar{
 		{Name: "WORKLOAD_TOKEN_AUDIENCE", Value: in.WorkloadAudience},
 		{Name: "WORKLOAD_TOKEN_PATH", Value: KitWorkloadAssertionPath},
-		{Name: "WORKLOAD_TOKEN_SUBJECT", Value: in.Workload.Subject},
+		{Name: "WORKLOAD_TOKEN_ISSUER", Value: in.issuer()},
+		{Name: "WORKLOAD_TOKEN_SUBJECT", Value: in.subject(in.Identity.Namespace, in.WorkloadServiceAccount)},
 	}
 	// A native sidecar's startup probe gates the Kit process on fresh authority.
 	pod.Spec.InitContainers = []corev1.Container{{
@@ -261,7 +269,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		Env:     metadataEnv, RestartPolicy: new(corev1.ContainerRestartPolicyAlways),
 		StartupProbe:    &corev1.Probe{ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs", "--ready"}}}, PeriodSeconds: 2, TimeoutSeconds: 5, FailureThreshold: 60},
 		SecurityContext: security,
-		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("128Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("64Mi")}},
+		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("256Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("64Mi")}},
 		VolumeMounts:    []corev1.VolumeMount{{Name: "workload", MountPath: "/var/run/secrets/speakeasy/workload"}},
 	}}
 	if in.SnapshotsEnabled {
