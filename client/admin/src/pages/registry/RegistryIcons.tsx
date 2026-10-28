@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type JSX } from "react";
 // oxlint-disable-next-line no-restricted-imports -- uploads must ignore completions after unmount
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ export function RegistryIcons({
   disabled,
   onChange,
   onBusyChange,
-}: RegistryIconsProps) {
+}: RegistryIconsProps): JSX.Element {
   const id = useId();
   const active = useRef(true);
   const uploading = useRef(false);
