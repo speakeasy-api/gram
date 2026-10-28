@@ -802,6 +802,12 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 		return GetPluginOutput{}, fmt.Errorf("list assigned platform mcp plugin skills: %w", err)
 	}
 	servers, serversTruncated := boundedRows(servers, maxPluginMembers)
+	serverAliases, err := pluginMemberAliases(ctx, s.db, project.ID, servers, func(row platformrepo.ListPlatformMCPPluginServersRow) (string, uuid.NullUUID) {
+		return row.McpSlug, row.AliasToolsetID
+	})
+	if err != nil {
+		return GetPluginOutput{}, err
+	}
 	skills, skillsTruncated := boundedRows(skills, maxPluginMembers)
 	output := GetPluginOutput{
 		ProjectID: project.ID.String(),
@@ -814,7 +820,7 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 		if server.GatewayBacked {
 			backend = "gateway"
 		}
-		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: server.McpSlug, Policy: server.Policy, Enabled: server.Enabled})
+		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: memberSlug(server.McpSlug, server.AliasToolsetID, serverAliases), Policy: server.Policy, Enabled: server.Enabled})
 	}
 	for _, skill := range skills {
 		pinned := ""
@@ -922,6 +928,12 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin memberships: %w", err)
 	}
 	memberships, membershipsMore := boundedRows(memberships, membershipLimit)
+	membershipAliases, err := pluginMemberAliases(ctx, s.db, project.ID, memberships, func(row platformrepo.ListPlatformMCPPluginMembershipsRow) (string, uuid.NullUUID) {
+		return row.McpSlug, row.AliasToolsetID
+	})
+	if err != nil {
+		return GetPluginOutput{}, err
+	}
 	if len(memberships) > 0 && memberships[0].MembershipVersion != membershipVersion {
 		return GetPluginOutput{}, ErrPluginCursorInvalid
 	}
@@ -993,7 +1005,7 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		if membership.TargetResolved && membership.TargetID.Valid {
 			targetID = membership.TargetID.UUID.String()
 		}
-		output.Servers = append(output.Servers, PluginServer{MembershipID: membership.MembershipID.String(), DisplayName: membership.DisplayName, Backend: membership.TargetKind, TargetID: targetID, MCPSlug: membership.McpSlug, Policy: membership.Policy, Enabled: membership.Enabled})
+		output.Servers = append(output.Servers, PluginServer{MembershipID: membership.MembershipID.String(), DisplayName: membership.DisplayName, Backend: membership.TargetKind, TargetID: targetID, MCPSlug: memberSlug(membership.McpSlug, membership.AliasToolsetID, membershipAliases), Policy: membership.Policy, Enabled: membership.Enabled})
 	}
 	if membershipsMore && len(memberships) > 0 {
 		last := memberships[len(memberships)-1]

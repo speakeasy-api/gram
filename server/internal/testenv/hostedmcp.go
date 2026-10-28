@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -52,7 +53,7 @@ func SetHostedMCP(t *testing.T, ctx context.Context, db testrepo.DBTX, projectID
 func SetLegacyAlias(t *testing.T, ctx context.Context, db testrepo.DBTX, projectID, toolsetID uuid.UUID, slug string, customDomainID uuid.NullUUID) {
 	t.Helper()
 
-	require.NoError(t, testrepo.New(db).SetToolsetLegacyAliasFixture(ctx, testrepo.SetToolsetLegacyAliasFixtureParams{
-		ID: toolsetID, ProjectID: projectID, McpSlug: pgtype.Text{String: slug, Valid: slug != ""}, CustomDomainID: customDomainID,
+	require.NoError(t, legacyalias.SetFixture(ctx, db, projectID, toolsetID, legacyalias.Alias{
+		Slug: pgtype.Text{String: slug, Valid: slug != ""}, CustomDomainID: customDomainID,
 	}))
 }

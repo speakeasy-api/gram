@@ -16,7 +16,6 @@ func TestDerive(t *testing.T) {
 	issuer := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	domain := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	none := Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	alias := Address{Slug: pgtype.Text{String: "alias", Valid: true}, CustomDomainID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	endpoint := Address{Slug: pgtype.Text{String: "endpoint", Valid: true}, CustomDomainID: domain}
 	canonical := func(vis string, hasEndpoint bool) *Row {
 		return &Row{Canonical: true, Visibility: vis, UserSessionIssuerID: issuer, HasEndpoint: hasEndpoint, EndpointSlug: endpoint.Slug.String, EndpointCustomDomainID: domain}
@@ -33,11 +32,11 @@ func TestDerive(t *testing.T) {
 		{name: "public wrapper with endpoint", row: canonical(visibility.Public, true), hosting: Hosting{Enabled: true, Public: true, UserSessionIssuerID: issuer}, address: endpoint},
 		{name: "private wrapper with endpoint", row: canonical(visibility.Private, true), hosting: Hosting{Enabled: true, Public: false, UserSessionIssuerID: issuer}, address: endpoint},
 		{name: "disabled wrapper reads private", row: canonical(visibility.Disabled, true), hosting: Hosting{Enabled: false, Public: false, UserSessionIssuerID: issuer}, address: endpoint},
-		{name: "wrapper without endpoint keeps the alias", row: canonical(visibility.Public, false), hosting: Hosting{Enabled: true, Public: true, UserSessionIssuerID: issuer}, address: alias},
+		{name: "wrapper without endpoint has no endpoint address", row: canonical(visibility.Public, false), hosting: Hosting{Enabled: true, Public: true, UserSessionIssuerID: issuer}, address: none},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			hosting, address := Derive(alias, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, tt.row)
+			hosting, address := Derive(uuid.NullUUID{UUID: uuid.Nil, Valid: false}, tt.row)
 			require.Equal(t, tt.hosting, hosting)
 			require.Equal(t, tt.address, address)
 		})

@@ -329,7 +329,7 @@ func createPrivateIssuerGatedToolset(
 	ti *testInstance,
 	authCtx *contextvalues.AuthContext,
 	slug string,
-) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer) {
+) (hostedToolset, usersessions_repo.UserSessionIssuer) {
 	t.Helper()
 
 	usersRepo := usersessions_repo.New(ti.conn)
@@ -347,7 +347,7 @@ func createPrivateIssuerGatedToolset(
 	require.NoError(t, err)
 
 	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Issuer MCP " + slug,
@@ -356,7 +356,7 @@ func createPrivateIssuerGatedToolset(
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, slug, "private", uuid.NullUUID{UUID: issuer.ID, Valid: true})
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, slug, "private", uuid.NullUUID{UUID: issuer.ID, Valid: true})
 
 	return toolset, issuer
 }

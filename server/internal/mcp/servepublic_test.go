@@ -156,7 +156,7 @@ func createPublicMCPToolset(
 	ti *testInstance,
 	authCtx *contextvalues.AuthContext,
 	slug string,
-) toolsets_repo.Toolset {
+) hostedToolset {
 	t.Helper()
 
 	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
@@ -186,7 +186,7 @@ func TestServePublic_InitializeSucceeds(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Test MCP Server",
@@ -195,7 +195,7 @@ func TestServePublic_InitializeSucceeds(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "test-mcp", "public", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "test-mcp", "public", noIssuer())
 
 	mcpSlug := toolset.McpSlug.String
 	w, err := servePublicHTTP(t, ctx, ti, mcpSlug, makeInitializeBody(), "", nil)
@@ -231,7 +231,7 @@ func TestServePublic_InitializeWithMalformedParamsSucceeds(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Malformed Params MCP",
@@ -240,7 +240,7 @@ func TestServePublic_InitializeWithMalformedParamsSucceeds(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "malformed-params-mcp", "public", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "malformed-params-mcp", "public", noIssuer())
 
 	// params is an array rather than the expected object, so decoding into our
 	// recorded shape fails — but the RPC must still succeed.
@@ -320,7 +320,7 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Auth Error MCP",
@@ -329,7 +329,7 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset = hostLegacyToolset(t, ctx, ti, toolset, "private-auth-error-mcp", "private", noIssuer())
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-auth-error-mcp", "private", noIssuer())
 
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
