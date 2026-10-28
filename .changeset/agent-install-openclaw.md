@@ -3,4 +3,4 @@
 "dashboard": minor
 ---
 
-The one-command agent install now sets up OpenClaw as well as Claude Code and Codex. On OpenClaw it adds the agent gateway as an MCP server, installs the Speakeasy observability plugin with the agent's key, allows the plugin conversation access, and finishes with a `Speakeasy hooks: PASS` or `FAIL` line that explains a missing grant, followed by a reminder to restart the OpenClaw Gateway, which loads plugins only at startup. Run the command in a trusted shell; the separate OpenClaw follow-up message contains no redeemable install code. Credential setup keeps keys out of client process arguments. The OpenClaw observability plugin now declares the hook capability, which OpenClaw 2026.9.3 and later need to load it at startup, and plugin ZIP downloads mark the key-carrying `speakeasy.json` owner-only.
+The agent install command now sets up OpenClaw: the agent gateway, the observability plugin with the agent's key, and conversation access. An agent's key now outranks cached sign-ins.
