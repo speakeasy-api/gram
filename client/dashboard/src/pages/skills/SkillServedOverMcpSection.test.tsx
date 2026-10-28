@@ -44,8 +44,14 @@ vi.mock("@/pages/plugins/usePluginServerQueries", () => ({
     serversQuery: {
       data: {
         mcpServers: [
-          { id: "toolset-a", toolsetId: "toolset-a" },
-          { id: "wrapper-2", toolsetId: "toolset-a" },
+          { id: "toolset-a", toolsetId: "toolset-a", slug: "billing" },
+          { id: "wrapper-2", toolsetId: "toolset-a", slug: "billing-team" },
+          {
+            id: "host-3",
+            toolsetId: "toolset-b",
+            slug: "payments",
+            toolset: { hostingMcpServerId: "host-3" },
+          },
         ],
       },
     },
@@ -120,6 +126,11 @@ beforeEach(() => {
       mcpServerId: "wrapper-2",
       targetName: "Billing (team)",
     }),
+    link("l4", {
+      targetKind: "mcp_server",
+      mcpServerId: "host-3",
+      targetName: "Payments",
+    }),
     link("l3", {
       targetKind: "meta_mcp_server",
       metaMcpServerId: "gw",
@@ -134,6 +145,11 @@ describe("SkillServedOverMcpSection", () => {
     expect(
       screen.getByRole("link", { name: "Billing" }).getAttribute("href"),
     ).toBe("/mcp/billing/skills");
+    // A server the API names as its toolset's host has the tab too, even
+    // when its id differs from the toolset's.
+    expect(
+      screen.getByRole("link", { name: "Payments" }).getAttribute("href"),
+    ).toBe("/mcp/payments/skills");
     expect(
       screen.getByRole("link", { name: "Ops gateway" }).getAttribute("href"),
     ).toBe("/mcp/gateway/gw/skills");
