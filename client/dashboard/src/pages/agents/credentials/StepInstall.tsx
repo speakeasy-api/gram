@@ -290,6 +290,19 @@ export function StepInstall({
                   language="toml"
                 />
                 <CodeBlock
+                  value={[
+                    // OpenClaw sends MCP headers as written, so the shell has
+                    // to expand the key; named `speakeasy` like the one-line
+                    // setup's entry, so either replaces the other.
+                    "# Saves the key in ~/.openclaw/openclaw.json. Restart the Gateway after.",
+                    `openclaw mcp add speakeasy --url ${gatewayURL} \\`,
+                    "  --transport streamable-http \\",
+                    `  --header "Authorization=Bearer $${KEY_ENV}"`,
+                  ].join("\n")}
+                  label="OpenClaw"
+                  language="shell"
+                />
+                <CodeBlock
                   value={JSON.stringify(
                     {
                       mcpServers: {
