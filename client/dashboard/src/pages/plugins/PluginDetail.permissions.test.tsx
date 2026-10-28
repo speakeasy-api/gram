@@ -166,6 +166,7 @@ function renderAdmin(section = "overview", servers: object[] = [hostedServer]) {
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter initialEntries={[`/plugins/plugin-a/${section}`]}>
           <Routes>
+            <Route path="/plugins" element={<h1>Plugins</h1>} />
             <Route
               path="/plugins/:pluginId/:section"
               element={<PluginDetail />}

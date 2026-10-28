@@ -34,7 +34,6 @@ WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
   AND b.revoked_at IS NULL AND a.suspended_at IS NULL AND a.revoked_at IS NULL
   AND b.remote_session_id = ANY(@remote_session_ids::uuid[])
   AND b.remote_session_client_id = rs.remote_session_client_id
-  AND b.grant_generation = rs.grant_generation
   AND b.user_session_issuer_id = us.user_session_issuer_id
   AND rs.subject_urn = b.attached_by_subject_id
   AND b.attached_by_subject_id = rs.subject_urn

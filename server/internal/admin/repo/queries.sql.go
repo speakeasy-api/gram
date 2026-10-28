@@ -460,6 +460,7 @@ SELECT
     t.converted_at AS trial_converted_at,
     t.demoted_at AS trial_demoted_at,
     om.creation_source,
+    om.adoption_dashboard_url,
     om.created_at,
     om.updated_at,
     (
@@ -498,6 +499,7 @@ type AdminGetOrganizationRow struct {
 	TrialConvertedAt     pgtype.Timestamptz
 	TrialDemotedAt       pgtype.Timestamptz
 	CreationSource       pgtype.Text
+	AdoptionDashboardUrl pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 	MemberCount          int64
@@ -531,6 +533,7 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.TrialConvertedAt,
 		&i.TrialDemotedAt,
 		&i.CreationSource,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
@@ -2080,6 +2083,28 @@ type AdminResolveProjectIDBySlugInOrganizationParams struct {
 func (q *Queries) AdminResolveProjectIDBySlugInOrganization(ctx context.Context, arg AdminResolveProjectIDBySlugInOrganizationParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, adminResolveProjectIDBySlugInOrganization, arg.OrganizationID, arg.Slug)
 	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const adminSetOrganizationAdoptionDashboardURL = `-- name: AdminSetOrganizationAdoptionDashboardURL :one
+UPDATE organization_metadata
+SET
+    adoption_dashboard_url = $1::text,
+    updated_at = clock_timestamp()
+WHERE id = $2::text
+RETURNING id
+`
+
+type AdminSetOrganizationAdoptionDashboardURLParams struct {
+	AdoptionDashboardUrl pgtype.Text
+	ID                   string
+}
+
+// NULL clears the link. Keyed on id alone, like every other admin write.
+func (q *Queries) AdminSetOrganizationAdoptionDashboardURL(ctx context.Context, arg AdminSetOrganizationAdoptionDashboardURLParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetOrganizationAdoptionDashboardURL, arg.AdoptionDashboardUrl, arg.ID)
+	var id string
 	err := row.Scan(&id)
 	return id, err
 }
