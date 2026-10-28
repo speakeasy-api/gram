@@ -89,7 +89,7 @@ func TestConnectionPopupGrantOffersAdditionalDelegation(t *testing.T) {
 			require.NoError(t, s.recordConnectionPopupGrant(t.Context(), grant))
 			current, err := s.authnChallengeCache.Get(t.Context(), parent.CacheKey())
 			require.NoError(t, err)
-			if scenario == "dashboard" {
+			if scenario == "dashboard" || scenario == "third party" {
 				require.Equal(t, &grant, current.PendingDelegation)
 			} else {
 				require.Nil(t, current.PendingDelegation)

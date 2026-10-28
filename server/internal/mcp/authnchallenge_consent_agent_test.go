@@ -187,7 +187,7 @@ func TestConsentAgentSelectionRequiresDistinctAction(t *testing.T) {
 	require.NoError(t, err, "mismatched rolling-deploy action must not consume the challenge")
 }
 
-func TestConsentAgentPickerShowsOnlyEligibleAgents(t *testing.T) {
+func TestConsentAgentEligibilityRetainedWithoutActorPicker(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -206,16 +206,14 @@ func TestConsentAgentPickerShowsOnlyEligibleAgents(t *testing.T) {
 	w := serveAgentConsentGet(t, ctx, ti, fx)
 	require.Equal(t, http.StatusOK, w.Code)
 	html := w.Body.String()
-	require.Contains(t, html, "Authorize as")
-	require.Contains(t, html, eligible.Name)
-	require.Contains(t, html, eligible.ID.String())
+	require.NotContains(t, html, "data-agent-mode")
+	require.NotContains(t, html, eligible.Name)
+	require.Equal(t, []string{eligible.Name}, eligibleConsentAgentNames(t, ctx, ti, fx))
 	require.NotContains(t, html, missingPolicy.Name)
 	require.NotContains(t, html, suspended.Name)
-	require.Contains(t, html, "mcp:connect")
-	require.Contains(t, html, "agent-management")
 }
 
-func TestConsentAgentPickerAllowsExactAgentAuthorizer(t *testing.T) {
+func TestConsentAgentEligibilityAllowsExactAgentAuthorizer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -235,7 +233,8 @@ func TestConsentAgentPickerAllowsExactAgentAuthorizer(t *testing.T) {
 
 	w := serveAgentConsentGet(t, ctx, ti, fx)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), agent.Name)
+	require.NotContains(t, w.Body.String(), "data-agent-mode")
+	require.Contains(t, eligibleConsentAgentNames(t, ctx, ti, fx), agent.Name)
 
 	rows, err := accessrepo.New(ti.conn).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: grantID, OrganizationID: fx.orgID})
 	require.NoError(t, err)
@@ -243,6 +242,7 @@ func TestConsentAgentPickerAllowsExactAgentAuthorizer(t *testing.T) {
 	w = serveAgentConsentGet(t, ctx, ti, fx)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NotContains(t, w.Body.String(), agent.Name)
+	require.NotContains(t, eligibleConsentAgentNames(t, ctx, ti, fx), agent.Name)
 }
 
 func TestConsentAgentApprovalCarriesFixedResultWithoutReusableConsent(t *testing.T) {
@@ -301,7 +301,8 @@ func TestConsentAgentApprovalRechecksLiveAgentPolicy(t *testing.T) {
 
 	w := serveAgentConsentGet(t, ctx, ti, fx)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), agent.Name)
+	require.NotContains(t, w.Body.String(), "data-agent-mode")
+	require.Contains(t, eligibleConsentAgentNames(t, ctx, ti, fx), agent.Name)
 	rows, err := accessrepo.New(ti.conn).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: grantID, OrganizationID: fx.orgID})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rows)
@@ -371,4 +372,13 @@ func TestConsentAgentSelectionRejectsLegacyAuthorizerWithoutProvenance(t *testin
 	require.Empty(t, w.Header().Get("Location"))
 	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
 	require.NoError(t, err, "legacy-state rejection must not consume the challenge")
+}
+
+func eligibleConsentAgentNames(t *testing.T, ctx context.Context, ti *testInstance, fx agentConsentFixture) []string {
+	t.Helper()
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	names, err := ti.service.EligibleConsentAgents(ctx, state, &mcp.ResolvedMcpEndpoint{OrganizationID: fx.orgID, ProjectID: fx.target.ProjectID, UserSessionIssuerID: fx.target.UserSessionIssuerID, ToolsetID: uuid.NullUUID{UUID: fx.target.MCPResourceID, Valid: true}})
+	require.NoError(t, err)
+	return names
 }

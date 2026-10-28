@@ -300,6 +300,13 @@ type ChallengeManager struct {
 // RemoteGrant is a grant the remote login callback committed, keyed to the
 // consent challenge it belongs to.
 type RemoteGrant struct {
+	// Scopes is the effective scope set committed for this exact grant.
+	Scopes []string `json:"scopes"`
+	// PreviousScopes is the scope set immediately before this sign-in replaced it.
+	PreviousScopes []string `json:"previous_scopes"`
+	// PreviousGeneration identifies that previous grant; zero means no previous connection.
+	PreviousGeneration int64 `json:"previous_generation"`
+
 	// UpstreamDisplayName is the identity reported by the provider for this exact grant.
 	UpstreamDisplayName string `json:"upstream_display_name"`
 	// UpstreamEmail is the email reported by the provider, never inferred from the local user.
@@ -1833,6 +1840,19 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
+	// The client lock keeps concurrent callbacks from changing the previous
+	// grant between this snapshot and the write below. Never read another
+	// organization's connection merely because it uses the same client.
+	previous, previousErr := txQueries.GetTenantUserRemoteSessionForClient(ctx, remotesessions_repo.GetTenantUserRemoteSessionForClientParams{
+		ProjectID:             state.ProjectID,
+		OrganizationID:        state.OrganizationID,
+		SubjectUrn:            *state.Subject,
+		RemoteSessionClientID: state.RemoteSessionClientID,
+	})
+	if previousErr != nil && !errors.Is(previousErr, pgx.ErrNoRows) {
+		return none, oops.E(oops.CodeUnexpected, previousErr, "read previous connection scopes").LogError(ctx, logger)
+	}
+
 	storedSession, err := storeRemoteSessionGrant(ctx, txQueries, state.OrganizationID, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
@@ -1872,6 +1892,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	return RemoteLoginResult{
 		RedirectURL: redirect,
 		Grant: &RemoteGrant{
+			Scopes:                 slices.Clone(storedSession.Scopes),
+			PreviousScopes:         slices.Clone(previous.Scopes),
+			PreviousGeneration:     previous.GrantGeneration,
 			UpstreamDisplayName:    storedSession.UpstreamDisplayName.String,
 			UpstreamEmail:          storedSession.UpstreamEmail.String,
 			ConnectionPopup:        state.ConnectionPopup,

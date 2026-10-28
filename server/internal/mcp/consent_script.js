@@ -22,13 +22,21 @@
 
   var delegationForm = document.querySelector("[data-delegation-form]");
   if (delegationForm) {
-    var grantButton = delegationForm.querySelector("[data-grant-agents]");
+    var integratedDelegation = delegationForm.hasAttribute(
+      "data-integrated-delegation",
+    );
+    var approvalForm = document.querySelector("[data-approve-form]");
+    var delegationFinished = false;
+    var grantButton = integratedDelegation
+      ? document.querySelector("#consent-approve-button")
+      : delegationForm.querySelector("[data-grant-agents]");
     var skipButton = delegationForm.querySelector("[data-skip-delegation]");
     var delegationError = delegationForm.querySelector(
       "[data-delegation-error]",
     );
     var delegationBusy = false;
     function updateDelegationSelection() {
+      if (integratedDelegation) return;
       grantButton.disabled =
         delegationBusy ||
         !delegationForm.querySelector(
@@ -37,18 +45,26 @@
       skipButton.disabled = delegationBusy;
     }
     async function delegationRequest(action, agent) {
-      var body = new URLSearchParams(new FormData(delegationForm));
+      var body = new URLSearchParams();
+      delegationForm
+        .querySelectorAll('input[type="hidden"]')
+        .forEach(function (input) {
+          body.set(input.name, input.value);
+        });
       body.delete("agent_id");
       body.set("action", action);
       if (agent) {
         body.set("agent_id", agent.value);
         body.set("binding_id", agent.dataset.bindingId);
       }
-      var response = await fetch(delegationForm.action, {
-        method: "POST",
-        body: body,
-        credentials: "same-origin",
-      });
+      var response = await fetch(
+        delegationForm.dataset.actionUrl || delegationForm.action,
+        {
+          method: "POST",
+          body: body,
+          credentials: "same-origin",
+        },
+      );
       if (!response.ok)
         throw new Error(
           "The connection or your permissions changed. Reload to review current assignments. Successfully granted agents keep their connection.",
@@ -73,7 +89,12 @@
           }
         }
         await delegationRequest("finish_delegation");
-        window.location.assign(delegationForm.dataset.continueUrl);
+        if (integratedDelegation) {
+          delegationFinished = true;
+          approvalForm.requestSubmit(grantButton);
+        } else {
+          window.location.assign(delegationForm.dataset.continueUrl);
+        }
       } catch (error) {
         delegationError.textContent = error.message;
         delegationError.hidden = false;
@@ -83,14 +104,21 @@
       }
     }
     delegationForm.addEventListener("change", updateDelegationSelection);
-    delegationForm.addEventListener("submit", function (event) {
-      event.preventDefault();
-      finishDelegation(true);
-    });
-    skipButton.addEventListener("click", function () {
-      finishDelegation(false);
-    });
-    return;
+    (integratedDelegation ? approvalForm : delegationForm).addEventListener(
+      "submit",
+      function (event) {
+        if (delegationFinished) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finishDelegation(true);
+      },
+      true,
+    );
+    if (skipButton)
+      skipButton.addEventListener("click", function () {
+        finishDelegation(false);
+      });
+    if (!integratedDelegation) return;
   }
 
   // A connected first-party flow has no remaining consent step. Briefly show
@@ -249,30 +277,6 @@
   if (form) {
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
-    var agentInputs = document.querySelectorAll("input[data-agent-select]");
-    var agentModes = document.querySelectorAll("input[data-agent-mode]");
-    var agentMode = document.querySelector(
-      'input[data-agent-mode][value="agent"]',
-    );
-    var selfMode = document.querySelector(
-      'input[data-agent-mode][value="self"]',
-    );
-    var selfAgentInput = document.querySelector("[data-agent-self]");
-    var agentPicker = document.querySelector("[data-agent-picker]");
-    var agentSetup = document.querySelector("[data-agent-setup]");
-    var agentSearch = document.querySelector("[data-agent-search]");
-    var agentEmpty = document.querySelector("[data-agent-empty]");
-    var agentPolicy = document.querySelector("[data-agent-policy]");
-    var agentPolicyName = document.querySelector("[data-agent-policy-name]");
-    var subjectDisplay = document.querySelector(
-      "[data-consent-subject-display]",
-    );
-    var subjectMode = document.querySelector("[data-consent-subject-mode]");
-    var selfOnlySections = document.querySelectorAll("[data-agent-self-only]");
-    var services = document.querySelector("[data-service-connections]");
-    var connectionRevision = 0;
-    var activeConnectionAgent = "";
-    var savedAgentKey = "gram-consent-agent-v1:" + form.elements.state.value;
     var discoverySelect = document.querySelector(
       'select[name="discovery_mode"]',
     );
@@ -300,376 +304,8 @@
         }
       });
     }
-    // This is UI state only. The server reauthorizes every selection and write.
-    // sessionStorage survives a full-page upstream OAuth round trip in this tab.
-    try {
-      var savedAgent = sessionStorage.getItem(savedAgentKey);
-      Array.prototype.forEach.call(agentInputs, function (input) {
-        if (savedAgent !== null && input.value === savedAgent) {
-          input.checked = true;
-          if (agentMode) agentMode.checked = true;
-        }
-      });
-    } catch (_) {
-      /* Storage may be disabled; normal selection still works. */
-    }
-
-    async function connectionRequest(action, agentId, extra) {
-      var body = new URLSearchParams({
-        state: form.elements.state.value,
-        csrf_token: form.elements.csrf_token.value,
-        action: action,
-        agent_id: agentId,
-      });
-      Object.keys(extra || {}).forEach(function (key) {
-        body.set(key, extra[key]);
-      });
-      var response = await fetch(services.getAttribute("data-action-url"), {
-        method: "POST",
-        credentials: "same-origin",
-        body: body,
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        var error = new Error(
-          "Could not verify agent access (" +
-            response.status +
-            "). Retry, or restart authorization if the page has expired.",
-        );
-        error.status = response.status;
-        throw error;
-      }
-      return response.json();
-    }
-
-    async function updateAgentAccess(agentId) {
-      activeConnectionAgent = agentId;
-      var revision = ++connectionRevision;
-      if (!services) {
-        if (agentId) button.disabled = submitted;
-        return;
-      }
-      var providers = services.querySelectorAll("[data-remote-client]");
-      Array.prototype.forEach.call(providers, function (provider) {
-        var access = provider.querySelector("[data-agent-access]");
-        if (!access) return;
-        access.hidden = !agentId;
-        access.replaceChildren();
-        if (agentId) access.textContent = "Checking access for this agent…";
-      });
-      if (!agentId) return;
-      button.disabled = true;
-      function current() {
-        return (
-          revision === connectionRevision && activeConnectionAgent === agentId
-        );
-      }
-      function showError(error) {
-        if (!current()) return;
-        button.disabled = true;
-        Array.prototype.forEach.call(providers, function (provider) {
-          var access = provider.querySelector("[data-agent-access]");
-          if (!access) return;
-          access.replaceChildren();
-          var message = document.createElement("p");
-          message.className = "text-muted-foreground text-xs";
-          message.setAttribute("role", "alert");
-          message.textContent =
-            error.message +
-            " Connection state is unknown. Retry to reload the current state.";
-          access.appendChild(message);
-          if (error.status === 401 || error.status === 403) {
-            var unavailable = document.createElement("p");
-            unavailable.setAttribute("data-agent-access-unavailable", "");
-            unavailable.className = "text-muted-foreground text-xs";
-            unavailable.textContent =
-              "This agent is not available for authorization by the signed-in user. Select another identity or restart authorization.";
-            access.appendChild(unavailable);
-          }
-          var retry = document.createElement("button");
-          retry.type = "button";
-          retry.className =
-            "bg-card interact:bg-accent h-10 border px-4 text-sm";
-          retry.textContent = "Retry agent access";
-          retry.addEventListener("click", function () {
-            updateAgentAccess(agentId);
-          });
-          access.appendChild(retry);
-        });
-      }
-      async function mutate(action, extra) {
-        if (!current()) return;
-        button.disabled = true;
-        Array.prototype.forEach.call(
-          services.querySelectorAll(
-            "[data-agent-access] button, [data-agent-access] select",
-          ),
-          function (control) {
-            control.disabled = true;
-          },
-        );
-        try {
-          await connectionRequest(action, agentId, extra);
-          if (current()) await updateAgentAccess(agentId);
-        } catch (error) {
-          // Do not retry writes automatically: the response may have been lost
-          // after commit. A fresh read reconciles state when the user retries.
-          showError(error);
-        }
-      }
-      function connectionUsable(session) {
-        if (!session) return false;
-        if (
-          session.HasRefreshToken &&
-          (!session.RefreshExpiresAt ||
-            new Date(session.RefreshExpiresAt).getTime() > Date.now())
-        )
-          return true;
-        return (
-          !session.AccessExpiresAt ||
-          new Date(session.AccessExpiresAt).getTime() > Date.now()
-        );
-      }
-      function accountLabel(session) {
-        return (
-          [session.UpstreamDisplayName, session.UpstreamEmail]
-            .filter(function (value) {
-              return typeof value === "string" && value.trim() !== "";
-            })
-            .join(" · ") || "Identity unavailable"
-        );
-      }
-      if (!providers.length) {
-        button.disabled = submitted;
-        return;
-      }
-      try {
-        var data = await connectionRequest("agent_connections", agentId);
-        if (!current()) return;
-        while (data.nextCursor) {
-          var page = await connectionRequest("agent_connections", agentId, {
-            cursor: data.nextCursor,
-          });
-          if (!current()) return;
-          data.candidates = (data.candidates || []).concat(
-            page.candidates || [],
-          );
-          data.nextCursor = page.nextCursor;
-        }
-        // Advisory only: final approval runs the runtime credential resolver.
-        button.disabled =
-          submitted ||
-          !Array.prototype.every.call(providers, function (provider) {
-            return (data.bindings || []).some(function (binding) {
-              return (
-                binding.RemoteSessionClientID ===
-                  provider.getAttribute("data-remote-client") &&
-                connectionUsable(binding.RemoteSession)
-              );
-            });
-          });
-        Array.prototype.forEach.call(providers, function (provider) {
-          var clientId = provider.getAttribute("data-remote-client");
-          var display = provider.getAttribute("data-remote-display");
-          var row = provider.querySelector("[data-agent-access]");
-          if (!row) return;
-          row.replaceChildren();
-          var binding = (data.bindings || []).find(function (item) {
-            return item.RemoteSessionClientID === clientId;
-          });
-          if (binding) {
-            var attached = document.createElement("span");
-            attached.className = "text-muted-foreground text-xs";
-            var account = binding.RemoteSession;
-            var eligible = connectionUsable(account);
-            var connectedAs = provider.getAttribute("data-connected-as");
-            var sameAccount =
-              account &&
-              connectedAs &&
-              (connectedAs === accountLabel(account) ||
-                connectedAs === account.UpstreamEmail ||
-                connectedAs === account.UpstreamDisplayName);
-            attached.textContent = eligible
-              ? "Available to agent" +
-                (sameAccount ? "" : " · " + accountLabel(account))
-              : "Agent access unavailable. Detach it before choosing an account. Your service connection has not been changed.";
-            row.appendChild(attached);
-            if (!data.canManageConnections) {
-              var readonly = document.createElement("span");
-              readonly.textContent =
-                "Only agent editors can change this assignment.";
-              row.appendChild(readonly);
-              return;
-            }
-            var detach = document.createElement("button");
-            detach.type = "button";
-            detach.className =
-              "bg-card interact:bg-accent h-10 border px-4 text-sm";
-            detach.textContent = "Remove agent access";
-            detach.addEventListener("click", function () {
-              mutate("agent_detach", { binding_id: binding.ID });
-            });
-            row.appendChild(detach);
-          } else {
-            if (!data.canManageConnections) {
-              row.textContent = "Ask an agent editor to assign a connection.";
-              return;
-            }
-            var candidates = (data.candidates || []).filter(function (item) {
-              return item.RemoteSessionClientID === clientId;
-            });
-            if (candidates.length) {
-              var select = document.createElement("select");
-              select.setAttribute(
-                "aria-label",
-                "Your " + display + " connection",
-              );
-              select.className = "bg-card h-10 border px-4 text-sm";
-              candidates.forEach(function (candidate) {
-                var option = document.createElement("option");
-                option.value = candidate.ID;
-                option.textContent =
-                  accountLabel(candidate) +
-                  ((candidate.Scopes || []).length
-                    ? " — " + candidate.Scopes.join(", ")
-                    : "");
-                select.appendChild(option);
-              });
-              // The provider card already identifies its connected account.
-              // Show a chooser only for a choice or a different eligible account.
-              var only = candidates[0];
-              var shown = provider.getAttribute("data-connected-as");
-              if (
-                candidates.length > 1 ||
-                !shown ||
-                (shown !== accountLabel(only) &&
-                  shown !== only.UpstreamEmail &&
-                  shown !== only.UpstreamDisplayName)
-              ) {
-                row.appendChild(select);
-              }
-              var notice = document.createElement("span");
-              notice.className = "text-muted-foreground text-xs";
-              notice.textContent = "Not yet available to agent";
-              row.appendChild(notice);
-              var attach = document.createElement("button");
-              attach.type = "button";
-              attach.className =
-                "bg-card interact:bg-accent h-10 border px-4 text-sm";
-              attach.textContent = "Use this account";
-              attach.addEventListener("click", function () {
-                mutate("agent_attach", { remote_session_id: select.value });
-              });
-              row.appendChild(attach);
-            } else {
-              var missing = document.createElement("span");
-              missing.className = "text-muted-foreground text-xs";
-              missing.textContent =
-                "No account is eligible for this agent. Connect or reconnect this service, then choose Use this account. An existing connection may not meet this agent’s permissions.";
-              row.appendChild(missing);
-            }
-          }
-        });
-      } catch (error) {
-        showError(error);
-      }
-    }
-    if (agentInputs.length > 0) {
-      var syncAgentSelection = function () {
-        var authorizingAgent = Boolean(agentMode && agentMode.checked);
-        var selected = authorizingAgent ? null : selfMode;
-        Array.prototype.forEach.call(agentInputs, function (input) {
-          input.disabled = !authorizingAgent;
-          input.required = authorizingAgent;
-          if (!authorizingAgent) input.checked = false;
-          if (input.checked) selected = input;
-        });
-        if (selfAgentInput) selfAgentInput.disabled = authorizingAgent;
-        if (agentPicker) agentPicker.hidden = !authorizingAgent;
-        if (agentSetup) agentSetup.hidden = !authorizingAgent;
-        var selectedDisplay = selected
-          ? selected.getAttribute("data-subject-display") || ""
-          : "";
-        if (agentPolicy) {
-          agentPolicy.hidden = !authorizingAgent || !selected;
-        }
-        if (agentPolicyName) {
-          agentPolicyName.textContent = authorizingAgent ? selectedDisplay : "";
-        }
-        Array.prototype.forEach.call(selfOnlySections, function (section) {
-          section.hidden = authorizingAgent;
-        });
-        var discoveryMode = document.querySelector(
-          'select[name="discovery_mode"]',
-        );
-        if (discoveryMode) {
-          discoveryMode.disabled = authorizingAgent;
-        }
-        if (subjectDisplay) {
-          subjectDisplay.textContent = selectedDisplay || "Choose an agent";
-        }
-        if (subjectMode) {
-          subjectMode.textContent = authorizingAgent
-            ? "Authorizing"
-            : "Signing in as";
-        }
-        if (button) {
-          button.textContent = authorizingAgent
-            ? button.getAttribute("data-agent-label")
-            : button.getAttribute("data-self-label");
-          button.setAttribute(
-            "data-agent-selected",
-            authorizingAgent ? "true" : "false",
-          );
-          button.value = authorizingAgent ? "approve_agent" : "approve";
-          button.disabled = authorizingAgent
-            ? true
-            : button.getAttribute("data-consent-self-ready") !== "true";
-        }
-        var selectedID = authorizingAgent && selected ? selected.value : "";
-        try {
-          sessionStorage.setItem(savedAgentKey, selectedID);
-        } catch (_) {}
-        updateAgentAccess(selectedID);
-      };
-      Array.prototype.forEach.call(agentInputs, function (input) {
-        input.addEventListener("change", syncAgentSelection);
-      });
-      Array.prototype.forEach.call(agentModes, function (input) {
-        input.addEventListener("change", syncAgentSelection);
-      });
-      if (agentSearch) {
-        agentSearch.addEventListener("input", function () {
-          var query = agentSearch.value.trim().toLowerCase();
-          var matches = 0;
-          Array.prototype.forEach.call(agentInputs, function (input) {
-            var matchesName = (input.getAttribute("data-subject-display") || "")
-              .toLowerCase()
-              .includes(query);
-            input.closest("[data-agent-option]").hidden = !matchesName;
-            if (matchesName) matches++;
-          });
-          if (agentEmpty) agentEmpty.hidden = matches !== 0;
-        });
-      }
-      syncAgentSelection();
-      // Agent mode requires these handlers; leave it unavailable if the script
-      // cannot load or initialize rather than silently approving as Myself.
-      if (agentMode) agentMode.disabled = false;
-    }
-
     form.addEventListener("submit", function (event) {
-      // Guard implicit/programmatic submissions too: an empty Agent choice
-      // must never fall through to self authorization.
-      if (
-        submitted ||
-        (button && button.disabled) ||
-        (agentMode &&
-          agentMode.checked &&
-          !Array.prototype.some.call(agentInputs, function (input) {
-            return input.checked && !input.disabled;
-          }))
-      ) {
+      if (submitted || (button && button.disabled)) {
         event.preventDefault();
         return;
       }

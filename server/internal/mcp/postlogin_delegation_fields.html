@@ -1,0 +1,11 @@
+{{define "agentDelegationFields"}}
+<div class="border-b px-6 py-6 sm:px-8"><p class="text-sm font-semibold">New upstream account</p><p class="mt-2 text-sm">{{if .AccountName}}{{.AccountName}}{{else}}The provider did not share an account name{{end}}</p>{{if .AccountEmail}}<p class="text-sm text-muted-foreground">{{.AccountEmail}}</p>{{end}}</div>
+<div class="border-b px-6 py-6 sm:px-8"><h2 class="text-sm font-semibold">Upstream permissions</h2>
+{{if .HasPreviousScopes}}<p class="mt-3 text-sm text-muted-foreground">Previous connection</p><ul class="mt-2 flex flex-wrap gap-2">{{range .PreviousScopes}}<li class="border px-2 py-1 font-mono text-xs">{{.}}</li>{{else}}<li class="text-sm text-muted-foreground">No scopes recorded</li>{{end}}</ul>{{end}}
+<p class="mt-3 text-sm text-muted-foreground">New connection</p><ul class="mt-2 flex flex-wrap gap-2">{{range .Scopes}}<li class="border px-2 py-1 font-mono text-xs {{if .Added}}bg-accent font-semibold{{end}}">{{.Name}}{{if .Added}} <span class="font-sans">· Added</span>{{end}}</li>{{else}}<li class="text-sm text-muted-foreground">No scopes recorded</li>{{end}}</ul>
+<p class="mt-3 text-sm text-muted-foreground">Selected agents receive the new connection's permissions.</p></div>
+<input type="hidden" name="state" value="{{.State}}"/><input type="hidden" name="csrf_token" value="{{.CSRF}}"/><input type="hidden" name="remote_session_id" value="{{.SessionID}}"/><input type="hidden" name="grant_generation" value="{{.Generation}}"/>
+<div class="px-6 py-6 sm:px-8"><h2 class="text-sm font-semibold">Choose agents</h2><p class="mt-2 text-sm text-muted-foreground">Nothing is selected automatically. Existing assignments are kept unless you choose to renew your own.</p></div>
+<ul class="m-0 max-h-64 list-none overflow-y-auto p-0">{{range .Options}}<li class="border-t"><label class="flex items-start gap-3 px-6 py-4 sm:px-8"><input type="checkbox" name="agent_id" value="{{.ID}}" data-binding-id="{{.BindingID}}" {{if .Disabled}}disabled{{end}}/><span><span class="text-sm font-semibold">{{.Name}}</span><span class="mt-2 block text-sm text-muted-foreground">{{.Detail}}</span></span></label></li>{{end}}</ul>
+
+{{end}}

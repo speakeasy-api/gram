@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -85,22 +83,6 @@ func (t AgentAuthorizationTarget) matches(endpoint *ResolvedMcpEndpoint) bool {
 
 func (t AgentAuthorizationTarget) connectCheck() authz.Check {
 	return authz.MCPCheck(t.Scope, t.MCPResourceID.String(), t.ProjectID.String())
-}
-
-// agentSetupURL is the dashboard page where the organization's humans
-// register and manage agents, linked from the consent page.
-func (s *Service) agentSetupURL(ctx context.Context, logger *slog.Logger, organizationID string) (string, error) {
-	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		logger.WarnContext(ctx, "agent setup organization unavailable")
-		return "", fmt.Errorf("read organization metadata: %w", err)
-	}
-	setupURL, err := url.JoinPath(s.siteURL.String(), organization.Slug, "agent-management")
-	if err != nil {
-		logger.WarnContext(ctx, "agent setup URL unavailable")
-		return "", fmt.Errorf("build agent setup URL: %w", err)
-	}
-	return setupURL, nil
 }
 
 // Only positive authorization denials are forbidden. Dependency failures must

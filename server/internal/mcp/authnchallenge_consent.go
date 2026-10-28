@@ -58,7 +58,7 @@ import (
 var consentTemplateHTML string
 
 var consentTemplate = template.Must(
-	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentpage.LogoTemplate),
+	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentpage.LogoTemplate + postLoginDelegationFields),
 )
 
 // consentScriptData is the consent page's client-side script. It is served
@@ -116,6 +116,7 @@ type consentApprovalError struct {
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
+	Delegation *postLoginDelegationData
 	// GatewayDefaultMode labels the gateway default when choosing discovery.
 	GatewayDefaultMode string
 	// CodeModeUnavailable explains a stored code choice that is currently served as Progressive.
@@ -674,22 +675,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// Gateway capture below decides whether any member can be approved.
 	consentEnabled := gateway != nil || len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
 
-	agentSelectionEnabled := false
-	agentSetupURL := ""
-	var agentOptions []consentAgentOption
-	if !challengeState.FirstParty && challengeState.AuthorizerUserID != "" {
-		if setupURL, serr := s.agentSetupURL(ctx, logger, endpoint.OrganizationID); serr != nil {
-			logger.WarnContext(ctx, "agent selection unavailable", attr.SlogError(serr))
-		} else if options, aerr := s.eligibleConsentAgents(ctx, challengeState, endpoint); aerr != nil {
-			logger.WarnContext(ctx, "eligible agent selection unavailable", attr.SlogError(aerr))
-		} else {
-			agentSelectionEnabled = true
-			agentSetupURL = setupURL
-			agentOptions = options
-		}
-	}
-
-	if r.URL.Query().Get("consent") != "required" && len(agentOptions) == 0 &&
+	if challengeState.PendingDelegation == nil && r.URL.Query().Get("consent") != "required" &&
 		consentReuseEligible(endpoint, challengeState) && consentBrowserMatches(r, challengeState, time.Now()) &&
 		consentRemoteFingerprint(endpoint, cards) != "" {
 		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
@@ -751,7 +737,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 	autoConnect := gateway == nil || (gateway.Focus != nil && challengeState.FirstParty && challengeState.FocusServer == gateway.Focus.Slug)
-	if len(agentOptions) == 0 && autoConnect {
+	if autoConnect {
 		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, autoConnectCards, focusServer); err != nil {
 			return err
 		} else if redirected {
@@ -839,7 +825,6 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if approvalError != nil {
 		showToolsIsland = false
 		consentEnabled = false
-		agentSelectionEnabled = false
 	}
 
 	prefillAttr := ""
@@ -883,7 +868,15 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			gatewayDefaultMode = "Progressive"
 		}
 	}
+	var delegation *postLoginDelegationData
+	if !challengeState.FirstParty {
+		delegation, err = s.loadPostLoginDelegation(r, endpoint, challengeState)
+	}
+	if err != nil {
+		return err
+	}
 	data := consentTemplateData{
+		Delegation:              delegation,
 		GatewayDefaultMode:      gatewayDefaultMode,
 		CodeModeUnavailable:     codeModeUnavailable,
 		ClientName:              clientName,
@@ -919,9 +912,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentpage.Styles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
-		AgentSelectionEnabled:   agentSelectionEnabled,
-		AgentOptions:            agentOptions,
-		AgentSetupURL:           agentSetupURL,
+		AgentSelectionEnabled:   false,
+		AgentOptions:            nil,
+		AgentSetupURL:           "",
 		Gateway:                 gateway,
 	}
 

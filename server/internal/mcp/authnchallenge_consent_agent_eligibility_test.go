@@ -69,10 +69,12 @@ func TestConsentAgentEligibilityListAndSubmit(t *testing.T) {
 
 			w := serveAgentConsentGet(t, ctx, ti, fx)
 			require.Equal(t, http.StatusOK, w.Code)
+			require.NotContains(t, w.Body.String(), "data-agent-mode")
+			names := eligibleConsentAgentNames(t, ctx, ti, fx)
 			if tc.eligible {
-				require.Contains(t, w.Body.String(), agent.Name)
+				require.Contains(t, names, agent.Name)
 			} else {
-				require.NotContains(t, w.Body.String(), agent.Name)
+				require.NotContains(t, names, agent.Name)
 			}
 			w, err = serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
 			if tc.eligible {
@@ -121,9 +123,8 @@ func TestConsentAgentEligibilityListKeepsOwnerCapsSeparate(t *testing.T) {
 	}
 	w := serveAgentConsentGet(t, ctx, ti, fx)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "Allowed owner first agent")
-	require.Contains(t, w.Body.String(), "Allowed owner second agent")
-	require.NotContains(t, w.Body.String(), "Denied owner agent")
+	require.NotContains(t, w.Body.String(), "data-agent-mode")
+	require.ElementsMatch(t, []string{"Allowed owner first agent", "Allowed owner second agent"}, eligibleConsentAgentNames(t, ctx, ti, fx))
 }
 
 func TestConsentAgentSubmissionRechecksOwnerExclusion(t *testing.T) {
@@ -134,7 +135,8 @@ func TestConsentAgentSubmissionRechecksOwnerExclusion(t *testing.T) {
 	agent := createConsentAgent(t, ctx, ti, fx, "Newly excluded owner agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
 	w := serveAgentConsentGet(t, ctx, ti, fx)
-	require.Contains(t, w.Body.String(), agent.Name)
+	require.NotContains(t, w.Body.String(), "data-agent-mode")
+	require.Contains(t, eligibleConsentAgentNames(t, ctx, ti, fx), agent.Name)
 	seedPrincipalGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.userID), authz.ScopeMCPBlockedConnect, fx.target.MCPResourceID.String())
 	w, err := serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
 	require.Error(t, err)

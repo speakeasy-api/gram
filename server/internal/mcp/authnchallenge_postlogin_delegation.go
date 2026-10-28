@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -24,7 +25,10 @@ import (
 
 //go:embed postlogin_delegation_template.html
 var postLoginDelegationHTML string
-var postLoginDelegationTemplate = template.Must(template.Must(template.New("delegation").Parse(postLoginDelegationHTML)).Parse(consentpage.LogoTemplate))
+
+//go:embed postlogin_delegation_fields.html
+var postLoginDelegationFields string
+var postLoginDelegationTemplate = template.Must(template.Must(template.New("delegation").Parse(postLoginDelegationHTML)).Parse(consentpage.LogoTemplate + postLoginDelegationFields))
 
 type exactGrantDelegator interface {
 	DelegateGrant(context.Context, uuid.UUID, remotesessions.RemoteGrant, uuid.UUID) error
@@ -33,7 +37,15 @@ type delegationOption struct {
 	ID, Name, BindingID, Detail string
 	Disabled                    bool
 }
+type delegationScope struct {
+	Name  string
+	Added bool
+}
 type postLoginDelegationData struct {
+	PreviousScopes    []string
+	HasPreviousScopes bool
+	Scopes            []delegationScope
+
 	AccountName, AccountEmail                                             string
 	Styles                                                                template.CSS
 	ScriptURL, ActionURL, ContinueURL, State, CSRF, SessionID, Generation string
@@ -41,7 +53,7 @@ type postLoginDelegationData struct {
 }
 
 func (s *Service) delegationHuman(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (consentHumanAuthorization, error) {
-	if !state.FirstParty || state.BindingRefreshAttemptID != "" || state.WorkloadReconnect != nil || state.PendingDelegation == nil || state.Subject == nil || state.PendingDelegation.Subject != *state.Subject || state.PendingDelegation.UserSessionIssuerID != endpoint.UserSessionIssuerID {
+	if state.BindingRefreshAttemptID != "" || state.WorkloadReconnect != nil || state.PendingDelegation == nil || state.Subject == nil || state.PendingDelegation.Subject != *state.Subject || state.PendingDelegation.UserSessionIssuerID != endpoint.UserSessionIssuerID {
 		return consentHumanAuthorization{}, oops.C(oops.CodeForbidden)
 	}
 	return s.loadConsentHuman(ctx, state, AgentAuthorizationTarget{Scope: authz.ScopeAgentWrite, OrganizationID: endpoint.OrganizationID, ProjectID: endpoint.ProjectID, UserSessionIssuerID: endpoint.UserSessionIssuerID, MCPResourceID: uuid.Nil})
@@ -54,24 +66,24 @@ func consentBindingContext(ctx context.Context, endpoint *ResolvedMcpEndpoint, u
 	return ctx
 }
 
-func (s *Service) servePostLoginDelegation(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (bool, error) {
+func (s *Service) loadPostLoginDelegation(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (*postLoginDelegationData, error) {
 	if state.PendingDelegation == nil {
-		return false, nil
+		return nil, nil
 	}
 	if _, ok := s.consentBindings.(exactGrantDelegator); !ok {
-		return false, nil
+		return nil, nil
 	}
 	human, err := s.delegationHuman(r.Context(), endpoint, state)
 	if err != nil {
-		return true, consentAgentAuthorizationError(err, "connection delegation is unavailable")
+		return nil, consentAgentAuthorizationError(err, "connection delegation is unavailable")
 	}
 	candidates, err := agentsrepo.New(s.db).ListActiveAgentsForAuthorization(r.Context(), endpoint.OrganizationID)
 	if err != nil {
-		return true, fmt.Errorf("list delegation agents: %w", err)
+		return nil, fmt.Errorf("list delegation agents: %w", err)
 	}
 	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(r.Context(), endpoint.OrganizationID)
 	if err != nil {
-		return true, fmt.Errorf("load delegation organization: %w", err)
+		return nil, fmt.Errorf("load delegation organization: %w", err)
 	}
 	options := make([]delegationOption, 0)
 	for _, agent := range candidates {
@@ -84,7 +96,7 @@ func (s *Service) servePostLoginDelegation(w http.ResponseWriter, r *http.Reques
 		ctx := consentBindingContext(r.Context(), endpoint, human.userID, agent.ID, organization.Slug)
 		bindings, err := s.consentBindings.ListBindings(ctx, &gen.ListBindingsPayload{SessionToken: nil, ProjectSlugInput: nil, PrincipalID: agent.ID.String(), UserSessionIssuerID: endpoint.UserSessionIssuerID.String()})
 		if err != nil {
-			return true, fmt.Errorf("load agent assignments: %w", err)
+			return nil, fmt.Errorf("load agent assignments: %w", err)
 		}
 		option := delegationOption{ID: agent.ID.String(), Name: agent.Name, BindingID: "", Detail: "Give this agent access to your new connection", Disabled: false}
 		for _, binding := range bindings.Items {
@@ -111,9 +123,40 @@ func (s *Service) servePostLoginDelegation(w http.ResponseWriter, r *http.Reques
 		return !options[i].Disabled && options[i].BindingID != "" && options[j].BindingID == ""
 	})
 	if len(options) == 0 {
+		return nil, nil
+	}
+	data := postLoginDelegationData{AccountName: state.PendingDelegation.UpstreamDisplayName, AccountEmail: state.PendingDelegation.UpstreamEmail, Styles: consentpage.Styles, ScriptURL: consentScriptURL, ActionURL: endpoint.consentPath() + "/remote-session", ContinueURL: endpoint.consentPath() + "?state=" + url.QueryEscape(state.ID), State: state.ID, CSRF: state.CSRFToken, SessionID: state.PendingDelegation.RemoteSessionID.String(), Generation: strconv.FormatInt(state.PendingDelegation.GrantGeneration, 10), Options: options, PreviousScopes: nil, HasPreviousScopes: false, Scopes: nil}
+	data.PreviousScopes = state.PendingDelegation.PreviousScopes
+	data.HasPreviousScopes = state.PendingDelegation.PreviousGeneration > 0
+	for _, scope := range state.PendingDelegation.Scopes {
+		data.Scopes = append(data.Scopes, delegationScope{Name: scope, Added: data.HasPreviousScopes && !slices.Contains(data.PreviousScopes, scope)})
+	}
+	return &data, nil
+}
+
+func (s *Service) servePostLoginDelegation(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (bool, error) {
+	if state.PendingDelegation == nil {
 		return false, nil
 	}
-	data := postLoginDelegationData{AccountName: state.PendingDelegation.UpstreamDisplayName, AccountEmail: state.PendingDelegation.UpstreamEmail, Styles: consentpage.Styles, ScriptURL: consentScriptURL, ActionURL: endpoint.consentPath() + "/remote-session", ContinueURL: endpoint.consentPath() + "?state=" + url.QueryEscape(state.ID), State: state.ID, CSRF: state.CSRFToken, SessionID: state.PendingDelegation.RemoteSessionID.String(), Generation: strconv.FormatInt(state.PendingDelegation.GrantGeneration, 10), Options: options}
+	if !state.FirstParty && !endpoint.MetaMcpServerID.Valid {
+		clients, err := s.remoteChallengeMgr.ListClients(r.Context(), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		if err != nil {
+			return true, fmt.Errorf("load connection delegation clients: %w", err)
+		}
+		// Multi-service flows complete each delegation before another provider
+		// callback can replace the grant being reviewed. A single service uses
+		// the client's final consent page instead.
+		if len(clients) <= 1 {
+			return false, nil
+		}
+	}
+	data, err := s.loadPostLoginDelegation(r, endpoint, state)
+	if err != nil {
+		return true, err
+	}
+	if data == nil {
+		return false, nil
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")

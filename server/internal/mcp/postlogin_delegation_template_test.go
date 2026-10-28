@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"github.com/stretchr/testify/require"
+	"strings"
 	"testing"
 )
 
@@ -27,4 +28,19 @@ func TestPostLoginDelegationEscapesAccountAndAgentNames(t *testing.T) {
 	require.NotContains(t, out.String(), "<script>account")
 	require.NotContains(t, out.String(), "<script>agent")
 	require.Contains(t, out.String(), "&lt;script&gt;")
+}
+
+func TestPostLoginDelegationShowsIncreasedScopes(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	err := postLoginDelegationTemplate.Execute(&out, postLoginDelegationData{
+		HasPreviousScopes: true, PreviousScopes: []string{"tools:read"},
+		Scopes: []delegationScope{{Name: "tools:read"}, {Name: "tools:write", Added: true}},
+	})
+	require.NoError(t, err)
+	require.Contains(t, out.String(), "Previous connection")
+	require.Contains(t, out.String(), "New connection")
+	require.Contains(t, out.String(), "tools:write")
+	require.Equal(t, 1, strings.Count(out.String(), "· Added"))
+	require.NotContains(t, out.String(), "checked")
 }

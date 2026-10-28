@@ -131,3 +131,5 @@
     cursor: pointer;
   }
 }
+
+@source "../../../../server/internal/mcp/postlogin_delegation_fields.html";

@@ -16,7 +16,7 @@ import (
 // parent and use its server-stamped attempt reference, never the initial ID or
 // a parameter supplied by the returning browser.
 func (s *Service) recordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
-	if !grant.ConnectionPopup {
+	if grant.ParentChallengeID == "" {
 		return nil
 	}
 	// Consent updates may race the callback; reload before retrying so those
@@ -30,10 +30,10 @@ func (s *Service) recordConnectionPopupGrant(ctx context.Context, grant remotese
 			}
 			return fmt.Errorf("load popup grant parent: %w", err)
 		}
-		if !parent.FirstParty || parent.Subject == nil || *parent.Subject != grant.Subject || parent.UserSessionIssuerID != grant.UserSessionIssuerID {
+		if parent.Subject == nil || *parent.Subject != grant.Subject || parent.UserSessionIssuerID != grant.UserSessionIssuerID {
 			return nil
 		}
-		if parent.BindingRefreshAttemptID != "" && s.bindingRefresh != nil {
+		if parent.FirstParty && grant.ConnectionPopup && parent.BindingRefreshAttemptID != "" && s.bindingRefresh != nil {
 			if err := s.bindingRefresh.Record(ctx, parent.BindingRefreshAttemptID, grant); err != nil {
 				return fmt.Errorf("record attachment popup grant: %w", err)
 			}
@@ -49,7 +49,7 @@ func (s *Service) recordConnectionPopupGrant(ctx context.Context, grant remotese
 				continue
 			}
 		}
-		if parent.ReauthenticateClientID == grant.RemoteSessionClientID {
+		if parent.FirstParty && grant.ConnectionPopup && parent.ReauthenticateClientID == grant.RemoteSessionClientID {
 			completed := parent
 			completed.ReauthenticateClientID = uuid.Nil
 			swapped, err := s.authnChallengeCache.CompareAndSwap(ctx, parent, completed)
