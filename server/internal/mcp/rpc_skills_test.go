@@ -15,16 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
-	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -55,7 +52,7 @@ func newSkillsFixture(t *testing.T, ctx context.Context, ti *testInstance) *skil
 	require.NotNil(t, authCtx.ProjectSlug)
 
 	slug := "skills-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 	ti.features.SetFlag(feature.FlagSkillsOverMCP, authCtx.ActiveOrganizationID, true)
 
 	return &skillsFixture{
@@ -63,27 +60,11 @@ func newSkillsFixture(t *testing.T, ctx context.Context, ti *testInstance) *skil
 		projectID:      *authCtx.ProjectID,
 		organizationID: authCtx.ActiveOrganizationID,
 		toolsetID:      toolset.ID,
-		serverID:       createToolsetWrapper(t, ctx, ti, *authCtx.ProjectID, toolset.ID, slug),
-		projectSlug:    *authCtx.ProjectSlug,
-		mcpSlug:        toolset.McpSlug.String,
+		// The canonical server shares the toolset id and serves its legacy slug.
+		serverID:    toolset.ID,
+		projectSlug: *authCtx.ProjectSlug,
+		mcpSlug:     toolset.McpSlug.String,
 	}
-}
-
-// createToolsetWrapper adds an enabled MCP server wrapping the toolset, the
-// server a request to the toolset's hosted route is attributed to.
-func createToolsetWrapper(t *testing.T, ctx context.Context, ti *testInstance, projectID, toolsetID uuid.UUID, slug string) uuid.UUID {
-	t.Helper()
-
-	server, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
-		ID:         uuid.New(),
-		ProjectID:  projectID,
-		Name:       conv.ToPGText("wrapper-" + slug),
-		Slug:       conv.ToPGText("wrapper-" + slug),
-		ToolsetID:  conv.ToNullUUID(toolsetID),
-		Visibility: "public",
-	})
-	require.NoError(t, err)
-	return server.ID
 }
 
 func skillContent(name, description string) string {
@@ -268,9 +249,8 @@ func TestServePublic_Skills_ListServesLinkedSkills(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
 	_, linkedContent := servedSkill(t, ctx, ti, f, "linked-skill")
-	otherToolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), f.authCtx, "other-"+f.mcpSlug)
-	otherServer := createToolsetWrapper(t, ctx, ti, f.projectID, otherToolset.ID, "other-"+f.mcpSlug)
-	servedSkillOn(t, ctx, ti, f, "elsewhere-skill", otherServer)
+	otherToolset := createPublicMCPToolset(t, ctx, ti, f.authCtx, "other-"+f.mcpSlug)
+	servedSkillOn(t, ctx, ti, f, "elsewhere-skill", otherToolset.ID)
 
 	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
 	require.NoError(t, err)
@@ -285,17 +265,17 @@ func TestServePublic_Skills_ListServesLinkedSkills(t *testing.T) {
 	require.NotContains(t, result, "nextCursor")
 }
 
-func TestServePublic_Skills_ToolsetWithoutServerServesNothing(t *testing.T) {
+func TestServePublic_Skills_OtherServerServesNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
 	servedSkill(t, ctx, ti, f, "unreachable-skill")
-	bare := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), f.authCtx, "bare-"+f.mcpSlug)
+	bare := createPublicMCPToolset(t, ctx, ti, f.authCtx, "bare-"+f.mcpSlug)
 
 	w, err := servePublicHTTP(t, ctx, ti, bare.McpSlug.String, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
 	require.NoError(t, err)
-	require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), "skills are linked to servers, so a toolset no server wraps serves none")
+	require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), "skills are linked to servers, so another server serves none of them")
 
 	w, err = servePublicHTTP(t, ctx, ti, bare.McpSlug.String, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": f.uri("unreachable-skill")}), "", nil)
 	require.NoError(t, err)
