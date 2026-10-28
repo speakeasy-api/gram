@@ -4054,6 +4054,9 @@ type OrganizationMetadatum struct {
 	CreationSource pgtype.Text
 	// @access: confidential
 	DefaultHost pgtype.Text
+	// Staff-entered link to the adoption dashboard for this organization.
+	// @access: restricted
+	AdoptionDashboardUrl pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -7887,6 +7890,21 @@ type UserAccount struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type UserHiddenMcpServer struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type UserOauthToken struct {

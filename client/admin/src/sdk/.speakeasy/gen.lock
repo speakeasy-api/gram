@@ -115,6 +115,7 @@ trackedFiles:
   src/funcs/adminRunUpstreamOAuthMigration.ts: {}
   src/funcs/adminSaveRegistryEntry.ts: {}
   src/funcs/adminServeImage.ts: {}
+  src/funcs/adminSetAdoptionDashboardUrl.ts: {}
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
@@ -224,6 +225,7 @@ trackedFiles:
   src/models/components/adminregistryoktaunmapped.ts: {}
   src/models/components/adminregistryoktaunmappedname.ts: {}
   src/models/components/adminregistrypage.ts: {}
+  src/models/components/adminregistrypromotionauthdiscovery.ts: {}
   src/models/components/adminregistrypromotioncandidate.ts: {}
   src/models/components/adminregistrypromotioncandidates.ts: {}
   src/models/components/adminregistrypromotionsuggestions.ts: {}
@@ -302,6 +304,7 @@ trackedFiles:
   src/models/components/riskidrequestbody.ts: {}
   src/models/components/runupstreamoauthmigrationrequestbody.ts: {}
   src/models/components/saveregistryentryrequestbody.ts: {}
+  src/models/components/setadoptiondashboardurlrequestbody.ts: {}
   src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
@@ -502,6 +505,7 @@ trackedFiles:
   src/react-query/adminSaveRegistryEntry.ts: {}
   src/react-query/adminServeImage.core.ts: {}
   src/react-query/adminServeImage.ts: {}
+  src/react-query/adminSetAdoptionDashboardUrl.ts: {}
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/react-query/adminSetRegistryEntryPublished.ts: {}
@@ -1605,6 +1609,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminSetAdoptionDashboardUrl:
+    speakeasy-default-admin-set-adoption-dashboard-url:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2026-08-21T02:59:01.694Z", "id": "<id>", "member_count": 658564, "name": "<value>", "slug": "<value>", "updated_at": "2026-05-07T22:44:29.515Z", "whitelisted": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminSetInferenceKeyMonthlyLimit:
     speakeasy-default-admin-set-inference-key-monthly-limit:
       requestBody:

@@ -60,6 +60,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Gateway overview Activity + MCP listing gateway marker         | CH `telemetry_logs` rows stamped `gram.meta_mcp_server.id` = det_uuid(`gram-demo-metamcp-1`): `meta_discovery` rows (list_servers → describe_server → describe_tools, the Gateway tool usage chart) + member `tool_call` rows keyed by `gram.mcp_server.id` for the four members, unique `gwdisc`/`gwcall` trace namespaces; `gwgone` dispatches to GitHub (membership soft-deleted 3 days ago, PG `meta_mcp_server_members.deleted_at`) that stay out of Calls by member; `gwhook` hook rows whose `gram.mcp.server_url` is the gateway endpoint URL, classified as the gateway on Tool Logs / Insights                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `[~]`  |
 | Inbound MCP network traffic                                    | CH `mcp_network_traffic_hourly_summaries` via an MV on explicit `mcp_network_request` event URN, seeded for existing MCP and gateway server IDs on public/private surfaces; hourly request count and last observed time, 90-day retention                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `[~]`  |
 | MCP connections (server tab, org MCP Sessions, identity page)  | PG project `user_session_issuers` ×4 plus organization `user_session_issuers` ×1 (used by the GitHub server, in shared authorization server mode and unpinned, so its issuer URL and token endpoint follow the deployment and also list in the Access Hub guided setup), `user_session_clients` ×5 (one per credential kind, plus a pre-column row), and `user_sessions` ×5                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `[~]`  |
+| Gateway Connections (manual and Organization Gateway)          | Shared Clients and Sessions tab (same as MCP servers) with paginated identity search, provider/server associations and creation dates; three inert organization authorizations (two active, one expired) and an upstream provider binding, visible even while the gateway is disabled.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `[~]`  |
 | Workload sessions (project MCP Sessions, revoke dialogs)       | PG `workload_issuers` ×4 (reserved-domain URLs; `Acme CI` refuses wildcard admission because its subjects encode a branch ref, `Acme Agent Platform` permits it; assertion reuse is explicitly disabled for CI and enabled for the agent platform’s short-lived projected tokens) + `workload_identity_admissions` ×6 (project and organization tier; the payments workload is admitted at both; one `wildcard` rule standing for the agent fleet) + `workload_agent_assignments` ×5 (active and suspended managed agent, plus the wildcard fleet assignment) + inert `workload:` `user_sessions` ×2 on the gateway issuer                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `[~]`  |
 | Access Hub (trust policy page)                                 | The same `workload_issuers` / `workload_identity_admissions` / `workload_agent_assignments` rows, read through `workloadIdentities.list` on the org-level `/<org>/access-hub`, which shows the organization tier only: three custom platforms with descriptions, tags and differing wildcard permissions. The CI and agent platforms open to three org-tier tagged admissions (two exact and one wildcard) and their assigned agents; the inference platform uses a project-tier admission. Demo visitors hold every scope through `authz.DemoScopeGrants`, so the page renders populated here; a real organization needs `workload:read`, which only reaches organizations provisioned after AIM-291 (see AIM-360).                                                                                                                                                                                                                                                                                                                                                                          | `[~]`  |
 | Organization setup wizard (`/acme-demo/setup`)                 | PG `organization_setup_tasks`: 11 explicit selections (9 visible, 2 hidden); the wizard shows 9 tasks, including one identity-provider task with nested Verify domain, Single sign-on, and Directory sync steps, with completion projected from organization facts and saved status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `[~]`  |
@@ -78,6 +79,8 @@ The ordinary MCP connection inventory totals 11 sessions: five on Acme Partner
 Gateway and six across Linear, Slack, and Acme Agent Gateway. The project-scoped
 managed-agent session below is checked separately, not counted as a twelfth MCP
 connection.
+
+Command K opens **Organization Gateway Connections** and the manual gateway’s Connections view. From the seeded **Default** project, search **Claude Desktop** to open the seeded registration directly; registration names stay out of AI intent ranking. Session history is not indexed by the launcher.
 
 ### Gateway instructions
 
@@ -108,9 +111,9 @@ agent identifier and must show unavailable, never human-owner activity or zeros.
 
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
-PG `agents` ×5 includes Release assistant, Support triage, Retired
-documentation bot, the active Release notes assistant, and the dedicated
-Identity-bound assistant agent (empty grants), covering active,
+PG `agents` ×6 includes Release assistant, Support triage, Retired
+documentation bot, the active Release notes assistant, the dedicated
+Identity-bound assistant agent (empty grants), and Inference summary worker, covering active,
 suspended, and revoked identities with three existing fictional owners (display names and
 avatar initials fallback). One inert agent-subject `user_sessions` row shows the
 credential relationship and approving human; its refresh hash is invalid and its
@@ -147,20 +150,35 @@ in the audit feed. Shared-demo agent access remains restricted as above.
 
 ### Exact remote-session attachments
 
-PG `remote_sessions` ×1 and `principal_remote_session_bindings` ×2 show one
-fictional user-owned upstream account shared by **Release assistant** and
-**Release notes assistant** (both active, same human owner). Linear MCP session
+PG `remote_sessions` ×2 and `principal_remote_session_bindings` ×2 show a working
+owner connection on **Release assistant** and an expired connection delegated by the second demo member on **Release notes assistant**. Authorized editors can remove assignments and attach their own connections; only the connection owner can refresh it. Linear MCP session
 6 is the requesting human session; its issuer is explicitly linked to the
-upstream client. Both bindings retain the same exact session ID, not a copy of
-its credential. The original three agent lifecycle fixtures remain unchanged.
-The account has invalid ciphertext, no refresh token and auto-refresh disabled.
+upstream client. Each binding retains its source session’s exact ID, not a copy of
+its credential. Both release agents belong to the first demo member; the original three
+agent lifecycle fixtures remain unchanged.
+Both accounts have invalid ciphertext, no refresh token and auto-refresh disabled.
 Its client sits under Linear's remote identity provider (reserved example
 endpoints), so Linear's user session issuer binds clients of one remote issuer
 and the `mcp_servers.remote_session_issuer_id` stamp stays derivable. It is
 display-only, not a live OAuth integration. All IDs reuse `Spec.NameSeed` and
 retarget with the tenant.
 Reseeding deletes bindings before sessions, issuers, agents and projects.
-Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
+The wizard separates **MCP selection** from **MCP authentication**. The latter
+shows selected servers with compact shared/personal/expired/missing summaries
+and expandable connection controls, with server removal available on the same
+step. Expired connections show **Reauthenticate** and **Remove** on the
+connection row; popup completion refreshes its state automatically. The list
+and detail page use one **Needs refresh** status instead of a second Active
+badge. Live popup recovery needs a separate local OAuth fixture; seeded
+ciphertext is deliberately unusable.
+
+This UI reorganization adds no routes, named resource types, permissions, or
+management capability. Existing Command K agent page and named-agent
+candidates remain applicable. Platform MCP authorization and the documented
+human-session-only assignment boundary are unchanged; no additional tool is
+introduced for wizard layout or popup presentation.
+
+Browser verification: `[~]` (not yet verified); see check 23 in `verify.md`.
 
 That upstream client sits under the **Example Workspace Identity** provider,
 which carries a scope override (`read`), shown on its Overview and editable on its

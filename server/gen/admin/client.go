@@ -51,6 +51,7 @@ type Client struct {
 	GetPaygBillingSummaryEndpoint                   goa.Endpoint
 	GetStripeCustomerEndpoint                       goa.Endpoint
 	SetStripeCustomerEndpoint                       goa.Endpoint
+	SetAdoptionDashboardURLEndpoint                 goa.Endpoint
 	GetStripeSubscriptionEndpoint                   goa.Endpoint
 	CancelStripeSubscriptionEndpoint                goa.Endpoint
 	ResumeStripeSubscriptionEndpoint                goa.Endpoint
@@ -122,7 +123,7 @@ type Client struct {
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, getMcpServerToolCalls, getHookClients, listExternalMcpMigrationCandidates, previewExternalMcpMigration, migrateExternalMcpServers, listRegistryPromotionCandidates, getRegistryPromotionCandidate, promoteRegistryCandidate, curateRegistryPromotionCandidate, retryRegistryPromotionDocs, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage, listUpstreamOAuthMigrationOrganizations, getUpstreamOAuthMigrationStatus, runUpstreamOAuthMigration, enableUpstreamAuthEnforcement, disableUpstreamAuthEnforcement goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, setAdoptionDashboardURL, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, getMcpServerToolCalls, getHookClients, listExternalMcpMigrationCandidates, previewExternalMcpMigration, migrateExternalMcpServers, listRegistryPromotionCandidates, getRegistryPromotionCandidate, promoteRegistryCandidate, curateRegistryPromotionCandidate, retryRegistryPromotionDocs, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage, listUpstreamOAuthMigrationOrganizations, getUpstreamOAuthMigrationStatus, runUpstreamOAuthMigration, enableUpstreamAuthEnforcement, disableUpstreamAuthEnforcement goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                                   login,
 		CallbackEndpoint:                                callback,
@@ -158,6 +159,7 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		GetPaygBillingSummaryEndpoint:                   getPaygBillingSummary,
 		GetStripeCustomerEndpoint:                       getStripeCustomer,
 		SetStripeCustomerEndpoint:                       setStripeCustomer,
+		SetAdoptionDashboardURLEndpoint:                 setAdoptionDashboardURL,
 		GetStripeSubscriptionEndpoint:                   getStripeSubscription,
 		CancelStripeSubscriptionEndpoint:                cancelStripeSubscription,
 		ResumeStripeSubscriptionEndpoint:                resumeStripeSubscription,
@@ -995,6 +997,29 @@ func (c *Client) GetStripeCustomer(ctx context.Context, p *GetStripeCustomerPayl
 func (c *Client) SetStripeCustomer(ctx context.Context, p *SetStripeCustomerPayload) (res *AdminOrganization, err error) {
 	var ires any
 	ires, err = c.SetStripeCustomerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// SetAdoptionDashboardURL calls the "setAdoptionDashboardUrl" endpoint of the
+// "admin" service.
+// SetAdoptionDashboardURL may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetAdoptionDashboardURL(ctx context.Context, p *SetAdoptionDashboardURLPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.SetAdoptionDashboardURLEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

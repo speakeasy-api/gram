@@ -89,21 +89,6 @@ FROM mcp_servers s
 JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
 WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
--- Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
--- name: ServersMirrorHostedToolsets :exec
-UPDATE toolsets AS t
-SET
-    mcp_slug = e.slug
-  , custom_domain_id = e.custom_domain_id
-  , mcp_enabled = s.visibility <> 'disabled'
-  , mcp_is_public = s.visibility = 'public'
-  , user_session_issuer_id = s.user_session_issuer_id
-  , tool_variations_group_id = s.tool_variations_group_id
-FROM mcp_servers AS s
-JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
-  AND t.project_id = @project_id::uuid AND t.deleted IS FALSE;
-
 -- Check Access scenarios on GitHub. Contractors blocks connecting, which
 -- wins over every other role's grant: Mateo (a contractor through the
 -- directory) is blocked even though Engineer reaches every server, and his
@@ -584,7 +569,7 @@ INSERT INTO remote_sessions
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes');
 
@@ -801,3 +786,21 @@ FROM (VALUES
 ) AS v(id, slug, scope)
 JOIN organization_roles r
   ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;
+
+-- name: ServersInsertOrganizationGatewayClient :exec
+INSERT INTO user_session_clients
+ (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
+ redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+VALUES (@id::uuid, NULL, @org_id::text, @issuer_id::uuid,
+ (@id::uuid)::text, 'Example desktop client', ARRAY['http://127.0.0.1:41296/callback'], now(), 'none');
+
+-- name: ServersInsertOrganizationGatewaySession :exec
+-- Inert authorizations remain visible while the gateway is disabled.
+-- Access tokens expired one hour ago; refresh authorization has its own deadline.
+INSERT INTO user_sessions
+ (id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn,
+ jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+VALUES (@id::uuid, @org_id::text, @issuer_id::uuid, @client_id::uuid, 'user:' || @user_id::text,
+ @jti::text, @refresh_token_hash::text,
+ now() + (@refresh_expires_in::text)::interval,
+ now() - interval '1 hour', now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
