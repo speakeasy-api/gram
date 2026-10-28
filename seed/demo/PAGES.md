@@ -111,9 +111,9 @@ agent identifier and must show unavailable, never human-owner activity or zeros.
 
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
-PG `agents` ×5 includes Release assistant, Support triage, Retired
-documentation bot, the active Release notes assistant, and the dedicated
-Identity-bound assistant agent (empty grants), covering active,
+PG `agents` ×6 includes Release assistant, Support triage, Retired
+documentation bot, the active Release notes assistant, the dedicated
+Identity-bound assistant agent (empty grants), and Inference summary worker, covering active,
 suspended, and revoked identities with three existing fictional owners (display names and
 avatar initials fallback). One inert agent-subject `user_sessions` row shows the
 credential relationship and approving human; its refresh hash is invalid and its
@@ -150,20 +150,35 @@ in the audit feed. Shared-demo agent access remains restricted as above.
 
 ### Exact remote-session attachments
 
-PG `remote_sessions` ×1 and `principal_remote_session_bindings` ×2 show one
-fictional user-owned upstream account shared by **Release assistant** and
-**Release notes assistant** (both active, same human owner). Linear MCP session
+PG `remote_sessions` ×2 and `principal_remote_session_bindings` ×2 show a working
+owner connection on **Release assistant** and an expired connection delegated by the second demo member on **Release notes assistant**. Authorized editors can remove assignments and attach their own connections; only the connection owner can refresh it. Linear MCP session
 6 is the requesting human session; its issuer is explicitly linked to the
-upstream client. Both bindings retain the same exact session ID, not a copy of
-its credential. The original three agent lifecycle fixtures remain unchanged.
-The account has invalid ciphertext, no refresh token and auto-refresh disabled.
+upstream client. Each binding retains its source session’s exact ID, not a copy of
+its credential. Both release agents belong to the first demo member; the original three
+agent lifecycle fixtures remain unchanged.
+Both accounts have invalid ciphertext, no refresh token and auto-refresh disabled.
 Its client sits under Linear's remote identity provider (reserved example
 endpoints), so Linear's user session issuer binds clients of one remote issuer
 and the `mcp_servers.remote_session_issuer_id` stamp stays derivable. It is
 display-only, not a live OAuth integration. All IDs reuse `Spec.NameSeed` and
 retarget with the tenant.
 Reseeding deletes bindings before sessions, issuers, agents and projects.
-Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
+The wizard separates **MCP selection** from **MCP authentication**. The latter
+shows selected servers with compact shared/personal/expired/missing summaries
+and expandable connection controls, with server removal available on the same
+step. Expired connections show **Reauthenticate** and **Remove** on the
+connection row; popup completion refreshes its state automatically. The list
+and detail page use one **Needs refresh** status instead of a second Active
+badge. Live popup recovery needs a separate local OAuth fixture; seeded
+ciphertext is deliberately unusable.
+
+This UI reorganization adds no routes, named resource types, permissions, or
+management capability. Existing Command K agent page and named-agent
+candidates remain applicable. Platform MCP authorization and the documented
+human-session-only assignment boundary are unchanged; no additional tool is
+introduced for wizard layout or popup presentation.
+
+Browser verification: `[~]` (not yet verified); see check 23 in `verify.md`.
 
 That upstream client sits under the **Example Workspace Identity** provider,
 which carries a scope override (`read`), shown on its Overview and editable on its

@@ -394,6 +394,7 @@ func (s *Service) buildRemoteConnectURL(
 		loginProjectID = resourceMember.projectID
 	}
 	parent := remotesessions.ParentChallenge{
+		ConnectionPopup:     challengeState.FirstParty && (challengeState.BindingRefreshAttemptID != "" || challengeState.ReauthenticateClientID != uuid.Nil),
 		ID:                  challengeState.ID,
 		ProjectID:           loginProjectID,
 		OrganizationID:      endpoint.OrganizationID,

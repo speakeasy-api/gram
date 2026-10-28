@@ -40,7 +40,8 @@ type RemoteSession struct {
 	AccessExpiresAt string
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string
-	// Absolute upstream authorization deadline; refreshing does not extend it.
+	// Upstream authorization deadline. When present, the connection cannot be used
+	// or refreshed after this time even if its tokens have later expiries.
 	AuthorizationExpiresAt *string
 	// Last recorded upstream request, accurate to within five minutes. Null means
 	// unknown.

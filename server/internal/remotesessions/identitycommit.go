@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
@@ -954,6 +955,15 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 		}
 		if associated == 0 {
 			return identityRefusal(ErrIdentityConflict, nil, "the MCP server or its client changed while saving; retry")
+		}
+		// This server may put the client on a second source, which makes the
+		// credential headers it copied from the first no longer its to send.
+		// Last in this transaction and copies only, so the only rows it locks
+		// are the copies themselves: the remote session client rows written
+		// above are locked by MCP server deletion before it reaches the same
+		// copies, and taking a source lock here would invert that order.
+		if err := authclientbackfill.SyncServerDerivedCopies(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.MCPServerID); err != nil {
+			return fmt.Errorf("sync mcp server auth client headers: %w", err)
 		}
 	}
 	c.result = IdentityResult{
