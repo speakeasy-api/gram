@@ -973,6 +973,9 @@ func TestWritePluginMarksAgentKey(t *testing.T) {
 			BinaryPath:   "/tmp/speakeasy-hooks",
 		})
 		require.NoError(t, err)
+		info, err := os.Stat(filepath.Join(dir, configFileName))
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "speakeasy.json carries the key")
 
 		cfg, _ := SplitInlineFlags(Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--config=" + filepath.Join(dir, configFileName)})
 		require.Equal(t, "install-key", cfg.HooksAPIKey)
@@ -984,6 +987,7 @@ func TestWritePluginMarksAgentKey(t *testing.T) {
 // browser sign-in, even with browser login on and no cached sign-in, because
 // its own key outranks any cache that sign-in would write.
 func TestAgentKeySessionStartSkipsBrowserLogin(t *testing.T) {
+	setSpoolStateHome(t)
 	unsetClaudeLaunch(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("TMPDIR", t.TempDir())
