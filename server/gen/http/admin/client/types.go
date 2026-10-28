@@ -1835,8 +1835,10 @@ type MigrateToGlobalIssuerResponseBody struct {
 // UploadPlatformImageResponseBody is the type of the "admin" service
 // "uploadPlatformImage" endpoint HTTP response body.
 type UploadPlatformImageResponseBody struct {
-	// The asset entry that was created in Speakeasy
+	// The uploaded platform image asset
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
+	// Canonical public URL for the uploaded image
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 }
 
 // StartTrialResponseBody is the type of the "admin" service "startTrial"
@@ -33293,10 +33295,12 @@ func NewMigrateToGlobalIssuerGatewayError(body *MigrateToGlobalIssuerGatewayErro
 	return v
 }
 
-// NewUploadPlatformImageUploadImageResultOK builds a "admin" service
+// NewUploadPlatformImageAdminUploadImageResultOK builds a "admin" service
 // "uploadPlatformImage" endpoint result from a HTTP "OK" response.
-func NewUploadPlatformImageUploadImageResultOK(body *UploadPlatformImageResponseBody) *admin.UploadImageResult {
-	v := &admin.UploadImageResult{}
+func NewUploadPlatformImageAdminUploadImageResultOK(body *UploadPlatformImageResponseBody) *admin.AdminUploadImageResult {
+	v := &admin.AdminUploadImageResult{
+		URL: *body.URL,
+	}
 	v.Asset = unmarshalAssetResponseBodyToAdminAsset(body.Asset)
 
 	return v
@@ -43986,6 +43990,9 @@ func ValidateMigrateToGlobalIssuerResponseBody(body *MigrateToGlobalIssuerRespon
 func ValidateUploadPlatformImageResponseBody(body *UploadPlatformImageResponseBody) (err error) {
 	if body.Asset == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("asset", "body"))
+	}
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}
 	if body.Asset != nil {
 		if err2 := ValidateAssetResponseBody(body.Asset); err2 != nil {

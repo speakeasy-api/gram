@@ -10627,7 +10627,7 @@ func EncodeMigrateToGlobalIssuerError(encoder func(context.Context, http.Respons
 // by the admin uploadPlatformImage endpoint.
 func EncodeUploadPlatformImageResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*admin.UploadImageResult)
+		res, _ := v.(*admin.AdminUploadImageResult)
 		enc := encoder(ctx, w)
 		body := NewUploadPlatformImageResponseBody(res)
 		w.WriteHeader(http.StatusOK)

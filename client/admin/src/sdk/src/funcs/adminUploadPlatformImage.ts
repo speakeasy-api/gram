@@ -11,9 +11,9 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  UploadImageResult,
-  UploadImageResult$inboundSchema,
-} from "../models/components/uploadimageresult.js";
+  AdminUploadImageResult,
+  AdminUploadImageResult$inboundSchema,
+} from "../models/components/adminuploadimageresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -35,7 +35,7 @@ import { Result } from "../types/fp.js";
  * uploadPlatformImage admin
  *
  * @remarks
- * Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+ * Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG.
  */
 export function adminUploadPlatformImage(
   client: GramCore,
@@ -43,7 +43,7 @@ export function adminUploadPlatformImage(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    UploadImageResult,
+    AdminUploadImageResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -69,7 +69,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      UploadImageResult,
+      AdminUploadImageResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -160,7 +160,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    UploadImageResult,
+    AdminUploadImageResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -171,7 +171,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, UploadImageResult$inboundSchema),
+    M.json(200, AdminUploadImageResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),

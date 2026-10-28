@@ -668,11 +668,17 @@ it("locks JSON and Save during upload and saves icons with the same draft after 
       .disabled,
   ).toBe(true);
   await act(async () =>
-    resolve({ asset: { id: "accepted", contentType: "image/svg+xml" } }),
+    resolve({
+      url: "https://public.example.test/rpc/assets.serveImage?id=accepted",
+      asset: { id: "accepted", contentType: "image/svg+xml" },
+    }),
   );
   const draft = editor.value;
   expect(draft).toContain("9007199254740993");
   expect(draft).toContain("com.speakeasy.ai/icons");
+  expect(JSON.parse(draft)._meta["com.speakeasy.ai/icons"].default.src).toBe(
+    "https://public.example.test/rpc/assets.serveImage?id=accepted",
+  );
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByText("Temporary save failure");
   expect(editor.value).toBe(draft);
@@ -684,6 +690,7 @@ it("locks JSON and Save during upload and saves icons with the same draft after 
 
 it("retains icon draft on conflict and keeps Save locked until reload", async () => {
   mutations.upload.mockResolvedValue({
+    url: "https://public.example.test/rpc/assets.serveImage?id=accepted",
     asset: { id: "accepted", contentType: "image/svg+xml" },
   });
   mutations.save.mockRejectedValue(

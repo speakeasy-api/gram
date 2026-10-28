@@ -116,7 +116,7 @@ paths:
             x-speakeasy-name-override: serveImage
     /admin/assets.uploadImage:
         post:
-            description: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+            description: Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG.
             operationId: adminUploadPlatformImage
             parameters:
                 - allowEmptyValue: true
@@ -130,7 +130,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/UploadImageResult'
+                                $ref: '#/components/schemas/AdminUploadImageResult'
                     description: OK response.
                 "400":
                     content:
@@ -95191,6 +95191,17 @@ components:
                 - id
                 - customer_id
                 - status
+        AdminUploadImageResult:
+            type: object
+            properties:
+                asset:
+                    $ref: '#/components/schemas/Asset'
+                url:
+                    type: string
+                    description: Canonical public URL for the uploaded image
+            required:
+                - asset
+                - url
         AdminUpstreamAuthEnforcement:
             type: object
             properties:

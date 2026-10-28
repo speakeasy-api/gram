@@ -62,7 +62,16 @@ export function RegistryIcons({
       if (!active.current) return;
       if (result.asset.contentType !== "image/svg+xml")
         throw new Error("The uploaded asset must be an SVG.");
-      const src = `${window.location.origin}/rpc/assets.serveImage?id=${encodeURIComponent(result.asset.id)}`;
+      const src = result.url;
+      if (!src || !safePreview(src))
+        throw new Error("The upload did not return a valid public asset URL.");
+      const publicURL = new URL(src);
+      if (
+        publicURL.hash ||
+        publicURL.searchParams.size !== 1 ||
+        publicURL.searchParams.get("id") !== result.asset.id
+      )
+        throw new Error("The upload did not return a valid public asset URL.");
       onChange(
         setCatalogIcon(latest.current, slot, {
           src,

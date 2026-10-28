@@ -91,10 +91,13 @@ it("uploads only accepted assets and locks concurrent actions", async () => {
   ).toBe(true);
   expect(screen.queryAllByRole("img")).toHaveLength(0);
   await act(async () =>
-    resolve({ asset: { id: "accepted", contentType: "image/svg+xml" } }),
+    resolve({
+      url: "https://public.example.test/rpc/assets.serveImage?id=accepted",
+      asset: { id: "accepted", contentType: "image/svg+xml" },
+    }),
   );
   expect(screen.getByAltText("Light preview").getAttribute("src")).toBe(
-    `${window.location.origin}/rpc/assets.serveImage?id=accepted`,
+    "https://public.example.test/rpc/assets.serveImage?id=accepted",
   );
   expect(screen.getByText("logo.svg")).toBeTruthy();
 });
@@ -154,3 +157,27 @@ it("never previews raw SVG data or blob URLs from JSON", () => {
   );
   expect(screen.queryAllByRole("img")).toHaveLength(0);
 });
+
+it.each([
+  undefined,
+  "",
+  "https://public.example.test/other?id=accepted",
+  "data:image/svg+xml,<svg/>",
+  "https://public.example.test/rpc/assets.serveImage?id=different",
+])(
+  "rejects missing or invalid upload URL %s without changing the draft",
+  async (url) => {
+    upload.mockResolvedValue({
+      url,
+      asset: { id: "accepted", contentType: "image/svg+xml" },
+    });
+    render(<Harness />);
+    select("Replace primary logo");
+    await screen.findByText(
+      "The upload did not return a valid public asset URL.",
+    );
+    expect(screen.getByAltText("Light preview").getAttribute("src")).toBe(
+      primary.src,
+    );
+  },
+);

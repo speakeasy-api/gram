@@ -1370,13 +1370,13 @@ func (c *Client) MigrateToGlobalIssuer(ctx context.Context, p *MigrateToGlobalIs
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UploadPlatformImage(ctx context.Context, p *UploadPlatformImagePayload, req io.ReadCloser) (res *UploadImageResult, err error) {
+func (c *Client) UploadPlatformImage(ctx context.Context, p *UploadPlatformImagePayload, req io.ReadCloser) (res *AdminUploadImageResult, err error) {
 	var ires any
 	ires, err = c.UploadPlatformImageEndpoint(ctx, &UploadPlatformImageRequestData{Payload: p, Body: req})
 	if err != nil {
 		return
 	}
-	return ires.(*UploadImageResult), nil
+	return ires.(*AdminUploadImageResult), nil
 }
 
 // ServeImage calls the "serveImage" endpoint of the "admin" service.

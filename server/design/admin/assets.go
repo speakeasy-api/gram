@@ -8,9 +8,9 @@ import (
 
 func platformAssetMethods() {
 	Method("uploadPlatformImage", func() {
-		Description("Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.")
+		Description("Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG.")
 		Payload(func() { security.AdminAuthPayload(); Attribute("content_type", String); Required("content_type") })
-		Result(assetsdesign.UploadImageResult)
+		Result(AdminUploadImageResult)
 		declareUnavailable()
 		HTTP(func() {
 			POST("/admin/assets.uploadImage")
@@ -47,3 +47,9 @@ func platformAssetMethods() {
 		Meta("openapi:extension:x-speakeasy-name-override", "serveImage")
 	})
 }
+
+var AdminUploadImageResult = Type("AdminUploadImageResult", func() {
+	Attribute("asset", assetsdesign.Asset, "The uploaded platform image asset")
+	Attribute("url", String, "Canonical public URL for the uploaded image")
+	Required("asset", "url")
+})
