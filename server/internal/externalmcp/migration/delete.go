@@ -89,7 +89,7 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 		return fail("risk policies are bound to its server; delete it from the dashboard instead")
 	}
 	if ownServer && address != "" {
-		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Delete the server at /mcp/%s with its addresses and plugin entries", address))
+		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Delete the server (oldest address /mcp/%s) with all of its addresses and plugin entries", address))
 	}
 
 	// A server whose id is not the toolset's still points at it; deleting the

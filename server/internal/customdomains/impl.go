@@ -516,11 +516,10 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 				return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, s.logger)
 			}
 			available, err := mcpendpointsrepo.New(dbtx).CheckEndpointSlugAvailability(ctx, mcpendpointsrepo.CheckEndpointSlugAvailabilityParams{
-				Slug:             server.Slug.String,
-				CustomDomainID:   uuid.NullUUID{UUID: domain.ID, Valid: true},
-				OrganizationID:   authCtx.ActiveOrganizationID,
-				ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				SkipDomainCheck:  false,
+				Slug:            server.Slug.String,
+				CustomDomainID:  uuid.NullUUID{UUID: domain.ID, Valid: true},
+				OrganizationID:  authCtx.ActiveOrganizationID,
+				SkipDomainCheck: false,
 			})
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, s.logger)

@@ -71,7 +71,7 @@ func seedToolsetBackedMcpServerWithID(t *testing.T, ctx context.Context, conn *p
 	return server.ID
 }
 
-func TestCheckSlugAvailable_EndpointSlugBlocksToolsetValidation(t *testing.T) {
+func TestCheckSlugAvailable_EndpointHoldsItsSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -89,57 +89,13 @@ func TestCheckSlugAvailable_EndpointSlugBlocksToolsetValidation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// A toolset validating this slug for itself (owner exclusion set to an
-	// unrelated toolset id) finds it taken by the endpoint.
-	unrelatedToolset := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "unrelated-"+uuid.NewString()[:8])
 	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:             slug,
-		CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ExcludeToolsetID: uuid.NullUUID{UUID: unrelatedToolset.ID, Valid: true},
+		Slug:           slug,
+		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err)
 	require.False(t, available)
-}
-
-func TestCheckSlugAvailable_OwnerExclusionToolset(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := authCtx.OrganizationSlug + "-own-address"
-	toolset := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
-	wrapperID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
-	_, err := repo.New(ti.conn).CreateMCPEndpoint(ctx, repo.CreateMCPEndpointParams{
-		ProjectID:       *authCtx.ProjectID,
-		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:     uuid.NullUUID{UUID: wrapperID, Valid: true},
-		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Slug:            slug,
-	})
-	require.NoError(t, err)
-
-	// Without the exclusion the wrapper's endpoint counts.
-	available, err := mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:             slug,
-		CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	require.NoError(t, err)
-	require.False(t, available)
-
-	// With the exclusion, the wrapper's endpoint does not count against the toolset.
-	available, err = mcpendpoints.CheckSlugAvailable(ctx, ti.conn, mcpendpoints.SlugAvailabilityCheck{
-		Slug:             slug,
-		CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ExcludeToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.True(t, available)
 }
 
 func TestToolsetWrapperLookups_PreferCanonicalWrapper(t *testing.T) {

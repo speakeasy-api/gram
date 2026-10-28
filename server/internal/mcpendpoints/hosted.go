@@ -139,7 +139,6 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 			Slug:                     slug,
 			CustomDomainID:           customDomainID,
 			OrganizationID:           authCtx.ActiveOrganizationID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			SkipDomainOwnershipCheck: true,
 		})
 		if err != nil {

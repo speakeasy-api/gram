@@ -101,8 +101,13 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	if err != nil {
 		return outcome, fmt.Errorf("read toolset server: %w", err)
 	}
-	if _, err := mcpendpointsrepo.New(tx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID}); err != nil {
+	endpoints, err := mcpendpointsrepo.New(tx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID})
+	if err != nil {
 		return outcome, fmt.Errorf("lock server endpoints: %w", err)
+	}
+	// The domain lock above came from the candidate read; the locked endpoint must still be that address.
+	if len(endpoints) != 1 || endpoints[0].Slug != candidate.Row.EndpointSlug || endpoints[0].CustomDomainID != candidate.Row.EndpointCustomDomainID {
+		return outcome, fail("its address changed during the migration; run it again")
 	}
 	outcome.McpServerID = serverID
 	server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})

@@ -30,7 +30,9 @@ export type CheckMcpEndpointSlugAvailabilityRequest = {
    */
   customDomainId?: string | undefined;
   /**
-   * Optional MCP server the slug is for. It must belong to the project.
+   * Deprecated: ignored.
+   *
+   * @deprecated field: Ignored.
    */
   mcpServerId?: string | undefined;
   /**

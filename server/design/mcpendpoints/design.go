@@ -140,7 +140,7 @@ var _ = Service("mcpEndpoints", func() {
 			Attribute("custom_domain_id", String, "Optional custom domain ID. Omit to check platform-domain slug availability.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("mcp_server_id", String, "Optional MCP server the slug is for. It must belong to the project.", func() {
+			Attribute("mcp_server_id", String, "Deprecated: ignored.", func() {
 				Format(FormatUUID)
 			})
 			Required("slug")

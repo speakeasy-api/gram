@@ -422,11 +422,8 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if ref.IsPublic != nil && e.IsPublic != *ref.IsPublic {
 		return errToolsetEndpointMismatch
 	}
-	// Modern states pin the owning server/meta row and, when present, the
-	// delegated toolset. A legacy direct-toolset ref can intentionally survive a
-	// migration to a server-backed endpoint only when slug, issuer, visibility,
-	// route, domain, and the exact toolset all still match. States carrying no
-	// backend ID retain TTL-bounded compatibility with pre-field cached values.
+	// A state pins the server or meta row it was minted for and, when present,
+	// the delegated toolset.
 	if ref.McpServerID.Valid || ref.MetaMcpServerID.Valid {
 		if e.McpServerID != ref.McpServerID || e.MetaMcpServerID != ref.MetaMcpServerID {
 			return errToolsetEndpointMismatch

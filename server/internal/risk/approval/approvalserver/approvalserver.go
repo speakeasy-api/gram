@@ -187,11 +187,10 @@ func createEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, a
 			return "", fmt.Errorf("lock approvals endpoint slug: %w", err)
 		}
 		available, err := endpoints.CheckEndpointSlugAvailability(ctx, endpointsrepo.CheckEndpointSlugAvailabilityParams{
-			Slug:             slug,
-			CustomDomainID:   noDomain,
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ExcludeToolsetID: noDomain,
-			SkipDomainCheck:  false,
+			Slug:            slug,
+			CustomDomainID:  noDomain,
+			OrganizationID:  authCtx.ActiveOrganizationID,
+			SkipDomainCheck: false,
 		})
 		if err != nil {
 			return "", fmt.Errorf("check approvals endpoint slug: %w", err)

@@ -211,7 +211,6 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		Slug:                     slug,
 		CustomDomainID:           customDomainID,
 		OrganizationID:           authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		SkipDomainOwnershipCheck: false,
 	})
 	if err != nil {
@@ -588,7 +587,6 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 			Slug:                     slug,
 			CustomDomainID:           customDomainID,
 			OrganizationID:           authCtx.ActiveOrganizationID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			SkipDomainOwnershipCheck: false,
 		})
 		if err != nil {
@@ -685,28 +683,12 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		return false, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").LogError(ctx, logger)
 	}
 
-	mcpServerID, err := conv.PtrToNullUUID(payload.McpServerID)
-	if err != nil {
-		return false, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)
-	}
-	if mcpServerID.Valid {
-		// Only a server in this project may be named.
-		_, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID.UUID, ProjectID: *authCtx.ProjectID})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return false, oops.E(oops.CodeInvalid, err, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
-		case err != nil:
-			return false, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
-		}
-	}
-
 	// A foreign or unknown domain reads as "unavailable" so slugs can't be
 	// probed under domains the caller doesn't own.
 	available, err := CheckSlugAvailable(ctx, s.db, SlugAvailabilityCheck{
 		Slug:                     string(payload.Slug),
 		CustomDomainID:           customDomainID,
 		OrganizationID:           authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		SkipDomainOwnershipCheck: false,
 	})
 	if err != nil {

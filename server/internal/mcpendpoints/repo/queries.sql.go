@@ -29,30 +29,19 @@ SELECT (
   WHERE e.slug = $4
     AND e.custom_domain_id IS NOT DISTINCT FROM $2::uuid
     AND e.deleted IS FALSE
-    AND (
-      $5::uuid IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM mcp_servers s
-        WHERE s.id = e.mcp_server_id
-          AND s.toolset_id = $5::uuid
-      )
-    )
 )
 `
 
 type CheckEndpointSlugAvailabilityParams struct {
-	SkipDomainCheck  bool
-	CustomDomainID   uuid.NullUUID
-	OrganizationID   string
-	Slug             string
-	ExcludeToolsetID uuid.NullUUID
+	SkipDomainCheck bool
+	CustomDomainID  uuid.NullUUID
+	OrganizationID  string
+	Slug            string
 }
 
 // True when no live mcp_endpoints.slug holds the slug in the namespace
 // (platform when custom_domain_id is NULL, else that domain).
-// Not project-scoped, mirroring the partial unique index. exclude_toolset_id
-// discounts the endpoints of servers backed by that toolset. Unless
+// Not project-scoped, mirroring the partial unique index. Unless
 // skip_domain_check, a supplied domain must be live and owned by
 // organization_id or the result is false (blocks probing foreign domains).
 func (q *Queries) CheckEndpointSlugAvailability(ctx context.Context, arg CheckEndpointSlugAvailabilityParams) (pgtype.Bool, error) {
@@ -61,7 +50,6 @@ func (q *Queries) CheckEndpointSlugAvailability(ctx context.Context, arg CheckEn
 		arg.CustomDomainID,
 		arg.OrganizationID,
 		arg.Slug,
-		arg.ExcludeToolsetID,
 	)
 	var column_1 pgtype.Bool
 	err := row.Scan(&column_1)
@@ -1044,9 +1032,10 @@ type LockSlugScopeParams struct {
 }
 
 // Serializes competing claims on one (namespace, slug) address for the rest of
-// the caller's transaction; the per-table unique indexes cannot see
-// cross-table collisions. The platform lock comes first, also for a
-// custom-domain claim, so every claim takes the locks in one order.
+// the caller's transaction, since the availability check runs before the write.
+// A custom-domain claim also takes the platform lock first: it no longer needs
+// it, but keeping one lock order stays deadlock-free beside pods still running
+// the earlier order.
 func (q *Queries) LockSlugScope(ctx context.Context, arg LockSlugScopeParams) error {
 	_, err := q.db.Exec(ctx, lockSlugScope, arg.Slug, arg.CustomDomainID)
 	return err

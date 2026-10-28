@@ -300,7 +300,7 @@ SELECT
     JOIN mcp_servers AS ms ON ms.id = me.mcp_server_id AND ms.project_id = me.project_id
     WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE AND me.deleted IS FALSE
   )::bigint AS endpoint_count,
-  -- The server's oldest live endpoint: its address while endpoint_count is one.
+  -- The server's oldest live endpoint: the address a migration keeps (it requires endpoint_count to be one), and the one a delete names.
   COALESCE(ep.slug, '')::text AS endpoint_slug,
   ep.custom_domain_id AS endpoint_custom_domain_id,
   EXISTS (SELECT 1 FROM toolset_prompts AS tp WHERE tp.toolset_id = t.id)::boolean AS has_prompts,

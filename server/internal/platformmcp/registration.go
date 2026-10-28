@@ -881,7 +881,6 @@ func readableRegistrationSlugFree(ctx context.Context, tx pgx.Tx, projectID uuid
 		Slug:                     endpointSlug,
 		CustomDomainID:           uuid.NullUUID{},
 		OrganizationID:           organizationID,
-		ExcludeToolsetID:         uuid.NullUUID{},
 		SkipDomainOwnershipCheck: false,
 	})
 	if err != nil {

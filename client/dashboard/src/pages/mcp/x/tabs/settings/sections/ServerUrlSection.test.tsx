@@ -336,11 +336,10 @@ describe("ServerUrlSection", () => {
       "domain-1",
       "example",
       true,
-      "toolset-1",
     );
   });
 
-  it("checks a new hosted address against its server", () => {
+  it("checks a new hosted address without naming the server", () => {
     renderSection(hosted(), [platformEndpoint]);
     slugValidation.mockClear();
 
@@ -350,7 +349,6 @@ describe("ServerUrlSection", () => {
       null,
       undefined,
       false,
-      "toolset-1",
     );
   });
 });

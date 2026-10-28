@@ -316,3 +316,7 @@ actions:
   - target: $.components.schemas.*.properties[?@['x-speakeasy-deprecation-message']]
     update:
       deprecated: true
+  - target: $.paths.*[?(@.operationId=='checkMcpEndpointSlugAvailability')].parameters[?(@.name=='mcp_server_id')]
+    update:
+      deprecated: true
+      x-speakeasy-deprecation-message: Ignored

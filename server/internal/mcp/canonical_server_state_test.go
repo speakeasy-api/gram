@@ -73,10 +73,12 @@ func TestRetiredToolsetSlug_NotFoundOnEverySurface(t *testing.T) {
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, issuerID)
 
+	clientID := "retired-client-" + uuid.NewString()[:8]
+	insertUserSessionClient(t, ctx, ti.conn, issuerID, clientID)
+
 	w, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
-	require.Error(t, err, "issuer-gated endpoint asks for a token while it holds the slug")
-	require.Contains(t, err.Error(), "access token")
-	require.NotNil(t, w)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	require.NotEmpty(t, w.Header().Get("WWW-Authenticate"), "issuer-gated endpoint asks for a token while it holds the slug")
 
 	require.NoError(t, testrepo.New(ti.conn).RetireHostedToolsetEndpointsFixture(ctx, testrepo.RetireHostedToolsetEndpointsFixtureParams{
 		ID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: toolset.ProjectID,
@@ -99,6 +101,21 @@ func TestRetiredToolsetSlug_NotFoundOnEverySurface(t *testing.T) {
 
 	err = ti.service.HandleRegister(httptest.NewRecorder(), newRegisterRequest(t, slug, dcrPublicClientBody))
 	requireOopsCode(t, err, oops.CodeNotFound)
+
+	err = ti.service.HandleAuthorize(httptest.NewRecorder(), authorizeRequest(t, slug, clientID, "http://example.com/cb"))
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	err = ti.service.HandleToken(httptest.NewRecorder(), deletedProjectTokenRequest(t, slug, clientID))
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	// GET (SSE) and DELETE answer as for an unknown slug: nothing is proxied.
+	unknown := "retired-unknown-" + uuid.NewString()[:8]
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		for _, target := range []string{slug, unknown} {
+			_, err := serveRuntimeMethod(t, ctx, ti, method, target, "", map[string]string{"Accept": "text/event-stream"})
+			requireOopsCode(t, err, oops.CodeMethodNotAllowed)
+		}
+	}
 }
 
 // A challenge cached against a toolset with no MCP server id cannot resume.

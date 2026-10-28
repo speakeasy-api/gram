@@ -156,8 +156,7 @@ RETURNING *;
 -- name: CheckEndpointSlugAvailability :one
 -- True when no live mcp_endpoints.slug holds the slug in the namespace
 -- (platform when custom_domain_id is NULL, else that domain).
--- Not project-scoped, mirroring the partial unique index. exclude_toolset_id
--- discounts the endpoints of servers backed by that toolset. Unless
+-- Not project-scoped, mirroring the partial unique index. Unless
 -- skip_domain_check, a supplied domain must be live and owned by
 -- organization_id or the result is false (blocks probing foreign domains).
 SELECT (
@@ -176,22 +175,14 @@ SELECT (
   WHERE e.slug = @slug
     AND e.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
     AND e.deleted IS FALSE
-    AND (
-      sqlc.narg('exclude_toolset_id')::uuid IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM mcp_servers s
-        WHERE s.id = e.mcp_server_id
-          AND s.toolset_id = sqlc.narg('exclude_toolset_id')::uuid
-      )
-    )
 );
 
 -- name: LockSlugScope :exec
 -- Serializes competing claims on one (namespace, slug) address for the rest of
--- the caller's transaction; the per-table unique indexes cannot see
--- cross-table collisions. The platform lock comes first, also for a
--- custom-domain claim, so every claim takes the locks in one order.
+-- the caller's transaction, since the availability check runs before the write.
+-- A custom-domain claim also takes the platform lock first: it no longer needs
+-- it, but keeping one lock order stays deadlock-free beside pods still running
+-- the earlier order.
 SELECT
   pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0)),
   pg_advisory_xact_lock(hashtextextended(

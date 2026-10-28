@@ -409,7 +409,8 @@ type mcpInputs struct {
 	mcpServerID *uuid.UUID
 	// mcpEndpointID: nil off the endpoint path and for gateway member dispatch.
 	mcpEndpointID *uuid.UUID
-	// attributionServerID keeps legacy attribution separate from route authorization.
+	// attributionServerID is the server internal callers attribute a toolset's
+	// calls to, kept separate from route authorization.
 	attributionServerID *uuid.UUID
 	// wrapperRBACResourceID overrides the resource id for per-tool mcp:connect
 	// checks: the fronting mcp_servers id when the request is wrapper-governed
@@ -1403,17 +1404,11 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		apiKeyID = authCtx.APIKeyID
 	}
 
-	// Wrapper-governed requests carry the wrapper's RBAC id and visibility
-	// into the RPC handlers so per-tool checks key on the mcp_servers row;
-	// requests without a fronting server leave both unset and the handlers
-	// derive them from the described toolset, unchanged.
-	var wrapperRBACResourceID string
-	var wrapperIsPublic *bool
-	if cfg.mcpServerID != nil {
-		wrapperRBACResourceID = cfg.rbacResourceID.String()
-		isPublic := cfg.isPublic
-		wrapperIsPublic = &isPublic
-	}
+	// The fronting server's RBAC id and visibility reach the RPC handlers so
+	// per-tool checks key on the mcp_servers row.
+	wrapperRBACResourceID := cfg.rbacResourceID.String()
+	isPublic := cfg.isPublic
+	wrapperIsPublic := &isPublic
 
 	mcpInputs := &mcpInputs{
 		projectID:                toolset.ProjectID,

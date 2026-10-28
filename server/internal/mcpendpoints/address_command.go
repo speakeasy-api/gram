@@ -99,7 +99,6 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 	available, err := CheckSlugAvailable(ctx, tx, SlugAvailabilityCheck{
 		Slug: input.Slug, CustomDomainID: input.CustomDomainID, OrganizationID: authCtx.ActiveOrganizationID,
-		ExcludeToolsetID: uuid.NullUUID{},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability")
@@ -236,8 +235,7 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 		}
 		available, err := CheckSlugAvailable(ctx, tx, SlugAvailabilityCheck{
 			Slug: input.Slug, CustomDomainID: input.CustomDomainID,
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ExcludeToolsetID: uuid.NullUUID{},
+			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		if err != nil {
 			return nil, nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability")

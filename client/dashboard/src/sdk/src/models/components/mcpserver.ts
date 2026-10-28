@@ -78,7 +78,9 @@ export type McpServer = {
    */
   id: string;
   /**
-   * The slug of an older Speakeasy-hosted address of this hosted server: its legacy custom-domain address, which the Speakeasy domain also answers under the same access rules. Absent when a platform endpoint or another alias holds that slug.
+   * Deprecated: always absent.
+   *
+   * @deprecated field: Always absent.
    */
   legacyPlatformSlug?: string | undefined;
   /**
