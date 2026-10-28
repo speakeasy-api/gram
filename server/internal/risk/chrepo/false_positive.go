@@ -172,8 +172,8 @@ func (q *Queries) AppendBackfillSuppressions(
 	ids := make([]uuid.UUID, 0, len(copies))
 	valueRows := make([]string, 0, len(copies))
 	valueArgs := make([]any, 0, len(copies)*6)
-	for _, copy := range copies {
-		state := copy.State
+	for _, suppressionCopy := range copies {
+		state := suppressionCopy.State
 		var (
 			excludedAt      any
 			exclusionID     any
@@ -195,14 +195,14 @@ func (q *Queries) AppendBackfillSuppressions(
 			markedAt = FormatCHTime(*state.FalsePositiveAt)
 			reason = ExcludedReasonManual
 		default:
-			return fmt.Errorf("backfill suppression state for %s is empty", copy.ID)
+			return fmt.Errorf("backfill suppression state for %s is empty", suppressionCopy.ID)
 		}
 		if state.MarkedAt != nil {
 			markedAt = FormatCHTime(*state.MarkedAt)
 		}
-		ids = append(ids, copy.ID)
+		ids = append(ids, suppressionCopy.ID)
 		valueRows = append(valueRows, "(?, ?, ?, ?, ?, ?)")
-		valueArgs = append(valueArgs, copy.ID, excludedAt, exclusionID, falsePositiveAt, reason, markedAt)
+		valueArgs = append(valueArgs, suppressionCopy.ID, excludedAt, exclusionID, falsePositiveAt, reason, markedAt)
 	}
 
 	latest, idArgs := latestRiskFindingsByIDsSubquery(ids)

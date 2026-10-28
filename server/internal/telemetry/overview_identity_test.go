@@ -20,7 +20,7 @@ func TestGetObservabilityOverview_CanonicalHostedIdentity(t *testing.T) {
 	ac, _ := contextvalues.GetAuthContext(ctx)
 	toolset, err := toolsetsRepo.New(ti.conn).CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
 		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
-		Name: "Hosted overview", Slug: "hosted-overview", McpEnabled: true,
+		Name: "Hosted overview", Slug: "hosted-overview",
 	})
 	require.NoError(t, err)
 	servers := mcpserversRepo.New(ti.conn)

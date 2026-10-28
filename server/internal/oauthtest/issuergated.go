@@ -27,7 +27,7 @@ import (
 type IssuerGatedToolsetOpts struct {
 	// Slug prefix for the toolset. A UUID suffix is appended automatically.
 	Slug string
-	// IsPublic sets McpIsPublic on the toolset. Default false (private).
+	// IsPublic makes the canonical server public. Default false (private).
 	IsPublic bool
 	// UpstreamMetadata is RFC 8414 JSON describing the remote authorization
 	// server (e.g. devidptest.Instance.OAuth21Metadata(t)). The helper reads
@@ -90,7 +90,6 @@ func CreateIssuerGatedToolset(
 
 	usersRepo := usersessions_repo.New(conn)
 	remoteRepo := remotesessions_repo.New(conn)
-	toolsetsRepo := toolsets_repo.New(conn)
 
 	usi, err := usersRepo.CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
@@ -151,40 +150,10 @@ func CreateIssuerGatedToolset(
 	})
 	require.NoError(t, err)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Issuer-Gated MCP " + suffix,
-		Slug:                   slug,
-		Description:            conv.ToPGText("Test toolset bound to user_session_issuer"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
+	toolset := createLegacyHostedToolset(t, ctx, conn, authCtx, legacyHostedToolset{
+		name: "Issuer-Gated MCP " + suffix, slug: slug, description: "Test toolset bound to user_session_issuer",
+		public: opts.IsPublic, issuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
 	})
-	require.NoError(t, err)
-
-	if opts.IsPublic {
-		toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-			Name:                   toolset.Name,
-			Description:            toolset.Description,
-			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-			McpSlug:                toolset.McpSlug,
-			McpIsPublic:            true,
-			McpEnabled:             toolset.McpEnabled,
-			CustomDomainID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ToolSelectionMode:      "",
-			Slug:                   toolset.Slug,
-			ProjectID:              toolset.ProjectID,
-		})
-		require.NoError(t, err)
-	}
-
-	toolset, err = toolsetsRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	return IssuerGatedToolsetResult{
 		Toolset:             toolset,

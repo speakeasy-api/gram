@@ -71,16 +71,9 @@ func (f workloadGrantFixture) seedToolsetOnUserSessionIssuer(t *testing.T, issue
 		Slug:                   slug,
 		Description:            conv.ToPGText("another MCP server of the workload fixture's issuer"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	toolset, err = toolsets_repo.New(f.ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           f.fx.target.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = hostLegacyToolset(t, ctx, f.ti, toolset, slug, "private", uuid.NullUUID{UUID: issuerID, Valid: true})
 
 	return &mcp.ResolvedMcpEndpoint{
 		AudienceURN:         urn.NewToolset(toolset.ID).String(),

@@ -156,15 +156,6 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		}
 	}
 
-	disabled, err := queries.DisableToolset(ctx, repo.DisableToolsetParams{ID: toolset.ID, ProjectID: projectID})
-	if err != nil {
-		return outcome, fmt.Errorf("disable toolset: %w", err)
-	}
-	if disabled != 1 {
-		return outcome, errNotCandidate
-	}
-	outcome.Actions = append(outcome.Actions, "Disable the old toolset")
-
 	entries, err := queries.CountServerPluginEntries(ctx, repo.CountServerPluginEntriesParams{ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID)})
 	if err != nil {
 		return outcome, fmt.Errorf("count plugin entries: %w", err)

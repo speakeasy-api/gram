@@ -108,7 +108,7 @@ func createToolset(t *testing.T, ctx context.Context, f *fixture, projectID uuid
 
 	toolset, err := toolsetsrepo.New(f.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: f.organizationID, ProjectID: projectID, Name: slug, Slug: slug,
-		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: conv.ToPGText(slug), McpEnabled: true,
+		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
 	return toolset.ID

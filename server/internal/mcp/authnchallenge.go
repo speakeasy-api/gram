@@ -1,5 +1,5 @@
 // OAuth authorization code exchange handlers for MCP clients. Issuer-gated
-// toolsets (toolsets.user_session_issuer_id set) flow through the OAuth 2.1
+// servers (mcp_servers.user_session_issuer_id set) flow through the OAuth 2.1
 // + RFC 7591 / RFC 9728 handlers in this package; toolsets without an
 // issuer fall through to the legacy paths in wellknown.Resolve*.
 //
@@ -1029,6 +1029,12 @@ type issuerGateAuthentication struct {
 	// endpoint when the resolver is authoritative for the organization; nil
 	// keeps the upstream client choice.
 	authClient *authClientResolution
+
+	// attachedSession is the exact remote session an attached agent's auth
+	// client permit was decided for. It is kept apart from authClient, which
+	// selects how the request is served, so a compatibility handback to the
+	// upstream client choice still serves only that connection.
+	attachedSession uuid.UUID
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1164,6 +1170,7 @@ func (s *Service) authenticateIssuerGate(
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		chosenNoAuth:           false,
 		authClient:             nil,
+		attachedSession:        uuid.Nil,
 	}, toolSelection, nil
 }
 

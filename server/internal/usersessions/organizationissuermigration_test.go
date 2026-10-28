@@ -241,13 +241,10 @@ func TestOrganizationUserSessionIssuerMigrateWidensScopeAndPreservesData(t *test
 	require.NoError(t, err)
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: "Migration toolset", Slug: "migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: false,
+		Name: "Migration toolset", Slug: "migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: sourceID, Valid: true}, Slug: toolset.Slug, ProjectID: *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
+	hostToolset(t, ctx, ti, toolset, uuid.NullUUID{UUID: sourceID, Valid: true})
 	mcpServerID := uuid.New()
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: mcpServerID, ProjectID: *authCtx.ProjectID,
@@ -299,10 +296,10 @@ func TestOrganizationUserSessionIssuerMigrateWidensScopeAndPreservesData(t *test
 	require.NoError(t, err)
 	require.Equal(t, targetID, cimdAfter.UserSessionIssuerID)
 	require.False(t, cimdAfter.ProjectID.Valid)
-	toolsetAfter, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndOrganization(ctx, toolsetsrepo.GetToolsetByIDAndOrganizationParams{ID: toolset.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	hostedAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: toolset.ID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
-	require.True(t, toolsetAfter.UserSessionIssuerID.Valid)
-	require.Equal(t, targetID, toolsetAfter.UserSessionIssuerID.UUID)
+	require.True(t, hostedAfter.UserSessionIssuerID.Valid)
+	require.Equal(t, targetID, hostedAfter.UserSessionIssuerID.UUID)
 	mcpServerAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: mcpServerID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.True(t, mcpServerAfter.UserSessionIssuerID.Valid)
@@ -517,7 +514,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	}))
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: "Remote migration toolset", Slug: "remote-migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: false,
+		Name: "Remote migration toolset", Slug: "remote-migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
 	mcpServerID := uuid.New()

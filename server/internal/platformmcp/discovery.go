@@ -153,9 +153,10 @@ func discoveryModeFromContext(ctx context.Context) discoveryMode {
 	return discoveryFull
 }
 
-// discoveryMiddleware serves a caller in the small surface from the meta-tools.
-// It sits outside the allowlist and catalogue middleware: a tools/list never
-// reaches them, and a dispatched call enters them as an ordinary tools/call,
+// discoveryMiddleware serves a caller in the small surface from the meta-tools
+// plus the first-run tools. It sits outside the allowlist and catalogue
+// middleware: its tools/list takes the first-run tools from the catalogue they
+// filter for this caller, and a dispatched call enters them as an ordinary tools/call,
 // so the meta-tools reach a catalogue tool through the same SDK validation,
 // per-tool authorization, handler and fail-safe as a direct call does.
 func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
@@ -172,7 +173,11 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 				if listReq, ok := req.(*mcp.ListToolsRequest); ok && listReq.Params != nil && listReq.Params.Cursor != "" {
 					return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: "tools/list is not paginated for this caller"}
 				}
-				listed := &mcp.ListToolsResult{Tools: discoveryTools(mode)}
+				firstRun, err := firstRunToolsFor(ctx, next, method, req)
+				if err != nil {
+					return nil, err
+				}
+				listed := &mcp.ListToolsResult{Tools: append(discoveryTools(mode), firstRun...)}
 				listed.CacheScope = "private"
 				return listed, nil
 			case "tools/call":
@@ -213,11 +218,50 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 	}
 }
 
+// firstRunTools are the tools most people reach for first: find or add an MCP
+// server, check it works, install it, and ask how. The small surface lists them
+// directly next to the meta-tools, so these steps take one call instead of a
+// search, a describe and a call. Every other tool stays behind search.
+var firstRunTools = []string{
+	"search_mcp_catalog",
+	"inspect_mcp_candidate",
+	"register_catalog_mcp",
+	"register_remote_mcp",
+	"find_mcp",
+	"get_mcp_readiness",
+	"get_my_install_instructions",
+	"search_speakeasy_docs",
+}
+
+// firstRunToolsFor returns the first-run tools this caller may see, taken from
+// the caller's own filtered catalogue so discovery and authorization rules
+// apply unchanged. Output schemas are left out to fit the host's tool budget;
+// results still carry their structured content.
+func firstRunToolsFor(ctx context.Context, next mcp.MethodHandler, method string, req mcp.Request) ([]*mcp.Tool, error) {
+	result, err := next(ctx, method, req)
+	if err != nil {
+		return nil, err
+	}
+	catalogue, ok := result.(*mcp.ListToolsResult)
+	if !ok {
+		return nil, nil
+	}
+	tools := make([]*mcp.Tool, 0, len(firstRunTools))
+	for _, tool := range catalogue.Tools {
+		if slices.Contains(firstRunTools, tool.Name) {
+			listed := *tool
+			listed.OutputSchema = nil
+			tools = append(tools, &listed)
+		}
+	}
+	return tools, nil
+}
+
 // discoveryInstructions replace the full server instructions, which Codex cuts
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
-	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. This connection lists discovery tools only; every Platform tool is reachable through them. " +
-		"Find tools with search_platform_tools (plain words, such as \"add an MCP server from the catalog\"). Always call describe_platform_tool before using a tool: it returns the input schema and the rules for that tool. Then run it with call_platform_tool. Answer how-to and setup questions with search_speakeasy_docs and cite the pages it returns. " +
+	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. This connection lists the tools most people use first; call them directly. " +
+		"For any other Platform tool, find it with search_platform_tools (plain words, such as \"add an MCP server to a plugin\"), call describe_platform_tool for its input schema and rules, then run it with call_platform_tool. Answer how-to and setup questions with search_speakeasy_docs and cite the pages it returns. " +
 		"Write tools preview first: show the user what will change and wait for explicit confirmation before calling again with confirmed set. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
 	if mode == discoveryCode {
 		instructions += " For multi-step work, execute runs Python that can search, describe and call every tool as platform--<tool name>."
@@ -251,9 +295,9 @@ Write tools keep their own safeguards: preview with confirmed false and get the 
 
 Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment, network or sleep. Limits: 64 KiB source, 30 s wall, 64 helper calls, 256 KiB result.`
 
-// discoveryTools is the whole tools/list of a caller in the small surface. It
-// is the same for every such caller: what each caller may use is decided when
-// it searches, describes or calls.
+// discoveryTools are the meta-tools every caller in the small surface lists.
+// The first-run tools listed next to them depend on the caller; for every other
+// tool, what a caller may use is decided when it searches, describes or calls.
 func discoveryTools(mode discoveryMode) []*mcp.Tool {
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: new(false)}
 	tools := []*mcp.Tool{
