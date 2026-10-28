@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
 const mocks = vi.hoisted(() => ({
+  flagStatus: "enabled",
   workloadWrite: true,
   orgSlug: "example",
   organizationOverride: false,
@@ -11,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   adminOrg: "",
   impersonatorEmail: "",
   navigate: vi.fn(),
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: mocks.flagStatus }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project_one" }),
@@ -50,6 +54,7 @@ vi.mock("@/routes", () => ({
 }));
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.flagStatus = "enabled";
   mocks.workloadWrite = true;
   mocks.orgSlug = "example";
   mocks.organizationOverride = false;
@@ -126,5 +131,19 @@ it.each(["demo", "support", "override"])(
       useInferenceSetupCandidate({ enabled: true }),
     );
     expect(result.current).toEqual([]);
+  },
+);
+
+it.each(["disabled", "loading", "missing", "error"])(
+  "hides setup when its rollout flag is %s without hiding role configuration",
+  (status) => {
+    mocks.flagStatus = status;
+    mocks.adminOrg = "org_one";
+    const { result } = renderHook(() =>
+      useInferenceSetupCandidate({ enabled: true }),
+    );
+    expect(result.current.map((candidate) => candidate.id)).toEqual([
+      "inference-role-permissions",
+    ]);
   },
 );
