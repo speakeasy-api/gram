@@ -3776,11 +3776,16 @@ func NewConfigureGitHubAppAuthClientPayload(body *ConfigureGitHubAppAuthClientRe
 		ID:             body.ID,
 		McpServerID:    *body.McpServerID,
 		Name:           *body.Name,
-		InstanceURL:    *body.InstanceURL,
 		AppID:          *body.AppID,
 		InstallationID: *body.InstallationID,
 		PrivateKey:     *body.PrivateKey,
 		UpstreamOrigin: *body.UpstreamOrigin,
+	}
+	if body.InstanceURL != nil {
+		v.InstanceURL = *body.InstanceURL
+	}
+	if body.InstanceURL == nil {
+		v.InstanceURL = "https://github.com"
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -3904,9 +3909,6 @@ func ValidateConfigureGitHubAppAuthClientRequestBody(body *ConfigureGitHubAppAut
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.InstanceURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("instance_url", "body"))
 	}
 	if body.AppID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("app_id", "body"))

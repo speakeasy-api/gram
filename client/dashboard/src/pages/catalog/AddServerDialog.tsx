@@ -757,6 +757,11 @@ function ConfigurePhaseContent({
   const userIdentityPermissionBlocked =
     !canCreateIdentity &&
     releaseState.serverConfigs.some((config) => config.identityMode === "user");
+  const githubPermissionBlocked =
+    !canConfigureGitHub &&
+    releaseState.serverConfigs.some(
+      (config) => config.identityMode === "agent" && !!config.githubApp,
+    );
   const canSubmit =
     releaseState.canInstall &&
     missingRequiredHeaders === 0 &&
@@ -769,6 +774,7 @@ function ConfigurePhaseContent({
   // With guardrails on offer, finishing Configure moves to that step; the
   // install itself starts from there.
   const advance = (configureSkipped = false) => {
+    if (githubPermissionBlocked) return;
     if (releaseState.continueToGuardrails) {
       releaseState.continueToGuardrails({ configureSkipped });
     } else {

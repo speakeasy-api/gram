@@ -85,6 +85,14 @@ export async function configureCreatedRemoteMcpIdentity({
           undefined,
           options,
         );
+      } catch {
+        return setupRequired(
+          mcpServer,
+          identityMode,
+          "GitHub App setup failed. Check the app credentials and installation in Settings > Identity.",
+        );
+      }
+      try {
         return configured(
           await setMcpServerVisibility(client, mcpServer, "private", options),
           identityMode,
@@ -93,7 +101,7 @@ export async function configureCreatedRemoteMcpIdentity({
         return setupRequired(
           mcpServer,
           identityMode,
-          "GitHub App setup failed. Check the app credentials and installation in Settings > Identity.",
+          "GitHub App configured, but the server could not be enabled. Review it in Settings.",
         );
       }
     }

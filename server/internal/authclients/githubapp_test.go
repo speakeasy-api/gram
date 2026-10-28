@@ -26,13 +26,23 @@ func TestGitHubAppConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	calls := 0
 	reject := false
+	changeTarget := false
 	authclients.SetGitHubAppTestVerifier(ti.service, enc, func(_ context.Context, instance string, app, installation int64, key string) error {
 		calls++
+		if calls == 1 {
+			require.Equal(t, "TEST_PRIVATE_KEY_ONE", key)
+		} else {
+			require.Equal(t, "TEST_PRIVATE_KEY_TWO", key)
+		}
 		require.Equal(t, "https://git.example.com", instance)
 		require.EqualValues(t, 123, app)
 		require.EqualValues(t, 456, installation)
 		if reject {
 			return errors.New("TEST_SECRET_REJECTED")
+		}
+		if changeTarget {
+			_, err := ti.conn.Exec(ctx, "UPDATE remote_mcp_servers SET url = 'https://changed.example.com/mcp' WHERE id = (SELECT remote_mcp_server_id FROM mcp_servers WHERE id = $1)", server.id)
+			require.NoError(t, err)
 		}
 		return nil
 	})
@@ -80,4 +90,17 @@ func TestGitHubAppConfiguration(t *testing.T) {
 	_, err = ti.service.ConfigureGitHubAppAuthClient(denied, payload)
 	require.Error(t, err)
 	require.Equal(t, 3, calls, "permission is checked before verification")
+	reject = false
+	changeTarget = true
+	_, err = ti.service.ConfigureGitHubAppAuthClient(ctx, payload)
+	require.ErrorContains(t, err, "destination changed")
+	changeTarget = false
+	payload.UpstreamOrigin = "https://changed.example.com"
+	_, err = ti.service.ConfigureGitHubAppAuthClient(ctx, payload)
+	require.ErrorContains(t, err, "separate GitHub App")
+	stored, err = queries.GetGitHubAppCredential(ctx, repo.GetGitHubAppCredentialParams{AuthClientID: uuid.MustParse(created.ID), OrganizationID: ti.organizationID})
+	require.NoError(t, err)
+	require.Equal(t, version, stored.CredentialVersion)
+	require.Equal(t, "https://upstream.example.com", stored.UpstreamOrigin)
+
 }

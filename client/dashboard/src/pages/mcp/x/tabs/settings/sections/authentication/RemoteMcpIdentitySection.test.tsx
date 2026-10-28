@@ -55,6 +55,14 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
+vi.mock("@gram/client/react-query/authClients.js", () => ({
+  useAuthClients: () => ({
+    data: { result: { items: [] } },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
   useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
 }));
@@ -2858,7 +2866,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(screen.getByText("Requires KMS")).toBeDefined();
     const signingKey = within(
-      screen.getByRole("radiogroup", { name: "OAuth credential" }),
+      screen.getByRole("radiogroup", { name: "Renewable credential" }),
     ).getByRole("radio", { name: /^Signing Client/ }) as HTMLButtonElement;
     expect(signingKey.disabled).toBe(true);
     // Still on Bearer: the option advertises KMS signing, it does not switch.
@@ -3210,7 +3218,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
     fireEvent.click(
       within(
-        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+        screen.getByRole("radiogroup", { name: "Renewable credential" }),
       ).getByRole("radio", { name: /^Client Secret/ }),
     );
     addCustomHeader("X-Team", "platform");
@@ -3267,7 +3275,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
     fireEvent.click(
       within(
-        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+        screen.getByRole("radiogroup", { name: "Renewable credential" }),
       ).getByRole("radio", { name: /^Client Secret/ }),
     );
     addCustomHeader("X-Team", "platform");

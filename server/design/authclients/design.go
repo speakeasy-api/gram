@@ -151,7 +151,7 @@ var _ = Service("authClients", func() {
 			Attribute("installation_id", String, "Positive numeric installation ID.", func() { Pattern("^[1-9][0-9]{0,18}$") })
 			Attribute("private_key", String, "GitHub App RSA private key in PEM format. Write-only.", func() { MaxLength(32768); Meta("struct:tag:json", "private_key") })
 			Attribute("upstream_origin", String, "Explicit HTTPS MCP origin allowed to receive the token.", func() { MaxLength(2048) })
-			Required("mcp_server_id", "name", "instance_url", "app_id", "installation_id", "private_key", "upstream_origin")
+			Required("mcp_server_id", "name", "app_id", "installation_id", "private_key", "upstream_origin")
 			security.SessionPayload()
 			security.ByKeyPayload()
 		})

@@ -1,4 +1,4 @@
-h1:sPddqt5U5MuPawUhyoQp3MXVc51vC/M6InJiNPEoZ3w=
+h1:Lo093GDIMnw6gQdj+t24xBlbW/8tCTN8PV9XkOFy2HM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -511,3 +511,4 @@ h1:sPddqt5U5MuPawUhyoQp3MXVc51vC/M6InJiNPEoZ3w=
 20261028140800_mcp-skill-links.sql h1:IgMxVGJmyR4+WU1ddGru8vK3p9ax8etFRVn39jw8ktw=
 20261028210842_device-agent-state-reports.sql h1:Az5YrfbmmRxN/b4w7Eb9bAPulW6TYcQUrw3k66OW0rM=
 20261028225558_github_app_auth_clients.sql h1:eAWdx/flZRVRhWS0aRJQaov5y3+2qXYFSAaeMTh6ICQ=
+20261028233110_github_app_key_classification.sql h1:RovT22QLlCay0srxWjOOqVshr/DE+KRoR4eeHDlMkGE=

@@ -257,14 +257,24 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 		return none, false, oops.E(oops.CodeUnexpected, err, "load upstream client choice").LogError(ctx, s.logger)
 	}
 	mode, err := s.authClientMode(ctx, endpoint.OrganizationID)
+	githubRequired := false
 	if err == nil {
-		mode, err = s.githubAppMode(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID, mode)
+		var providerMode feature.AuthClientResolverMode
+		providerMode, err = s.githubAppMode(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID, feature.AuthClientResolverOff)
+		githubRequired = providerMode == feature.AuthClientResolverEnforced
+		if githubRequired {
+			mode = feature.AuthClientResolverEnforced
+		}
 	}
 	if err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, s.logger)
 	}
 	if selector == nil {
-		return s.directPrincipalChoice(ctx, w, authentication, mode)
+		choice, handled, err := s.directPrincipalChoice(ctx, w, authentication, mode)
+		if githubRequired && !handled && err == nil {
+			return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+		}
+		return choice, handled, err
 	}
 	if mode == feature.AuthClientResolverEnforced {
 		choice, handled, err := s.enforceAuthClient(ctx, w, authentication, selector)

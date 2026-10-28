@@ -531,6 +531,7 @@ export function RemoteMcpIdentitySectionBody({
         if (!canManageGitHub) return;
         if (githubDraft.canSave && !(await githubDraft.save())) return;
         if (!githubDraft.bound && !githubDraft.canSave) return;
+        await deleteStaticCredential();
         setFormatPick(null);
       } else {
         // Binding a service account client replaces the user clients in the

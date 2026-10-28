@@ -566,14 +566,19 @@ func clientViews(ctx context.Context, queries *repo.Queries, organizationID stri
 		serversByClient[srv.AuthClientID] = append(serversByClient[srv.AuthClientID], srv)
 	}
 
+	configs, err := queries.ListGitHubAppConfigurations(ctx, repo.ListGitHubAppConfigurationsParams{OrganizationID: organizationID, AuthClientIds: ids})
+	if err != nil {
+		return nil, fmt.Errorf("list GitHub App configurations: %w", err)
+	}
+	apps := make(map[uuid.UUID]*types.GitHubAppConfiguration, len(configs))
+	for _, config := range configs {
+		apps[config.AuthClientID] = &types.GitHubAppConfiguration{InstanceURL: config.InstanceUrl, AppID: fmt.Sprint(config.AppID), InstallationID: fmt.Sprint(config.InstallationID), UpstreamOrigin: config.UpstreamOrigin}
+	}
 	views := make([]*types.AuthClient, 0, len(clients))
 	for _, c := range clients {
 		view := buildAuthClientView(c, headersByClient[c.ID], serversByClient[c.ID])
 		if c.ClientType == "service_account" && !c.RemoteSessionClientID.Valid {
-			view.GithubApp, err = githubAppView(ctx, queries, organizationID, c.ID)
-			if err != nil {
-				return nil, err
-			}
+			view.GithubApp = apps[c.ID]
 		}
 		views = append(views, view)
 	}

@@ -100941,7 +100941,6 @@ components:
             required:
                 - mcp_server_id
                 - name
-                - instance_url
                 - app_id
                 - installation_id
                 - private_key

@@ -431,3 +431,5 @@ Browser verification: [~] — follow check 33 in `seed/demo/verify.md`.
 ### GitHub App service account
 
 The GitHub MCP server offers a disabled **GitHub App (demo — disabled)** service account. Its instance, app, and installation fields illustrate the configuration; its placeholder private key cannot mint a token. Inspect Settings → Identity → Service Account → GitHub App. The provider row is removed through the auth client's project cascade on reseed, and postflight checks require exactly one demo GitHub App row.
+
+- [x] Browser check: on the seeded GitHub server, Settings → Identity shows Service Account → GitHub App, the demo IDs, an empty PEM field, and the disabled credential toggle. Verified locally with Playwright; the placeholder is never used for token exchange.

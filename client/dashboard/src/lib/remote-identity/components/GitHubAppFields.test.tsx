@@ -17,6 +17,18 @@ describe("GitHub App configuration", () => {
       }),
     ).toBe(true);
   });
+  it.each(["instanceUrl", "appId", "installationId", "privateKey"] as const)(
+    "requires %s",
+    (field) => {
+      const complete = {
+        instanceUrl: "https://github.com",
+        appId: "123",
+        installationId: "456",
+        privateKey: "-----BEGIN PRIVATE KEY-----",
+      };
+      expect(gitHubAppReady({ ...complete, [field]: "" })).toBe(false);
+    },
+  );
   it("has accessible enterprise and private key fields", () => {
     const onChange =
       vi.fn<(value: import("../model/githubApp").GitHubAppDraft) => void>();

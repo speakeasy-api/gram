@@ -24,6 +24,7 @@ func TestAPIBase(t *testing.T) {
 		{"https://git.example.com:8443/", "https://git.example.com:8443/api/v3"},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
 			got, err := APIBase(tc.input)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
@@ -41,6 +42,7 @@ func TestInstallationExchange(t *testing.T) {
 	private := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
 	for _, host := range []string{"https://github.com", "https://git.example.com"} {
 		t.Run(host, func(t *testing.T) {
+			t.Parallel()
 			base, err := APIBase(host)
 			require.NoError(t, err)
 			expires := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
@@ -78,11 +80,25 @@ func TestInstallationExchange(t *testing.T) {
 		{"expired", 201, map[string]any{"token": "TEST_SECRET_MUST_NOT_LEAK", "expires_at": time.Now().Add(-time.Hour)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := NewInstanceClient(123, private, "https://github.com", &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return jsonResponse(t, tc.status, tc.body), nil })})
+			t.Parallel()
+			calls := 0
+			client, err := NewInstanceClient(123, private, "https://github.com", &http.Client{
+				CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					calls++
+					response := jsonResponse(t, tc.status, tc.body)
+					response.Header = make(http.Header)
+					if tc.name == "redirect" {
+						response.Header.Set("Location", "https://other.example.com/token")
+					}
+					return response, nil
+				}),
+			})
 			require.NoError(t, err)
 			_, _, err = client.MintInstallationToken(t.Context(), 456)
 			require.Error(t, err)
 			require.NotContains(t, err.Error(), "TEST_SECRET_MUST_NOT_LEAK")
+			require.Equal(t, 1, calls, "errors and redirects must not send a second request")
 		})
 	}
 }

@@ -10142,7 +10142,7 @@ COMMENT ON COLUMN mcp_auth_client_github_apps.organization_id IS '@access: confi
 COMMENT ON COLUMN mcp_auth_client_github_apps.instance_url IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_github_apps.app_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_github_apps.installation_id IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_client_github_apps.private_key_encrypted IS '@access: secret';
+COMMENT ON COLUMN mcp_auth_client_github_apps.private_key_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN mcp_auth_client_github_apps.upstream_origin IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_github_apps.credential_version IS '@access: confidential';
 

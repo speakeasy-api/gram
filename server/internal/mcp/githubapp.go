@@ -58,3 +58,36 @@ func (s *Service) prepareGitHubApp(ctx context.Context, organizationID string, s
 	own = append(own, proxy.ConfiguredHeader{Name: "Authorization", IsRequired: true, StaticValue: "Bearer " + token.Value()})
 	return applyAuthClientHeaders(res, own), nil
 }
+
+// rejectLegacyGitHubMembers closes legacy and non-session paths as well as
+// typed selection. Historical provider attachments must never revive legacy auth.
+func (s *Service) rejectLegacyGitHubMembers(ctx context.Context, organizationID string, members []metaMember) error {
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, member := range members {
+		if member.backend == metaMemberBackendProxied {
+			ids = append(ids, member.serverID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	servers, err := authclientsrepo.New(s.db).ListGitHubAppServers(ctx, authclientsrepo.ListGitHubAppServersParams{OrganizationID: organizationID, McpServerIds: ids})
+	if err != nil {
+		return fmt.Errorf("check gateway GitHub App requirements: %w", err)
+	}
+	required := make(map[uuid.UUID]bool, len(servers))
+	for _, id := range servers {
+		required[id] = true
+	}
+	for i := range members {
+		member := &members[i]
+		if required[member.serverID] && githubSelectionMissing(member.authClient) {
+			member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: "This server requires a new sign-in to choose its upstream identity."}}
+		}
+	}
+	return nil
+}
+
+func githubSelectionMissing(res *authClientResolution) bool {
+	return res == nil || (res.outcome == authClientLegacy && res.clientID == uuid.Nil)
+}

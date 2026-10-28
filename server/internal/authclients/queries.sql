@@ -263,3 +263,20 @@ WITH retired AS (
 UPDATE mcp_servers m SET requires_upstream_auth = TRUE, updated_at = clock_timestamp()
 FROM projects p WHERE m.id = @mcp_server_id AND m.project_id = p.id
  AND p.organization_id = @organization_id AND NOT m.deleted AND NOT p.deleted;
+
+-- name: ListGitHubAppServers :many
+SELECT DISTINCT a.mcp_server_id FROM mcp_server_auth_clients a
+JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+WHERE a.organization_id = @organization_id AND a.mcp_server_id = ANY(@mcp_server_ids::uuid[]);
+
+-- name: ListGitHubAppConfigurations :many
+SELECT auth_client_id, instance_url, app_id, installation_id, upstream_origin
+FROM mcp_auth_client_github_apps
+WHERE organization_id = @organization_id AND auth_client_id = ANY(@auth_client_ids::uuid[]);
+
+-- name: LockGitHubAppServerURL :one
+SELECT r.url FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id AND NOT p.deleted
+JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND NOT r.deleted
+WHERE m.id = @mcp_server_id AND NOT m.deleted
+FOR UPDATE OF m, r;

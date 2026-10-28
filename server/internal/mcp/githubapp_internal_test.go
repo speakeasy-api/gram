@@ -24,6 +24,7 @@ func TestDecideGitHubApp(t *testing.T) {
 		name   string
 		mutate func(*upstreamclientsrepo.GetAuthClientSelectionRow)
 	}{
+		{"stale headers", func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.HeadersStale = true }},
 		{"disabled", func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.ClientEnabled.Bool = false }},
 		{"detached", func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.Associated = false }},
 		{"deleted", func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.ClientDeleted.Bool = true }},
@@ -33,9 +34,18 @@ func TestDecideGitHubApp(t *testing.T) {
 		{"missing auxiliary header", func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.CredentialHeadersUncovered = true }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			row := live
 			tc.mutate(&row)
 			require.Equal(t, authClientGap, decideAuthClient(row).outcome)
 		})
 	}
+}
+
+func TestGitHubSelectionMissing(t *testing.T) {
+	t.Parallel()
+	require.True(t, githubSelectionMissing(nil))
+	require.True(t, githubSelectionMissing(&authClientResolution{outcome: authClientLegacy}))
+	require.False(t, githubSelectionMissing(&authClientResolution{outcome: authClientResolved, clientID: uuid.New(), githubApp: true}))
+	require.False(t, githubSelectionMissing(&authClientResolution{outcome: authClientGap}))
 }

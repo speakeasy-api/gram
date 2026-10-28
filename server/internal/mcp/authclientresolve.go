@@ -282,7 +282,7 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 	switch res.clientType {
 	case authClientTypeRemoteSession, authClientTypeServiceAccount:
 		if res.githubApp {
-			if res.clientType != authClientTypeServiceAccount || row.RegistrationID.Valid || row.Tunneled || row.RequiresDeniedSource || row.CredentialHeadersUncovered {
+			if res.clientType != authClientTypeServiceAccount || row.RegistrationID.Valid || row.Tunneled || row.RequiresDeniedSource || row.CredentialHeadersUncovered || row.HeadersStale {
 				res.reason = authClientReasonSetup
 			} else {
 				res.outcome = authClientResolved

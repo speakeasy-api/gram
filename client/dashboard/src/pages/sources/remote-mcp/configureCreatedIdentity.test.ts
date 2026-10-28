@@ -98,6 +98,30 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
+  it("distinguishes a configured GitHub App from enablement failure", async () => {
+    mocks.configureGitHub.mockResolvedValue({ id: "app-client" });
+    mocks.updateServer.mockRejectedValueOnce(
+      new Error("sensitive backend detail"),
+    );
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "agent",
+      githubApp: {
+        instanceUrl: "https://github.com",
+        appId: "123",
+        installationId: "456",
+        privateKey: "TEST_PEM",
+      },
+    });
+    expect(result).toMatchObject({
+      status: "setup-required",
+      message: expect.stringContaining("GitHub App configured, but"),
+    });
+    expect(mocks.configureGitHub).toHaveBeenCalledOnce();
+  });
+
   it("keeps a failed GitHub App setup disabled and reports setup required", async () => {
     mocks.configureGitHub.mockRejectedValueOnce(
       new Error("invalid installation"),

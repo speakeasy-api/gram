@@ -59,6 +59,9 @@ const mocks = vi.hoisted(() => ({
   calls: {} as Record<string, unknown[]>,
 }));
 
+vi.mock("./useAuthClientCandidates", () => ({
+  useAuthClientCandidates: vi.fn(() => []),
+}));
 vi.mock("./useGatewayConnectionCandidates", () => ({
   useGatewayConnectionCandidates: (options: { enabled: boolean }) => {
     mocks.gatewayCandidateOptions.push(options);
@@ -1774,8 +1777,9 @@ describe("useLauncherCandidates", () => {
         .map((call) => call.resourceId);
     expect(against("hasAnyScope", ["org:admin"])).toEqual(["org-acme"]);
     expect(against("hasScope", ["org:admin"])).toContain("org-acme");
-    // People and plugins both gate on org readership.
+    // People, plugins, and service accounts gate on org readership.
     expect(against("hasAnyScope", ["org:read", "org:admin"])).toEqual([
+      "org-acme",
       "org-acme",
       "org-acme",
     ]);
@@ -1845,4 +1849,20 @@ describe("new resource source wiring", () => {
       enabled: false,
     });
   });
+});
+
+it("registers service-account discovery with organization-read permission", async () => {
+  const { useAuthClientCandidates } = await import("./useAuthClientCandidates");
+  mocks.scopes = ["org:read"];
+  mocks.inProject = true;
+  renderHook(() =>
+    useLauncherCandidates({
+      enabled: true,
+      inProject: true,
+      recentsUserId: null,
+      orgSlug: "fixture",
+      projectSlug: "default",
+    }),
+  );
+  expect(useAuthClientCandidates).toHaveBeenLastCalledWith({ enabled: true });
 });

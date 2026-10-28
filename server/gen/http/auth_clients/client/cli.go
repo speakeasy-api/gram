@@ -74,6 +74,12 @@ func BuildConfigureGitHubAppAuthClientPayload(authClientsConfigureGitHubAppAuthC
 		PrivateKey:     body.PrivateKey,
 		UpstreamOrigin: body.UpstreamOrigin,
 	}
+	{
+		var zero string
+		if v.InstanceURL == zero {
+			v.InstanceURL = "https://github.com"
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 
