@@ -40,7 +40,8 @@ func (f *fixture) agent(ownerUserID string) uuid.UUID {
 
 // attach binds agentID to connectionOwner's new connection through
 // registration, as the session subject attachedBy made it. A nonzero
-// generationOffset records the generation observed when the connection was attached.
+// generationOffset shifts the attachment snapshot relative to the source generation
+// to exercise a mismatch between the stored snapshot and current source generation.
 func (f *fixture) attach(agentID, registration uuid.UUID, attachedBy, connectionOwner string, generationOffset int64) uuid.UUID {
 	f.t.Helper()
 	id, err := f.q.SeedAgentAttachmentFixture(f.t.Context(), SeedAgentAttachmentFixtureParams{
