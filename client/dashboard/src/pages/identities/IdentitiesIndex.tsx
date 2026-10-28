@@ -1,3 +1,5 @@
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { IdentitySyncCallout } from "@/components/setup-empty-state";
 import {
   buildEmployees,
@@ -559,6 +561,9 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   const canAdminOrganization = hasScope("org:admin", organization.id);
+  const inferenceSetupFlag = useFeatureFlag(
+    FEATURE_FLAGS.inferenceWorkloadSetup,
+  );
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
     organization.slug !== DEMO_ORG_SLUG &&
@@ -1262,13 +1267,15 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                 Set up Claude Tag
               </Link>
             </Button>
-            <Button asChild variant="secondary">
-              <Link
-                to={`${routes.identities.agents.new.href()}?capability=inference`}
-              >
-                Set up inference
-              </Link>
-            </Button>
+            {inferenceSetupFlag.status === "enabled" && (
+              <Button asChild variant="secondary">
+                <Link
+                  to={`${routes.identities.agents.new.href()}?capability=inference`}
+                >
+                  Set up inference
+                </Link>
+              </Button>
+            )}
             <Button asChild variant="primary">
               <Link to={routes.identities.agents.new.href()}>
                 <Plus className="size-4" aria-hidden="true" />

@@ -43,10 +43,15 @@ func createHostedToolset(t *testing.T, ctx context.Context, ti *testInstance, sl
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug+"-mcp", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, hostedAliasSlug(toolset), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	toolset, err = toolsets_repo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	require.NoError(t, err)
 	return toolset
+}
+
+// hostedAliasSlug is the legacy alias createHostedToolset gives a toolset.
+func hostedAliasSlug(toolset toolsets_repo.Toolset) string {
+	return toolset.Slug + "-mcp"
 }
 
 // createCanonicalWrapper inserts the mcp_servers row that shares the toolset's id.
@@ -218,7 +223,7 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	for _, payload := range []*gen.ExportMcpMetadataPayload{
-		{McpSlug: new(types.Slug(toolset.McpSlug.String))},
+		{McpSlug: new(types.Slug(hostedAliasSlug(toolset)))},
 		{McpServerID: new(toolset.ID.String())},
 	} {
 		got, err := ti.service.ExportMcpMetadata(ctx, payload)
@@ -237,13 +242,13 @@ func TestExportMcpMetadata_ByMcpServerID(t *testing.T) {
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpServerID: new(toolset.ID.String())})
 	require.NoError(t, err)
 	require.Equal(t, toolset.Slug, result.Slug)
-	require.Contains(t, result.ServerURL, toolset.McpSlug.String)
+	require.Contains(t, result.ServerURL, hostedAliasSlug(toolset))
 
 	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug:     new(types.Slug(toolset.McpSlug.String)),
+		McpSlug:     new(types.Slug(hostedAliasSlug(toolset))),
 		McpServerID: new(toolset.ID.String()),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -361,11 +366,11 @@ func TestExportMcpMetadata_BySlugKeepsFrozenAliasIdentity(t *testing.T) {
 	other := createHostedToolset(t, ctx, ti, "endpoint-owner")
 	otherServer := createCanonicalWrapper(t, ctx, ti, other, mcpservers.VisibilityPrivate)
 	_, err := mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
-		ProjectID: other.ProjectID, McpServerID: uuid.NullUUID{UUID: otherServer.ID, Valid: true}, Slug: legacy.McpSlug.String,
+		ProjectID: other.ProjectID, McpServerID: uuid.NullUUID{UUID: otherServer.ID, Valid: true}, Slug: hostedAliasSlug(legacy),
 	})
 	require.NoError(t, err)
 
-	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpSlug: new(types.Slug(legacy.McpSlug.String))})
+	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpSlug: new(types.Slug(hostedAliasSlug(legacy)))})
 	require.NoError(t, err)
 	require.Equal(t, legacy.Slug, result.Slug, "the frozen alias keeps naming its toolset")
 

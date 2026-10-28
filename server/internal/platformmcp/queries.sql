@@ -3373,14 +3373,17 @@ WHERE p.id = @plugin_id
 -- name: ListPlatformMCPPluginServers :many
 -- Member-facing compatibility projection. It deliberately omits membership and
 -- backend IDs, which are administrative identity and must not cross this path.
--- A canonical wrapper with no endpoint falls back to its toolset's MCP slug.
+-- A canonical wrapper with no endpoint falls back to its toolset's legacy alias,
+-- which the caller reads through legacyalias for alias_toolset_id.
 SELECT
     ps.id,
     ps.display_name,
     ps.policy,
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    -- legacyalias: drop with AIM-670.
+    t.id AS alias_toolset_id,
     COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
@@ -3455,7 +3458,9 @@ SELECT
     CASE WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server' ELSE 'gateway' END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
-    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    -- legacyalias: drop with AIM-670.
+    t.id AS alias_toolset_id,
     COALESCE(s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps

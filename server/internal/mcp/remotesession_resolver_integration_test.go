@@ -114,7 +114,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionResolvedTokenReachesExternalM
 }
 
 type issuerGatedExternalMCPFixture struct {
-	Toolset             toolsets_repo.Toolset
+	Toolset             hostedToolset
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer
 	RemoteSessionClient remotesessions_repo.RemoteSessionClient
 	ToolName            string
