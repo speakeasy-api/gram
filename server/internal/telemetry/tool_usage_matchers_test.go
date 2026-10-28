@@ -34,7 +34,7 @@ func TestLoadToolUsageMatchers_CoverAliasAndEveryEndpoint(t *testing.T) {
 	// A toolset created after the flip: no alias, an endpoint on its canonical server.
 	flipped, err := toolsetsRepo.New(ti.conn).CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Name: "Matcher Flipped", Slug: "matcher-flipped",
-		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: false,
+		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
 	addToolsetWrapperWith(t, ctx, ti, flipped.ID, flipped.ID, "matcher-flipped-server", "private", true)

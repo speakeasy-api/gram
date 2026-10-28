@@ -27,15 +27,21 @@ scoped_toolsets AS (
     t.name,
     t.slug,
     t.mcp_slug,
-    -- The canonical wrapper owns hosting state; the toolset columns stand only without one,
-    -- and a server that kept the toolset's id but left it leaves the toolset disabled.
-    (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)::boolean AS mcp_enabled,
+    -- The canonical wrapper owns hosting state; a toolset without one is not hosted.
+    (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::boolean AS mcp_enabled,
     t.custom_domain_id,
-    COALESCE(cw.user_session_issuer_id, CASE WHEN cw.id IS NULL THEN t.user_session_issuer_id END) AS user_session_issuer_id,
+    -- The issuer of the server fronting the toolset: its canonical wrapper, else the server that holds it.
+    (
+      SELECT ms.user_session_issuer_id
+      FROM mcp_servers AS ms
+      WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE
+      ORDER BY (ms.id = t.id) DESC, ms.id
+      LIMIT 1
+    ) AS user_session_issuer_id,
     t.external_oauth_server_id,
     t.tool_variations_group_id,
     (
-      (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)
+      (cw.id IS NOT NULL AND cw.visibility <> 'disabled')
       OR EXISTS (
         SELECT 1
         FROM mcp_servers AS ms
@@ -45,7 +51,6 @@ scoped_toolsets AS (
   FROM toolsets AS t
   JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
   LEFT JOIN mcp_servers AS cw ON cw.id = t.id AND cw.toolset_id = t.id AND cw.project_id = t.project_id AND cw.deleted IS FALSE
-  LEFT JOIN mcp_servers AS kept ON kept.id = t.id AND kept.toolset_id IS DISTINCT FROM t.id AND kept.project_id = t.project_id AND kept.deleted IS FALSE
   WHERE t.deleted IS FALSE
     AND (sqlc.narg('toolset_ids')::uuid[] IS NULL OR t.id = ANY(sqlc.narg('toolset_ids')::uuid[]))
 ),
@@ -217,12 +222,11 @@ SELECT
     SELECT count(*)
     FROM toolsets AS other
     JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
-    LEFT JOIN mcp_servers AS ocw ON ocw.id = other.id AND ocw.toolset_id = other.id AND ocw.project_id = other.project_id AND ocw.deleted IS FALSE
-    LEFT JOIN mcp_servers AS okept ON okept.id = other.id AND okept.toolset_id IS DISTINCT FROM other.id AND okept.project_id = other.project_id AND okept.deleted IS FALSE
-    WHERE COALESCE(ocw.user_session_issuer_id, CASE WHEN ocw.id IS NULL THEN other.user_session_issuer_id END) = t.user_session_issuer_id
+    JOIN mcp_servers AS ocw ON ocw.id = other.id AND ocw.toolset_id = other.id AND ocw.project_id = other.project_id AND ocw.deleted IS FALSE
+    WHERE ocw.user_session_issuer_id = t.user_session_issuer_id
       AND other.id <> t.id
       AND other.deleted IS FALSE
-      AND (CASE WHEN ocw.id IS NOT NULL THEN ocw.visibility <> 'disabled' WHEN okept.id IS NOT NULL THEN FALSE ELSE other.mcp_enabled END)
+      AND ocw.visibility <> 'disabled'
   )::bigint AS other_toolsets_on_issuer,
   COALESCE((
     SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))
@@ -321,13 +325,6 @@ WHERE id = @id
   AND project_id = @project_id
   AND toolset_id = @toolset_id
   AND deleted IS FALSE;
-
--- name: DisableToolset :execrows
--- The toolset stays for undo: pointing the server back at it and enabling it
--- restores the old backend.
-UPDATE toolsets
-SET mcp_enabled = FALSE, updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: CountServerPluginEntries :one
 SELECT count(*)::bigint AS entries
@@ -458,7 +455,7 @@ WHERE remote_mcp_server_id = @remote_mcp_server_id AND deleted IS FALSE
 ORDER BY name;
 
 -- name: GetToolsetStateFixture :one
-SELECT mcp_enabled, deleted
+SELECT deleted
 FROM toolsets
 WHERE id = @id;
 

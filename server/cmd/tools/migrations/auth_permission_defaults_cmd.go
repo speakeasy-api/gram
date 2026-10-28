@@ -86,7 +86,7 @@ type attachmentRemediation struct {
 }
 
 func newAuthPermissionDefaultsReport() authPermissionDefaultsReport {
-	return authPermissionDefaultsReport{Organizations: 0, Granted: map[authclientbackfill.GrantKind]int{}, Written: 0, KeysWaiting: 0, SharedWaiting: 0, AttachmentsWaiting: 0, Busy: 0, Failed: 0, Remediations: nil}
+	return authPermissionDefaultsReport{Organizations: 0, Granted: make(map[authclientbackfill.GrantKind]int), Written: 0, KeysWaiting: 0, SharedWaiting: 0, AttachmentsWaiting: 0, Busy: 0, Failed: 0, Remediations: nil}
 }
 
 // authPermissionDefaultsProgressEvery is how many organizations pass between

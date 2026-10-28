@@ -38,7 +38,7 @@ func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (
 	require.NotNil(t, authCtx.ProjectID)
 
 	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "selection-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "selection-"+uuid.NewString()[:8])
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      toolset.ProjectID,
@@ -103,12 +103,7 @@ func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (
 		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Valid: true},
 	})
 	require.NoError(t, err)
-	toolset, err = toolsetsRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, issuer.ID)
 
 	return toolset, issuer
 }

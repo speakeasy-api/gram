@@ -1503,7 +1503,7 @@ function IdentityGroup({
               at all. It is collapsed to nothing instead of removed: the column
               tracks come from the grid template, so a zero-height row costs no
               layout, where sr-only would take the cells out of the subgrid. */}
-          <div className="border-border min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0 [&_thead]:h-0 [&_thead]:overflow-hidden [&_thead_th]:h-0 [&_thead_th]:overflow-hidden [&_thead_th]:border-0 [&_thead_th]:p-0">
+          <div className="border-border min-h-0 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0 [&_thead]:h-0 [&_thead]:overflow-hidden [&_thead_th]:h-0 [&_thead_th]:overflow-hidden [&_thead_th]:border-0 [&_thead_th]:p-0">
             <Table
               columns={columns}
               data={rows.slice(0, visible)}

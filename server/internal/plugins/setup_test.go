@@ -36,7 +36,6 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
@@ -338,32 +337,42 @@ func orgObservabilitySlugs(t *testing.T, ctx context.Context, ti *testInstance) 
 	return plugins.ClaudeObservabilitySlug(cfg), plugins.CursorObservabilitySlug(cfg)
 }
 
-// createTestToolset creates an MCP-enabled toolset with its canonical server and endpoint, as toolset creation does.
+// createTestToolset creates a toolset with its canonical server and endpoint, as toolset creation does; McpSlug carries the endpoint slug.
 func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
-	ts := createUnwrappedTestToolset(t, ctx, conn, name)
+	ts := createEndpointlessTestToolset(t, ctx, conn, name)
+	testenv.SetHostedMCP(t, ctx, conn, ts.ProjectID, ts.ID, testenv.HostedMCP{Visibility: "", UserSessionIssuerID: nil, Slug: ts.McpSlug.String, CustomDomainID: uuid.NullUUID{}})
+	return ts
+}
+
+// createEndpointlessTestToolset creates a toolset whose private canonical server has no endpoint, so other servers over it stay deliverable.
+func createEndpointlessTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
+	t.Helper()
+	ts := createRawTestToolset(t, ctx, conn, name)
 	_, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: ts.ID, ProjectID: ts.ProjectID, Name: pgtype.Text{String: ts.Name, Valid: true}, Slug: ts.McpSlug,
-		ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Visibility: mcpservers.VisibilityPrivate,
-	})
-	require.NoError(t, err)
-	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID: ts.ProjectID, McpServerID: uuid.NullUUID{UUID: ts.ID, Valid: true}, CustomDomainID: uuid.NullUUID{}, Slug: ts.McpSlug.String,
+		ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, ToolVariationsGroupID: ts.ToolVariationsGroupID, Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
 	return ts
 }
 
-// setTestToolsetMCPPublic sets a toolset's MCP visibility and mirrors it onto its canonical server.
-func setTestToolsetMCPPublic(ctx context.Context, conn *pgxpool.Pool, params testrepo.SetToolsetMCPPublicByIDParams) error {
-	if err := testrepo.New(conn).SetToolsetMCPPublicByID(ctx, params); err != nil {
-		return fmt.Errorf("set toolset mcp public: %w", err)
-	}
-	return nil
+// setTestToolsetVisibility sets the visibility of a toolset's canonical server.
+func setTestToolsetVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, toolset toolsetsrepo.Toolset, visibility string) {
+	t.Helper()
+	testenv.SetHostedMCP(t, ctx, conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: visibility, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{}})
 }
 
-// createUnwrappedTestToolset creates an MCP-enabled toolset with no MCP server.
+// createUnwrappedTestToolset creates a toolset with no MCP server that still carries a legacy /mcp/<slug> alias.
 func createUnwrappedTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
+	t.Helper()
+	ts := createRawTestToolset(t, ctx, conn, name)
+	testenv.SetLegacyAlias(t, ctx, conn, ts.ProjectID, ts.ID, ts.McpSlug.String, uuid.NullUUID{})
+	return ts
+}
+
+// createRawTestToolset creates a bare toolset row; McpSlug carries the slug its callers address it at.
+func createRawTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -375,10 +384,9 @@ func createUnwrappedTestToolset(t *testing.T, ctx context.Context, conn *pgxpool
 		Slug:                   slug,
 		Description:            pgtype.Text{Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{Valid: false},
-		McpSlug:                pgtype.Text{String: slug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	ts.McpSlug = pgtype.Text{String: slug, Valid: true}
 	return ts
 }
 
@@ -412,10 +420,9 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 
 	// Back the mcp_server with a toolset to satisfy the backend-exclusivity
 	// check; the plugin path does not distinguish remote- vs toolset-backed.
-	backing := createUnwrappedTestToolset(t, ctx, conn, name+"-backing")
+	backing := createEndpointlessTestToolset(t, ctx, conn, name+"-backing")
 	if visibility == mcpservers.VisibilityPublic {
-		err := testrepo.New(conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
-		require.NoError(t, err)
+		setTestToolsetVisibility(t, ctx, conn, backing, mcpservers.VisibilityPublic)
 	}
 
 	slug := fmt.Sprintf("mcp-%s-%s", name, uuid.New().String()[:8])

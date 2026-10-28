@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Where a shadowed mandatory check ran.
@@ -187,23 +186,21 @@ func isAccessDenial(err error) bool {
 // shadowAuthClientUse records the check for using a resolved client. A
 // personal client a non-user session uses has no connection owner to check
 // yet, so it is recorded as skipped rather than as an invalid check.
-func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, subject urn.SessionSubject) {
-	if clientType == authClientTypeRemoteSession && subject.Kind != urn.SessionSubjectKindUser {
+func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, owner string) {
+	if clientType == authClientTypeRemoteSession && owner == "" {
 		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, legacyAllowed, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
 		return
 	}
-	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, registrationID, clientType, subject))
+	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, registrationID, clientType, owner))
 }
 
 // mandatoryAuthClientCheck is the check for using a resolved client. A
 // personal client is checked against the connection's stored owner and the
 // upstream OAuth client the connection uses.
-func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, subject urn.SessionSubject) authz.Check {
+func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, connectionOwner string) authz.Check {
 	owner, upstream := "", ""
 	if clientType == authClientTypeRemoteSession {
-		if subject.Kind == urn.SessionSubjectKindUser {
-			owner = subject.ID
-		}
+		owner = connectionOwner
 		if registrationID.Valid {
 			upstream = registrationID.UUID.String()
 		}

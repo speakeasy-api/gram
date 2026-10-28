@@ -502,6 +502,9 @@ type RegisterRemoteMCPResult struct {
 	Registration      string
 	NextAction        string
 	DashboardSetupURL string
+	// AutomaticClientRegistration says how an OAuth client is obtained from the
+	// server's provider; empty when the server needs no sign-in.
+	AutomaticClientRegistration string
 }
 
 // RegisterRemoteMCP re-inspects the exact URL before persistence. An inspection
@@ -539,13 +542,17 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return RegisterRemoteMCPResult{}, err
 	}
+	// The idempotency hash covers only what the caller chose: their display
+	// name, or the URL when they gave none. The upstream's own name can change
+	// between a call and its retry, so it must not change the request's hash.
+	requestedName := displayName
+	if requestedName == "" {
+		requestedName = inspection.CanonicalURL
+	}
 	if displayName == "" {
-		displayName = inspection.CanonicalURL
+		displayName = defaultDirectRemoteDisplayName(inspection)
 	}
-	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.IndexFunc(displayName, isDirectRemoteDisplayNameBreak) >= 0 {
-		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
-	}
-	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": displayName})
+	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": requestedName})
 	request := CatalogRegistrationRequest{
 		ProjectSlug:       project.Slug,
 		SourceKind:        directRemoteSourceKind,
@@ -582,9 +589,15 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
 		}
 		nextAction = "secure_dashboard_setup_required"
+		// Attachment can set up the provider's client automatically, so the
+		// only step left is the user's sign-in, which the agent can connect in
+		// chat. The dashboard link stays as the fallback.
+		if inspection.AttachmentSupported {
+			nextAction = "connect_sign_in"
+		}
 	}
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})
-	return RegisterRemoteMCPResult{Project: project, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL}, nil
+	return RegisterRemoteMCPResult{Project: project, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection)}, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
@@ -687,6 +700,20 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 // plugin, audit, and MCP surfaces, so accepting only CR/LF is insufficient.
 func isDirectRemoteDisplayNameBreak(value rune) bool {
 	return unicode.IsControl(value) || value == '\u2028' || value == '\u2029'
+}
+
+// defaultDirectRemoteDisplayName names a remote MCP whose caller gave no name:
+// the upstream's own server name, then the URL's host name, then the URL.
+func defaultDirectRemoteDisplayName(inspection DirectRemoteInspection) string {
+	if name := directRemoteServerName(inspection.ServerName); name != "" {
+		return name
+	}
+	if parsed, err := url.Parse(inspection.CanonicalURL); err == nil {
+		if host := directRemoteServerName(parsed.Hostname()); host != "" {
+			return host
+		}
+	}
+	return inspection.CanonicalURL
 }
 
 func catalogDisplayName(catalog CatalogDetails) string {

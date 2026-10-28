@@ -157,13 +157,8 @@ func createRemoteSessionResolverFixture(
 	})
 	require.NoError(t, err)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
-	toolset, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, userIssuer.ID)
 	ti.addToolWithDualSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 
 	remoteRepo := remotesessions_repo.New(ti.conn)

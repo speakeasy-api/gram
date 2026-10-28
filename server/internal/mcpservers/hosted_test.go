@@ -256,7 +256,7 @@ func TestUpdateMcpServerHostedWrapperRejectsPublicFlipWithExternalOAuth(t *testi
 	require.Equal(t, "disabled", server.Visibility)
 }
 
-func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t *testing.T) {
+func TestUpdateMcpServerHostedWrapperFlipsIssuerGatedVisibility(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -273,7 +273,6 @@ func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t 
 		p.UserSessionIssuerID = new(issuer.ID.String())
 	}))
 	require.NoError(t, err)
-	testenv.LinkRetiredOAuthProxy(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("public"), nil))
 	require.NoError(t, err)
@@ -300,7 +299,7 @@ func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t 
 	require.True(t, enabled)
 	require.NoError(t, tx.Commit(ctx))
 	_, server = f.requireProjected(t, ctx)
-	require.Equal(t, "private", server.Visibility, "the retired proxy link alone re-enables private")
+	require.Equal(t, "private", server.Visibility, "re-enabling an issuer-gated server restores private")
 }
 
 func TestUpdateMcpServerHostedWrapperRejectsNameOverToolsetLimit(t *testing.T) {
