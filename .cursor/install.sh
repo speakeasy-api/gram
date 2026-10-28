@@ -18,6 +18,8 @@ if ! command -v mise >/dev/null 2>&1; then
   curl -fsSL https://mise.run | sh
 fi
 export PATH="$HOME/.local/bin:$PATH"
-cd /workspace
+# Resolve the repo root from this script so it works wherever the checkout
+# lives (single-repo environments use /workspace; multi-repo ones may not).
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 mise trust
 mise install
