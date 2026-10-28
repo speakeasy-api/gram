@@ -268,6 +268,142 @@ func (q *Queries) GetAlias(ctx context.Context, arg GetAliasParams) (GetAliasRow
 	return i, err
 }
 
+const getAliasEndpointBackfillState = `-- name: GetAliasEndpointBackfillState :one
+SELECT
+    t.mcp_slug
+  , t.custom_domain_id
+  , t.deleted AS toolset_deleted
+  , p.deleted AS project_deleted
+  , p.organization_id
+  , om.slug AS organization_slug
+  , om.gram_account_type
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE t.id = $1 AND t.project_id = $2
+`
+
+type GetAliasEndpointBackfillStateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetAliasEndpointBackfillStateRow struct {
+	McpSlug          pgtype.Text
+	CustomDomainID   uuid.NullUUID
+	ToolsetDeleted   bool
+	ProjectDeleted   bool
+	OrganizationID   string
+	OrganizationSlug string
+	GramAccountType  string
+}
+
+// A toolset's alias with what the hosted address rules read about its project and organization.
+func (q *Queries) GetAliasEndpointBackfillState(ctx context.Context, arg GetAliasEndpointBackfillStateParams) (GetAliasEndpointBackfillStateRow, error) {
+	row := q.db.QueryRow(ctx, getAliasEndpointBackfillState, arg.ID, arg.ProjectID)
+	var i GetAliasEndpointBackfillStateRow
+	err := row.Scan(
+		&i.McpSlug,
+		&i.CustomDomainID,
+		&i.ToolsetDeleted,
+		&i.ProjectDeleted,
+		&i.OrganizationID,
+		&i.OrganizationSlug,
+		&i.GramAccountType,
+	)
+	return i, err
+}
+
+const getPlatformAliasContenders = `-- name: GetPlatformAliasContenders :one
+SELECT
+    EXISTS (
+      SELECT 1
+      FROM toolsets pa
+      WHERE pa.mcp_slug = $1
+        AND pa.custom_domain_id IS NULL
+        AND pa.deleted IS FALSE
+    )::boolean AS platform_alias_held
+  , EXISTS (
+      SELECT 1
+      FROM toolsets t
+      JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
+      WHERE t.mcp_slug = $1
+        AND t.custom_domain_id IS NOT NULL
+        AND t.deleted IS FALSE
+        AND t.id <> $2
+    )::boolean AS ambiguous
+`
+
+type GetPlatformAliasContendersParams struct {
+	Slug      pgtype.Text
+	ToolsetID uuid.UUID
+}
+
+type GetPlatformAliasContendersRow struct {
+	PlatformAliasHeld bool
+	Ambiguous         bool
+}
+
+// For a toolset's custom-domain alias, whether the loose platform lookup skips it: a live platform alias with the slug
+// wins, and another live-project custom-domain alias with it makes the lookup ambiguous.
+func (q *Queries) GetPlatformAliasContenders(ctx context.Context, arg GetPlatformAliasContendersParams) (GetPlatformAliasContendersRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformAliasContenders, arg.Slug, arg.ToolsetID)
+	var i GetPlatformAliasContendersRow
+	err := row.Scan(&i.PlatformAliasHeld, &i.Ambiguous)
+	return i, err
+}
+
+const listAliasEndpointBackfillCandidates = `-- name: ListAliasEndpointBackfillCandidates :many
+SELECT t.id, t.project_id, t.organization_id
+FROM toolsets t
+WHERE t.mcp_slug IS NOT NULL
+  AND t.id > $1
+  AND ($2::text IS NULL OR t.organization_id = $2::text)
+  AND ($3::uuid IS NULL OR t.project_id = $3::uuid)
+ORDER BY t.id
+LIMIT $4
+`
+
+type ListAliasEndpointBackfillCandidatesParams struct {
+	AfterID        uuid.UUID
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	PageSize       int32
+}
+
+type ListAliasEndpointBackfillCandidatesRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Toolsets carrying an alias, in id order after after_id, for the alias endpoint backfill. Deleted toolsets and projects
+// are listed too so the backfill reports them as skipped.
+func (q *Queries) ListAliasEndpointBackfillCandidates(ctx context.Context, arg ListAliasEndpointBackfillCandidatesParams) ([]ListAliasEndpointBackfillCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listAliasEndpointBackfillCandidates,
+		arg.AfterID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAliasEndpointBackfillCandidatesRow
+	for rows.Next() {
+		var i ListAliasEndpointBackfillCandidatesRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.OrganizationID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAliases = `-- name: ListAliases :many
 SELECT id, mcp_slug, custom_domain_id
 FROM toolsets

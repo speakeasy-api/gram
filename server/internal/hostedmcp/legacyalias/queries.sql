@@ -224,3 +224,51 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE AND mcp_slug IS
 UPDATE toolsets
 SET mcp_slug = sqlc.narg('mcp_slug')::text, custom_domain_id = sqlc.narg('custom_domain_id')::uuid, updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id;
+
+-- name: ListAliasEndpointBackfillCandidates :many
+-- Toolsets carrying an alias, in id order after after_id, for the alias endpoint backfill. Deleted toolsets and projects
+-- are listed too so the backfill reports them as skipped.
+SELECT t.id, t.project_id, t.organization_id
+FROM toolsets t
+WHERE t.mcp_slug IS NOT NULL
+  AND t.id > @after_id
+  AND (sqlc.narg('organization_id')::text IS NULL OR t.organization_id = sqlc.narg('organization_id')::text)
+  AND (sqlc.narg('project_id')::uuid IS NULL OR t.project_id = sqlc.narg('project_id')::uuid)
+ORDER BY t.id
+LIMIT @page_size;
+
+-- name: GetAliasEndpointBackfillState :one
+-- A toolset's alias with what the hosted address rules read about its project and organization.
+SELECT
+    t.mcp_slug
+  , t.custom_domain_id
+  , t.deleted AS toolset_deleted
+  , p.deleted AS project_deleted
+  , p.organization_id
+  , om.slug AS organization_slug
+  , om.gram_account_type
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE t.id = @id AND t.project_id = @project_id;
+
+-- name: GetPlatformAliasContenders :one
+-- For a toolset's custom-domain alias, whether the loose platform lookup skips it: a live platform alias with the slug
+-- wins, and another live-project custom-domain alias with it makes the lookup ambiguous.
+SELECT
+    EXISTS (
+      SELECT 1
+      FROM toolsets pa
+      WHERE pa.mcp_slug = @slug
+        AND pa.custom_domain_id IS NULL
+        AND pa.deleted IS FALSE
+    )::boolean AS platform_alias_held
+  , EXISTS (
+      SELECT 1
+      FROM toolsets t
+      JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
+      WHERE t.mcp_slug = @slug
+        AND t.custom_domain_id IS NOT NULL
+        AND t.deleted IS FALSE
+        AND t.id <> @toolset_id
+    )::boolean AS ambiguous;
