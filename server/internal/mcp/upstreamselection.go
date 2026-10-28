@@ -340,6 +340,10 @@ func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issue
 		if err != nil {
 			return nil, fmt.Errorf("resolve auth client: %w", err)
 		}
+		tokens, err = pinAttachedSession(tokens, authentication.authClient, skipUnusable)
+		if err != nil {
+			return nil, fmt.Errorf("resolve auth client: %w", err)
+		}
 		return tokens, nil
 	}
 	if authentication.chosenClient.Valid {
@@ -434,7 +438,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 				if err != nil {
 					return nil, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 				}
-				return tokens, nil
+				return pinAttachedSession(tokens, member.authClient, true)
 			}
 			tokens, err := s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, member.chosenClientID.UUID, true)
 			switch {
@@ -513,6 +517,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, authClientPermitRequest{
 				OrganizationID: c.selector.organizationID, ProjectID: projects[id], ServerID: id, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 				CredentialKind: c.selector.credentialKindOrDefault(), CredentialID: c.selector.credentialID, Subject: c.subject,
+				UserSessionIssuerID: c.selector.userSessionIssuerID, ConnectionOwner: "",
 			}, res, nil)
 			resolved[id] = prepared
 			memberErrors[id] = prepareErr
