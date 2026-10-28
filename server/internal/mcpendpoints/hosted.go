@@ -260,10 +260,22 @@ func isCanonicalHosted(server mcpserversrepo.McpServer) bool {
 	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID
 }
 
+// slugPrefixRule selects whether a new hosted address must carry the organization slug prefix.
+type slugPrefixRule string
+
+const (
+	// slugPrefixRequired applies the prefix rule, as every API create does.
+	slugPrefixRequired slugPrefixRule = "required"
+
+	// slugPrefixExemptLegacyAlias skips it for an address a legacy toolset alias already serves, so the backfill
+	// that makes the address explicit keeps the URL clients hold.
+	slugPrefixExemptLegacyAlias slugPrefixRule = "exempt_legacy_alias"
+)
+
 // checkHostedNewAddress applies the hosted address rules to an endpoint created on a canonical hosted server: the
 // slug length, the organization's verified and activated custom domain only, the organization prefix on the
-// platform and for free accounts, and a private network mode's ingress namespace.
-func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID) error {
+// platform and for free accounts unless prefixRule exempts it, and a private network mode's ingress namespace.
+func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID, prefixRule slugPrefixRule) error {
 	if len(slug) > maxHostedSlugLength {
 		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
@@ -272,8 +284,10 @@ func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, 
 			return err
 		}
 	}
-	if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
-		return err
+	if prefixRule != slugPrefixExemptLegacyAlias {
+		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
+			return err
+		}
 	}
 	// Endpoints left on a deleted domain cannot serve, so they do not hold back a new address.
 	live, err := repo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, repo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{

@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/mcp_endpoints"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -17,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -178,7 +181,7 @@ func TestAliasBackfillDeletedDomainAliasGetsPlatformEndpoint(t *testing.T) {
 	require.Len(t, f.endpoints(t, ctx, toolset.ID), 1)
 }
 
-func TestAliasBackfillUnprefixedPlatformSlugIsSkipped(t *testing.T) {
+func TestAliasBackfillKeepsUnprefixedPlatformSlug(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAliasBackfillFixture(t)
 	domain := f.activeDomain(t, ctx, []string{})
@@ -186,11 +189,39 @@ func TestAliasBackfillUnprefixedPlatformSlugIsSkipped(t *testing.T) {
 	toolset := f.aliasedServer(t, ctx, slug, domain)
 	f.endpoint(t, ctx, toolset.ID, domain, slug)
 
+	_, err := f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(toolset.ID.String()), Slug: types.McpEndpointSlug(slug)})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
 	rows := f.run(t, ctx, toolset, true)
-	require.Len(t, rows, 2)
-	require.Equal(t, mcpendpoints.AliasBackfillSkip, rows[1].Action)
-	require.Contains(t, rows[1].Reason, "prefixed with the org slug")
-	require.Len(t, f.endpoints(t, ctx, toolset.ID), 1)
+	requireOutcomes(t, rows,
+		aliasBackfillOutcome{slug: slug, domain: domain, action: mcpendpoints.AliasBackfillAlreadyHeld, reason: "", platform: false},
+		aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillCreate, reason: "", platform: true},
+	)
+	require.Len(t, f.endpoints(t, ctx, toolset.ID), 2)
+
+	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(toolset.ID.String()), Slug: types.McpEndpointSlug("unprefixed-other-" + uuid.NewString()[:6])})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestAliasBackfillUnprefixedEndpointSavesWithoutSlugChange(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	slug := "unprefixed-" + uuid.NewString()[:6]
+	toolset := f.aliasedServer(t, ctx, slug, platformHost)
+	rows := f.run(t, ctx, toolset, true)
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpendpoints.AliasBackfillCreate, rows[0].Action)
+	endpointID := rows[0].EndpointID.UUID.String()
+
+	view, err := f.ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{ID: endpointID, McpServerID: new(toolset.ID.String()), Slug: types.McpEndpointSlug(slug)})
+	require.NoError(t, err)
+	require.Equal(t, slug, string(view.Slug))
+
+	_, err = f.ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{ID: endpointID, McpServerID: new(toolset.ID.String()), Slug: types.McpEndpointSlug("unprefixed-renamed-" + uuid.NewString()[:6])})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	f.endpoint(t, ctx, toolset.ID, platformHost, f.slug("kept"))
+	require.NoError(t, f.ti.service.DeleteMcpEndpoint(ctx, &gen.DeleteMcpEndpointPayload{ID: endpointID}))
 }
 
 func TestAliasBackfillLockdownSkipsPlatformAddress(t *testing.T) {

@@ -83,7 +83,8 @@ type AliasBackfillRow struct {
 }
 
 // BackfillAliasEndpoints gives a legacy toolset's canonical server an endpoint at every address its alias serves that
-// no live endpoint holds, in one transaction under the hosted endpoint create path's locks and rules. Without apply
+// no live endpoint holds, in one transaction under the hosted endpoint create path's locks and rules, except the
+// organization slug prefix: the alias already serves each address, so its slug is kept as clients hold it. Without apply
 // it runs the same transaction and rolls it back. Audit rows are written through auditLogger.
 func BackfillAliasEndpoints(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, auditLogger *audit.Logger, candidate AliasBackfillCandidate, apply bool) ([]AliasBackfillRow, error) {
 	tx, err := db.Begin(ctx)
@@ -243,7 +244,7 @@ func backfillAliasAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, a
 		return fmt.Errorf("load endpoint at address: %w", err)
 	}
 
-	if err := checkHostedNewAddress(ctx, tx, logger, authCtx, server, row.Slug, row.CustomDomainID); err != nil {
+	if err := checkHostedNewAddress(ctx, tx, logger, authCtx, server, row.Slug, row.CustomDomainID, slugPrefixExemptLegacyAlias); err != nil {
 		var shareable *oops.ShareableError
 		if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
 			row.Reason = shareable.Error()

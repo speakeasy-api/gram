@@ -91,7 +91,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, hostedServer.ID.String(), authCtx.ProjectID.String())); err != nil {
 			return nil, err
 		}
-		if err := checkHostedNewAddress(ctx, tx, s.logger, authCtx, *hostedServer, input.Slug, input.CustomDomainID); err != nil {
+		if err := checkHostedNewAddress(ctx, tx, s.logger, authCtx, *hostedServer, input.Slug, input.CustomDomainID, slugPrefixRequired); err != nil {
 			return nil, err
 		}
 	}
@@ -165,10 +165,6 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, nil, err
 	}
-	if err := validateSlugPrefix(input.Slug, input.CustomDomainID, authCtx.OrganizationSlug); err != nil {
-		return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug")
-	}
-
 	// Keep the shared writer order: ingress lifecycle, project admission,
 	// domains, endpoint, then its backing server. The ingress lock serializes
 	// this mutation with ingress state changes before any row locks are taken.
@@ -185,6 +181,12 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 	}
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint")
+	}
+	// An unchanged address keeps its slug, so an endpoint created before the prefix rule can still be saved.
+	if input.Slug != preexisting.Slug || input.CustomDomainID != preexisting.CustomDomainID {
+		if err := validateSlugPrefix(input.Slug, input.CustomDomainID, authCtx.OrganizationSlug); err != nil {
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug")
+		}
 	}
 	// A hosted endpoint takes the dashboard's hosted update path, with its server-scoped check and address rules.
 	if preexisting.McpServerID.Valid {

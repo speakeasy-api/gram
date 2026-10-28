@@ -11,7 +11,7 @@ For each toolset with an alias, on its canonical server (`mcp_servers.id = tools
 - **The alias's own address**: the platform host or its custom domain, with the alias slug.
 - **The platform address of a custom-domain alias**: the platform host also serves a custom-domain alias when no live platform alias has the slug, no other live-project custom-domain alias has it, and the organization's custom domain has no IP allowlist (lockdown).
 
-Every address goes through the hosted endpoint create path's rules: the slug is at most 40 characters, a custom-domain address must be on the organization's verified and activated domain, a platform slug (and any slug of a free account) must carry the organization slug prefix, and a server whose network mode is not `public_only` needs a live private ingress covering all its endpoints. A rule that rejects an address is reported as a skip with its reason; the backfill never bypasses one.
+Every address goes through the hosted endpoint create path's rules: the slug is at most 40 characters, a custom-domain address must be on the organization's verified and activated domain, and a server whose network mode is not `public_only` needs a live private ingress covering all its endpoints. A rule that rejects an address is reported as a skip with its reason. The one exception is the organization slug prefix the create path requires on platform slugs (and on every slug of a free account): the alias already serves each address, so the backfill keeps its slug as clients hold it. Endpoints created through the API still need the prefix, and an endpoint saved without changing its address is not checked for it again.
 
 ## Preview (default)
 
