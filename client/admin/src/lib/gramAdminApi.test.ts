@@ -555,7 +555,7 @@ describe("the organization write endpoints", () => {
     vi.unstubAllGlobals();
   });
 
-  it("serializes the URL and explicit ownership confirmation without a name", async () => {
+  it("serializes the URL, editable identity and ownership confirmation", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(ORG), {
         status: 200,
@@ -566,6 +566,8 @@ describe("the organization write endpoints", () => {
     await expect(
       createOrganization({
         url: "https://example.com/path",
+        name: "Example Customer",
+        slug: "example-customer",
         ownership_confirmed: true,
       }),
     ).resolves.toEqual(ORG);
@@ -573,7 +575,12 @@ describe("the organization write endpoints", () => {
       path: "/admin/organization.create",
       method: "POST",
       contentType: "application/json",
-      body: { url: "https://example.com/path", ownership_confirmed: true },
+      body: {
+        url: "https://example.com/path",
+        name: "Example Customer",
+        slug: "example-customer",
+        ownership_confirmed: true,
+      },
     });
   });
 

@@ -1647,6 +1647,9 @@ type AdminUpstreamOAuthMigrationAuthClients struct {
 	// agents and API keys are missing, which a run adds. Enforcement needs them,
 	// so existing callers keep their access.
 	PendingGrants *int64
+	// Agent attachments whose grants a run does not write while the organization's
+	// upstream selector writes are not allowed. While any wait, complete is false.
+	AttachmentsWaiting *int64
 	// Credential choice coverage for each credential class.
 	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClass
 	// The first live credential choices left without a usable auth client.
@@ -2124,8 +2127,15 @@ type CreateOnboardingUseCasePayload struct {
 type CreateOrganizationPayload struct {
 	AdminSessionToken *string
 	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
-	// the name and verified email domain.
+	// the verified email domain.
 	URL string
+	// Organization display name. When omitted, a name is derived from the
+	// registrable company domain.
+	Name *string
+	// Preferred organization URL slug. When omitted, a unique slug is derived from
+	// the organization name. Explicit slugs use lowercase letters, numbers, and
+	// hyphens.
+	Slug *string
 	// The operator confirms that domain ownership was established outside this
 	// form.
 	OwnershipConfirmed bool
