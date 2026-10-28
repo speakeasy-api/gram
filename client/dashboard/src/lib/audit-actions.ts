@@ -285,14 +285,17 @@ export const AUDIT_ACTIONS = [
   "skill:archive",
   "skill:create",
   "skill:distribute",
+  "skill:link",
   "skill:restore_version",
   "skill:share_link_create",
   "skill:share_link_revoke",
   "skill:suggestion_approve",
   "skill:suggestion_dismiss",
   "skill:undistribute",
+  "skill:unlink",
   "skill:update",
   "skill:update_distribution",
+  "skill:update_link",
   "skill_efficacy_settings:upsert",
   "spend_rule:archive",
   "spend_rule:create",
@@ -979,6 +982,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "stopped distributing skill";
     case "skill:update_distribution":
       return "updated distribution for skill";
+    case "skill:link":
+      return "linked skill";
+    case "skill:update_link":
+      return "updated a link for skill";
+    case "skill:unlink":
+      return "unlinked skill";
     case "skill:share_link_create":
       return "created a share link for";
     case "skill:share_link_revoke":

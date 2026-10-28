@@ -192,6 +192,11 @@ it("shows compact icon stacks at 50 servers and expands ten at a time", async ()
   expect(state.audience).toHaveBeenCalledTimes(50);
   expect(state.identity).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText("Engineering"));
+  for (const rowgroup of screen.getAllByRole("rowgroup")) {
+    expect(
+      Array.from(rowgroup.children).every((row) => row.tagName === "TR"),
+    ).toBe(true);
+  }
   expect(screen.getAllByRole("link")).toHaveLength(10);
   fireEvent.click(screen.getByRole("button", { name: "Show 10 more" }));
   expect(screen.getAllByRole("link")).toHaveLength(20);

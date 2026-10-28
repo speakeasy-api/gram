@@ -15,7 +15,7 @@ import (
 // flags.csv relies on: the header names four columns while rows carry three
 // or four, a three-column row still sets its boolean, and only a non-empty
 // fourth column sets a variant.
-func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) { //nolint:paralleltest // changes the working directory
+func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) {
 	t.Chdir(t.TempDir())
 	wd, err := os.Getwd()
 	require.NoError(t, err)

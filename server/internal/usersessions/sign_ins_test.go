@@ -734,8 +734,8 @@ func TestRecord_AFirstSignInInAnotherOrganizationWaitsForARevocation(t *testing.
 		done <- err
 	}()
 	select {
-	case <-done:
-		t.Fatal("a first-ever recording in another organization ran while the revocation held the user lock")
+	case err := <-done:
+		t.Fatalf("a first-ever recording in another organization ran while the revocation held the user lock: %v", err)
 	case <-time.After(300 * time.Millisecond):
 	}
 	require.NoError(t, tx.Commit(ctx))
@@ -976,7 +976,7 @@ func TestMintUserSession_LinksTheDashboardSignIn(t *testing.T) {
 			require.NoError(t, err)
 			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(minted.AccessToken, urn.NewToolset(toolset.ID).String())
 			require.NoError(t, err)
-			row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{UserSessionIssuerID: toolset.UserSessionIssuerID.UUID, Jti: claims.ID})
+			row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{UserSessionIssuerID: hostedIssuerID(t, ctx, ti, toolset), Jti: claims.ID})
 			require.NoError(t, err)
 			if tc.wantLinked {
 				require.Equal(t, signIn.ID, row.SignInID)

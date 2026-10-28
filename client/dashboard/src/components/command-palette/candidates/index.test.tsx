@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
+  gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
   includeNewResourceFixtures: false,
   /**
    * When set, the mcp:write grant is selector-scoped to these server ids:
@@ -56,6 +57,13 @@ const mocks = vi.hoisted(() => ({
   // Every SDK list hook records the options it was called with so the test can
   // prove nothing fetches while the palette is closed.
   calls: {} as Record<string, unknown[]>,
+}));
+
+vi.mock("./useGatewayConnectionCandidates", () => ({
+  useGatewayConnectionCandidates: (options: { enabled: boolean }) => {
+    mocks.gatewayCandidateOptions.push(options);
+    return [];
+  },
 }));
 
 function record(name: string, args: unknown[]) {
@@ -198,6 +206,12 @@ vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => mocks.pluginWriteAccess,
 }));
 vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetryContext: () => ({
+    featureFlags: { status: "ready" },
+    telemetry: {
+      isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
+    },
+  }),
   useTelemetry: () => ({
     isFeatureEnabled: (flag: string) => mocks.flags.includes(flag),
   }),
@@ -552,6 +566,7 @@ describe("useMcpServerCandidates", () => {
         id: "toolset-1",
         name: "Hosted wrapper",
         toolset: { ...HOSTED_ROW.toolset, name: "Hosted tools" },
+        platformEndpointSlug: "acme-renamed-address",
         visibility: "private",
       },
     ];
@@ -560,6 +575,7 @@ describe("useMcpServerCandidates", () => {
 
     expect(hosted?.title).toBe("Hosted tools");
     expect(hosted?.keywords).toContain("hosted");
+    expect(hosted?.keywords).toContain("acme-renamed-address");
     await act(async () => {
       await hosted?.run("open");
     });
@@ -1595,6 +1611,12 @@ describe("useRuleCandidates", () => {
 });
 
 describe("useLauncherCandidates", () => {
+  it("registers gateway discovery with the palette open state", () => {
+    renderCandidates({ enabled: false });
+    expect(mocks.gatewayCandidateOptions.at(-1)).toMatchObject({
+      enabled: false,
+    });
+  });
   it("orders sources: actions, recents, marketplace, mcp servers, gateways, catalog, …, people", () => {
     mocks.scopes = ["org:read", "org:admin", "mcp:write", "project:read"];
     mocks.actions = [

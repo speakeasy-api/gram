@@ -123,6 +123,11 @@ type authClientResolution struct {
 	// noAuthAllowed is a server explicitly marked as needing no upstream
 	// authentication.
 	noAuthAllowed bool
+
+	// attachedSession is the exact remote session an attached agent's
+	// permit was decided for. Its token must come from that row, so a binding
+	// that moves to another user's connection after the check serves nothing.
+	attachedSession uuid.UUID
 }
 
 // headersOnly reports a resolved client whose material is its headers alone,
@@ -151,6 +156,27 @@ type authClientPermitRequest struct {
 	CredentialID   uuid.UUID
 	// Subject is the user the credential represents.
 	Subject urn.SessionSubject
+	// UserSessionIssuerID is the sign-in an agent attachment is keyed by.
+	UserSessionIssuerID uuid.UUID
+	// ConnectionOwner is the stored owner of the personal connection the
+	// client serves, resolved by checkAuthClientPermission before the
+	// permitter decides: the subject itself for a user, the user who owns the
+	// exact attached connection for an attached agent, and empty when there is
+	// none, which no personal grant matches.
+	ConnectionOwner string
+}
+
+// connectionOwner is the owner the mcp:auth check names: the resolved
+// ConnectionOwner, or for a request built without resolving it, a user's own
+// subject. Nothing else is ever assumed, so an unresolved agent has no owner.
+func (r authClientPermitRequest) connectionOwner() string {
+	if r.ConnectionOwner != "" {
+		return r.ConnectionOwner
+	}
+	if r.ClientType == authClientTypeRemoteSession && r.Subject.Kind == urn.SessionSubjectKindUser {
+		return r.Subject.ID
+	}
+	return ""
 }
 
 // authClientPermitter decides whether the caller may use a resolved client.
@@ -184,7 +210,7 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 	if err != nil {
 		return false, fmt.Errorf("admit caller for auth client: %w", err)
 	}
-	decision, err := authorization.Decide(req.OrganizationID, mandatoryAuthClientCheck(req.ProjectID, req.ClientID, req.RegistrationID, req.ClientType, req.Subject))
+	decision, err := authorization.Decide(req.OrganizationID, mandatoryAuthClientCheck(req.ProjectID, req.ClientID, req.RegistrationID, req.ClientType, req.connectionOwner()))
 	if err != nil {
 		return false, fmt.Errorf("evaluate auth client check: %w", err)
 	}
@@ -194,7 +220,7 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 // gapResolution is a choice that cannot be used, for reason.
 func gapResolution(reason string) authClientResolution {
 	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false}
+	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false, attachedSession: uuid.Nil}
 }
 
 // decideAuthClient resolves a recorded choice without side effects.
@@ -343,14 +369,15 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 	req := authClientPermitRequest{
 		OrganizationID: selector.organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 		CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject,
+		UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "",
 	}
-	return s.prepareAuthClient(ctx, req, res, func(bool) {
+	return s.prepareAuthClient(ctx, req, res, func(permit authClientPermitRequest, _ bool) {
 		if resolved {
 			// The shadow compares the mandatory check with the
 			// connect-equivalent rule served before it, whichever of the two
 			// decided here.
-			legacyPermitted, _ := connectPermitter{}.Permitted(ctx, req)
-			s.shadowAuthClientUse(ctx, selector.organizationID, legacyPermitted, projectID, res.clientID, res.choice.clientID, res.clientType, subject)
+			legacyPermitted, _ := connectPermitter{}.Permitted(ctx, permit)
+			s.shadowAuthClientUse(ctx, selector.organizationID, legacyPermitted, projectID, res.clientID, res.choice.clientID, res.clientType, permit.ConnectionOwner)
 		}
 	})
 }
@@ -373,10 +400,10 @@ func (s *Service) resolveAuthClientForConsent(ctx context.Context, organizationI
 		res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
 	}
 
-	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject}, res, nil)
+	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: ""}, res, nil)
 }
 
-func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermitRequest, res authClientResolution, observe func(permitted bool)) (authClientResolution, error) {
+func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermitRequest, res authClientResolution, observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
 	res, err := s.checkAuthClientPermission(ctx, permit, res, observe)
 	if err != nil {
 		return res, err
@@ -396,8 +423,9 @@ func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermit
 	return res, nil
 }
 
-// observe, when set, receives the permit decision before it is applied.
-func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClientPermitRequest, res authClientResolution, observe func(permitted bool)) (authClientResolution, error) {
+// observe, when set, receives the permit request, with its connection owner
+// resolved, and the decision before it is applied.
+func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClientPermitRequest, res authClientResolution, observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
 	// A mapped client keeps its permit even when serving falls back to the
 	// registration or current server headers.
 	if res.outcome == authClientResolved || (res.outcome == authClientLegacy && res.clientID != uuid.Nil) {
@@ -405,12 +433,18 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 		if err != nil {
 			return res, err
 		}
+		connection, err := s.authClientConnection(ctx, permit)
+		if err != nil {
+			return res, fmt.Errorf("check auth client permission: %w", err)
+		}
+		permit.ConnectionOwner = connection.owner
+		res.attachedSession = connection.attachedSession
 		permitted, err := permitter.Permitted(ctx, permit)
 		if err != nil {
 			return res, fmt.Errorf("check auth client permission: %w", err)
 		}
 		if observe != nil {
-			observe(permitted)
+			observe(permit, permitted)
 		}
 		if !permitted {
 			res.outcome = authClientNoAccess
@@ -590,6 +624,9 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 	if err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 	}
+	// The connection the permit was decided for binds every token path,
+	// including a handback to the upstream client choice.
+	authentication.attachedSession = res.attachedSession
 	switch res.outcome {
 	case authClientLegacy:
 		return none, false, nil
@@ -709,7 +746,15 @@ func (s *Service) shadowAuthClient(ctx context.Context, selector *upstreamSelect
 	// the request, any other error is not a decision.
 	legacyDenied := errors.Is(choiceErr, errUpstreamSelectionMissing) || errors.Is(choiceErr, errUpstreamSelectionUnusable)
 	if res.outcome == authClientResolved && (choiceErr == nil || legacyDenied) {
-		s.shadowAuthClientUse(ctx, selector.organizationID, choiceErr == nil, projectID, res.clientID, res.choice.clientID, res.clientType, subject)
+		connection, err := s.authClientConnection(ctx, authClientPermitRequest{
+			OrganizationID: selector.organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
+			CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject, UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "",
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "auth client shadow could not resolve the connection owner", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
+		} else {
+			s.shadowAuthClientUse(ctx, selector.organizationID, choiceErr == nil, projectID, res.clientID, res.choice.clientID, res.clientType, connection.owner)
+		}
 	}
 	annotateAuthClient(ctx, s.logger, res)
 	s.reportAuthClientParity(ctx, selector.organizationID, serverID, res, choice, choiceErr)
