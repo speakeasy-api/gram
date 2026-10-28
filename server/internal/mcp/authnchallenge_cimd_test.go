@@ -202,17 +202,7 @@ func newTestCIMDServiceWithMeterProvider(t *testing.T, meterProvider metric.Mete
 
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	return ctx, ti, ds, toolset
 }

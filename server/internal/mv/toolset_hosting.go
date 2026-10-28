@@ -39,10 +39,10 @@ func canonicalHosting(ctx context.Context, db tsr.DBTX, organizationID string, t
 	return byID, nil
 }
 
-// deriveToolsetHosting applies hostingstate.Derive to a toolset's hosting columns and its external OAuth server,
-// which decides how a disabled server re-enables.
-func deriveToolsetHosting(columns hostingstate.Columns, externalOAuthServerID uuid.NullUUID, row *hostingstate.Row) toolsetHosting {
-	hosting, address := hostingstate.Derive(columns, externalOAuthServerID, row)
+// deriveToolsetHosting applies hostingstate.Derive given the toolset's legacy alias and external OAuth server, which
+// decides how a disabled server re-enables.
+func deriveToolsetHosting(alias hostingstate.Address, externalOAuthServerID uuid.NullUUID, row *hostingstate.Row) toolsetHosting {
+	hosting, address := hostingstate.Derive(alias, externalOAuthServerID, row)
 	return toolsetHosting{
 		McpSlug:             conv.FromPGText[types.Slug](address.Slug),
 		CustomDomainID:      conv.FromNullableUUID(address.CustomDomainID),

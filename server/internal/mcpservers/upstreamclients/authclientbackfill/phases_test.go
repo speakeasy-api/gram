@@ -1234,12 +1234,12 @@ func TestReconcileDerived_KeepsARacedClientsLinks(t *testing.T) {
 	want := newExpected()
 	want.race(clientID)
 	report := newReport(true)
-	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, want, map[Kind]bool{}, startedAt))
+	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, want, make(map[Kind]bool), startedAt))
 	require.Zero(t, report.ClientsRetired+report.LinksRetired+report.PendingRetiredLinks)
 	require.Equal(t, []uuid.UUID{clientID}, f.links(server), "a race never retires the client's links")
 
 	report = newReport(true)
-	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, newExpected(), map[Kind]bool{}, startedAt))
+	require.NoError(t, reconcileDerived(t.Context(), f.q, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0}, &report, newExpected(), make(map[Kind]bool), startedAt))
 	require.Equal(t, 1, report.LinksRetired, "without the race the link is retired")
 }
 
@@ -1358,7 +1358,7 @@ func TestRun_EMAHonorsThePersistedProtectedResource(t *testing.T) {
 	require.Empty(t, f.live(TypeEMA))
 	require.Empty(t, f.links(refused))
 	require.Empty(t, f.links(renamed))
-	reasons := map[Reason]uuid.UUID{}
+	reasons := make(map[Reason]uuid.UUID)
 	for _, r := range results(report, KindEMA, OutcomeAmbiguous) {
 		reasons[r.Reason] = r.MCPServerID
 	}
