@@ -22,6 +22,28 @@ func TestComplianceSourceFromUserAgentDesktop(t *testing.T) {
 
 	require.Equal(t, "claude", complianceSourceFromUserAgent("Claude/1.2.3"))
 	require.Equal(t, "claude", complianceSourceFromUserAgent("Electron/39.0.0"))
+	require.Equal(t, "claude", complianceSourceFromUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/0.14.10 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36"))
+	require.Equal(t, "claude", complianceSourceFromUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Claude/0.14.10 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36"))
+}
+
+func TestComplianceSourceFromUserAgentMobileApp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		userAgent string
+	}{
+		{name: "it classifies the iOS app's CFNetwork user agent", userAgent: "Claude/22792454969 CFNetwork/3860.400.51 Darwin/25.3.0"},
+		{name: "it classifies the Android app's user agent", userAgent: "Claude com.anthropic.claude/1.260416.20 (Android 35)"},
+		{name: "it classifies an iOS app user agent naming the OS", userAgent: "Claude com.anthropic.claude/1.260604.0 (iOS 26.0)"},
+		{name: "it classifies an iPad app user agent", userAgent: "Claude/1.260604.0 (iPad; iPadOS 26.0)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, "claude-chat-mobile", complianceSourceFromUserAgent(tt.userAgent))
+		})
+	}
 }
 
 func TestComplianceSourceFromUserAgentWeb(t *testing.T) {
@@ -29,6 +51,9 @@ func TestComplianceSourceFromUserAgentWeb(t *testing.T) {
 
 	require.Equal(t, "claude-chat-web", complianceSourceFromUserAgent("Mozilla/5.0"))
 	require.Equal(t, "claude-chat-web", complianceSourceFromUserAgent(""))
+	// claude.ai in a phone's browser is Claude web, not the mobile app.
+	require.Equal(t, "claude-chat-web", complianceSourceFromUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1"))
+	require.Equal(t, "claude-chat-web", complianceSourceFromUserAgent("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"))
 }
 
 func TestChatsCursorStoredFormIgnoresActivityFeedToken(t *testing.T) {

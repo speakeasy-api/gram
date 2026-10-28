@@ -274,6 +274,8 @@ present in a developer's org and deliberately absent from the shared demo org.
 
 Anthropic inference hooks: Agent Sessions includes “Claude inference conversation” with a user prompt, assistant reply, and follow-up. The source is Claude Chat; Raw view retains the original content blocks. This transcript-only conversation contributes one chat to the owner’s identity metrics and analytics session lists, with three messages and zero reported token/cost usage.
 
+Claude mobile app: Agent Sessions includes “Rollout notes from the train”, owned by Jonas, with a user prompt and assistant reply. The source reads **Claude Mobile App** (`claude-chat-mobile`, the surface the Anthropic compliance import assigns to Claude iOS and Android app chats), and the agent filter lists it as its own entry.
+
 Anthropic inference hooks on AI Integrations shows **Finish setup** with a pending URL and no signing secret. The seeded configuration never permits real inference deliveries.
 
 `[~]` Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it to see the demo-releases channel, human message, and assistant reply. The row shows the persisted #demo-releases Slack channel and two directory participants with hover details, standing-owner messages show their individual authors, and “Release checklist helper” appears beneath its parent as a subagent. Both rows also name “Release assistant”, the agent principal that produced them (`chats.agent_id`): a channel session has no assistant record, so this is the only actor the row can name. The readable view extracts deliveries after harness reminders and inside nested threads. Raw view reveals those original wrappers, envelopes, and the Slack reply tool call.

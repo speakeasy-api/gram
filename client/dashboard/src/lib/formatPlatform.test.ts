@@ -15,6 +15,7 @@ describe("formatPlatform", () => {
     expect(formatPlatform("cowork")).toBe("Claude Cowork");
     expect(formatPlatform("Claude Web")).toBe("Claude Chat Web");
     expect(formatPlatform("Claude Chat Web")).toBe("Claude Chat Web");
+    expect(formatPlatform("claude-chat-mobile")).toBe("Claude Mobile App");
   });
 
   it("uses canonical labels for other known surfaces", () => {

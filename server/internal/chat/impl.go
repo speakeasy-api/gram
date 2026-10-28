@@ -3609,7 +3609,7 @@ func needsClaudeTurnUsage(source, originatingClient *string) bool {
 		case "claude-code":
 			return true
 		case "cursor", "codex", "codex-web", "chatgpt", "opencode", "openclaw",
-			"claude", "claude-chat-web", "assistants", "playground":
+			"claude", "claude-chat-web", "claude-chat-mobile", "assistants", "playground":
 			return false
 		default:
 			return true
@@ -3622,7 +3622,7 @@ func needsClaudeTurnUsage(source, originatingClient *string) bool {
 	case "claude-code", "claude-code-desktop", "cowork", "litellm":
 		return true
 	case "cursor", "codex", "codex-web", "chatgpt", "opencode", "openclaw",
-		"claude", "claude-chat-web", "assistants", "playground":
+		"claude", "claude-chat-web", "claude-chat-mobile", "assistants", "playground":
 		return false
 	default:
 		return true

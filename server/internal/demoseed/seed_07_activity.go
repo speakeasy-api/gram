@@ -163,6 +163,22 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return err
 	}
 
+	// The Anthropic compliance import labels Claude iOS and Android app chats
+	// as the mobile surface.
+	chatID = s.det("claude-mobile-chat")
+	if err := insertChat(chatID, jonas, "Rollout notes from the train", activityNull, activityMinutes(45), activityMinutes(43)); err != nil {
+		return err
+	}
+	mobileSrc := activityText("claude-chat-mobile")
+	if err := insertMessages(chatID, []activityMessage{
+		{"claude-mobile-prompt", "user", "Draft a short status update for the rollout.",
+			activityTextRaw("Draft a short status update for the rollout."), nil, mobileSrc, model, activityMinutes(45)},
+		{"claude-mobile-reply", "assistant", "Rollout is on track: tests are green and the rollback plan is reviewed.",
+			activityTextRaw("Rollout is on track: tests are green and the rollback plan is reviewed."), nil, mobileSrc, model, activityMinutes(43)},
+	}); err != nil {
+		return err
+	}
+
 	// Claude Tag preserves the wake/tool transcript for the Raw view toggle.
 	// The channel session and its helper have no assistant record, so the
 	// acting agent is what the session list names for them — the same agent

@@ -27,6 +27,7 @@ func TestForHookSource(t *testing.T) {
 		{name: "it folds claude code desktop", source: "claude-code-desktop", variant: "", want: agentsurface.SurfaceClaudeCode, known: true},
 		{name: "it folds claude tag onto claude code", source: "claude-tag", variant: "", want: agentsurface.SurfaceClaudeCode, known: true},
 		{name: "it folds claude chat web", source: "claude-chat-web", variant: "", want: agentsurface.SurfaceClaudeChat, known: true},
+		{name: "it folds the claude mobile app onto claude chat", source: "claude-chat-mobile", variant: "", want: agentsurface.SurfaceClaudeChat, known: true},
 
 		// Bare "claude" covers three products, so only the variant resolves it.
 		{name: "it resolves bare claude through the cowork variant", source: "claude", variant: "cowork", want: agentsurface.SurfaceCowork, known: true},
