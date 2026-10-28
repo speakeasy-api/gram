@@ -104,6 +104,15 @@ func TestKitGKEFailedProjectedGenerationCleanup(t *testing.T) {
 					return
 				}
 			}
+			if r.Retired {
+				// Simulate failed MarkReaped bookkeeping after successful cleanup.
+				// Both a stale caller and a freshly loaded row must be retryable.
+				client.ClearActions()
+				require.NoError(t, k.Reap(t.Context(), r))
+				r.BackendMetadataJSON = []byte("{}")
+				require.NoError(t, k.ReapStoppedMachine(t.Context(), r))
+				require.Empty(t, client.Actions())
+			}
 			if mode == "delete retry" {
 				require.Equal(t, 2, *fences)
 			} else {
@@ -118,6 +127,22 @@ func TestKitGKEFailedProjectedGenerationCleanup(t *testing.T) {
 					require.Equal(t, "v1alpha1", action.GetResource().Version)
 				}
 			}
+		})
+	}
+}
+
+func TestKitGKEReapClearedAuthorityRequiresRetiredEmptyObject(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{"", "null", "[]", "{", `{"unknown":true}`, `{"runtime_version":3}`, "{}"} {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			k, client, r, fences := kitGKEBackendFixture(t)
+			// Even an empty object must not bypass validation for a live row.
+			r.Retired = raw != "{}"
+			r.BackendMetadataJSON = []byte(raw)
+			require.Error(t, k.Reap(t.Context(), r))
+			require.Empty(t, client.Actions())
+			require.Zero(t, *fences)
 		})
 	}
 }

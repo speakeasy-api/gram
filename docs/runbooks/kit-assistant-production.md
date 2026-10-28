@@ -211,16 +211,19 @@ rejection can be cleared, but an uncertain result stays fenced until reconciled.
    `push: true`. It publishes `pr-<NUMBER>`, content-hash and SHA tags.
 2. Wait for that image build (including metadata-script tests) to succeed;
    resolve its registry digest. No image digest is invented in this change.
-3. Pin that published digest in `GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE` in
-   infrastructure **before** promoting the new application. The old application
-   ignores this new setting. Provision the dedicated IAM project, role and
-   ConfigMap/WarmPool RBAC first, setting the explicit cluster workload-pool project and removing local issuer/JWKS configuration.
-4. Promote the new application only after the metadata image setting and
-   permissions are deployed consistently to server and worker. Missing/invalid
-   metadata image is a deliberate startup validation error; do not promote a
-   server with only the IAM-project setting staged. Main's release-dispatch job
-   already waits for the assistant runtime image build, but that alone does not
-   populate the new infrastructure digest setting.
+3. Provision the dedicated IAM project, role, and ConfigMap/WarmPool RBAC.
+   Do not remove the existing issuer/JWKS configuration while old application
+   images are still selected.
+4. In **one infrastructure revision**, pin the published metadata-sidecar digest
+   in `GRAM_ASSISTANT_KIT_GKE_METADATA_IMAGE`, select the new server and worker
+   application image digests, set `GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT`,
+   and remove the local issuer/JWKS configuration. Apply these paired images and
+   settings together; do not deploy the configuration cleanup with old application
+   images or the new application with old issuer/JWKS settings. Include all
+   environments and preview defaults that enable Kit. Missing/invalid metadata
+   image or workload-pool project is a deliberate startup validation error.
+   Main's release-dispatch job waits for the assistant runtime image build, but
+   that alone does not populate infrastructure image pins or configuration.
 5. Validate authorized managed-sandbox startup/rotation/cleanup before enabling
    new Kit sessions. No fallback to a shared IAM identity or mutable image tag
    is permitted.

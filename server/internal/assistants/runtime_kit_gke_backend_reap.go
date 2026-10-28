@@ -35,6 +35,12 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		if err != nil {
 			return fmt.Errorf("load retired Kit authority: %w", err)
 		}
+		// Legacy cleanup clears durable authority before its caller marks the
+		// row reaped. Retrying that final bookkeeping must not require resources
+		// already deleted. Accept only the explicit empty-object sentinel.
+		if len(raw) != 0 && kitLocalUnprovisionedMetadata(raw) {
+			return nil
+		}
 		var prior kitGKEBackendMetadata
 		if json.Unmarshal(raw, &prior) == nil && kitGKEFailedProjectedWorkload(prior, r, k.config.GKE.Namespace) {
 			r.BackendMetadataJSON = raw
