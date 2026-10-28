@@ -85,8 +85,12 @@ func TestCardRendersLogoAsDataImage(t *testing.T) {
 	logo, err := cardLogoDataURI("image/png", testPNG(t))
 	require.NoError(t, err)
 	rendered := renderCard(t, signInCard("Example", logo, "https://dashboard.example.test/inspect"))
-	require.Contains(t, rendered, `<img class="mark" src="`+string(logo)+`" alt="">`)
-	require.NotContains(t, rendered, `<span class="mark"`)
+	require.Contains(t, rendered, `<div class="tile tile-logo"><img class="logo" src="`+string(logo)+`" alt=""></div>`)
+	require.NotContains(t, rendered, `<span aria-hidden="true">E</span>`, "the logo replaces the initials")
+
+	server := renderCard(t, serverCard("Example", logo, ResolvedProject{Name: "Support", Slug: "support"}, nextActionSecureDashboardSetup, "https://dashboard.example.test/setup", false, ""))
+	require.Contains(t, server, `<img class="logo" src="`+string(logo)+`" alt=""><span class="badge badge-action" role="img" aria-label="Needs action">!</span>`, "the badge stays on a logo tile")
+	require.NotContains(t, server, `<svg class="icon"`, "the logo replaces the server icon")
 }
 
 // Only a template.URL built from validated bytes becomes an image: a server
@@ -94,9 +98,13 @@ func TestCardRendersLogoAsDataImage(t *testing.T) {
 func TestCardWithoutLogoShowsInitial(t *testing.T) {
 	t.Parallel()
 
-	rendered := renderCard(t, serverCard("data:image/png;base64,AAAA", "", ResolvedProject{Name: "Support", Slug: "support"}, nextActionStartSetup, ""))
-	require.Contains(t, rendered, `<span class="mark" aria-hidden="true">D</span>`)
+	rendered := renderCard(t, serverCard("data:image/png;base64,AAAA", "", ResolvedProject{Name: "Support", Slug: "support"}, nextActionStartSetup, "", false, ""))
+	require.Contains(t, rendered, `<div class="tile"><svg class="icon"`)
 	require.NotContains(t, rendered, "<img")
+
+	signIn := renderCard(t, signInCard("data:image/png;base64,AAAA", "", "https://dashboard.example.test/inspect"))
+	require.Contains(t, signIn, `<div class="tile tile-initials"><span aria-hidden="true">D</span>`)
+	require.NotContains(t, signIn, "<img")
 }
 
 // iconCall is one logo fetch the registration store scheduled.
@@ -217,7 +225,7 @@ func TestCatalogRegistrationCapturesLogoForItsCard(t *testing.T) {
 
 	first := callRegisterCatalogCard(t, ctx, session, project, providerKey)
 	require.NotContains(t, first, "<img", "the logo is fetched after the add returns")
-	require.Contains(t, first, `<span class="mark" aria-hidden="true">R</span>`)
+	require.Contains(t, first, `<div class="tile"><svg class="icon"`)
 
 	calls := icons.recorded()
 	require.Len(t, calls, 1)
@@ -229,7 +237,7 @@ func TestCatalogRegistrationCapturesLogoForItsCard(t *testing.T) {
 	logo := testPNG(t)
 	storeLogo(t, conn, storage, project, principal.OrganizationID, calls[0].mcpServerID, "image/png", logo)
 	replayed := callRegisterCatalogCard(t, ctx, session, project, providerKey)
-	require.Contains(t, replayed, `<img class="mark" src="data:image/png;base64,`+base64.StdEncoding.EncodeToString(logo)+`" alt="">`)
+	require.Contains(t, replayed, `<img class="logo" src="data:image/png;base64,`+base64.StdEncoding.EncodeToString(logo)+`" alt="">`)
 	require.Len(t, icons.recorded(), 1, "a replayed add does not fetch the logo again")
 
 	storeLogo(t, conn, storage, project, principal.OrganizationID, calls[0].mcpServerID, "image/svg+xml", []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`))

@@ -10416,6 +10416,77 @@ CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_mcp
 ON meta_mcp_server_members (meta_mcp_server_id, mcp_server_id)
 WHERE deleted IS FALSE;
 
+-- Links a skill to the MCP surface that serves it over the Skills extension.
+-- target_kind names the surface: 'mcp_server' and 'meta_mcp_server' point at
+-- stored rows through their id column, while row-less surfaces such as the
+-- organization gateway are named by their kind alone and leave both id columns
+-- NULL. Which columns each kind sets is validated in application code.
+CREATE TABLE IF NOT EXISTS mcp_skill_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  -- NULL serves the skill's latest valid version.
+  pinned_version_id uuid,
+
+  target_kind TEXT NOT NULL CHECK (target_kind <> ''),
+  mcp_server_id uuid,
+  meta_mcp_server_id uuid,
+
+  created_by_user_id TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_skill_links_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_skill_links_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_skill_links_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  -- No delete action, as on skill_distributions: versions are only removed
+  -- together with their skill, which cascades this row in the same statement.
+  CONSTRAINT mcp_skill_links_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
+  CONSTRAINT mcp_skill_links_project_id_mcp_server_id_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_skill_links_project_id_meta_mcp_server_id_fkey FOREIGN KEY (project_id, meta_mcp_server_id) REFERENCES meta_mcp_servers (project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN mcp_skill_links.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.skill_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.pinned_version_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.target_kind IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.meta_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_skill_links.deleted IS '@access: confidential';
+
+-- One live link per skill and target. NULLS NOT DISTINCT makes row-less
+-- targets, whose id columns are both NULL, unique per kind.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_skill_links_project_id_skill_id_target_key
+ON mcp_skill_links (project_id, skill_id, target_kind, mcp_server_id, meta_mcp_server_id) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_skill_links_mcp_server_id_idx
+ON mcp_skill_links (mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_skill_links_meta_mcp_server_id_idx
+ON mcp_skill_links (meta_mcp_server_id)
+WHERE deleted IS FALSE;
+
+-- Serves row-less targets that span projects, such as the organization
+-- gateway, which reads every project's links of its kind.
+CREATE INDEX IF NOT EXISTS mcp_skill_links_organization_id_target_kind_idx
+ON mcp_skill_links (organization_id, target_kind)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_skill_links_skill_id_pinned_version_id_idx
+ON mcp_skill_links (skill_id, pinned_version_id);
+
 CREATE TABLE IF NOT EXISTS mcp_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   mcp_server_id UUID NOT NULL,

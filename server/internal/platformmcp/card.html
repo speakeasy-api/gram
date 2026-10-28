@@ -5,50 +5,103 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Speakeasy</title>
 <style>
+/* One shared shell: a 48px leading tile, the title and a status line, one
+   trailing action, and optional label and value rows below a divider. Dark
+   mode mirrors the same structure with dark neutrals. */
 :root {
   color-scheme: light dark;
-  --bg: light-dark(#ffffff, #18181b);
-  --fg: light-dark(#18181b, #fafafa);
-  --muted: light-dark(#52525b, #a1a1aa);
-  --line: light-dark(#e4e4e7, #3f3f46);
-  --mark-bg: light-dark(#f4f4f5, #27272a);
-  --accent: light-dark(#18181b, #fafafa);
-  --accent-fg: light-dark(#ffffff, #18181b);
+  --surface: light-dark(hsl(0 0% 100%), hsl(0 0% 11%));
+  --line: light-dark(hsl(0 0% 90%), hsl(0 0% 21%));
+  --fg: light-dark(hsl(0 0% 7%), hsl(0 0% 96%));
+  --muted: light-dark(hsl(0 0% 42%), hsl(0 0% 64%));
+  --tile: light-dark(hsl(0 0% 96%), hsl(0 0% 17%));
+  --tile-icon: light-dark(hsl(0 0% 45%), hsl(0 0% 64%));
+  --solid: light-dark(hsl(0 0% 9%), hsl(0 0% 96%));
+  --solid-fg: light-dark(hsl(0 0% 100%), hsl(0 0% 7%));
+  --chip: light-dark(hsl(0 0% 95%), hsl(0 0% 18%));
+  --done: light-dark(hsl(142 71% 36%), hsl(142 60% 45%));
+  --done-text: light-dark(hsl(142 72% 29%), hsl(142 65% 62%));
+  --done-soft: light-dark(hsl(138 76% 97%), hsl(142 60% 45% / 12%));
+  --done-line: light-dark(hsl(141 60% 82%), hsl(142 60% 45% / 35%));
+  --action: light-dark(hsl(28 92% 44%), hsl(30 95% 55%));
+  --pending: light-dark(hsl(0 0% 80%), hsl(0 0% 40%));
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: var(--bg);
+  background: transparent;
   color: var(--fg);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.45 var(--sans);
+  -webkit-font-smoothing: antialiased;
 }
-.card { padding: 16px; display: grid; gap: 10px; }
-.card header { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.mark {
-  flex: none; width: 40px; height: 40px; border-radius: 8px;
+p, h1, dl, dd { margin: 0; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 14px; padding: 16px; }
+.tile {
+  position: relative; flex: none; width: 48px; height: 48px;
   display: grid; place-items: center;
-  background: var(--mark-bg); border: 1px solid var(--line);
-  font-weight: 600; font-size: 16px;
+  border-radius: 10px; background: var(--tile); color: var(--tile-icon);
 }
-img.mark { object-fit: contain; padding: 4px; }
-.heading { min-width: 0; }
-h1 { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
-p { margin: 0; overflow-wrap: anywhere; }
-.sub, .note { color: var(--muted); }
-.note {
-  justify-self: start; font-size: 12px; padding: 2px 8px;
-  border: 1px solid var(--line); border-radius: 999px;
+.tile-logo { background: var(--tile); }
+.logo { width: 32px; height: 32px; object-fit: contain; border-radius: 6px; }
+.tile-initials { background: var(--solid); color: var(--solid-fg); font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.badge {
+  position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px;
+  display: grid; place-items: center; border-radius: 50%;
+  border: 2px solid var(--surface); color: hsl(0 0% 100%);
+  font-size: 11px; font-weight: 700; line-height: 1;
 }
-.action {
-  justify-self: start; padding: 8px 14px; border-radius: 8px;
-  background: var(--accent); color: var(--accent-fg);
-  font-weight: 600; text-decoration: none;
+.badge-done { background: var(--done); }
+.badge-action { background: var(--action); }
+.badge svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.text { flex: 1 1 200px; min-width: 0; }
+.title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+h1 { font-size: 16px; line-height: 1.35; font-weight: 600; overflow-wrap: anywhere; }
+.pill {
+  padding: 1px 6px; border: 1px solid var(--line); border-radius: 4px;
+  font: 500 11px/1.4 var(--mono); letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap;
 }
-.action:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.pill-done { color: var(--done-text); background: var(--done-soft); border-color: var(--done-line); }
+.line { margin-top: 2px; color: var(--muted); overflow-wrap: anywhere; }
+.dot { display: inline-block; width: 7px; height: 7px; margin: 0 7px 1px 1px; border-radius: 50%; vertical-align: middle; }
+.dot-pending { background: var(--pending); }
+.dot-action { background: var(--action); }
+.button {
+  flex: none; display: inline-flex; align-items: center; height: 32px; padding: 0 14px;
+  border: 1px solid var(--solid); border-radius: 8px;
+  background: var(--solid); color: var(--solid-fg);
+  font-weight: 500; text-decoration: none; white-space: nowrap;
+}
+.button.secondary { background: var(--surface); color: var(--fg); border-color: var(--line); }
+.button:focus-visible, .copy:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.details { display: grid; gap: 6px; padding: 12px 16px 14px; border-top: 1px solid var(--line); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 24px; }
+dt { flex: none; color: var(--muted); }
+dd { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.field {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  padding: 3px 3px 3px 8px; border: 1px solid var(--line); border-radius: 6px;
+}
+code { min-width: 0; font: 13px/1.4 var(--mono); text-align: left; overflow-wrap: anywhere; }
+.copy {
+  flex: none; padding: 1px 7px; border: 0; border-radius: 4px; cursor: pointer;
+  background: var(--chip); color: var(--muted); font: 12px/1.5 var(--sans);
+}
 </style>
 </head>
 <body>
+<div id="frame" hidden>
 <main id="card"></main>
+</div>
 <script>
 (function () {
   "use strict";
@@ -56,6 +109,7 @@ p { margin: 0; overflow-wrap: anywhere; }
   // result's _meta. This shell only places it, follows the host theme, and
   // opens the card's one link through the host.
   var CARD_KEY = "com.speakeasy/card";
+  var frame = document.getElementById("frame");
   var root = document.getElementById("card");
   var nextId = 1;
   var initializeId = 0;
@@ -77,14 +131,29 @@ p { margin: 0; overflow-wrap: anywhere; }
       document.documentElement.style.colorScheme = theme;
     }
   }
-  // A result without a card, such as a refusal, leaves the view empty and
-  // clears any earlier card and reports zero height so the host can collapse it.
+  // MCP Apps hosts may send their own style variables; the card's neutrals
+  // read them, so it matches the host's surfaces.
+  function applyHostContext(context) {
+    if (!context) {
+      return;
+    }
+    setTheme(context.theme);
+    var variables = context.styles && context.styles.variables;
+    for (var name in variables || {}) {
+      if (/^--[a-z0-9-]+$/.test(name) && typeof variables[name] === "string") {
+        document.documentElement.style.setProperty(name, variables[name]);
+      }
+    }
+  }
+  // A result without a card, such as a refusal, clears any earlier card,
+  // hides the frame and reports zero height so the host can collapse it.
   function render(meta) {
     var card = meta && meta[CARD_KEY];
     root.innerHTML = typeof card === "string" ? card : "";
+    frame.hidden = root.innerHTML === "";
     notify("ui/notifications/size-changed", {
       width: document.documentElement.scrollWidth,
-      height: root.offsetHeight
+      height: frame.offsetHeight
     });
   }
 
@@ -94,16 +163,35 @@ p { margin: 0; overflow-wrap: anywhere; }
       return;
     }
     if (message.id === initializeId && message.result) {
-      setTheme(message.result.hostContext && message.result.hostContext.theme);
+      applyHostContext(message.result.hostContext);
       notify("ui/notifications/initialized", {});
     } else if (message.method === "ui/notifications/tool-result") {
       render(message.params && message.params._meta);
     } else if (message.method === "ui/notifications/host-context-changed") {
-      setTheme(message.params && message.params.theme);
+      applyHostContext(message.params);
     }
   });
 
+  // Copy uses the clipboard the view is allowed; when it is not, nothing
+  // happens and the value stays selectable.
+  function copy(button) {
+    var done = function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1500);
+    };
+    try {
+      navigator.clipboard.writeText(button.getAttribute("data-copy")).then(done, function () {});
+    } catch (error) {
+      // No clipboard in this host.
+    }
+  }
+
   root.addEventListener("click", function (event) {
+    var button = event.target.closest && event.target.closest("button[data-copy]");
+    if (button) {
+      copy(button);
+      return;
+    }
     var link = event.target.closest && event.target.closest("a[href]");
     if (!link) {
       return;
