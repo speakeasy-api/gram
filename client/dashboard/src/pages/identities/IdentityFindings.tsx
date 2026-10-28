@@ -28,23 +28,20 @@ import type { RiskOverviewCategory } from "@gram/client/models/components/riskov
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router";
+import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import { identityHandoffs } from "./identityHandoffs";
 import {
   CATEGORY_PARAM,
+  FINDINGS_ANCHOR,
   type FindingsFilter,
-  RISK_UNAVAILABLE,
   RULE_PARAM,
   setFindingsFilterParams,
 } from "./identityFindingsLink";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
-import { useIdentityOutlet } from "./identityRoute";
-import { IdentitySection } from "./IdentitySection";
-import { sectionMeta } from "./sectionMeta";
 import {
   riskMatchedOnLabel,
-  useCanReadRisk,
   useIdentityPrincipalUrn,
   useIdentityProject,
   useIdentityRisk,
@@ -54,10 +51,16 @@ import {
 const PAGE_SIZE = 20;
 const ALL = "all";
 
-/** Every finding this person triggered, newest first, across all their agent ids. */
-export default function IdentityFindingsPage(): JSX.Element {
-  const canReadRisk = useCanReadRisk();
-  const { identity } = useIdentityOutlet();
+/**
+ * Every finding this person triggered, newest first, across all their agent
+ * ids. Sits at the foot of the Security section, which owns the window and
+ * links its category and rule charts here.
+ */
+export function IdentityFindingsPanel({
+  identity,
+}: {
+  identity: IdentityModel;
+}): JSX.Element {
   const { from, to } = useIdentityWindow();
   const location = useLocation();
   const routes = useRoutes();
@@ -83,39 +86,45 @@ export default function IdentityFindingsPage(): JSX.Element {
 
   const riskQuery = useIdentityRisk(identity, from, to);
   const categories = riskQuery.data?.categories ?? [];
-  const findings = categories.reduce((sum, c) => sum + Number(c.findings), 0);
 
-  if (!canReadRisk) {
-    return (
-      <IdentitySection title="Findings">
-        <IdentityPanel title="Findings">
-          <IdentityPanelEmpty>{RISK_UNAVAILABLE}</IdentityPanelEmpty>
-        </IdentityPanel>
-      </IdentitySection>
-    );
-  }
+  // The charts above link here by anchor; the router changes the hash
+  // without scrolling to it.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (location.hash === `#${FINDINGS_ANCHOR}`) {
+      ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [location.hash, location.search]);
 
   return (
-    <IdentitySection
-      title="Findings"
-      timeRange
-      meta={sectionMeta([{ count: findings, singular: "finding" }])}
-      action={
-        <FindingsFilterControls
-          categories={categories}
+    <div ref={ref} id={FINDINGS_ANCHOR} className="scroll-mt-24">
+      <IdentityPanel
+        title="Findings"
+        action={
+          <FindingsFilterControls
+            categories={categories}
+            filter={filter}
+            onFilterChange={setFilter}
+            riskEventsHref={handoffs.riskEvents}
+          />
+        }
+      >
+        <FindingsTable
+          externalUserIds={identity.externalUserIds}
+          from={from}
+          to={to}
           filter={filter}
-          onFilterChange={setFilter}
-          riskEventsHref={handoffs.riskEvents}
         />
-      }
-    >
-      <FindingsTable
-        externalUserIds={identity.externalUserIds}
-        from={from}
-        to={to}
-        filter={filter}
-      />
-    </IdentitySection>
+      </IdentityPanel>
+    </div>
+  );
+}
+
+/** The old Findings address: its list now sits at the foot of Security. */
+export default function IdentityFindingsPage(): JSX.Element {
+  const location = useLocation();
+  return (
+    <Navigate to={`../security${location.search}#${FINDINGS_ANCHOR}`} replace />
   );
 }
 

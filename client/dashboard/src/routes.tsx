@@ -83,6 +83,7 @@ import IdentityCost from "./pages/identities/IdentityCost";
 import IdentityDevices from "./pages/identities/IdentityDevices";
 import IdentityConnections from "./pages/identities/IdentityConnections";
 import IdentityActivity from "./pages/identities/IdentityActivity";
+import IdentityToolLogs from "./pages/identities/IdentityToolLogs";
 import IdentityAgentSection from "./pages/identities/IdentityAgentSection";
 import NewAgentIdentity from "./pages/agents/NewAgentIdentity";
 import EditAgentIdentity from "./pages/agents/EditAgentIdentity";
@@ -799,6 +800,11 @@ const ROUTE_STRUCTURE = {
             title: "Identity Activity",
             url: "activity",
             component: IdentityActivity,
+          },
+          toolLogs: {
+            title: "Identity Tool Logs",
+            url: "tool-logs",
+            component: IdentityToolLogs,
           },
           // An agent is a different subject from a person, and its sections
           // are named for what an agent holds. They are their own segments so

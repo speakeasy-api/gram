@@ -22,6 +22,7 @@ import { AgentIdentityUsage } from "./AgentIdentityUsage";
 import { IdentityPanel } from "./IdentityPanel";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { IdentitySection } from "./IdentitySection";
+import { IdentityToolLogsSection } from "./IdentityToolLogs";
 
 /**
  * Edit, for the page header's top right: it acts on the agent itself, not on
@@ -98,6 +99,8 @@ export function AgentIdentityProfile({
     setParams(next, { replace: true });
   };
   switch (section) {
+    case "tool-logs":
+      return <IdentityToolLogsSection agentId={agent.id} />;
     case "permissions":
       return (
         <IdentitySection
