@@ -6,7 +6,7 @@ import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
  * The window the identity panels read (useIdentityWindow), offered on the
  * sections whose content it scopes rather than in the page header.
  */
-export function IdentityTimeRangePicker(): React.JSX.Element {
+function IdentityTimeRangePicker(): React.JSX.Element {
   const {
     dateRange,
     customRange,

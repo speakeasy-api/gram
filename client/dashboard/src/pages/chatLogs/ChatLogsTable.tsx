@@ -344,6 +344,8 @@ function SessionTitleCell({
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(update);
     observer.observe(container);
+    // Lineage icons load asynchronously and widen this span after mount.
+    if (lineageRef.current) observer.observe(lineageRef.current);
     return () => observer.disconnect();
   }, [chat.title]);
 

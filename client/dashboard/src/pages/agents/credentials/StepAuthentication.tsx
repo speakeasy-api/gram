@@ -1,5 +1,5 @@
 import { ServerInfoPopover } from "./ServerInfoPopover";
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import {
   Accordion,
@@ -38,6 +38,9 @@ export function StepAuthentication({
 }): JSX.Element {
   const { user } = useSession();
   const oauth = useOAuthPopup(connections.refetch);
+  // Controlled so the first row opens even when the server list arrives after
+  // mount; until someone toggles a row, the default tracks the list.
+  const [openRows, setOpenRows] = useState<string[] | null>(null);
   const displayedConnections = agent
     ? (connections.assignedByServer ?? connections.byServer)
     : connections.byServer;
@@ -69,7 +72,8 @@ export function StepAuthentication({
           looks like without a click. */}
       <Accordion
         type="multiple"
-        defaultValue={servers[0] ? [servers[0].id] : []}
+        value={openRows ?? (servers[0] ? [servers[0].id] : [])}
+        onValueChange={setOpenRows}
         className="border-border border"
       >
         {servers.map((server) => {

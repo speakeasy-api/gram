@@ -102,6 +102,7 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Permissions"
+          timeRange
           meta="What this agent's keys may be narrowed to"
         >
           <AgentIdentityPermissions agent={agent} />

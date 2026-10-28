@@ -257,15 +257,21 @@ describe("ChatDetailSheet session actor", () => {
 
   it("shows the full chat id with a copy button at the top", () => {
     const writeText = vi.fn();
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText },
     });
-    renderPanel(makeChat({ id: "chat_01HXQ1P84WV3S9J7Z52DKVE7NE" }));
+    try {
+      renderPanel(makeChat({ id: "chat_01HXQ1P84WV3S9J7Z52DKVE7NE" }));
 
-    expect(screen.getByText("chat_01HXQ1P84WV3S9J7Z52DKVE7NE")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Copy chat ID" }));
-    expect(writeText).toHaveBeenCalledWith("chat_01HXQ1P84WV3S9J7Z52DKVE7NE");
+      expect(screen.getByText("chat_01HXQ1P84WV3S9J7Z52DKVE7NE")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Copy chat ID" }));
+      expect(writeText).toHaveBeenCalledWith("chat_01HXQ1P84WV3S9J7Z52DKVE7NE");
+    } finally {
+      if (original) Object.defineProperty(navigator, "clipboard", original);
+      else Reflect.deleteProperty(navigator, "clipboard");
+    }
   });
 
   it("names the agent and no person on an agent session that reports nobody", () => {

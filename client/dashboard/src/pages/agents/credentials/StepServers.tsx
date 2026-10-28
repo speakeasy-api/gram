@@ -291,12 +291,12 @@ export function StepServers({
                         {/* Name and URL on one line, so every row is the
                             same height however long the URL is. */}
                         <span className="flex min-w-0 items-baseline gap-2">
-                          <span className="shrink-0 truncate">
+                          <span className="min-w-0 truncate">
                             {server.name}
                           </span>
                           {server.upstreamUrl && (
                             <span
-                              className="text-muted-foreground min-w-0 truncate text-sm"
+                              className="text-muted-foreground min-w-0 flex-1 truncate text-sm"
                               title={server.upstreamUrl}
                             >
                               {server.upstreamUrl}

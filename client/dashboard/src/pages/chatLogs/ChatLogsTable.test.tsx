@@ -135,7 +135,8 @@ describe("ChatLogsTable", () => {
 
     // The id and its copy control live in the detail drawer, leaving the
     // title room to wrap.
-    expect(screen.queryByTitle("Copy Chat ID")).toBeNull();
+    expect(screen.queryByRole("button", { name: /copy chat id/i })).toBeNull();
+    expect(screen.queryByText(chatId)).toBeNull();
     expect(screen.queryByText(chatId.slice(0, 8))).toBeNull();
     expect(screen.queryByRole("columnheader", { name: /Messages/ })).toBeNull();
     expect(screen.getByTitle("Messages").textContent).toBe("4");

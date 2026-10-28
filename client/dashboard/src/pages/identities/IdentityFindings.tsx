@@ -87,7 +87,7 @@ export default function IdentityFindingsPage(): JSX.Element {
 
   if (!canReadRisk) {
     return (
-      <IdentitySection title="Findings" timeRange>
+      <IdentitySection title="Findings">
         <IdentityPanel title="Findings">
           <IdentityPanelEmpty>{RISK_UNAVAILABLE}</IdentityPanelEmpty>
         </IdentityPanel>
