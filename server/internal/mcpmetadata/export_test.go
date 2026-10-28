@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -173,4 +174,34 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 	// Verify the server URL uses the custom domain
 	require.Contains(t, result.ServerURL, customDomain.Domain, "server URL should contain custom domain")
 	require.Equal(t, "https://mcp.example.com/mcp/custom-domain-mcp", result.ServerURL, "server URL should use custom domain")
+}
+
+func TestService_ExportMcpMetadata_PrefersLiveCustomDomainEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	domainsRepo := customdomains_repo.New(ti.conn)
+	customDomain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID, Domain: "primary.example.com",
+		IngressName: pgtype.Text{String: "test-ingress", Valid: true}, CertSecretName: pgtype.Text{String: "test-cert", Valid: true}, IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	_, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID: customDomain.ID, Verified: true, Activated: true,
+		IngressName: pgtype.Text{String: "test-ingress", Valid: true}, CertSecretName: pgtype.Text{String: "test-cert", Valid: true},
+	})
+	require.NoError(t, err)
+
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{name: "Primary", slug: "primary", mcpSlug: "primary-platform"})
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: toolset.ProjectID, CustomDomainID: uuid.NullUUID{UUID: customDomain.ID, Valid: true},
+		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: "primary-domain",
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpSlug: new(types.Slug("primary-platform"))})
+	require.NoError(t, err)
+	require.Equal(t, "https://primary.example.com/mcp/primary-domain", result.ServerURL)
 }

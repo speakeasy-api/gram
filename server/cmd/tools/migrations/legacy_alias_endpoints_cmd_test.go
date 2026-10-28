@@ -1,9 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 )
 
 func legacyAliasEndpointsEnv(key string) string {
@@ -13,11 +24,16 @@ func legacyAliasEndpointsEnv(key string) string {
 	return ""
 }
 
+var legacyAliasApplyArgs = []string{
+	"-apply", "-environment=dev", "-confirm-environment=dev", "-confirm-target=db.example.internal:5432/gram",
+	"-confirm-apply=legacy-alias-endpoints",
+}
+
 func TestParseLegacyAliasEndpointsFlagsDryRunByDefault(t *testing.T) {
 	t.Parallel()
-	cfg, err := parseLegacyAliasEndpointsFlags(nil, legacyAliasEndpointsEnv)
+	cfg, err := parseLegacyAliasEndpointsFlags([]string{"-environment=dev"}, legacyAliasEndpointsEnv)
 	require.NoError(t, err)
-	require.True(t, cfg.dryRun)
+	require.False(t, cfg.apply)
 }
 
 func TestParseLegacyAliasEndpointsFlagsWriteGuards(t *testing.T) {
@@ -28,10 +44,13 @@ func TestParseLegacyAliasEndpointsFlagsWriteGuards(t *testing.T) {
 		args    []string
 		wantErr string
 	}{
-		{name: "missing journal", args: []string{"-dry-run=false", "-confirm-target=db.example.internal:5432/gram"}, wantErr: "-journal"},
-		{name: "wrong target", args: []string{"-dry-run=false", "-journal=j.jsonl", "-confirm-target=other:5432/gram"}, wantErr: "-confirm-target=db.example.internal:5432/gram"},
-		{name: "invalid project", args: []string{"-project=nope"}, wantErr: "invalid -project"},
-		{name: "confirmed", args: []string{"-dry-run=false", "-journal=j.jsonl", "-confirm-target=db.example.internal:5432/gram"}, wantErr: ""},
+		{name: "missing environment", args: []string{}, wantErr: "environment is required"},
+		{name: "wrong confirm environment", args: []string{"-apply", "-environment=dev", "-confirm-environment=prod", "-journal=j"}, wantErr: "-confirm-environment"},
+		{name: "wrong target", args: []string{"-apply", "-environment=dev", "-confirm-environment=dev", "-confirm-target=other:5432/gram", "-journal=j"}, wantErr: "-confirm-target=db.example.internal:5432/gram"},
+		{name: "missing confirm apply", args: []string{"-apply", "-environment=dev", "-confirm-environment=dev", "-confirm-target=db.example.internal:5432/gram", "-journal=j"}, wantErr: "-confirm-apply=legacy-alias-endpoints"},
+		{name: "missing journal", args: legacyAliasApplyArgs, wantErr: "-journal"},
+		{name: "invalid project", args: []string{"-environment=dev", "-project=nope"}, wantErr: "invalid -project"},
+		{name: "confirmed", args: append([]string{"-journal=j"}, legacyAliasApplyArgs...), wantErr: ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -44,4 +63,117 @@ func TestParseLegacyAliasEndpointsFlagsWriteGuards(t *testing.T) {
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}
+}
+
+func TestRunLegacyAliasEndpointsRefusesExistingJournal(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "journal.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte("earlier run\n"), 0o600))
+
+	var out bytes.Buffer
+	code := runLegacyAliasEndpoints(append([]string{"-journal=" + path}, legacyAliasApplyArgs...), &out, legacyAliasEndpointsEnv)
+	require.Equal(t, 2, code)
+	require.Contains(t, out.String(), "open -journal")
+	contents, err := os.ReadFile(path) // #nosec G304 -- test temp file
+	require.NoError(t, err)
+	require.Equal(t, "earlier run\n", string(contents))
+}
+
+type recordingJournal struct {
+	bytes.Buffer
+	syncs int
+}
+
+func (j *recordingJournal) Sync() error {
+	j.syncs++
+	return nil
+}
+
+func legacyAliasPages(pages ...[]mcpendpoints.AliasBackfillCandidate) func(uuid.UUID) ([]mcpendpoints.AliasBackfillCandidate, error) {
+	return func(uuid.UUID) ([]mcpendpoints.AliasBackfillCandidate, error) {
+		if len(pages) == 0 {
+			return nil, nil
+		}
+		page := pages[0]
+		pages = pages[1:]
+		return page, nil
+	}
+}
+
+func TestLegacyAliasEndpointsRunJournalsWritesAndCountsTotals(t *testing.T) {
+	t.Parallel()
+	created, failing, unknown := uuid.New(), uuid.New(), uuid.New()
+	projectID, endpointID, domainID := uuid.New(), uuid.New(), uuid.New()
+	journal := &recordingJournal{}
+	var out bytes.Buffer
+	run := legacyAliasEndpointsRun{
+		list: legacyAliasPages([]mcpendpoints.AliasBackfillCandidate{
+			{ToolsetID: created, ProjectID: projectID, OrganizationID: "org"},
+			{ToolsetID: failing, ProjectID: projectID, OrganizationID: "org"},
+			{ToolsetID: unknown, ProjectID: projectID, OrganizationID: "org"},
+		}),
+		backfill: func(candidate mcpendpoints.AliasBackfillCandidate) (mcpendpoints.AliasBackfillResult, error) {
+			switch candidate.ToolsetID {
+			case failing:
+				return mcpendpoints.AliasBackfillResult{}, errors.New("boom")
+			case unknown:
+				return mcpendpoints.AliasBackfillResult{}, mcpendpoints.ErrAliasBackfillCommitUnknown
+			}
+			return mcpendpoints.AliasBackfillResult{
+				Rows: []mcpendpoints.AliasBackfillRow{
+					{ToolsetID: created, ProjectID: projectID, Slug: "old", CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Action: mcpendpoints.AliasBackfillSkip, Reason: "custom domain deleted"},
+					{ToolsetID: created, ProjectID: projectID, Slug: "old", PlatformForCustomDomain: true, Action: mcpendpoints.AliasBackfillCreate, EndpointID: uuid.NullUUID{UUID: endpointID, Valid: true}},
+				},
+				AliasMove: &mcpendpoints.AliasMove{
+					From: legacyalias.Alias{Slug: pgtype.Text{String: "old", Valid: true}, CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}},
+					To:   legacyalias.Alias{Slug: pgtype.Text{String: "old", Valid: true}},
+				},
+			}, nil
+		},
+		apply:   true,
+		stdout:  &out,
+		journal: journal,
+	}
+
+	totals, err := run.execute()
+	require.NoError(t, err)
+	require.Equal(t, legacyAliasEndpointsTotals{"skip": 1, "created": 1, "alias_moved": 1, "failed": 1, "commit_outcome_unknown": 1}, totals)
+
+	lines := strings.Split(strings.TrimSpace(journal.String()), "\n")
+	require.Len(t, lines, 2)
+	require.Equal(t, 2, journal.syncs)
+	var endpoint, move legacyAliasJournalEntry
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &endpoint))
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &move))
+	require.Equal(t, "endpoint_created", endpoint.Kind)
+	require.Equal(t, endpointID, *endpoint.EndpointID)
+	require.Equal(t, &legacyAliasJournalAddress{Slug: "old", CustomDomainID: nil}, endpoint.Address)
+	require.Equal(t, "alias_moved", move.Kind)
+	require.Equal(t, &legacyAliasJournalAddress{Slug: "old", CustomDomainID: &domainID}, move.AliasFrom)
+	require.Equal(t, &legacyAliasJournalAddress{Slug: "old", CustomDomainID: nil}, move.AliasTo)
+
+	var report bytes.Buffer
+	code := legacyAliasEndpointsReport(&report, legacyAliasEndpointsConfig{environment: "dev", apply: true}, totals, nil)
+	require.Equal(t, 1, code)
+	require.Contains(t, report.String(), "mode=apply environment=dev alias_moved=1 commit_outcome_unknown=1 created=1 failed=1 skip=1")
+	require.Contains(t, out.String(), "action=commit_outcome_unknown")
+	require.Contains(t, out.String(), "action=failed")
+}
+
+func TestLegacyAliasEndpointsDryRunWritesNoJournalAndExitsZero(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	run := legacyAliasEndpointsRun{
+		list: legacyAliasPages([]mcpendpoints.AliasBackfillCandidate{{ToolsetID: uuid.New(), ProjectID: uuid.New(), OrganizationID: "org"}}),
+		backfill: func(candidate mcpendpoints.AliasBackfillCandidate) (mcpendpoints.AliasBackfillResult, error) {
+			return mcpendpoints.AliasBackfillResult{Rows: []mcpendpoints.AliasBackfillRow{{ToolsetID: candidate.ToolsetID, Slug: "s", Action: mcpendpoints.AliasBackfillCreate}}}, nil
+		},
+		apply:   false,
+		stdout:  &out,
+		journal: nil,
+	}
+	totals, err := run.execute()
+	require.NoError(t, err)
+	require.Equal(t, legacyAliasEndpointsTotals{"would_create": 1}, totals)
+	require.Equal(t, 0, legacyAliasEndpointsReport(&out, legacyAliasEndpointsConfig{environment: "dev"}, totals, nil))
 }

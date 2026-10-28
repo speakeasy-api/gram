@@ -2097,9 +2097,9 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 	return template.URL(u.String()), nil // #nosec G203 // This has been checked and escaped
 }
 
-// resolveMCPURLFromContext builds a toolset's MCP URL. The canonical server's address wins: its platform endpoint
-// first, else its oldest endpoint on a live custom domain; the toolset's frozen alias stands only when it has
-// neither.
+// resolveMCPURLFromContext builds a toolset's MCP URL. The canonical server's primary endpoint wins, a live custom
+// domain before the platform as endpointaddr.PrimaryEndpoint picks; the toolset's frozen alias stands only when it
+// has no addressable endpoint.
 func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, alias legacyalias.Alias, serverUrl string) (string, error) {
 	hosting, err := hostingstate.Load(ctx, s.db, toolset.OrganizationID, []uuid.UUID{toolset.ID})
 	if err != nil {

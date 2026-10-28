@@ -3185,7 +3185,15 @@ LEFT JOIN LATERAL (
     AND me.project_id = ms.project_id
     AND me.deleted IS FALSE
     AND (me.custom_domain_id IS NULL OR cd.id IS NOT NULL)
-  ORDER BY (me.custom_domain_id IS NOT NULL), me.created_at, me.id
+  ORDER BY
+    CASE
+      WHEN ms.toolset_id IS DISTINCT FROM ms.id THEN (me.custom_domain_id IS NOT NULL)::int
+      WHEN me.custom_domain_id IS NOT NULL AND me.is_domain_root IS TRUE THEN 0
+      WHEN me.custom_domain_id IS NOT NULL THEN 1
+      ELSE 2
+    END,
+    me.created_at,
+    me.id
   LIMIT 1
 ) ep ON TRUE
 LEFT JOIN environments e ON e.id = ams.environment_id AND e.project_id = $1
@@ -3215,8 +3223,10 @@ type LoadAssistantMcpServersRow struct {
 
 // Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug and
 // default environment, and sort first so they win runtime id
-// collisions. The address is the server's own endpoint: platform first, else
-// one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
+// collisions. The address is the server's own endpoint on the platform or a verified, activated custom domain
+// (ListAddressableMCPEndpointsByMCPServerIDs): for a hosted row in endpointaddr.PrimaryEndpoint's order (domain
+// root, then another custom-domain endpoint, then platform), as its toolset view and plugins advertise; for any
+// other row platform first, whose slug the assistant view reports.
 // A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
 // caller fills in from legacyalias until the toolset slug fallback is removed.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {

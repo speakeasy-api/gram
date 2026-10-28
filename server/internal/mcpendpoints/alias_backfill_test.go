@@ -15,13 +15,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -84,13 +87,38 @@ func (f *aliasBackfillFixture) activeDomain(t *testing.T, ctx context.Context, a
 	return uuid.NullUUID{UUID: domain.ID, Valid: true}
 }
 
-func (f *aliasBackfillFixture) run(t *testing.T, ctx context.Context, toolset toolsetsrepo.Toolset, apply bool) []mcpendpoints.AliasBackfillRow {
+func (f *aliasBackfillFixture) runResult(t *testing.T, ctx context.Context, toolset toolsetsrepo.Toolset, apply bool) mcpendpoints.AliasBackfillResult {
 	t.Helper()
-	rows, err := mcpendpoints.BackfillAliasEndpoints(ctx, f.ti.conn, testenv.NewLogger(t), audit.NewLogger(audit.WithoutOutbox()), mcpendpoints.AliasBackfillCandidate{
+	result, err := mcpendpoints.BackfillAliasEndpoints(ctx, f.ti.conn, testenv.NewLogger(t), audit.NewLogger(audit.WithoutOutbox()), mcpendpoints.AliasBackfillCandidate{
 		ToolsetID: toolset.ID, ProjectID: toolset.ProjectID, OrganizationID: f.authCtx.ActiveOrganizationID,
 	}, apply)
 	require.NoError(t, err)
-	return rows
+	return result
+}
+
+func (f *aliasBackfillFixture) run(t *testing.T, ctx context.Context, toolset toolsetsrepo.Toolset, apply bool) []mcpendpoints.AliasBackfillRow {
+	t.Helper()
+	return f.runResult(t, ctx, toolset, apply).Rows
+}
+
+func (f *aliasBackfillFixture) alias(t *testing.T, ctx context.Context, toolset toolsetsrepo.Toolset) legacyalias.Alias {
+	t.Helper()
+	alias, err := legacyalias.Get(ctx, f.ti.conn, toolset.ProjectID, toolset.ID)
+	require.NoError(t, err)
+	return alias
+}
+
+func (f *aliasBackfillFixture) serverWithMode(t *testing.T, ctx context.Context, toolset toolsetsrepo.Toolset, mode string) {
+	t.Helper()
+	_, err := mcpserversrepo.New(f.ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: toolset.ID, ProjectID: toolset.ProjectID, Name: conv.ToPGText("hosted"), Slug: conv.ToPGText("hosted-" + uuid.NewString()[:8]),
+		EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TunneledMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, UnproxiedMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Visibility: "private",
+		NetworkAccessMode: pgtype.Text{String: mode, Valid: true},
+	})
+	require.NoError(t, err)
 }
 
 func (f *aliasBackfillFixture) endpoints(t *testing.T, ctx context.Context, serverID uuid.UUID) []mcpendpointsrepo.McpEndpoint {
@@ -173,12 +201,15 @@ func TestAliasBackfillDeletedDomainAliasGetsPlatformEndpoint(t *testing.T) {
 	toolset := f.aliasedServer(t, ctx, slug, domain)
 	require.NoError(t, customdomainsrepo.New(f.ti.conn).DeleteCustomDomain(ctx, f.authCtx.ActiveOrganizationID))
 
-	rows := f.run(t, ctx, toolset, true)
-	requireOutcomes(t, rows,
+	result := f.runResult(t, ctx, toolset, true)
+	requireOutcomes(t, result.Rows,
 		aliasBackfillOutcome{slug: slug, domain: domain, action: mcpendpoints.AliasBackfillSkip, reason: "custom domain deleted", platform: false},
 		aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillCreate, reason: "", platform: true},
 	)
 	require.Len(t, f.endpoints(t, ctx, toolset.ID), 1)
+	moved := legacyalias.Alias{Slug: pgtype.Text{String: slug, Valid: true}, CustomDomainID: platformHost}
+	require.Equal(t, &mcpendpoints.AliasMove{From: legacyalias.Alias{Slug: pgtype.Text{String: slug, Valid: true}, CustomDomainID: domain}, To: moved}, result.AliasMove)
+	require.Equal(t, moved, f.alias(t, ctx, toolset), "the alias leaves the deleted domain for the new platform endpoint")
 }
 
 func TestAliasBackfillKeepsUnprefixedPlatformSlug(t *testing.T) {
@@ -332,18 +363,22 @@ func TestAliasBackfillPrivateServerFollowsIngressRules(t *testing.T) {
 	ctx, f := newAliasBackfillFixture(t)
 	slug := f.slug("private")
 	toolset := seedHostedToolset(t, ctx, f.ti.conn, f.authCtx.ActiveOrganizationID, *f.authCtx.ProjectID, slug)
-	_, err := mcpserversrepo.New(f.ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: toolset.ProjectID, Name: conv.ToPGText("private hosted"), Slug: conv.ToPGText("private-hosted-" + uuid.NewString()[:8]),
-		EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TunneledMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, UnproxiedMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Visibility: "private",
-		NetworkAccessMode: pgtype.Text{String: "dual", Valid: true},
-	})
-	require.NoError(t, err)
+	f.serverWithMode(t, ctx, toolset, "dual")
 
 	rows := f.run(t, ctx, toolset, true)
 	requireOutcomes(t, rows, aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillSkip, reason: "online private network ingress is required", platform: false})
+	require.Empty(t, f.endpoints(t, ctx, toolset.ID))
+}
+
+func TestAliasBackfillSkipsPrivateOnlyServer(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	slug := f.slug("private-only")
+	toolset := seedHostedToolset(t, ctx, f.ti.conn, f.authCtx.ActiveOrganizationID, *f.authCtx.ProjectID, slug)
+	f.serverWithMode(t, ctx, toolset, "private_only")
+
+	rows := f.run(t, ctx, toolset, true)
+	requireOutcomes(t, rows, aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillSkip, reason: "network mode does not serve the public host", platform: false})
 	require.Empty(t, f.endpoints(t, ctx, toolset.ID))
 }
 
@@ -391,4 +426,162 @@ func TestAliasBackfillDryRunWritesNothing(t *testing.T) {
 	after, err := audittest.AuditLogCount(ctx, f.ti.conn)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
+}
+
+func TestAliasBackfillPlatformAliasHoldsLooseSlug(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	domain := f.activeDomain(t, ctx, []string{})
+	slug := f.slug("held")
+	toolset := f.aliasedServer(t, ctx, slug, domain)
+	f.endpoint(t, ctx, toolset.ID, domain, slug)
+	other := seedHostedToolset(t, ctx, f.ti.conn, f.authCtx.ActiveOrganizationID, *f.authCtx.ProjectID, slug)
+
+	rows := f.run(t, ctx, toolset, true)
+	requireOutcomes(t, rows,
+		aliasBackfillOutcome{slug: slug, domain: domain, action: mcpendpoints.AliasBackfillAlreadyHeld, reason: "", platform: false},
+		aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillSkip, reason: "not served on platform: a platform alias holds the slug", platform: true},
+	)
+	require.Empty(t, f.endpoints(t, ctx, other.ID))
+}
+
+func TestAliasBackfillSkipsToolsetsWithoutCanonicalServer(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	slug := f.slug("serverless")
+	toolset := seedHostedToolset(t, ctx, f.ti.conn, f.authCtx.ActiveOrganizationID, *f.authCtx.ProjectID, slug)
+
+	rows := f.run(t, ctx, toolset, true)
+	requireOutcomes(t, rows, aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillSkip, reason: "no live canonical server", platform: false})
+}
+
+func TestAliasBackfillSkipsServerThatIsNotCanonical(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	slug := f.slug("moved")
+	toolset := seedHostedToolset(t, ctx, f.ti.conn, f.authCtx.ActiveOrganizationID, *f.authCtx.ProjectID, slug)
+	other := seedHostedToolset(t, ctx, f.ti.conn, f.authCtx.ActiveOrganizationID, *f.authCtx.ProjectID, f.slug("other"))
+	seedToolsetBackedMcpServerWithID(t, ctx, f.ti.conn, toolset.ProjectID, other.ID, toolset.ID, "private")
+
+	rows := f.run(t, ctx, toolset, true)
+	requireOutcomes(t, rows, aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillSkip, reason: "server is not the toolset's canonical server", platform: false})
+	require.Empty(t, f.endpoints(t, ctx, toolset.ID))
+}
+
+func TestAliasBackfillSkipsToolsetWithoutAlias(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	toolset := f.aliasedServer(t, ctx, f.slug("cleared"), platformHost)
+	require.NoError(t, legacyalias.SetFixture(ctx, f.ti.conn, toolset.ProjectID, toolset.ID, legacyalias.None()))
+
+	rows := f.run(t, ctx, toolset, true)
+	requireOutcomes(t, rows, aliasBackfillOutcome{slug: "", domain: platformHost, action: mcpendpoints.AliasBackfillSkip, reason: "toolset no longer has an alias", platform: false})
+}
+
+func TestAliasBackfillSkipsOrganizationDrift(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	slug := f.slug("drift")
+	toolset := f.aliasedServer(t, ctx, slug, platformHost)
+
+	result, err := mcpendpoints.BackfillAliasEndpoints(ctx, f.ti.conn, testenv.NewLogger(t), audit.NewLogger(audit.WithoutOutbox()), mcpendpoints.AliasBackfillCandidate{
+		ToolsetID: toolset.ID, ProjectID: toolset.ProjectID, OrganizationID: "org-" + uuid.NewString(),
+	}, true)
+	require.NoError(t, err)
+	requireOutcomes(t, result.Rows, aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillSkip, reason: "toolset or project organization changed; rerun", platform: false})
+	require.Empty(t, f.endpoints(t, ctx, toolset.ID))
+}
+
+func TestAliasBackfillFreeAccountKeepsUnprefixedCustomDomainSlug(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	require.NoError(t, orgrepo.New(f.ti.conn).SetAccountType(ctx, orgrepo.SetAccountTypeParams{GramAccountType: "free", ID: f.authCtx.ActiveOrganizationID}))
+	domain := f.activeDomain(t, ctx, []string{})
+	slug := "free-" + uuid.NewString()[:6]
+	toolset := f.aliasedServer(t, ctx, slug, domain)
+
+	rows := f.run(t, ctx, toolset, true)
+	requireOutcomes(t, rows,
+		aliasBackfillOutcome{slug: slug, domain: domain, action: mcpendpoints.AliasBackfillCreate, reason: "", platform: false},
+		aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillCreate, reason: "", platform: true},
+	)
+}
+
+func TestAliasBackfillLeavesAliasOnPendingDomain(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	domain := uuid.NullUUID{UUID: seedCustomDomain(t, ctx, f.ti.conn, f.authCtx.ActiveOrganizationID), Valid: true}
+	slug := f.slug("pending")
+	toolset := f.aliasedServer(t, ctx, slug, domain)
+
+	result := f.runResult(t, ctx, toolset, true)
+	requireOutcomes(t, result.Rows,
+		aliasBackfillOutcome{slug: slug, domain: domain, action: mcpendpoints.AliasBackfillSkip, reason: "a hosted MCP server can only use the organization's verified custom domain", platform: false},
+		aliasBackfillOutcome{slug: slug, domain: platformHost, action: mcpendpoints.AliasBackfillCreate, reason: "", platform: true},
+	)
+	require.Nil(t, result.AliasMove)
+	require.Equal(t, domain, f.alias(t, ctx, toolset).CustomDomainID, "the alias stays on the domain it will serve once verified")
+}
+
+func TestAliasBackfillPublishesNoOutboxEvents(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	toolset := f.aliasedServer(t, ctx, f.slug("quiet"), platformHost)
+	before, err := testrepo.New(f.ti.conn).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
+
+	rows := f.run(t, ctx, toolset, true)
+	require.Equal(t, mcpendpoints.AliasBackfillCreate, rows[0].Action)
+	after, err := testrepo.New(f.ti.conn).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
+func TestUpdateMcpEndpointAddressKeepsUnchangedUnprefixedSlug(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	serverID := seedMcpServer(t, ctx, f.ti.conn, *f.authCtx.ProjectID)
+	slug := "unprefixed-" + uuid.NewString()[:6]
+	endpointID := f.endpoint(t, ctx, serverID, platformHost, slug)
+
+	tx, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	updated, _, err := f.ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
+		AuthContext: f.authCtx, EndpointID: endpointID, CustomDomainID: platformHost, Slug: slug,
+	})
+	require.NoError(t, err)
+	require.Equal(t, slug, string(updated.Slug))
+}
+
+func TestUpdateMcpEndpointAddressRechecksPrefixOnDomainChange(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	domain := f.activeDomain(t, ctx, []string{})
+	serverID := seedMcpServer(t, ctx, f.ti.conn, *f.authCtx.ProjectID)
+	slug := "unprefixed-" + uuid.NewString()[:6]
+	endpointID := f.endpoint(t, ctx, serverID, domain, slug)
+
+	tx, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, _, err = f.ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
+		AuthContext: f.authCtx, EndpointID: endpointID, CustomDomainID: platformHost, Slug: slug,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestCanonicalHostingAdvertisesLiveCustomDomainFirst(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAliasBackfillFixture(t)
+	toolset := f.aliasedServer(t, ctx, f.slug("advertised"), platformHost)
+	f.endpoint(t, ctx, toolset.ID, platformHost, f.slug("platform"))
+	domain := f.activeDomain(t, ctx, []string{})
+	domainSlug := f.slug("domain")
+	f.endpoint(t, ctx, toolset.ID, domain, domainSlug)
+
+	rows, err := hostingstate.Load(ctx, f.ti.conn, f.authCtx.ActiveOrganizationID, []uuid.UUID{toolset.ID})
+	require.NoError(t, err)
+	_, address := hostingstate.Derive(uuid.NullUUID{UUID: uuid.Nil, Valid: false}, hostingstate.For(rows, toolset.ID))
+	require.Equal(t, hostingstate.Address{Slug: pgtype.Text{String: domainSlug, Valid: true}, CustomDomainID: domain}, address)
 }

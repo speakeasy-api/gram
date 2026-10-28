@@ -988,7 +988,7 @@ LEFT JOIN LATERAL (
     AND e.deleted IS FALSE
     AND s.toolset_id IS NOT DISTINCT FROM s.id
     AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
-  ORDER BY (e.custom_domain_id IS NULL) DESC, e.created_at, e.id
+  ORDER BY (e.custom_domain_id IS NOT NULL AND e.is_domain_root IS TRUE) DESC, (e.custom_domain_id IS NOT NULL) DESC, e.created_at, e.id
   LIMIT 1
 ) address ON TRUE
 WHERE s.id = ANY($2::uuid[])
@@ -1012,7 +1012,8 @@ type ListCanonicalHostingByToolsetIDsRow struct {
 }
 
 // The server row holding each toolset's id: its hosting state when it is the canonical wrapper, its preferred
-// address (the oldest platform endpoint, else the oldest endpoint on a verified, activated custom domain), and
+// address (endpointaddr.PrimaryEndpoint's order: a domain-root endpoint, then another endpoint on a verified,
+// activated custom domain, then a platform endpoint; oldest first), and
 // the slugs of all its live endpoints. A non-canonical row means the toolset's id was kept by a server that left it.
 func (q *Queries) ListCanonicalHostingByToolsetIDs(ctx context.Context, arg ListCanonicalHostingByToolsetIDsParams) ([]ListCanonicalHostingByToolsetIDsRow, error) {
 	rows, err := q.db.Query(ctx, listCanonicalHostingByToolsetIDs, arg.OrganizationID, arg.ToolsetIds)

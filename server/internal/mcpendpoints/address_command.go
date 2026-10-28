@@ -182,12 +182,6 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint")
 	}
-	// An unchanged address keeps its slug, so an endpoint created before the prefix rule can still be saved.
-	if input.Slug != preexisting.Slug || input.CustomDomainID != preexisting.CustomDomainID {
-		if err := validateSlugPrefix(input.Slug, input.CustomDomainID, authCtx.OrganizationSlug); err != nil {
-			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug")
-		}
-	}
 	// A hosted endpoint takes the dashboard's hosted update path, with its server-scoped check and address rules.
 	if preexisting.McpServerID.Valid {
 		server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: preexisting.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
@@ -215,6 +209,12 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 	}
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return nil, nil, oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request")
+	}
+	// An unchanged address keeps its slug, so an endpoint created before the prefix rule can still be saved.
+	if input.Slug != existing.Slug || input.CustomDomainID != existing.CustomDomainID {
+		if err := validateSlugPrefix(input.Slug, input.CustomDomainID, authCtx.OrganizationSlug); err != nil {
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug")
+		}
 	}
 
 	var targetServer *mcpserversrepo.McpServer

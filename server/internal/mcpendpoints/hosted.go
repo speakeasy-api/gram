@@ -128,6 +128,10 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
+		// An unchanged address keeps its slug, so an endpoint created before the prefix rule can still be saved.
+		if err := validateSlugPrefix(slug, customDomainID, authCtx.OrganizationSlug); err != nil {
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug").LogWarn(ctx, logger)
+		}
 		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
 			return nil, nil, err
 		}

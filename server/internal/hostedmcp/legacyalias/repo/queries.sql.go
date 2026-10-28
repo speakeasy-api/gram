@@ -273,13 +273,14 @@ SELECT
     t.mcp_slug
   , t.custom_domain_id
   , t.deleted AS toolset_deleted
+  , t.organization_id AS toolset_organization_id
   , p.deleted AS project_deleted
-  , p.organization_id
+  , p.organization_id AS project_organization_id
   , om.slug AS organization_slug
   , om.gram_account_type
 FROM toolsets t
-JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id
-JOIN organization_metadata om ON om.id = p.organization_id
+JOIN projects p ON p.id = t.project_id
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
 WHERE t.id = $1 AND t.project_id = $2
 `
 
@@ -289,16 +290,18 @@ type GetAliasEndpointBackfillStateParams struct {
 }
 
 type GetAliasEndpointBackfillStateRow struct {
-	McpSlug          pgtype.Text
-	CustomDomainID   uuid.NullUUID
-	ToolsetDeleted   bool
-	ProjectDeleted   bool
-	OrganizationID   string
-	OrganizationSlug string
-	GramAccountType  string
+	McpSlug               pgtype.Text
+	CustomDomainID        uuid.NullUUID
+	ToolsetDeleted        bool
+	ToolsetOrganizationID string
+	ProjectDeleted        bool
+	ProjectOrganizationID string
+	OrganizationSlug      pgtype.Text
+	GramAccountType       pgtype.Text
 }
 
-// A toolset's alias with what the hosted address rules read about its project and organization.
+// A toolset's alias with what the hosted address rules read about its project and organization. The organization ids
+// are returned separately so the backfill can skip a toolset whose project or organization drifted.
 func (q *Queries) GetAliasEndpointBackfillState(ctx context.Context, arg GetAliasEndpointBackfillStateParams) (GetAliasEndpointBackfillStateRow, error) {
 	row := q.db.QueryRow(ctx, getAliasEndpointBackfillState, arg.ID, arg.ProjectID)
 	var i GetAliasEndpointBackfillStateRow
@@ -306,8 +309,9 @@ func (q *Queries) GetAliasEndpointBackfillState(ctx context.Context, arg GetAlia
 		&i.McpSlug,
 		&i.CustomDomainID,
 		&i.ToolsetDeleted,
+		&i.ToolsetOrganizationID,
 		&i.ProjectDeleted,
-		&i.OrganizationID,
+		&i.ProjectOrganizationID,
 		&i.OrganizationSlug,
 		&i.GramAccountType,
 	)
