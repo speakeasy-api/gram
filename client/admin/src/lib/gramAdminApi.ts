@@ -283,6 +283,9 @@ export type AdminOrganization = {
   // and absent on every row the list endpoint returns: only the record read
   // selects it.
   creation_source?: string;
+  // Staff-entered link to the organization's adoption dashboard. Absent when
+  // none is set, and absent on list rows: only the record read selects it.
+  adoption_dashboard_url?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
@@ -307,6 +310,25 @@ export function getStripeCustomer(
   return gramAdminFetch<AdminStripeCustomer>(
     `/admin/organization.stripeCustomer?${query}`,
     { cache: "no-store" },
+  );
+}
+
+export type SetAdoptionDashboardUrlRequest = {
+  organization_id: string;
+  // An https URL, or empty to clear the link.
+  adoption_dashboard_url: string;
+};
+
+export function setAdoptionDashboardUrl(
+  body: SetAdoptionDashboardUrlRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setAdoptionDashboardUrl",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
   );
 }
 
@@ -529,6 +551,8 @@ export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
   url: string;
+  name: string;
+  slug: string;
   ownership_confirmed: boolean;
 };
 

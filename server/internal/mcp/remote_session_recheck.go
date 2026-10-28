@@ -394,6 +394,8 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			Subject:                  &subject,
 			CreatedAt:                now,
 			FirstParty:               true,
+			BindingRefreshAttemptID:  "",
+			ReauthenticateClientID:   uuid.Nil,
 			AutoConnectDone:          false,
 			FocusServer:              "",
 		}
