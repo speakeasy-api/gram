@@ -234,7 +234,7 @@ func TestConsentAgentEligibilityAllowsExactAgentAuthorizer(t *testing.T) {
 
 	w := serveAgentConsentGet(t, ctx, ti, fx)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.NotContains(t, w.Body.String(), "data-agent-mode")
+	require.Contains(t, w.Body.String(), "data-agent-mode")
 	require.Contains(t, eligibleConsentAgentNames(t, ctx, ti, fx), agent.Name)
 
 	rows, err := accessrepo.New(ti.conn).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: grantID, OrganizationID: fx.orgID})
@@ -307,7 +307,7 @@ func TestConsentAgentApprovalRechecksLiveAgentPolicy(t *testing.T) {
 
 	w := serveAgentConsentGet(t, ctx, ti, fx)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.NotContains(t, w.Body.String(), "data-agent-mode")
+	require.Contains(t, w.Body.String(), "data-agent-mode")
 	require.Contains(t, eligibleConsentAgentNames(t, ctx, ti, fx), agent.Name)
 	rows, err := accessrepo.New(ti.conn).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: grantID, OrganizationID: fx.orgID})
 	require.NoError(t, err)
