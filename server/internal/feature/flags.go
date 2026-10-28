@@ -151,6 +151,18 @@ const (
 	// of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
+	// FlagSkillsOverMCP gates serving managed skills over MCP (the
+	// `io.modelcontextprotocol/skills` extension) end to end with one key:
+	// the hosted and platform toolset surfaces advertise the extension,
+	// answer `skills/list` and `skills/get`, and serve `skill://` resources
+	// only for organizations with it, and the dashboard shows the matching
+	// MCP serving hints behind the same key. Off, the extension is absent
+	// from capabilities, its methods answer method-not-found, and
+	// `skill://` reads are not found. Targeted by PostHog
+	// organization group (org slug), like FlagBudgets. A rollout gate while
+	// client support matures; removed once the extension is GA.
+	FlagSkillsOverMCP Flag = "skills-over-mcp"
+
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
 	// PAYLOAD, not its boolean state: the flag carries a JSON payload

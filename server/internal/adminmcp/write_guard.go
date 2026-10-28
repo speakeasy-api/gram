@@ -86,7 +86,7 @@ type WriteConfig struct {
 // ParseWriteOperations reads a comma-separated operation list. Unknown names
 // are an error so a typo cannot silently leave an operation disabled or enabled.
 func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
-	operations := map[WriteOperation]bool{}
+	operations := make(map[WriteOperation]bool)
 	for name := range strings.SplitSeq(raw, ",") {
 		name = strings.TrimSpace(name)
 		if name == "" {

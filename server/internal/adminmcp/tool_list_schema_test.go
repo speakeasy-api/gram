@@ -21,7 +21,7 @@ import (
 // implemented write operation attached, following every page.
 func listAllAdminTools(t *testing.T) []json.RawMessage {
 	t.Helper()
-	operations := map[WriteOperation]bool{}
+	operations := make(map[WriteOperation]bool)
 	for _, op := range AllWriteOperations {
 		if op.implemented() {
 			operations[op] = true

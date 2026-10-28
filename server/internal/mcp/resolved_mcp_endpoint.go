@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -69,7 +71,7 @@ type ResolvedMcpEndpoint struct {
 	// CustomDomainID, when valid, scopes the endpoint to a custom domain.
 	CustomDomainID uuid.NullUUID
 
-	// IsPublic mirrors toolsets.mcp_is_public — controls
+	// IsPublic is the server's hosting publicness — controls
 	// HandleAuthorize's anonymous-vs-IDP path selection.
 	IsPublic bool
 
@@ -568,16 +570,16 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 
 // newResolvedMcpEndpointFromToolset materialises a ResolvedMcpEndpoint
 // from a resolved toolsets row. Caller is responsible for first checking
-// toolset.UserSessionIssuerID.Valid. routeBase is the URL surface the
+// hosting.UserSessionIssuerID.Valid. routeBase is the URL surface the
 // request arrived under — the WWW-Authenticate URL, OAuth issuer URL, and
 // consent form action all need to match the caller's surface.
-func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase mcproute.Base) *ResolvedMcpEndpoint {
+func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, hosting hostingstate.Hosting, alias legacyalias.Alias, routeBase mcproute.Base) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewToolset(toolset.ID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
-		CustomDomainID:            toolset.CustomDomainID,
-		IsPublic:                  toolset.McpIsPublic,
+		CustomDomainID:            alias.CustomDomainID,
+		IsPublic:                  hosting.Public,
 		idJAGConfigured:           false,
 		issuerStamped:             false,
 		useAuthenticationHost:     false,
@@ -588,10 +590,10 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 		RouteBase:                 routeBase,
 		sharedAuthorizationServer: nil,
 		sharedResource:            nil,
-		Slug:                      conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
+		Slug:                      conv.PtrValOr(conv.FromPGText[string](alias.Slug), ""),
 		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		UpstreamResource:          "",
-		UserSessionIssuerID:       toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID:       hosting.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -732,21 +734,21 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		// resolver and must never become a private fallback.
 		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 	}
-	toolset, wrapperID, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
+	toolset, hosting, alias, wrapperID, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
-	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackChallengeResume, ref.McpSlug, toolset, wrapperID)
-	if !toolset.UserSessionIssuerID.Valid {
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackChallengeResume, ref.McpSlug, toolset, alias, wrapperID)
+	if !hosting.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
 	// loadToolset has already checked the canonical hosted policy for this public fallback.
 	// Honour the surface the challenge was minted under so the resumed
 	// endpoint's URLs match the original mint.
-	return newResolvedMcpEndpointFromToolset(toolset, ref.RouteBase), nil
+	return newResolvedMcpEndpointFromToolset(toolset, hosting, alias, ref.RouteBase), nil
 }
 
 // loadResolvedMcpEndpointByToolsetSlug resolves an mcp_slug to a
@@ -763,19 +765,19 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, hosting, alias, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.recordToolsetSlugFallback(ctx, s.logger, entryPoint, mcpSlug, toolset, wrapperID)
-	if !toolset.UserSessionIssuerID.Valid {
+	s.recordToolsetSlugFallback(ctx, s.logger, entryPoint, mcpSlug, toolset, alias, wrapperID)
+	if !hosting.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
 	// loadToolset has already checked the canonical hosted policy for this public fallback.
-	endpoint := newResolvedMcpEndpointFromToolset(toolset, routeBase)
+	endpoint := newResolvedMcpEndpointFromToolset(toolset, hosting, alias, routeBase)
 	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 		return nil, err
 	}

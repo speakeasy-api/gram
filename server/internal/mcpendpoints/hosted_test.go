@@ -2,6 +2,7 @@ package mcpendpoints_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -78,7 +79,7 @@ func (f *hostedAddressFixture) payload(slug string, mutate func(*gen.UpdateMcpEn
 	return payload
 }
 
-// requireProjected returns the hosted server's single endpoint.
+// requireProjected returns the hosted server's single endpoint and asserts the toolset has no legacy alias.
 func (f *hostedAddressFixture) requireProjected(t *testing.T, ctx context.Context) mcpendpointsrepo.McpEndpoint {
 	t.Helper()
 
@@ -90,15 +91,12 @@ func (f *hostedAddressFixture) requireProjected(t *testing.T, ctx context.Contex
 func (f *hostedAddressFixture) endpoints(t *testing.T, ctx context.Context) []mcpendpointsrepo.McpEndpoint {
 	t.Helper()
 
+	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
+	require.NoError(t, err)
+	require.Equal(t, legacyalias.None(), alias, "endpoint writes never give the toolset a legacy alias")
 	endpoints, err := mcpendpointsrepo.New(f.ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: f.projectID, McpServerID: f.toolset.ID})
 	require.NoError(t, err)
 	return endpoints
-}
-
-// requireMirrored asserts the toolset columns mirror the server and its address, and an older pod's sync is a no-op.
-func (f *hostedAddressFixture) requireMirrored(t *testing.T, ctx context.Context) {
-	t.Helper()
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 }
 
 func (f *hostedAddressFixture) resolves(t *testing.T, ctx context.Context, slug string) bool {
@@ -145,8 +143,7 @@ func TestUpdateMcpEndpointHostedRenameMovesEndpointInPlace(t *testing.T) {
 	require.Equal(t, f.endpoint.ID, endpoint.ID)
 	require.Equal(t, newSlug, endpoint.Slug)
 	require.True(t, f.resolves(t, ctx, newSlug))
-	f.requireMirrored(t, ctx)
-	require.False(t, f.resolves(t, ctx, oldSlug), "the old address stops serving, as the toolset address moved with it")
+	require.False(t, f.resolves(t, ctx, oldSlug), "a server created without a toolset alias stops serving its old address")
 
 	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, f.ti.conn, audit.ActionMcpEndpointUpdate, f.endpoint.ID.String())
 	require.NoError(t, err)
@@ -159,18 +156,37 @@ func TestUpdateMcpEndpointHostedRenameMovesEndpointInPlace(t *testing.T) {
 	require.Equal(t, endpoint, f.requireProjected(t, ctx))
 }
 
-func TestHostedServerKeepsSingleAddress(t *testing.T) {
+func TestHostedServerManagesSeveralEndpoints(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")
+	secondSlug := f.authCtx.OrganizationSlug + "-second"
 
-	_, err := f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-second")})
-	requireOopsCode(t, err, oops.CodeInvalid)
-	require.ErrorContains(t, err, "single address")
-	err = f.ti.service.DeleteMcpEndpoint(ctx, &gen.DeleteMcpEndpointPayload{ID: f.endpoint.ID.String()})
-	requireOopsCode(t, err, oops.CodeInvalid)
-	require.ErrorContains(t, err, "disable the server instead")
-	require.Equal(t, f.endpoint, f.requireProjected(t, ctx))
-	f.requireMirrored(t, ctx)
+	created, err := f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(secondSlug)})
+	require.NoError(t, err)
+	require.Len(t, f.endpoints(t, ctx), 2)
+	require.True(t, f.resolves(t, ctx, f.endpoint.Slug))
+	require.True(t, f.resolves(t, ctx, secondSlug))
+
+	// The second address cannot take the first's slug.
+	_, err = f.ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{ID: created.ID, McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(f.endpoint.Slug)})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	renamed := f.authCtx.OrganizationSlug + "-second-renamed"
+	view, err := f.ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{ID: created.ID, McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(renamed)})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, view.ID)
+	byID := map[uuid.UUID]mcpendpointsrepo.McpEndpoint{}
+	for _, endpoint := range f.endpoints(t, ctx) {
+		byID[endpoint.ID] = endpoint
+	}
+	require.Equal(t, f.endpoint, byID[f.endpoint.ID], "the other endpoint is untouched")
+	require.Equal(t, renamed, byID[uuid.MustParse(created.ID)].Slug)
+
+	require.NoError(t, f.ti.service.DeleteMcpEndpoint(ctx, &gen.DeleteMcpEndpointPayload{ID: f.endpoint.ID.String()}))
+	remaining := f.requireProjected(t, ctx)
+	require.Equal(t, created.ID, remaining.ID.String())
+	require.False(t, f.resolves(t, ctx, f.endpoint.Slug))
+	require.True(t, f.resolves(t, ctx, renamed))
 }
 
 func TestUpdateMcpEndpointHostedMovesOntoVerifiedDomain(t *testing.T) {
@@ -187,14 +203,12 @@ func TestUpdateMcpEndpointHostedMovesOntoVerifiedDomain(t *testing.T) {
 	endpoint := f.requireProjected(t, ctx)
 	require.Equal(t, uuid.NullUUID{UUID: domain.ID, Valid: true}, endpoint.CustomDomainID)
 	require.Equal(t, "on-domain", endpoint.Slug)
-	f.requireMirrored(t, ctx)
 
 	// A live domain cannot be left: clients may hold URLs on it.
 	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(f.authCtx.OrganizationSlug+"-off-domain", nil))
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "cannot leave its custom domain")
 	require.Equal(t, "on-domain", f.requireProjected(t, ctx).Slug)
-	f.requireMirrored(t, ctx)
 }
 
 func TestUpdateMcpEndpointHostedAppliesHostedAddressRules(t *testing.T) {
@@ -236,7 +250,7 @@ func TestUpdateMcpEndpointRejectsRepointingToOrFromHostedServer(t *testing.T) {
 		p.McpServerID = new(otherServer.String())
 	}))
 	requireOopsCode(t, err, oops.CodeInvalid)
-	require.ErrorContains(t, err, "cannot move to or from another backend")
+	require.ErrorContains(t, err, "create or delete endpoints instead")
 	require.Equal(t, f.endpoint, f.requireProjected(t, ctx))
 
 	foreign, err := mcpendpointsrepo.New(f.ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
@@ -246,6 +260,52 @@ func TestUpdateMcpEndpointRejectsRepointingToOrFromHostedServer(t *testing.T) {
 	_, err = f.ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{ID: foreign.ID.String(), McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(foreign.Slug)})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Equal(t, f.endpoint, f.requireProjected(t, ctx), "another server's endpoint does not move onto the hosted server")
+}
+
+func TestCreateMcpEndpointHostedAppliesAddressRules(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	create := func(slug string, domainID *string) error {
+		_, err := f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(slug), CustomDomainID: domainID})
+		if err != nil {
+			return fmt.Errorf("create hosted endpoint: %w", err)
+		}
+		return nil
+	}
+
+	requireOopsCode(t, create(f.authCtx.OrganizationSlug+"-abcdefghijklmnopqrstuvwxyz0123456789abcdefgh", nil), oops.CodeBadRequest)
+	unverified, err := customdomainsrepo.New(f.ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: f.authCtx.ActiveOrganizationID, Domain: "create-unverified.example.com", IngressName: conv.ToPGText("ingress-create-unverified"),
+		CertSecretName: conv.ToPGText("cert-create-unverified"), ProvisionerKind: "ingress", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	err = create("on-unverified", new(unverified.ID.String()))
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "verified custom domain")
+	require.Len(t, f.endpoints(t, ctx), 1, "rejected creates add nothing")
+
+	require.NoError(t, create(f.authCtx.OrganizationSlug+"-created", nil))
+	require.Len(t, f.endpoints(t, ctx), 2)
+}
+
+func TestDeleteMcpEndpointKeepsLastAddressOfEnabledHostedServer(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+
+	err := f.ti.service.DeleteMcpEndpoint(ctx, &gen.DeleteMcpEndpointPayload{ID: f.endpoint.ID.String()})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "disable the server before removing its last address")
+	require.Equal(t, f.endpoint, f.requireProjected(t, ctx))
+
+	server, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(f.ti.conn).SyncHostedMCPServer(ctx, mcpserversrepo.SyncHostedMCPServerParams{
+		Name: server.Name, Slug: server.Slug, Visibility: "disabled", UserSessionIssuerID: server.UserSessionIssuerID,
+		ToolVariationsGroupID: server.ToolVariationsGroupID, NetworkAccessMode: server.NetworkAccessMode, ID: server.ID, ProjectID: server.ProjectID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, f.ti.service.DeleteMcpEndpoint(ctx, &gen.DeleteMcpEndpointPayload{ID: f.endpoint.ID.String()}), "a disabled server may drop its last address")
+	require.Empty(t, f.endpoints(t, ctx))
 }
 
 func TestHostedEndpointWritesFollowPrivateIngressNamespace(t *testing.T) {
@@ -268,15 +328,16 @@ func TestHostedEndpointWritesFollowPrivateIngressNamespace(t *testing.T) {
 	domain := f.activeDomain(t, ctx, "ingress-namespace.example.com")
 
 	// The ingress serves the platform namespace, so a custom-domain address cannot be private.
+	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: "on-domain", CustomDomainID: new(domain.ID.String())})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "private ingress namespace")
 	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload("on-domain", func(p *gen.UpdateMcpEndpointPayload) { p.CustomDomainID = new(domain.ID.String()) }))
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "private ingress namespace")
 	require.Equal(t, f.endpoint, f.requireProjected(t, ctx))
 
-	renamed := f.authCtx.OrganizationSlug + "-private-renamed"
-	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(renamed, nil))
+	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-private-second")})
 	require.NoError(t, err, "a platform address matches the ingress namespace")
-	f.requireMirrored(t, ctx)
 }
 
 func TestUpdateMcpEndpointHostedFreeAccountNeedsPrefixOnDomain(t *testing.T) {
@@ -332,7 +393,7 @@ func TestUpdateMcpEndpointHostedLeavesUnservableDomain(t *testing.T) {
 			})
 			require.NoError(t, err)
 		},
-		"soft-deleted, endpoint left behind": func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain) {
+		"soft-deleted": func(t *testing.T, ctx context.Context, f *hostedAddressFixture, domain customdomainsrepo.CustomDomain) {
 			t.Helper()
 			require.NoError(t, customdomainsrepo.New(f.ti.conn).DeleteCustomDomain(ctx, f.authCtx.ActiveOrganizationID))
 		},
@@ -369,7 +430,6 @@ func TestUpdateMcpEndpointHostedLeavesUnservableDomain(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, string(record.BeforeSnapshot), domain.ID.String())
 			require.NotContains(t, string(record.AfterSnapshot), domain.ID.String())
-			f.requireMirrored(t, ctx)
 		})
 	}
 }
@@ -398,7 +458,6 @@ func TestUpdateMcpEndpointHostedLeavingDomainAppliesPlatformRules(t *testing.T) 
 	endpoint := f.requireProjected(t, ctx)
 	require.False(t, endpoint.CustomDomainID.Valid)
 	require.Equal(t, renamed, endpoint.Slug)
-	f.requireMirrored(t, ctx)
 }
 
 func TestUpdateMcpEndpointHostedKeepsHealthDisabledDomain(t *testing.T) {
@@ -425,7 +484,6 @@ func TestUpdateMcpEndpointHostedKeepsHealthDisabledDomain(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "cannot leave its custom domain")
 	require.Equal(t, placed, f.requireProjected(t, ctx), "clients on a domain that can be reverified keep their URL")
-	f.requireMirrored(t, ctx)
 }
 
 func TestUpdateMcpEndpointHostedLeavingDomainProbesKeptSlug(t *testing.T) {
@@ -482,7 +540,6 @@ func TestUpdateMcpEndpointHostedLeavingDomainDropsRoot(t *testing.T) {
 	require.Equal(t, f.endpoint.ID, endpoint.ID)
 	require.False(t, endpoint.CustomDomainID.Valid)
 	require.False(t, endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool, "the platform endpoint is not a domain root")
-	f.requireMirrored(t, ctx)
 }
 
 func TestUpdateMcpEndpointHostedAcceptsServerScopedWrite(t *testing.T) {
@@ -510,7 +567,6 @@ func TestUpdateMcpEndpointHostedAcceptsServerScopedWrite(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, newSlug, string(view.Slug))
 	require.Equal(t, newSlug, f.requireProjected(t, ctx).Slug)
-	f.requireMirrored(t, ctx)
 
 	_, err = f.ti.service.UpdateMcpEndpoint(scoped, &gen.UpdateMcpEndpointPayload{
 		SessionToken:     nil,
@@ -535,8 +591,25 @@ func TestUpdateMcpEndpointHostedRejectsOtherServerScopedWrite(t *testing.T) {
 	require.Equal(t, f.endpoint.Slug, f.requireProjected(t, ctx).Slug)
 }
 
-// A server shaped by a later release, with several endpoints and a slug of its own, keeps its slug when an endpoint
-// moves, and the address write never fails on the server slug.
+func TestCreateMcpEndpointOnDisabledHostedServerChecksIngress(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	server, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(f.ti.conn).SyncHostedMCPServer(ctx, mcpserversrepo.SyncHostedMCPServerParams{
+		Name: server.Name, Slug: server.Slug, Visibility: "disabled", UserSessionIssuerID: server.UserSessionIssuerID,
+		ToolVariationsGroupID: server.ToolVariationsGroupID, NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true}, ID: server.ID, ProjectID: server.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// A re-enable must not find an address added past the private ingress check.
+	_, err = f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-disabled-private")})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "online private network ingress is required")
+	require.Len(t, f.endpoints(t, ctx), 1)
+}
+
+// A server with several endpoints and a slug of its own keeps its slug when an endpoint moves.
 func TestUpdateMcpEndpointHostedLeavesIndependentServerSlug(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")
@@ -562,8 +635,8 @@ func TestUpdateMcpEndpointHostedLeavesIndependentServerSlug(t *testing.T) {
 	require.Equal(t, "own-server-slug", after.Slug.String, "the server slug does not follow an endpoint it was not named after")
 }
 
-// A new address whose slug another server already uses as its name is refused; the endpoint and server keep their slugs.
-func TestUpdateMcpEndpointHostedRefusesSlugTakenByAnotherServer(t *testing.T) {
+// A new address whose slug another server uses as its name still saves; the server keeps its own slug.
+func TestUpdateMcpEndpointHostedSkipsSlugFollowOnCollision(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")
 	taken := f.authCtx.OrganizationSlug + "-taken"
@@ -579,9 +652,9 @@ func TestUpdateMcpEndpointHostedRefusesSlugTakenByAnotherServer(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(taken, nil))
-	requireOopsCode(t, err, oops.CodeConflict)
+	require.NoError(t, err)
+	require.Equal(t, taken, f.requireProjected(t, ctx).Slug)
 	after, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, before.Slug, after.Slug)
-	require.Equal(t, f.endpoint.Slug, f.requireProjected(t, ctx).Slug, "the address keeps its slug")
 }

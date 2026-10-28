@@ -26,12 +26,6 @@ SELECT *
 FROM toolsets
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
 
--- name: GetToolsetByMCPSlug :one
--- project_id is required to ensure uniqueness since mcp_slug is only unique within a project
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug AND project_id = @project_id AND deleted IS FALSE;
-
 -- name: CreateToolset :one
 INSERT INTO toolsets (
     organization_id
@@ -40,8 +34,6 @@ INSERT INTO toolsets (
   , slug
   , description
   , default_environment_slug
-  , mcp_slug
-  , mcp_enabled
 ) VALUES (
     @organization_id
   , @project_id
@@ -49,8 +41,6 @@ INSERT INTO toolsets (
   , @slug
   , @description
   , @default_environment_slug
-  , @mcp_slug
-  , @mcp_enabled
 )
 RETURNING *;
 
@@ -103,7 +93,7 @@ WHERE project_id = @project_id
 ORDER BY created_at DESC;
 
 -- name: UpdateToolsetDetails :one
--- Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state and MirrorToolsetHosting writes them.
+-- Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
@@ -115,16 +105,12 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: UpdateToolset :one
--- Test fixture: also writes the MCP hosting columns, which production code writes only through MirrorToolsetHosting.
+-- Test fixture.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
   , description = COALESCE(@description, description)
   , default_environment_slug = COALESCE(@default_environment_slug, default_environment_slug)
-  , mcp_slug = COALESCE(@mcp_slug, mcp_slug)
-  , mcp_is_public = COALESCE(@mcp_is_public, mcp_is_public)
-  , custom_domain_id = COALESCE(@custom_domain_id, custom_domain_id)
-  , mcp_enabled = COALESCE(@mcp_enabled, mcp_enabled)
   , tool_selection_mode = COALESCE(@tool_selection_mode, tool_selection_mode)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
@@ -146,44 +132,6 @@ WHERE key = ANY(@security_keys::TEXT[])
     cardinality(@openapiv3_document_ids::UUID[]) = 0
     OR openapiv3_document_id = ANY(@openapiv3_document_ids::UUID[])
   );
-
--- name: GetToolsetByMcpSlug :one
--- A winning row in a deleted project still owns the slug, so it yields no row rather than a fallback.
-SELECT *
-FROM toolsets
-WHERE id = (
-    SELECT t.id
-    FROM toolsets t
-    WHERE t.mcp_slug = @mcp_slug
-      AND t.deleted IS FALSE
-    ORDER BY (t.custom_domain_id IS NULL) DESC
-    LIMIT 1
-  )
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE);
-
--- name: GetToolsetByPlatformMcpSlug :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND custom_domain_id IS NULL
-  AND deleted IS FALSE
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE);
-
--- name: GetToolsetByMcpSlugAndCustomDomain :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND custom_domain_id = @custom_domain_id
-  AND deleted IS FALSE
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE);
-
--- name: GetToolsetByMcpSlugAndProject :one
-SELECT *
-FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND project_id = @project_id
-  AND deleted IS FALSE
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE);
 
 -- name: GetPromptTemplatesForToolset :many
 WITH ranked_templates AS (
@@ -258,9 +206,6 @@ SELECT
   t.slug,
   t.description,
   t.default_environment_slug,
-  t.mcp_slug,
-  t.mcp_is_public,
-  t.mcp_enabled,
   t.tool_selection_mode,
   t.external_oauth_server_id,
   t.created_at,
@@ -290,15 +235,6 @@ WHERE slug = @slug
   AND project_id = @project_id
   AND deleted IS FALSE
   AND external_oauth_server_id IS NULL
-RETURNING *;
-
--- name: UpdateToolsetUserSessionIssuer :one
--- Test fixture: production code writes the issuer column only through MirrorToolsetHosting and the issuer migration.
-UPDATE toolsets
-SET
-    user_session_issuer_id = @user_session_issuer_id
-  , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: UpdateToolsetToolVariationsGroup :one
@@ -419,12 +355,6 @@ SELECT *
 FROM toolsets
 WHERE id = @id AND project_id = @project_id;
 
--- name: GetToolsetByMcpSlugAndProjectAndCustomDomain :one
-SELECT * FROM toolsets
-WHERE mcp_slug = @mcp_slug AND project_id = @project_id
-  AND organization_id = @organization_id
-  AND custom_domain_id IS NOT DISTINCT FROM @custom_domain_id AND deleted IS FALSE;
-
 -- name: ListCanonicalHostingByToolsetIDs :many
 -- The server row holding each toolset's id: its hosting state when it is the canonical wrapper, its preferred
 -- address (the oldest platform endpoint, else the oldest endpoint on a verified, activated custom domain), and
@@ -471,17 +401,3 @@ LEFT JOIN LATERAL (
 WHERE s.id = ANY(@toolset_ids::uuid[])
   AND s.deleted IS FALSE;
 
--- name: MirrorToolsetHosting :one
--- Writes a hosted toolset's hosting columns from its canonical server so pods that still read them stay consistent.
-UPDATE toolsets
-SET
-    name = @name
-  , mcp_slug = @mcp_slug
-  , mcp_enabled = @mcp_enabled
-  , mcp_is_public = @mcp_is_public
-  , custom_domain_id = @custom_domain_id
-  , user_session_issuer_id = @user_session_issuer_id
-  , tool_variations_group_id = @tool_variations_group_id
-  , updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
-RETURNING *;
