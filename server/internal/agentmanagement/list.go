@@ -201,6 +201,9 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	for _, agent := range readable {
 		items = append(items, managedAgentView(agent, permissionsByID[agent.ID.String()], ownerProfiles[agent.OwnerUserID]))
 	}
+	if err := s.addConnectionHealth(ctx, s.db, human.Auth.ActiveOrganizationID, items); err != nil {
+		return nil, s.serviceError(ctx, err, "load agent connection health")
+	}
 	return &gen.ListAgentsResult{Items: items, NextCursor: nextCursor}, nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
@@ -128,7 +129,7 @@ INSERT INTO remote_sessions
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes')
 `
@@ -138,6 +139,7 @@ type ServersInsertAttachmentSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	ExpiresIn             pgtype.Interval
 }
 
 func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg ServersInsertAttachmentSessionParams) error {
@@ -146,6 +148,7 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.ExpiresIn,
 	)
 	return err
 }
@@ -1911,27 +1914,6 @@ type ServersMarkRequiresUpstreamAuthParams struct {
 
 func (q *Queries) ServersMarkRequiresUpstreamAuth(ctx context.Context, arg ServersMarkRequiresUpstreamAuthParams) error {
 	_, err := q.db.Exec(ctx, serversMarkRequiresUpstreamAuth, arg.ProjectID, arg.Ids)
-	return err
-}
-
-const serversMirrorHostedToolsets = `-- name: ServersMirrorHostedToolsets :exec
-UPDATE toolsets AS t
-SET
-    mcp_slug = e.slug
-  , custom_domain_id = e.custom_domain_id
-  , mcp_enabled = s.visibility <> 'disabled'
-  , mcp_is_public = s.visibility = 'public'
-  , user_session_issuer_id = s.user_session_issuer_id
-  , tool_variations_group_id = s.tool_variations_group_id
-FROM mcp_servers AS s
-JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
-  AND t.project_id = $1::uuid AND t.deleted IS FALSE
-`
-
-// Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
-func (q *Queries) ServersMirrorHostedToolsets(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, serversMirrorHostedToolsets, projectID)
 	return err
 }
 
