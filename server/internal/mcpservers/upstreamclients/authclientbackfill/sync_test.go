@@ -247,3 +247,87 @@ func TestSyncRemoteSource_RetiresEMACopiesWhenTheLastServerIsDeleted(t *testing.
 	require.Empty(t, f.headers(emaID),
 		"a client with no live server still carries the source's credentials")
 }
+
+// Attaching an upstream OAuth client to a server on another source makes the
+// client shared, and the backfill's rule then says it carries neither
+// source's credential headers. Until something retires them, the copies the
+// sole source left are still loaded by the serving path, which reads them by
+// auth client id alone and revalidates no ownership — so the first source's
+// secret would go out to the second source's upstream.
+func TestSyncServerDerivedCopies_RetiresCopiesAnAttachInvalidates(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	oauthClientID := f.client("subject")
+	first, second := f.source(), f.source()
+	sole, arriving := f.serverOn(first), f.serverOn(second)
+	f.header(first, "X-Tenant-Key", true, secretValue, "")
+	f.associate(sole, oauthClientID)
+	f.run(true)
+
+	authClients := f.liveAuthClients()
+	require.Len(t, authClients, 1, "the backfill recorded no client for the association")
+	authClientID := authClients[0]
+	require.Len(t, f.headers(authClientID), 1, "the sole source's header is carried by its client")
+
+	// The attach a live identity flow performs.
+	f.associate(arriving, oauthClientID)
+	require.Len(t, f.headers(authClientID), 1,
+		"the attach alone leaves the copy the serving path would send")
+
+	// A dry run agrees the configuration no longer yields it, so between the
+	// attach and the next run the copy is stale and still served.
+	require.Positive(t, f.run(false).PendingHeaders,
+		"a run would leave the invalidated copy alone")
+
+	// The write that invalidated it has to retire it in its own transaction.
+	f.syncServerCopies(arriving)
+
+	require.Empty(t, f.headers(authClientID),
+		"a client shared across sources still carries the first source's credentials")
+}
+
+// Detaching the server that made the client sole-source on its source leaves
+// the client serving another source alone, so the copies it took from the
+// source it no longer reaches are retired too.
+func TestSyncServerDerivedCopies_RetiresCopiesADetachInvalidates(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	oauthClientID := f.client("subject")
+	first, second := f.source(), f.source()
+	leaving, staying := f.serverOn(first), f.serverOn(second)
+	f.header(first, "X-Tenant-Key", true, secretValue, "")
+	f.associate(leaving, oauthClientID)
+	f.run(true)
+
+	authClients := f.liveAuthClients()
+	require.Len(t, authClients, 1)
+	authClientID := authClients[0]
+	require.Len(t, f.headers(authClientID), 1)
+
+	// The client moves to a server on the other source: the arriving server is
+	// attached and the original one detached, as a re-attach does.
+	f.associate(staying, oauthClientID)
+	f.detach(leaving, oauthClientID)
+	f.syncServerCopies(leaving)
+
+	require.Empty(t, f.headers(authClientID),
+		"the client still carries the credentials of the source it no longer reaches")
+}
+
+// syncServerCopies runs SyncServerDerivedCopies for one server and commits, as
+// the association write that changed its clients does.
+func (f *fixture) syncServerCopies(serverID uuid.UUID) {
+	f.t.Helper()
+	tx := testenv.BeginTx(f.t, f.t.Context(), f.pool)
+	require.NoError(f.t, SyncServerDerivedCopies(f.t.Context(), tx, f.orgID, serverID))
+	require.NoError(f.t, tx.Commit(f.t.Context()))
+}
+
+// detach removes a server's association the way the identity flows do.
+func (f *fixture) detach(serverID, clientID uuid.UUID) {
+	f.t.Helper()
+	require.NoError(f.t, f.q.SoftDeleteAssociationOfClientFixture(f.t.Context(), SoftDeleteAssociationOfClientFixtureParams{
+		McpServerID:           serverID,
+		RemoteSessionClientID: clientID,
+	}))
+}

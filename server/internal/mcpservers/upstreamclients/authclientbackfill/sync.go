@@ -109,9 +109,20 @@ func SyncTunneledSource(ctx context.Context, tx pgx.Tx, organizationID string, s
 // backend or been deleted still names its clients, so the copies of the source
 // it left are retired.
 //
-// It takes no lock of its own: every copy write repeats the ownership rule it
-// was decided from, so a concurrent change loses the write rather than
-// overwriting, and the next write or backfill run picks it up.
+// It locks only the header copy rows it writes: no source, server, link or
+// upstream client row. Callers must still run it after their own writes to
+// those, which every caller does, so the copy rows are the last locks any
+// transaction takes and none of them can be waited on by a transaction
+// holding something this one needs.
+//
+// Consistency under a concurrent source or header write comes from the writes
+// themselves rather than from a lock. A copy added or updated repeats the
+// ownership rule it was decided from, so a change that invalidates the
+// decision makes the write affect no row instead of writing a credential the
+// configuration no longer yields. A copy retired is unconditional, so the
+// decision to stop sending a credential always lands and is never lost to a
+// race; one retired by a racing writer is restored by the next source write or
+// backfill run.
 func SyncServerDerivedCopies(ctx context.Context, tx pgx.Tx, organizationID string, serverIDs ...uuid.UUID) error {
 	if organizationID == "" {
 		return errors.New("sync server derived copies: no tenant scope")
@@ -161,6 +172,13 @@ func syncSource(ctx context.Context, tx pgx.Tx, organizationID, kind string, sou
 		return err
 	}
 
+	// Before the copies below, so this writer takes mcp_servers rows ahead of
+	// mcp_auth_client_headers rows, the order an association write takes them
+	// in. Neither step reads what the other writes.
+	if err := markLinkedServers(ctx, q, organizationID, want); err != nil {
+		return err
+	}
+
 	// The servers on the source name the upstream OAuth and EMA clients whose
 	// copies of its other credential headers this write changed. Tombstoned
 	// ones are among them, so a source losing its last server still retires
@@ -169,11 +187,8 @@ func syncSource(ctx context.Context, tx pgx.Tx, organizationID, kind string, sou
 	if err != nil {
 		return err
 	}
-	if err := syncDerivedCopies(ctx, tx, q, opts, &report, servers); err != nil {
-		return err
-	}
 
-	return markLinkedServers(ctx, q, organizationID, want)
+	return syncDerivedCopies(ctx, tx, q, opts, &report, servers)
 }
 
 // sourceServerIDs is every MCP server backed by one source, tombstoned ones

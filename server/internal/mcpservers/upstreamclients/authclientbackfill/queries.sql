@@ -2266,6 +2266,10 @@ SELECT id FROM mcp_auth_clients WHERE organization_id = @organization_id AND del
 -- name: ListLiveLinkIDsFixture :many
 SELECT id FROM mcp_server_auth_clients WHERE organization_id = @organization_id AND deleted IS FALSE ORDER BY id;
 
+-- name: SoftDeleteAssociationOfClientFixture :exec
+UPDATE mcp_server_remote_session_clients SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = @mcp_server_id AND remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
+
 -- name: SoftDeleteAssociationFixture :exec
 UPDATE mcp_server_remote_session_clients SET deleted_at = clock_timestamp() WHERE id = @id;
 

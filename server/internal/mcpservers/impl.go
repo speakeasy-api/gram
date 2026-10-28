@@ -1185,15 +1185,6 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "delete mcp server").LogError(ctx, logger)
 	}
 	deleted := tombstoned.Server
-	if err := syncCredentialSources(ctx, dbtx, authCtx.ActiveOrganizationID, deletedSources); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "sync source auth clients").LogError(ctx, logger)
-	}
-	// The deleted server's own upstream OAuth and EMA clients may have been
-	// the only ones on its source, or may now serve another source's servers
-	// alone: either way their header copies are re-decided from itself.
-	if err := authclientbackfill.SyncServerDerivedCopies(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "sync mcp server auth client headers").LogError(ctx, logger)
-	}
 
 	// Remote- and tunneled-backed servers own the issuer minted with them.
 	// An issuer may also be referenced by another server or toolset, so only
@@ -1265,6 +1256,18 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 				}
 			}
 		}
+	}
+
+	// After the issuer cascade above, so this path takes the user session
+	// issuer row ahead of the header copy rows, as an identity commit does.
+	if err := syncCredentialSources(ctx, dbtx, authCtx.ActiveOrganizationID, deletedSources); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync source auth clients").LogError(ctx, logger)
+	}
+	// The deleted server's own upstream OAuth and EMA clients may have been
+	// the only ones on its source, or may now serve another source's servers
+	// alone: either way their header copies are re-decided from itself.
+	if err := authclientbackfill.SyncServerDerivedCopies(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync mcp server auth client headers").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogMcpServerDelete(ctx, dbtx, audit.LogMcpServerDeleteEvent{

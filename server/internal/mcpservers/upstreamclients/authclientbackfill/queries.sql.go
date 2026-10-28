@@ -5358,6 +5358,21 @@ func (q *Queries) SoftDeleteAssociationFixture(ctx context.Context, id uuid.UUID
 	return err
 }
 
+const softDeleteAssociationOfClientFixture = `-- name: SoftDeleteAssociationOfClientFixture :exec
+UPDATE mcp_server_remote_session_clients SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = $1 AND remote_session_client_id = $2 AND deleted IS FALSE
+`
+
+type SoftDeleteAssociationOfClientFixtureParams struct {
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteAssociationOfClientFixture(ctx context.Context, arg SoftDeleteAssociationOfClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteAssociationOfClientFixture, arg.McpServerID, arg.RemoteSessionClientID)
+	return err
+}
+
 const softDeleteAttachmentUserSessionIssuerFixture = `-- name: SoftDeleteAttachmentUserSessionIssuerFixture :exec
 UPDATE user_session_issuers SET deleted_at = clock_timestamp()
 WHERE id = (SELECT user_session_issuer_id FROM principal_remote_session_bindings WHERE principal_remote_session_bindings.id = $1)
