@@ -72,7 +72,7 @@ func (m *kitGKEIAM) provision(ctx context.Context, ksa string) (kitGKEIAMIdentit
 	name := "projects/" + m.project + "/serviceAccounts/" + email
 	accounts := m.service.Projects.ServiceAccounts
 	sa, err := accounts.Create("projects/"+m.project, &iam.CreateServiceAccountRequest{AccountId: account, ForceSendFields: nil, NullFields: nil, ServiceAccount: &iam.ServiceAccount{Disabled: false, Email: "", Etag: "", Name: "", Oauth2ClientId: "", ProjectId: "", UniqueId: "", ServerResponse: googleapi.ServerResponse{HTTPStatusCode: 0, Header: nil}, ForceSendFields: nil, NullFields: nil, DisplayName: "Speakeasy Kit workload", Description: m.description(ksa)}}).Context(ctx).Do()
-	if kitGKEIAMStatus(err, 400) || kitGKEIAMStatus(err, 403) || kitGKEIAMStatus(err, 404) || kitGKEIAMStatus(err, 429) {
+	if kitGKEIAMStatus(err, 400) || kitGKEIAMStatus(err, 403) || kitGKEIAMStatus(err, 404) {
 		return identity, kitGKEIAMCreateRejectedError{err}
 	}
 	if kitGKEIAMStatus(err, 409) {

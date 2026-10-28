@@ -66,6 +66,23 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 			require.Error(t, validateKitGKEComposition(c))
 		})
 	}
+	for _, tc := range []struct {
+		name      string
+		mutate    func(*KitGKECompositionConfig)
+		wantError string
+	}{
+		{"missing IAM project", func(c *KitGKECompositionConfig) { c.IAMProject = "" }, "requires an IAM project ID"},
+		{"missing workload pool project", func(c *KitGKECompositionConfig) { c.WorkloadPoolProject = "" }, "requires a workload pool project ID"},
+		{"invalid IAM project", func(c *KitGKECompositionConfig) { c.IAMProject = "invalid/project" }, "requires an IAM project ID"},
+		{"invalid workload pool project", func(c *KitGKECompositionConfig) { c.WorkloadPoolProject = "invalid/project" }, "requires a workload pool project ID"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := valid
+			tc.mutate(&c)
+			require.ErrorContains(t, validateKitGKEComposition(c), tc.wantError)
+		})
+	}
 	core := new(ServiceCore)
 	require.ErrorContains(t, core.InstallKitGKERuntime(valid), "guarded HTTP")
 	require.Nil(t, core.runtime, "failed installation must not alter dispatch")

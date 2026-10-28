@@ -120,9 +120,9 @@ func TestKitGKEIAMUsesFixedGoogleIssuer(t *testing.T) {
 	require.NotEqual(t, configured.WorkloadIssuerURL, c.WorkloadIssuerURL)
 }
 
-func TestKitGKEIAMPendingDefinitiveRejectionDoesNotStrandIntent(t *testing.T) {
+func TestKitGKEIAMPendingCreateFailureClassification(t *testing.T) {
 	t.Parallel()
-	for _, status := range []int{400, 403, 404, 429} {
+	for _, status := range []int{400, 403, 404, 429, 503} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
 			t.Parallel()
 			client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
@@ -156,8 +156,15 @@ func TestKitGKEIAMPendingDefinitiveRejectionDoesNotStrandIntent(t *testing.T) {
 			ctx := context.WithValue(t.Context(), kitGKEIAMContextKey{}, &kitGKEIAMAttempt{manager: m, runtime: r})
 			_, err = kitGKEWorkloadSubject(ctx, "kit-generation")
 			require.Error(t, err)
-			_, err = client.Resource(kitGKEIAMPendingGVR).Namespace(m.namespace).Get(ctx, kitGKEName(r)+"-iam", metav1.GetOptions{})
-			require.True(t, apierrors.IsNotFound(err))
+			pending, err := client.Resource(kitGKEIAMPendingGVR).Namespace(m.namespace).Get(ctx, kitGKEName(r)+"-iam", metav1.GetOptions{})
+			if status == 429 || status == 503 {
+				require.NoError(t, err, "transient errors must preserve recovery evidence")
+				notCreated, _, err := unstructured.NestedString(pending.Object, "data", "not_created")
+				require.NoError(t, err)
+				require.NotEqual(t, "true", notCreated)
+			} else {
+				require.True(t, apierrors.IsNotFound(err))
+			}
 		})
 	}
 }

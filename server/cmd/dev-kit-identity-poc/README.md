@@ -81,7 +81,8 @@ set -o pipefail
 kubectl --context "$DEV_CONTEXT" -n "$POC" exec "$POD" -c probe -- \
   curl --fail --silent --show-error --max-time 15 \
     -H 'Metadata-Flavor: Google' \
-    'http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience=https%3A%2F%2Fexample.invalid%2Fkit-identity-poc' |
+    --get --data-urlencode "audience=$AUDIENCE" \
+    'http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity' |
   /tmp/kit-identity-poc -subject "$SUBJECT" -audience "$AUDIENCE"
 ```
 

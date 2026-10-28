@@ -261,7 +261,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		Env:     metadataEnv, RestartPolicy: new(corev1.ContainerRestartPolicyAlways),
 		StartupProbe:    &corev1.Probe{ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"bun", "/usr/local/share/gram/kit-workload-token.mjs", "--ready"}}}, PeriodSeconds: 2, TimeoutSeconds: 5, FailureThreshold: 60},
 		SecurityContext: security,
-		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("32Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("128Mi")}},
+		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("128Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("64Mi")}},
 		VolumeMounts:    []corev1.VolumeMount{{Name: "workload", MountPath: "/var/run/secrets/speakeasy/workload"}},
 	}}
 	if in.SnapshotsEnabled {

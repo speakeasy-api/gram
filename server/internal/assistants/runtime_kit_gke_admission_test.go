@@ -1,8 +1,11 @@
 package assistants
 
 import (
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"slices"
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/stretchr/testify/require"
 )
@@ -50,16 +53,20 @@ func TestKitGKERenderMetadataRefreshSidecar(t *testing.T) {
 	require.Equal(t, input.WorkloadAudience, env["WORKLOAD_TOKEN_AUDIENCE"])
 	require.Equal(t, KitWorkloadAssertionPath, env["WORKLOAD_TOKEN_PATH"])
 	require.Equal(t, input.Workload.Subject, env["WORKLOAD_TOKEN_SUBJECT"])
+	require.Equal(t, "16Mi", sidecar.Resources.Requests.StorageEphemeral().String())
+	require.Equal(t, "64Mi", sidecar.Resources.Limits.StorageEphemeral().String())
 	require.Len(t, sidecar.VolumeMounts, 1)
+	require.Equal(t, "workload", sidecar.VolumeMounts[0].Name)
 	require.False(t, sidecar.VolumeMounts[0].ReadOnly)
-	for _, mount := range pod.Spec.Containers[0].VolumeMounts {
-		if mount.Name == "workload" {
-			require.True(t, mount.ReadOnly)
-			require.Empty(t, mount.SubPath)
-			require.Empty(t, mount.SubPathExpr)
-			require.Equal(t, sidecar.VolumeMounts[0].MountPath, mount.MountPath)
-		}
-	}
+	mountIndex := slices.IndexFunc(pod.Spec.Containers[0].VolumeMounts, func(mount corev1.VolumeMount) bool {
+		return mount.Name == "workload"
+	})
+	require.NotEqual(t, -1, mountIndex, "Kit must mount the workload token volume")
+	mount := pod.Spec.Containers[0].VolumeMounts[mountIndex]
+	require.True(t, mount.ReadOnly)
+	require.Empty(t, mount.SubPath)
+	require.Empty(t, mount.SubPathExpr)
+	require.Equal(t, sidecar.VolumeMounts[0].MountPath, mount.MountPath)
 	for _, image := range []string{"", "registry.example/assistant:latest", "registry.example/assistant:v1", "registry.example/assistant@sha256:bad"} {
 		input.MetadataImage = image
 		_, err := RenderKitGKEProvision(input)

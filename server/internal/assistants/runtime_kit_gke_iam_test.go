@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -145,5 +146,139 @@ func TestKitGKEIAMRejectsUnexpectedPolicy(t *testing.T) {
 			_, err = manager.provision(t.Context(), "kit-generation")
 			require.ErrorContains(t, err, "unexpected IAM grants")
 		})
+	}
+}
+
+func TestKitGKEIAMCreateFailures(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		status   int
+		rejected bool
+	}{
+		{http.StatusBadRequest, true}, {http.StatusForbidden, true}, {http.StatusNotFound, true},
+		{http.StatusTooManyRequests, false}, {http.StatusInternalServerError, false},
+	} {
+		t.Run(http.StatusText(tc.status), func(t *testing.T) {
+			t.Parallel()
+			manager := newKitGKEIAMTestManager(t, func(w http.ResponseWriter, r *http.Request) {
+				if !assert.Equal(t, http.MethodPost, r.Method) || !assert.Equal(t, "/v1/projects/test-project/serviceAccounts", r.URL.Path) {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(tc.status)
+			})
+			identity, err := manager.provision(t.Context(), "kit-generation")
+			require.Error(t, err)
+			require.Equal(t, kitGKEIAMIdentity{}, identity)
+			var rejected kitGKEIAMCreateRejectedError
+			require.Equal(t, tc.rejected, errors.As(err, &rejected))
+			require.True(t, kitGKEIAMStatus(err, tc.status), "original API status must be retained")
+		})
+	}
+}
+
+func TestKitGKEIAMRejectsMismatchedIdentity(t *testing.T) {
+	t.Parallel()
+	for _, resumed := range []bool{false, true} {
+		name := "created"
+		if resumed {
+			name = "resumed"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			for _, tc := range []struct {
+				name   string
+				change func(*iam.ServiceAccount)
+			}{
+				{"email", func(sa *iam.ServiceAccount) { sa.Email = "other@test-project.iam.gserviceaccount.com" }},
+				{"description", func(sa *iam.ServiceAccount) { sa.Description = "another workload" }},
+				{"disabled", func(sa *iam.ServiceAccount) { sa.Disabled = true }},
+				{"non-numeric subject", func(sa *iam.ServiceAccount) { sa.UniqueId = "not-numeric" }},
+				{"empty subject", func(sa *iam.ServiceAccount) { sa.UniqueId = "" }},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+					sa := kitGKEIAMTestAccount()
+					tc.change(sa)
+					manager := newKitGKEIAMTestManager(t, func(w http.ResponseWriter, r *http.Request) {
+						switch {
+						case r.Method == http.MethodPost && r.URL.Path == "/v1/projects/test-project/serviceAccounts":
+							if resumed {
+								w.WriteHeader(http.StatusConflict)
+								return
+							}
+						case resumed && r.Method == http.MethodGet && r.URL.Path == "/v1/projects/test-project/serviceAccounts/"+kitGKEIAMTestAccount().Email:
+						default:
+							t.Errorf("unexpected IAM request: %s %s", r.Method, r.URL.Path)
+							w.WriteHeader(http.StatusInternalServerError)
+							return
+						}
+						_ = json.NewEncoder(w).Encode(sa)
+					})
+					identity, err := manager.provision(t.Context(), "kit-generation")
+					require.ErrorContains(t, err, "account identity mismatch")
+					require.Equal(t, kitGKEIAMIdentity{}, identity)
+				})
+			}
+		})
+	}
+}
+
+func TestKitGKEIAMRemoveRefusesUnsafeIdentity(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name             string
+		subject, account string
+		change           func(*iam.ServiceAccount)
+		unbound          bool
+	}{
+		{name: "empty subject", account: "kit-generation", unbound: true},
+		{name: "non-numeric subject", subject: "not-numeric", account: "kit-generation", unbound: true},
+		{name: "empty account", subject: "123", unbound: true},
+		{name: "mismatched email", subject: "123", account: "kit-generation", change: func(sa *iam.ServiceAccount) { sa.Email = "other@test-project.iam.gserviceaccount.com" }},
+		{name: "mismatched description", subject: "123", account: "kit-generation", change: func(sa *iam.ServiceAccount) { sa.Description = "another workload" }},
+		{name: "mismatched subject", subject: "123", account: "kit-generation", change: func(sa *iam.ServiceAccount) { sa.UniqueId = "456" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			sa := kitGKEIAMTestAccount()
+			if tc.change != nil {
+				tc.change(sa)
+			}
+			manager := newKitGKEIAMTestManager(t, func(w http.ResponseWriter, r *http.Request) {
+				if tc.unbound || r.Method != http.MethodGet || r.URL.Path != "/v1/projects/test-project/serviceAccounts/123" {
+					t.Errorf("unexpected IAM request: %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(sa)
+			})
+			err := manager.remove(t.Context(), kitGKEIAMIdentity{subject: tc.subject, account: tc.account})
+			if tc.unbound {
+				require.ErrorContains(t, err, "refusing to delete unbound")
+			} else {
+				require.ErrorContains(t, err, "refusing to delete mismatched")
+			}
+		})
+	}
+}
+
+func newKitGKEIAMTestManager(t *testing.T, handler http.HandlerFunc) *kitGKEIAM {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		handler(w, r)
+	}))
+	t.Cleanup(server.Close)
+	service, err := iam.NewService(t.Context(), option.WithEndpoint(server.URL+"/"), option.WithoutAuthentication())
+	require.NoError(t, err)
+	return &kitGKEIAM{project: "test-project", workloadPoolProject: "pool-project", namespace: "kit-test", service: service}
+}
+
+func kitGKEIAMTestAccount() *iam.ServiceAccount {
+	return &iam.ServiceAccount{
+		Email:       kitGKEIAMAccount("kit-generation") + "@test-project.iam.gserviceaccount.com",
+		UniqueId:    "123",
+		Description: "Speakeasy Kit workload kit-test/kit-generation",
 	}
 }

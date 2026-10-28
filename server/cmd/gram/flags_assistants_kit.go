@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"regexp"
 
+	"github.com/distribution/reference"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -22,7 +23,7 @@ import (
 
 func assistantKitRuntimeFlags() []cli.Flag {
 	return []cli.Flag{
-		&cli.StringFlag{Name: "assistant-kit-workload-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL"}, Usage: "External issuer JWKS URL for local assertions and legacy GKE; managed metadata mode uses fixed Google JWKS."},
+		&cli.StringFlag{Name: "assistant-kit-workload-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL"}, Usage: "External issuer JWKS URL for local assertions; GKE Kit uses fixed Google JWKS."},
 		&cli.StringFlag{Name: "assistant-kit-workload-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER"}, Usage: "External issuer for local/legacy assertions. Managed GKE reads the cluster project from this GKE issuer URL, then uses fixed Google token verification."},
 		&cli.StringFlag{Name: "assistant-kit-workload-subject", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_SUBJECT"}, Usage: "Local operator-projected subject, unique to one cold bootstrap. Supply a fresh external subject and assertion before restarting; subjects cannot be reused or shared between assistants."},
 		&cli.StringFlag{Name: "assistant-kit-workload-assertion-file", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ASSERTION_FILE"}, Usage: "Absolute operator-projected file named assertion in a dedicated directory. Its parent is mounted read-only outside persistent HOME to support atomic rotation."},
@@ -140,7 +141,9 @@ func kitGKEProvisionFromCLI(c *cli.Context) (assistants.KitGKEProvisionInput, er
 		return out, fmt.Errorf("assistant-kit-gke-iam-project must be an explicit Google Cloud project ID")
 	}
 	out.MetadataImage = c.String("assistant-kit-gke-metadata-image")
-	if !regexp.MustCompile(`^[^\s@]+@sha256:[a-f0-9]{64}$`).MatchString(out.MetadataImage) {
+	named, imageErr := reference.ParseNormalizedNamed(out.MetadataImage)
+	_, digested := named.(reference.Digested)
+	if imageErr != nil || !digested {
 		return out, fmt.Errorf("assistant-kit-gke-metadata-image must be a digest-pinned assistant runtime image")
 	}
 	out.IngressCIDR = c.String("assistant-kit-gke-ingress-cidr")

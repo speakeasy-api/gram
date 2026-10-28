@@ -137,7 +137,18 @@ Enable Workload Identity Federation for the assistant cluster. The exact member
 is `serviceAccount:<CLUSTER_PROJECT_ID>.svc.id.goog[<NAMESPACE>/<KSA>]`, **not**
 the identity-project pool. Ensure organization policy permits the required
 cross-project service-account use. Generated workload accounts receive no
-project roles; the server's custom provisioning role is separate.
+project roles; the server's custom provisioning role is separate. Do not grant
+workload accounts roles through project, folder, organization, or resource
+policies, including broad principal sets. Account-level IAM policy checks do not
+prove the absence of these external grants; enforce and audit this invariant in
+infrastructure for both new and reused accounts.
+
+The managed GKE metadata server uses its documented link-local HTTP endpoint,
+not an external plaintext credential service. NetworkPolicy applies to the whole
+Pod: both Kit and its token sidecar can request metadata tokens, including for
+other audiences. The sidecar is a token-file adapter, not an isolation boundary.
+Do not configure other services to trust these workload identities. The gateway
+still verifies its exact audience and generation-specific subject.
 
 The metadata refresh sidecar requests the exact exchange audience from the
 link-local metadata server with `Metadata-Flavor: Google`, a bounded response,
@@ -243,13 +254,14 @@ Grant the runtime Kubernetes principal these namespace-scoped permissions in
 addition to Secret, NetworkPolicy, SandboxTemplate, and SandboxClaim resource
 management:
 
-| API group            | Resource                    | Required verbs            | Purpose                                                                |
-| -------------------- | --------------------------- | ------------------------- | ---------------------------------------------------------------------- |
-| Core (`""`)          | `serviceaccounts`           | `get`, `create`, `delete` | Provision and retire generation-specific linked identities             |
-| Core (`""`)          | `pods`                      | `get`, `list`, `delete`   | Discover claim Pods, verify source/restore identity, and reap runtimes |
-| `podsnapshot.gke.io` | `podsnapshotpolicies`       | `get`, `list`             | Select and validate the manual rootfs-only policy                      |
-| `podsnapshot.gke.io` | `podsnapshotmanualtriggers` | `create`, `get`, `delete` | Request, observe, and clean up checkpoints                             |
-| `podsnapshot.gke.io` | `podsnapshots`              | `get`, `delete`           | Validate selected snapshots and clean up backing checkpoint resources  |
+| API group            | Resource                    | Required verbs                      | Purpose                                                                |
+| -------------------- | --------------------------- | ----------------------------------- | ---------------------------------------------------------------------- |
+| Core (`""`)          | `serviceaccounts`           | `get`, `create`, `delete`           | Provision and retire generation-specific linked identities             |
+| Core (`""`)          | `configmaps`                | `get`, `create`, `update`, `delete` | Persist and retire IAM recovery intents                                |
+| Core (`""`)          | `pods`                      | `get`, `list`, `delete`             | Discover claim Pods, verify source/restore identity, and reap runtimes |
+| `podsnapshot.gke.io` | `podsnapshotpolicies`       | `get`, `list`                       | Select and validate the manual rootfs-only policy                      |
+| `podsnapshot.gke.io` | `podsnapshotmanualtriggers` | `create`, `get`, `delete`           | Request, observe, and clean up checkpoints                             |
+| `podsnapshot.gke.io` | `podsnapshots`              | `get`, `delete`                     | Validate selected snapshots and clean up backing checkpoint resources  |
 
 The managed snapshot controller creates `PodSnapshot` objects; the runtime
 principal does not need `create` on `podsnapshots`. Observation-only snapshot

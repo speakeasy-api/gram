@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"testing"
+	"time"
+
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestVerify(t *testing.T) {
@@ -19,11 +20,12 @@ func TestVerify(t *testing.T) {
 	require.NoError(t, err)
 	public := keys{set: jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &key.PublicKey, KeyID: "test", Use: "sig", Algorithm: "RS256"}}}}
 	now := time.Now()
-	claims := jwt.Claims{Issuer: googleIssuer, Subject: "100000000000000000001", Audience: jwt.Audience{"https://example.invalid/poc"}, IssuedAt: jwt.NewNumericDate(now), Expiry: jwt.NewNumericDate(now.Add(time.Hour))}
+	claims := jwt.Claims{Issuer: googleIssuer, Subject: "100000000000000000001", Audience: jwt.Audience{"https://example.invalid/poc", "https://example.invalid/additional"}, IssuedAt: jwt.NewNumericDate(now), Expiry: jwt.NewNumericDate(now.Add(time.Hour))}
 	raw, err := jwt.Signed(signer).Claims(claims).Serialize()
 	require.NoError(t, err)
 	out, err := verify(context.Background(), raw, claims.Subject, claims.Audience[0], public)
 	require.NoError(t, err)
+	require.Equal(t, []string(claims.Audience), out.Audience)
 	require.True(t, out.CachedTokenAccepted)
 	require.True(t, out.WrongSubjectRejected)
 	require.True(t, out.WrongAudienceRejected)

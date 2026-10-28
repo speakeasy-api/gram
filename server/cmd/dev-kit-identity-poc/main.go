@@ -52,7 +52,7 @@ func (g *guard) Reserve(_ context.Context, key replay.Key, _ time.Time) (bool, e
 type report struct {
 	Issuer                string    `json:"issuer"`
 	Subject               string    `json:"subject"`
-	Audience              string    `json:"audience"`
+	Audience              []string  `json:"audience"`
 	ExpiresAt             time.Time `json:"expires_at"`
 	CachedTokenAccepted   bool      `json:"cached_token_accepted"`
 	WrongSubjectRejected  bool      `json:"wrong_subject_rejected"`
@@ -93,15 +93,15 @@ func verify(ctx context.Context, raw, subject, audience string, publicKeys keys)
 	bad := expected
 	bad.Subject = subject + "-different"
 	_, err = verifier.Verify(ctx, raw, bad)
-	wrongSubject := err != nil
+	wrongSubject := workload.ReasonOf(err) == workload.ReasonSubjectMismatch
 	bad = expected
 	bad.Audiences = []string{audience + "/different"}
 	_, err = verifier.Verify(ctx, raw, bad)
-	wrongAudience := err != nil
+	wrongAudience := workload.ReasonOf(err) == workload.ReasonAudienceMismatch
 	if !wrongSubject || !wrongAudience {
 		return out, errors.New("negative identity checks failed")
 	}
-	return report{Issuer: claims.Issuer, Subject: claims.Subject, Audience: audience, ExpiresAt: result.ExpiresAt, CachedTokenAccepted: again.ReusedAssertion, WrongSubjectRejected: wrongSubject, WrongAudienceRejected: wrongAudience}, nil
+	return report{Issuer: claims.Issuer, Subject: claims.Subject, Audience: claims.Audience, ExpiresAt: result.ExpiresAt, CachedTokenAccepted: again.ReusedAssertion, WrongSubjectRejected: wrongSubject, WrongAudienceRejected: wrongAudience}, nil
 }
 func run() error {
 	subject := flag.String("subject", "", "expected IAM service account numeric unique ID (not email)")

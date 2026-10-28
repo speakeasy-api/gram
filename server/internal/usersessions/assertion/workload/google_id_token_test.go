@@ -39,4 +39,5 @@ func TestVerifyGoogleServiceAccountIDTokenShape(t *testing.T) {
 	expect.Subject = "system:serviceaccount:runtime-test:kit-runtime"
 	_, err = verifier.Verify(t.Context(), raw, expect)
 	require.Error(t, err)
+	require.Equal(t, ReasonSubjectMismatch, ReasonOf(err))
 }

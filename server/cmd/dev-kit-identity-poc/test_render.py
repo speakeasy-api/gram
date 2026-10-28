@@ -13,10 +13,18 @@ class ManifestTests(unittest.TestCase):
         ns, sa, template, pool, claim = doc["items"]
         self.assertEqual(ns["metadata"]["name"], "kit-wif-poc-test")
         self.assertFalse(sa["automountServiceAccountToken"])
+        self.assertEqual(
+            sa["metadata"]["annotations"]["iam.gke.io/gcp-service-account"],
+            "probe@example-project.iam.gserviceaccount.com",
+        )
         spec = template["spec"]["podTemplate"]["spec"]
         self.assertFalse(spec["automountServiceAccountToken"])
         self.assertNotIn("volumes", spec)
         self.assertEqual(spec["runtimeClassName"], "gvisor")
+        self.assertEqual(
+            spec["nodeSelector"],
+            {"sandbox.gke.io/runtime": "gvisor", "workload-type": "sandbox"},
+        )
         self.assertEqual(spec["serviceAccountName"], sa["metadata"]["name"])
         self.assertEqual(template["spec"]["networkPolicy"]["ingress"], [])
         self.assertEqual(
@@ -30,6 +38,22 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(claim["spec"]["warmPoolRef"]["name"], pool["metadata"]["name"])
         for obj in (template, pool, claim):
             self.assertEqual(obj["apiVersion"], "extensions.agents.x-k8s.io/v1beta1")
+
+    def test_namespace_suffix_boundaries(self):
+        for suffix in ("a", "0", "a-b", "a" * 30):
+            with self.subTest(suffix=suffix):
+                manifest(
+                    "kit-wif-poc-" + suffix,
+                    "probe@example-project.iam.gserviceaccount.com",
+                    "example.invalid/probe@sha256:" + "a" * 64,
+                )
+        for suffix in ("", "test-", "-", "a" * 31):
+            with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                manifest(
+                    "kit-wif-poc-" + suffix,
+                    "probe@example-project.iam.gserviceaccount.com",
+                    "example.invalid/probe@sha256:" + "a" * 64,
+                )
 
     def test_rejects_unpinned_image_and_non_probe_namespace(self):
         for namespace, image in [

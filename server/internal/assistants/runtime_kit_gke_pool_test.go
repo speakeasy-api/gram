@@ -11,7 +11,12 @@ import (
 
 func TestKitGKEPoolAuthorityFencing(t *testing.T) {
 	t.Parallel()
-	for _, mutation := range []string{"uid", "replicas", "template", "claim"} {
+	for mutation, wantError := range map[string]string{
+		"uid":      "authority mismatch",
+		"replicas": "zero speculative replicas",
+		"template": "template binding mismatch",
+		"claim":    "claim warm pool binding mismatch",
+	} {
 		t.Run(mutation, func(t *testing.T) {
 			t.Parallel()
 			k, client, r, fences := kitGKEBackendFixture(t)
@@ -39,9 +44,9 @@ func TestKitGKEPoolAuthorityFencing(t *testing.T) {
 			_, err = client.Resource(resource).Namespace(m.Namespace).Update(t.Context(), object, metav1.UpdateOptions{})
 			require.NoError(t, err)
 			_, err = k.Ensure(t.Context(), r)
-			require.Error(t, err)
+			require.ErrorContains(t, err, wantError)
 			client.ClearActions()
-			require.Error(t, k.Reap(t.Context(), r))
+			require.ErrorContains(t, k.Reap(t.Context(), r), wantError)
 			require.Zero(t, *fences)
 			for _, action := range client.Actions() {
 				require.NotEqual(t, "delete", action.GetVerb())

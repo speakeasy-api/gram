@@ -214,7 +214,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
 		if used {
-			return nil, errors.New("kit workload subjects cannot be reused; configure a fresh generation subject")
+			return nil, errors.New("kit workload subjects cannot be reused; subject was already admitted")
 		}
 	}
 	assignments, err := q.GetWorkloadAgentAssignmentForSubject(ctx, workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: issuer.ID, Subject: subject, MatchKind: "exact"})

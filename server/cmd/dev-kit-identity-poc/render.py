@@ -7,7 +7,7 @@ import re
 
 
 def manifest(namespace, iam_email, image):
-    if not re.fullmatch(r"kit-wif-poc-[a-z0-9-]{1,30}", namespace):
+    if not re.fullmatch(r"kit-wif-poc-[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?", namespace):
         raise ValueError(
             "namespace must start with kit-wif-poc- and use DNS-label characters"
         )
@@ -33,7 +33,10 @@ def manifest(namespace, iam_email, image):
                 "runAsGroup": 1000,
                 "seccompProfile": {"type": "RuntimeDefault"},
             },
-            "nodeSelector": {"sandbox.gke.io/runtime": "gvisor"},
+            "nodeSelector": {
+                "sandbox.gke.io/runtime": "gvisor",
+                "workload-type": "sandbox",
+            },
             "tolerations": [
                 {
                     "key": "sandbox.gke.io/runtime",

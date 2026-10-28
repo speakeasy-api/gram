@@ -133,10 +133,20 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	policy, found, err := unstructured.NestedMap(objects.Template.Object, "spec", "networkPolicy")
 	require.NoError(t, err)
 	require.True(t, found)
-	egress, ok := policy["egress"].([]any)
-	require.True(t, ok)
-	require.NotEmpty(t, egress)
-	require.Equal(t, map[string]any{"ingress": []any{map[string]any{"from": []any{map[string]any{"ipBlock": map[string]any{"cidr": in.IngressCIDR}}}, "ports": []any{map[string]any{"protocol": "TCP", "port": int64(8080)}}}}, "egress": []any{map[string]any{"to": []any{map[string]any{"ipBlock": map[string]any{"cidr": "0.0.0.0/0", "except": []any{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"}}}, map[string]any{"ipBlock": map[string]any{"cidr": "::/0", "except": []any{"fc00::/7", "fe80::/10"}}}}}}}, map[string]any{"ingress": policy["ingress"], "egress": egress[:1]})
+	metadataEgress := map[string]any{
+		"to":    []any{map[string]any{"ipBlock": map[string]any{"cidr": "169.254.169.254/32"}}},
+		"ports": []any{map[string]any{"protocol": "TCP", "port": int64(80)}},
+	}
+	require.Equal(t, map[string]any{
+		"ingress": []any{map[string]any{
+			"from":  []any{map[string]any{"ipBlock": map[string]any{"cidr": in.IngressCIDR}}},
+			"ports": []any{map[string]any{"protocol": "TCP", "port": int64(8080)}},
+		}},
+		"egress": []any{map[string]any{"to": []any{
+			map[string]any{"ipBlock": map[string]any{"cidr": "0.0.0.0/0", "except": []any{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"}}},
+			map[string]any{"ipBlock": map[string]any{"cidr": "::/0", "except": []any{"fc00::/7", "fe80::/10"}}},
+		}}, metadataEgress},
+	}, policy)
 	same, err := RenderKitGKEProvision(in)
 	require.NoError(t, err)
 	require.Equal(t, secret.Name, same.Secret.GetName())

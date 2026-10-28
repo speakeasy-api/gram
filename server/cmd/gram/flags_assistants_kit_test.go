@@ -150,3 +150,21 @@ func TestKitGKEWorkloadPoolProject(t *testing.T) {
 		require.Error(t, err, raw)
 	}
 }
+
+func TestKitGKEProvisionCLIRejectsMalformedMetadataImage(t *testing.T) {
+	t.Parallel()
+	for _, image := range []string{
+		"example.invalid/Runtime@sha256:" + strings.Repeat("a", 64),
+		"example.invalid/runtime@sha256:abc",
+		"example.invalid/runtime:latest",
+	} {
+		t.Run(image, func(t *testing.T) {
+			t.Parallel()
+			_, err := kitGKEProvisionFromCLI(kitCLIContext(t, map[string]string{
+				"assistant-kit-gke-iam-project":    "sandbox-project",
+				"assistant-kit-gke-metadata-image": image,
+			}))
+			require.ErrorContains(t, err, "assistant-kit-gke-metadata-image")
+		})
+	}
+}
