@@ -51,6 +51,7 @@ type Endpoints struct {
 	GetPaygBillingSummary                   goa.Endpoint
 	GetStripeCustomer                       goa.Endpoint
 	SetStripeCustomer                       goa.Endpoint
+	SetAdoptionDashboardURL                 goa.Endpoint
 	GetStripeSubscription                   goa.Endpoint
 	CancelStripeSubscription                goa.Endpoint
 	ResumeStripeSubscription                goa.Endpoint
@@ -178,6 +179,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetPaygBillingSummary:                   NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
 		GetStripeCustomer:                       NewGetStripeCustomerEndpoint(s, a.APIKeyAuth),
 		SetStripeCustomer:                       NewSetStripeCustomerEndpoint(s, a.APIKeyAuth),
+		SetAdoptionDashboardURL:                 NewSetAdoptionDashboardURLEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscription:                   NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		CancelStripeSubscription:                NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ResumeStripeSubscription:                NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
@@ -285,6 +287,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPaygBillingSummary = m(e.GetPaygBillingSummary)
 	e.GetStripeCustomer = m(e.GetStripeCustomer)
 	e.SetStripeCustomer = m(e.SetStripeCustomer)
+	e.SetAdoptionDashboardURL = m(e.SetAdoptionDashboardURL)
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
 	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
@@ -1104,6 +1107,29 @@ func NewSetStripeCustomerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.SetStripeCustomer(ctx, p)
+	}
+}
+
+// NewSetAdoptionDashboardURLEndpoint returns an endpoint function that calls
+// the method "setAdoptionDashboardUrl" of service "admin".
+func NewSetAdoptionDashboardURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetAdoptionDashboardURLPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetAdoptionDashboardURL(ctx, p)
 	}
 }
 

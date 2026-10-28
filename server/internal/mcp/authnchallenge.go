@@ -201,6 +201,10 @@ type AuthnChallengeState struct {
 	// upstream providers, but there is no client to approve or redirect back to
 	// — completing the connections is terminal.
 	FirstParty bool `json:"first_party,omitempty"`
+	// BindingRefreshAttemptID survives challenge ID rotation and links the exact dashboard attachment decision.
+	BindingRefreshAttemptID string `json:"binding_refresh_attempt_id,omitempty"`
+	// ReauthenticateClientID keeps an explicitly requested fresh login pending until its matching OAuth callback.
+	ReauthenticateClientID uuid.UUID `json:"reauthenticate_client_id,omitzero"`
 	// WorkloadReconnect binds a workload-started first-party flow to its owner.
 	WorkloadReconnect *WorkloadReconnectBinding `json:"workload_reconnect,omitempty"`
 	// AutoConnectDone records that the consent page has already sent this

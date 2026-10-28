@@ -500,9 +500,9 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 		case err == nil:
 			targetID = endpoint.ID
 		case errors.Is(err, pgx.ErrNoRows):
-			// A hosted MCP server keeps a single address.
+			// Hosted addresses follow the hosted address rules, so the root maps only an endpoint the server already has.
 			if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
-				return nil, oops.E(oops.CodeInvalid, nil, "hosted mcp server is not served on this domain; move it to this domain before mapping the root").LogError(ctx, s.logger)
+				return nil, oops.E(oops.CodeInvalid, nil, "hosted MCP server is not served on this domain; add an endpoint on this domain before mapping the root").LogWarn(ctx, s.logger)
 			}
 			if !server.Slug.Valid || server.Slug.String == "" {
 				return nil, oops.E(oops.CodeBadRequest, nil, "mcp server has no slug to name its domain endpoint; attach an endpoint to the domain first").LogError(ctx, s.logger)

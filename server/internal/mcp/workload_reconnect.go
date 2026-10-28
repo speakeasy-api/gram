@@ -156,6 +156,8 @@ func (s *Service) serveWorkloadReconnect(w http.ResponseWriter, r *http.Request,
 		Endpoint:                 ref,
 		CreatedAt:                now,
 		FirstParty:               true,
+		BindingRefreshAttemptID:  "",
+		ReauthenticateClientID:   uuid.Nil,
 		WorkloadReconnect:        &WorkloadReconnectBinding{ClientID: authentication.chosenClient.UUID, OwnerUserID: admission.OwnerUserID, ExpiresAt: now.Add(10 * time.Minute), Ticket: true},
 	}
 	if err := s.authnChallengeCache.Store(ctx, ticket); err != nil {
