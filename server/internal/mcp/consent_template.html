@@ -359,6 +359,8 @@
                   <span class="text-xs text-default-warning" data-validation-notice
                     >{{.ValidationNotice}}</span
                   >
+                  {{end}} {{if .AttachmentReconnect}}
+                  <span class="text-xs text-muted-foreground">Sign in again to choose the account for this agent</span>
                   {{end}} {{if .IdentityReconnect}}
                   <span class="text-xs text-muted-foreground"
                     >Reconnect to add account details</span
@@ -439,7 +441,7 @@
                 >
                   Verify
                 </button>
-                {{end}} {{if or (not .Connected) .IdentityReconnect .Rejected .Inactive}}
+                {{end}} {{if or (not .Connected) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
                 {{if and .Chained (ne .ChainCheck "rejected")}}
                 <button
                   type="submit"
@@ -459,7 +461,7 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if or .Expired .Unroutable .IdentityReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unroutable .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
                 </button>
                 {{end}}
                 {{end}} {{if or .Connected .Expired .Unroutable}}
@@ -900,9 +902,10 @@
 </html>
 {{define "gatewayServerRow"}}
 <li
-  class="flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
+  class="group/server flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
   data-gateway-server="{{.Slug}}"
   data-gateway-server-ready="{{.Ready}}"
+  {{if .Hidden}}data-gateway-server-hidden{{end}}
 >
   <span class="flex min-w-0 flex-col gap-0.5">
     <span class="flex min-w-0 items-baseline gap-2">
@@ -917,6 +920,42 @@
     >
   </span>
   <span class="flex shrink-0 items-center gap-3">
+    {{if .CanHide}}
+    {{/* Hide is an icon that shows on row hover or focus, and always on touch
+      screens, which can't hover. A hidden row swaps it for a plain Show
+      button. consent_script.js toggles data-gateway-server-hidden on the row. */}}
+    <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0" data-gateway-visibility-form>
+      <input type="hidden" name="state" value="{{.State}}" />
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+      <input type="hidden" name="server_id" value="{{.ServerID}}" />
+      <button
+        type="submit"
+        name="action"
+        value="{{if .Hidden}}show_server{{else}}hide_server{{end}}"
+        class="text-muted-foreground interact:text-foreground interact:bg-accent interact:border-border flex h-8 min-w-8 cursor-pointer items-center justify-center border border-transparent text-xs opacity-0 transition-[color,background-color,border-color,opacity] group-hover/server:opacity-100 group-focus-within/server:opacity-100 pointer-coarse:opacity-100 group-data-[gateway-server-hidden]/server:px-3 group-data-[gateway-server-hidden]/server:opacity-100 disabled:cursor-wait disabled:opacity-60"
+        title="{{if .Hidden}}Make this server available to your tools again{{else}}Hide this server, preventing your agent from attempting to access it.{{end}}"
+        data-gateway-visibility-toggle
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          class="size-4 group-data-[gateway-server-hidden]/server:hidden"
+        >
+          <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+          <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+          <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+          <path d="m2 2 20 20" />
+        </svg>
+        <span class="sr-only group-data-[gateway-server-hidden]/server:hidden">Hide</span>
+        <span class="hidden group-data-[gateway-server-hidden]/server:inline">Show</span>
+      </button>
+    </form>
+    {{end}}
     <span class="flex shrink-0 items-center gap-3" data-gateway-server-actions {{if .Hidden}}hidden{{end}}>
       {{if .ConnectClientID}}
       <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0">
@@ -949,23 +988,6 @@
       >
       {{end}}
     </span>
-    {{if .CanHide}}
-    <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0" data-gateway-visibility-form>
-      <input type="hidden" name="state" value="{{.State}}" />
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
-      <input type="hidden" name="server_id" value="{{.ServerID}}" />
-      <button
-        type="submit"
-        name="action"
-        value="{{if .Hidden}}show_server{{else}}hide_server{{end}}"
-        class="text-muted-foreground interact:text-foreground interact:bg-accent interact:border-border flex h-8 cursor-pointer items-center border border-transparent px-3 text-xs transition-colors disabled:cursor-wait disabled:opacity-60"
-        title="{{if .Hidden}}Make this server available to your tools again{{else}}Hide this server from your tools{{end}}"
-        data-gateway-visibility-toggle
-      >
-        {{if .Hidden}}Show{{else}}Hide{{end}}
-      </button>
-    </form>
-    {{end}}
   </span>
 </li>
 {{end}}

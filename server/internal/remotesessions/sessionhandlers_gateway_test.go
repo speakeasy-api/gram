@@ -103,7 +103,7 @@ func TestListRemoteSessions_GatewayLoginOrder(t *testing.T) {
 			}
 
 			authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
-			env.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+			env.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, _ bool) error {
 				_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
 				if err != nil {
 					return fmt.Errorf("authorize attachment owner: %w", err)

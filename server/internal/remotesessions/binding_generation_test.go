@@ -25,8 +25,12 @@ import (
 
 func configureBindingOwnerAuthorizer(ti *testInstance) {
 	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
-	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
-		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
 		if err != nil {
 			return fmt.Errorf("authorize attachment owner: %w", err)
 		}
@@ -158,7 +162,7 @@ func testAttachmentReconnectDuringRefresh(t *testing.T, reattach bool) {
 	require.Equal(t, env.session.ID, reconnected.ID)
 	require.Equal(t, env.session.GrantGeneration+1, reconnected.GrantGeneration)
 	if reattach {
-		_, err = env.q.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ProjectID: env.projectID, OrganizationID: env.organizationID, PrincipalID: agent.ID, UserSessionIssuerID: env.session.UserSessionIssuerID, SubjectUrn: env.subject.String(), ID: binding.ID})
+		_, err = env.q.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ProjectID: env.projectID, OrganizationID: env.organizationID, PrincipalID: agent.ID, UserSessionIssuerID: env.session.UserSessionIssuerID, ID: binding.ID})
 		require.NoError(t, err)
 		_, err = env.q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: env.projectID, OrganizationID: env.organizationID, PrincipalID: agent.ID, UserSessionIssuerID: env.session.UserSessionIssuerID, SubjectUrn: env.subject.String(), RemoteSessionID: env.session.ID})
 		require.NoError(t, err)

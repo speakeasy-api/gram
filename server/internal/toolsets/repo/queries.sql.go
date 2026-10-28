@@ -796,12 +796,18 @@ func (q *Queries) GetToolsetByMCPSlug(ctx context.Context, arg GetToolsetByMCPSl
 const getToolsetByMcpSlug = `-- name: GetToolsetByMcpSlug :one
 SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets
-WHERE mcp_slug = $1
-  AND deleted IS FALSE
-ORDER BY (custom_domain_id IS NULL) DESC
-LIMIT 1
+WHERE id = (
+    SELECT t.id
+    FROM toolsets t
+    WHERE t.mcp_slug = $1
+      AND t.deleted IS FALSE
+    ORDER BY (t.custom_domain_id IS NULL) DESC
+    LIMIT 1
+  )
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE)
 `
 
+// A winning row in a deleted project still owns the slug, so it yields no row rather than a fallback.
 func (q *Queries) GetToolsetByMcpSlug(ctx context.Context, mcpSlug pgtype.Text) (Toolset, error) {
 	row := q.db.QueryRow(ctx, getToolsetByMcpSlug, mcpSlug)
 	var i Toolset
@@ -835,6 +841,7 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id = $2
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE)
 `
 
 type GetToolsetByMcpSlugAndCustomDomainParams struct {
@@ -875,6 +882,7 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND project_id = $2
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE)
 `
 
 type GetToolsetByMcpSlugAndProjectParams struct {
@@ -961,6 +969,7 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND custom_domain_id IS NULL
   AND deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE)
 `
 
 func (q *Queries) GetToolsetByPlatformMcpSlug(ctx context.Context, mcpSlug pgtype.Text) (Toolset, error) {
@@ -1559,69 +1568,67 @@ func (q *Queries) LockToolsetByIDAndProject(ctx context.Context, arg LockToolset
 	return i, err
 }
 
-const mirrorToolsetHosting = `-- name: MirrorToolsetHosting :one
+const moveToolsetMCPAlias = `-- name: MoveToolsetMCPAlias :exec
 UPDATE toolsets
 SET
-    name = $1
-  , mcp_slug = $2
-  , mcp_enabled = $3
-  , mcp_is_public = $4
-  , custom_domain_id = $5
-  , user_session_issuer_id = $6
-  , tool_variations_group_id = $7
+    mcp_slug = $1
+  , custom_domain_id = $2
   , updated_at = clock_timestamp()
-WHERE id = $8 AND project_id = $9 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+WHERE id = $3 AND project_id = $4 AND deleted IS FALSE AND mcp_slug IS NOT NULL
 `
 
-type MirrorToolsetHostingParams struct {
-	Name                  string
-	McpSlug               pgtype.Text
-	McpEnabled            bool
-	McpIsPublic           bool
-	CustomDomainID        uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	ToolVariationsGroupID uuid.NullUUID
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
+type MoveToolsetMCPAliasParams struct {
+	McpSlug        pgtype.Text
+	CustomDomainID uuid.NullUUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
 }
 
-// Writes a hosted toolset's hosting columns from its canonical server so pods that still read them stay consistent.
-func (q *Queries) MirrorToolsetHosting(ctx context.Context, arg MirrorToolsetHostingParams) (Toolset, error) {
-	row := q.db.QueryRow(ctx, mirrorToolsetHosting,
-		arg.Name,
+// Moves a legacy toolset's MCP alias to the hosted endpoint that now holds its address.
+func (q *Queries) MoveToolsetMCPAlias(ctx context.Context, arg MoveToolsetMCPAliasParams) error {
+	_, err := q.db.Exec(ctx, moveToolsetMCPAlias,
 		arg.McpSlug,
-		arg.McpEnabled,
-		arg.McpIsPublic,
 		arg.CustomDomainID,
-		arg.UserSessionIssuerID,
-		arg.ToolVariationsGroupID,
 		arg.ID,
 		arg.ProjectID,
 	)
-	var i Toolset
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.DefaultEnvironmentSlug,
-		&i.McpSlug,
-		&i.McpIsPublic,
-		&i.McpEnabled,
-		&i.ToolSelectionMode,
-		&i.CustomDomainID,
-		&i.ExternalOauthServerID,
-		&i.UserSessionIssuerID,
-		&i.ToolVariationsGroupID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
+	return err
+}
+
+const otherCustomDomainAliasServedOnPlatform = `-- name: OtherCustomDomainAliasServedOnPlatform :one
+SELECT (
+  NOT EXISTS (
+    SELECT 1
+    FROM toolsets pa
+    WHERE pa.mcp_slug = $1
+      AND pa.custom_domain_id IS NULL
+      AND pa.deleted IS FALSE
+      AND pa.id <> $2
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM toolsets t
+    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+    WHERE t.mcp_slug = $1
+      AND t.custom_domain_id IS NOT NULL
+      AND t.deleted IS FALSE
+      AND t.id <> $2
+  )
+)::boolean AS served
+`
+
+type OtherCustomDomainAliasServedOnPlatformParams struct {
+	Slug      pgtype.Text
+	ToolsetID uuid.UUID
+}
+
+// Whether another live-project toolset's custom-domain alias holds the slug while no platform alias does: the
+// loose platform lookup serves that alias, so a second custom-domain alias with the slug would contend for it.
+func (q *Queries) OtherCustomDomainAliasServedOnPlatform(ctx context.Context, arg OtherCustomDomainAliasServedOnPlatformParams) (bool, error) {
+	row := q.db.QueryRow(ctx, otherCustomDomainAliasServedOnPlatform, arg.Slug, arg.ToolsetID)
+	var served bool
+	err := row.Scan(&served)
+	return served, err
 }
 
 const toolsetHasExternalMCPProxy = `-- name: ToolsetHasExternalMCPProxy :one
@@ -1699,7 +1706,8 @@ type UpdateToolsetParams struct {
 	ProjectID              uuid.UUID
 }
 
-// Test fixture: also writes the MCP hosting columns, which production code writes only through MirrorToolsetHosting.
+// Test fixture: also writes the MCP hosting columns. Production code writes them only through MoveToolsetMCPAlias,
+// the external MCP migration's DisableToolset and the issuer migration for toolsets without a wrapper.
 func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolset,
 		arg.Name,
@@ -1759,7 +1767,7 @@ type UpdateToolsetDetailsParams struct {
 	ProjectID              uuid.UUID
 }
 
-// Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state and MirrorToolsetHosting writes them.
+// Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state.
 func (q *Queries) UpdateToolsetDetails(ctx context.Context, arg UpdateToolsetDetailsParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolsetDetails,
 		arg.Name,
@@ -1896,7 +1904,7 @@ type UpdateToolsetUserSessionIssuerParams struct {
 	ProjectID           uuid.UUID
 }
 
-// Test fixture: production code writes the issuer column only through MirrorToolsetHosting and the issuer migration.
+// Test fixture: production code writes the issuer column only through the issuer migration, for toolsets without a wrapper.
 func (q *Queries) UpdateToolsetUserSessionIssuer(ctx context.Context, arg UpdateToolsetUserSessionIssuerParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolsetUserSessionIssuer, arg.UserSessionIssuerID, arg.Slug, arg.ProjectID)
 	var i Toolset

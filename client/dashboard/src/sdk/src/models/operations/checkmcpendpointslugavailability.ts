@@ -30,6 +30,10 @@ export type CheckMcpEndpointSlugAvailabilityRequest = {
    */
   customDomainId?: string | undefined;
   /**
+   * Optional MCP server the slug is for. Addresses that server may claim, such as its own legacy alias, read as available.
+   */
+  mcpServerId?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -160,6 +164,7 @@ export function checkMcpEndpointSlugAvailabilitySecurityToJSON(
 export type CheckMcpEndpointSlugAvailabilityRequest$Outbound = {
   slug: string;
   custom_domain_id?: string | undefined;
+  mcp_server_id?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -174,6 +179,7 @@ export const CheckMcpEndpointSlugAvailabilityRequest$outboundSchema:
     z.object({
       slug: z.string(),
       customDomainId: z.optional(z.string()),
+      mcpServerId: z.optional(z.string()),
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
       gramProject: z.optional(z.string()),
@@ -181,6 +187,7 @@ export const CheckMcpEndpointSlugAvailabilityRequest$outboundSchema:
     z.transform((v) => {
       return remap$(v, {
         customDomainId: "custom_domain_id",
+        mcpServerId: "mcp_server_id",
         gramSession: "Gram-Session",
         gramKey: "Gram-Key",
         gramProject: "Gram-Project",

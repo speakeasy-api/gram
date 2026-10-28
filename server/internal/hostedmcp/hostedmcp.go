@@ -194,9 +194,6 @@ func CreateCanonical(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 	}); err != nil {
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "audit hosted MCP endpoint")
 	}
-	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
-		return mcpserversrepo.McpServer{}, err //nolint:wrapcheck // oops errors pass through.
-	}
 	return server, nil
 }
 
@@ -237,10 +234,10 @@ func LockServer(ctx context.Context, tx pgx.Tx, organizationID string, projectID
 	return endpoints, server, nil
 }
 
-// RequireLiveAddress rejects enabling a hosted server with no endpoint that can serve; an address on a deleted
-// domain does not count.
+// RequireLiveAddress rejects enabling a hosted server with no endpoint that can serve: one on the platform or on
+// a live, verified and activated custom domain.
 func RequireLiveAddress(ctx context.Context, tx pgx.Tx, organizationID string, server mcpserversrepo.McpServer) error {
-	live, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+	live, err := mcpendpointsrepo.New(tx).ListServableMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListServableMCPEndpointsByMCPServerIDParams{
 		OrganizationID: organizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
 	})
 	if err != nil {
@@ -288,9 +285,6 @@ func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Act
 	}
 	if err := LogUpdate(ctx, tx, auditLogger, actor, toolset.OrganizationID, canonical, updated); err != nil {
 		return false, err
-	}
-	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
-		return false, err //nolint:wrapcheck // oops errors pass through.
 	}
 	return true, nil
 }
