@@ -1860,7 +1860,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // challenges) treats them as nonexistent — mirroring how the
 // mcp_endpoints → mcp_servers path handles visibility 'disabled'.
 func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, hostingstate.Hosting, legacyalias.Alias, uuid.NullUUID, error) {
-	toolset, alias, err := legacyalias.Find(ctx, s.db, mcpSlug, customDomainID, strictPlatform)
+	toolset, alias, err := legacyalias.Find(ctx, s.logger, s.db, mcpSlug, customDomainID, strictPlatform)
 	noWrapper := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

@@ -458,6 +458,22 @@ func TestHostedAttachmentUndialableToolsetUsesWrapper(t *testing.T) {
 	require.EqualValues(t, 1, counts)
 }
 
+// A disabled, endpointless hosted server whose legacy alias still serves is enabled when attached.
+func TestHostedAttachmentEnablesAliasOnlyWrapper(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_alias_only")
+	f.disableHosted(t)
+	f.deleteHostedEndpoints(t)
+	testenv.SetLegacyAlias(t, t.Context(), f.db, f.projectID, f.hosted.ID, "org-test-billing-x1", uuid.NullUUID{})
+
+	name := "updated"
+	_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil,
+		[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil, allowAllMCPEnable)
+	require.NoError(t, err)
+	require.Equal(t, "private", f.wrapper(t).Visibility)
+	require.Equal(t, []string{"billing"}, runtimeIDs(f.runtime(t)))
+}
+
 // A toolset without a canonical wrapper has no MCP server to attach.
 func TestHostedAttachmentWithoutWrapperRejected(t *testing.T) {
 	t.Parallel()

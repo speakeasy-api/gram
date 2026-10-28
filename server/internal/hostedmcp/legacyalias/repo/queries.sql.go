@@ -19,6 +19,10 @@ SELECT (EXISTS (
   WHERE t.mcp_slug = $1
     AND t.custom_domain_id IS NOT DISTINCT FROM $2::uuid
     AND t.deleted IS FALSE
+    AND (
+      $2::uuid IS NULL
+      OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE)
+    )
     AND ($3::uuid IS NULL OR t.id <> $3::uuid)
     AND (
       $4::uuid IS NULL
@@ -41,7 +45,7 @@ SELECT (EXISTS (
   AND EXISTS (
     SELECT 1
     FROM toolsets t
-    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+    JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
     WHERE t.mcp_slug = $1
       AND t.custom_domain_id IS NOT NULL
       AND t.deleted IS FALSE
@@ -68,7 +72,8 @@ type AliasTakenParams struct {
 }
 
 // Whether a live toolset alias holds the slug in the namespace (platform when custom_domain_id is NULL). Not
-// project-scoped, mirroring the partial unique index. exclude_toolset_id discounts that toolset's alias;
+// project-scoped, mirroring the partial unique index. A platform alias in a deleted project still holds its slug, as
+// the loose lookup refuses to fall back past it; a custom-domain alias holds its address only in a live project. exclude_toolset_id discounts that toolset's alias;
 // exclude_mcp_server_id discounts the toolset backing that server. On the platform, a custom-domain alias in a
 // live project also holds the slug while no platform alias does, since FindToolsetByAlias serves it there; only
 // that toolset or its canonical server may claim it.
@@ -84,19 +89,25 @@ func (q *Queries) AliasTaken(ctx context.Context, arg AliasTakenParams) (bool, e
 	return taken, err
 }
 
-const findToolsetByAlias = `-- name: FindToolsetByAlias :one
+const findToolsetByAlias = `-- name: FindToolsetByAlias :many
 
-SELECT id, project_id, mcp_slug, custom_domain_id
-FROM toolsets
-WHERE id = (
-    SELECT t.id
-    FROM toolsets t
-    WHERE t.mcp_slug = $1
-      AND t.deleted IS FALSE
-    ORDER BY (t.custom_domain_id IS NULL) DESC
-    LIMIT 1
+SELECT t.id, t.project_id, t.mcp_slug, t.custom_domain_id
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
+WHERE t.mcp_slug = $1
+  AND t.deleted IS FALSE
+  AND (
+    t.custom_domain_id IS NULL
+    OR NOT EXISTS (
+      SELECT 1
+      FROM toolsets pa
+      WHERE pa.mcp_slug = $1
+        AND pa.custom_domain_id IS NULL
+        AND pa.deleted IS FALSE
+    )
   )
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE)
+ORDER BY t.id
+LIMIT 2
 `
 
 type FindToolsetByAliasRow struct {
@@ -109,18 +120,32 @@ type FindToolsetByAliasRow struct {
 // The legacy /mcp/<slug> alias of toolsets created before hosted servers owned their endpoints (AIM-670). These
 // are the only queries that name toolsets.mcp_slug and toolsets.custom_domain_id; every other sqlc package reads
 // toolsets through sqlc_retired_columns.sql, which drops the toolset hosting columns.
-// Loose platform lookup: prefers a platform alias but accepts a custom-domain alias with the slug.
-// A winning row in a deleted project still owns the slug, so it yields no row rather than a fallback.
-func (q *Queries) FindToolsetByAlias(ctx context.Context, mcpSlug pgtype.Text) (FindToolsetByAliasRow, error) {
-	row := q.db.QueryRow(ctx, findToolsetByAlias, mcpSlug)
-	var i FindToolsetByAliasRow
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.McpSlug,
-		&i.CustomDomainID,
-	)
-	return i, err
+// Loose platform lookup: a platform alias wins over custom-domain aliases with the slug, and one in a deleted project
+// still owns the slug, so it yields no row rather than a fallback. Without a platform alias, every live-project
+// custom-domain alias with the slug is a candidate; the caller refuses more than one, since they span tenants.
+func (q *Queries) FindToolsetByAlias(ctx context.Context, mcpSlug pgtype.Text) ([]FindToolsetByAliasRow, error) {
+	rows, err := q.db.Query(ctx, findToolsetByAlias, mcpSlug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindToolsetByAliasRow
+	for rows.Next() {
+		var i FindToolsetByAliasRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.McpSlug,
+			&i.CustomDomainID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const findToolsetByCustomDomainAlias = `-- name: FindToolsetByCustomDomainAlias :one
@@ -316,6 +341,7 @@ WHERE t.id = ANY($2::uuid[])
       AND o.custom_domain_id IS NOT NULL
       AND o.id <> t.id
       AND o.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM projects op WHERE op.id = o.project_id AND op.organization_id = o.organization_id AND op.deleted IS FALSE)
   )
   AND NOT EXISTS (
     SELECT 1
@@ -337,7 +363,7 @@ type ListPlatformServedAliasesRow struct {
 	Slug        string
 }
 
-// Canonical hosted servers whose toolset alias sits on a custom domain and is the only alias with its slug, with no
+// Canonical hosted servers whose toolset alias sits on a custom domain and is the only live-project alias with its slug, with no
 // live platform endpoint holding it: the loose legacy lookup serves that alias on the platform host too.
 func (q *Queries) ListPlatformServedAliases(ctx context.Context, arg ListPlatformServedAliasesParams) ([]ListPlatformServedAliasesRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformServedAliases, arg.OrganizationID, arg.McpServerIds, arg.ProjectIds)
@@ -365,10 +391,14 @@ FROM toolsets t
 WHERE t.mcp_slug = ANY($1::text[])
   AND (t.mcp_slug || '|' || COALESCE(t.custom_domain_id::text, '')) = ANY($2::text[])
   AND t.deleted IS FALSE
+  AND (
+    t.custom_domain_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE)
+  )
 UNION
 SELECT (t.mcp_slug || '|')::text AS address_key
 FROM toolsets t
-JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
 WHERE t.mcp_slug = ANY($1::text[])
   AND (t.mcp_slug || '|') = ANY($2::text[])
   AND t.custom_domain_id IS NOT NULL
@@ -380,7 +410,8 @@ type ListTakenAliasesParams struct {
 	AddressKeys []string
 }
 
-// Which of the given addresses, keyed "<slug>|<custom domain id or empty for the platform>", a live toolset alias holds.
+// Which of the given addresses, keyed "<slug>|<custom domain id or empty for the platform>", a toolset alias holds. As in
+// AliasTaken, a platform alias holds its slug even in a deleted project; a custom-domain alias only in a live one.
 // The platform host also serves a custom-domain alias in a live project.
 func (q *Queries) ListTakenAliases(ctx context.Context, arg ListTakenAliasesParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, listTakenAliases, arg.Slugs, arg.AddressKeys)
@@ -442,7 +473,7 @@ SELECT (
   AND EXISTS (
     SELECT 1
     FROM toolsets t
-    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
+    JOIN projects p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
     WHERE t.mcp_slug = $1
       AND t.custom_domain_id IS NOT NULL
       AND t.deleted IS FALSE

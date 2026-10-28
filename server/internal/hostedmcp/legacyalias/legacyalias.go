@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -64,8 +66,9 @@ func List(ctx context.Context, db repo.DBTX, projectID uuid.UUID, toolsetIDs []u
 
 // Find returns the live toolset an alias names, with that alias. A valid customDomainID scopes the lookup to that
 // domain; otherwise strictPlatform restricts it to platform aliases, and without it a platform alias wins over a
-// custom-domain one with the same slug. It returns pgx.ErrNoRows when no toolset has the alias.
-func Find(ctx context.Context, db toolsetsrepo.DBTX, slug string, customDomainID uuid.NullUUID, strictPlatform bool) (toolsetsrepo.Toolset, Alias, error) {
+// custom-domain one with the same slug. It returns pgx.ErrNoRows when no toolset has the alias, and when the loose
+// lookup matches custom-domain aliases in more than one live project, since picking one could serve another tenant.
+func Find(ctx context.Context, logger *slog.Logger, db toolsetsrepo.DBTX, slug string, customDomainID uuid.NullUUID, strictPlatform bool) (toolsetsrepo.Toolset, Alias, error) {
 	q := repo.New(db)
 	text := pgtype.Text{String: slug, Valid: true}
 	var row repo.FindToolsetByAliasRow
@@ -80,7 +83,18 @@ func Find(ctx context.Context, db toolsetsrepo.DBTX, slug string, customDomainID
 		r, err = q.FindToolsetByPlatformAlias(ctx, text)
 		row = repo.FindToolsetByAliasRow(r)
 	default:
-		row, err = q.FindToolsetByAlias(ctx, text)
+		var rows []repo.FindToolsetByAliasRow
+		rows, err = q.FindToolsetByAlias(ctx, text)
+		switch {
+		case err != nil:
+		case len(rows) == 0:
+			err = pgx.ErrNoRows
+		case len(rows) > 1:
+			logger.WarnContext(ctx, "legacy MCP alias is ambiguous on the platform host; refusing to serve it", attr.SlogToolsetMCPSlug(slug))
+			err = pgx.ErrNoRows
+		default:
+			row = rows[0]
+		}
 	}
 	if err != nil {
 		return toolsetsrepo.Toolset{}, None(), err

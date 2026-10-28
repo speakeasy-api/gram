@@ -2155,7 +2155,7 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 	isCustomDomainRequest := customdomains.FromContext(ctx) != nil
 	domainID := s.resolveDomainIDFromContext(ctx)
 	if domainID != nil {
-		toolset, alias, toolsetErr = legacyalias.Find(ctx, s.db, mcpSlug, uuid.NullUUID{UUID: *domainID, Valid: true}, false)
+		toolset, alias, toolsetErr = legacyalias.Find(ctx, s.logger, s.db, mcpSlug, uuid.NullUUID{UUID: *domainID, Valid: true}, false)
 	}
 
 	// Fall back to slug-only lookup when the request did not arrive through a
@@ -2164,7 +2164,7 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 	// still preventing cross-domain toolset leakage for actual custom-domain
 	// requests.
 	if domainID == nil || (!isCustomDomainRequest && toolsetErr != nil) {
-		toolset, alias, toolsetErr = legacyalias.Find(ctx, s.db, mcpSlug, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, false)
+		toolset, alias, toolsetErr = legacyalias.Find(ctx, s.logger, s.db, mcpSlug, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, false)
 	}
 
 	switch {
