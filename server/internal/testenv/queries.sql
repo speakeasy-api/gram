@@ -2070,6 +2070,14 @@ FROM sign_in_revocation_deliveries
 WHERE organization_id = @organization_id
 ORDER BY created_at, id;
 
+-- name: ListMCPSkillObservations :many
+-- The skill observations one project recorded with one provider, oldest first.
+SELECT *
+FROM skill_observations
+WHERE project_id = @project_id
+  AND provider = @provider::text
+ORDER BY seen_at ASC, id ASC;
+
 -- name: SetDirectoryGroupWorkOSDeletedFixture :exec
 -- Deletes a directory group as a WorkOS deletion does, setting both markers,
 -- or with deleted false brings it back by clearing them.
@@ -2307,3 +2315,20 @@ SELECT EXISTS (
       AND wait_event_type = 'Lock'
       AND query LIKE '%LockWorkloadIssuerForWrite%'
 )::boolean;
+
+-- name: SetRemoteSessionListFixture :exec
+-- Test fixture for effective expiry and timestamp pagination.
+UPDATE remote_sessions s
+SET created_at = @created_at, last_used_at = sqlc.narg('last_used_at'),
+    access_expires_at = sqlc.narg('access_expires_at'), refresh_expires_at = sqlc.narg('refresh_expires_at'),
+    authorization_expires_at = sqlc.narg('authorization_expires_at'), refresh_token_encrypted = sqlc.narg('refresh_token_encrypted')
+FROM remote_session_clients c
+WHERE s.id = @id AND c.id = s.remote_session_client_id AND c.organization_id = @organization_id;
+
+-- name: SetGatewaySessionListFixture :exec
+-- Test fixture for endpoint, ordering, and expiry boundaries.
+UPDATE user_sessions
+SET resource = sqlc.narg('resource'), created_at = @created_at,
+    last_used_at = sqlc.narg('last_used_at'), refresh_expires_at = @refresh_expires_at,
+    deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id AND organization_id = @organization_id;

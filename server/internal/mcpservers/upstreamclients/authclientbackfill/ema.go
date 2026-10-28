@@ -33,19 +33,29 @@ type emaTarget struct {
 type emaPlan struct {
 	targets []emaTarget
 	served  map[uuid.UUID]bool
+	// direct holds the served servers an ema client serves on their direct
+	// route too, not only through the gateways.
+	direct  map[uuid.UUID]bool
 	order   []emaUpstream
 	groups  map[emaUpstream][]ListEMABackfillBindingsRow
 	reached map[emaUpstream][]reachedServer
 }
 
 func newEMAPlan() *emaPlan {
-	return &emaPlan{targets: nil, served: map[uuid.UUID]bool{}, order: nil, groups: map[emaUpstream][]ListEMABackfillBindingsRow{}, reached: map[emaUpstream][]reachedServer{}}
+	return &emaPlan{targets: nil, served: map[uuid.UUID]bool{}, direct: map[uuid.UUID]bool{}, order: nil, groups: map[emaUpstream][]ListEMABackfillBindingsRow{}, reached: map[emaUpstream][]reachedServer{}}
 }
 
 // reaches reports whether an ema client serves the server. A nil plan, as
 // when the EMA phase failed, serves none.
 func (p *emaPlan) reaches(serverID uuid.UUID) bool {
 	return p != nil && p.served[serverID]
+}
+
+// reachesDirectly reports whether an ema client serves the server on its
+// direct route. A server reached only through the gateways keeps its direct
+// route's own clients, which the ema client cannot replace there.
+func (p *emaPlan) reachesDirectly(serverID uuid.UUID) bool {
+	return p.reaches(serverID) && p.direct[serverID]
 }
 
 // runEMA groups the organization's ready, client-bound identity chaining
@@ -129,10 +139,11 @@ func reportEMAWarnings(ctx context.Context, q *Queries, opts Options, plan *emaP
 type reachedServer struct {
 	id, projectID uuid.UUID
 	allowed       bool
+	direct        bool
 }
 
 func reachedServers(ctx context.Context, q *Queries, organizationID string, bindings []ListEMABackfillBindingsRow) ([]reachedServer, error) {
-	seen := map[uuid.UUID]bool{}
+	seen := map[uuid.UUID]int{}
 	var servers []reachedServer
 	for _, binding := range bindings {
 		rows, err := q.ListEMABindingServers(ctx, ListEMABindingServersParams{BindingID: binding.BindingID, OrganizationID: organizationID})
@@ -140,10 +151,13 @@ func reachedServers(ctx context.Context, q *Queries, organizationID string, bind
 			return nil, fmt.Errorf("list servers of binding %s: %w", binding.BindingID, err)
 		}
 		for _, row := range rows {
-			if !seen[row.McpServerID] {
-				seen[row.McpServerID] = true
-				servers = append(servers, reachedServer{id: row.McpServerID, projectID: row.ProjectID, allowed: row.Match == "match"})
+			if i, ok := seen[row.McpServerID]; ok {
+				// Reached by several bindings: directly if any reaches it so.
+				servers[i].direct = servers[i].direct || row.Direct
+				continue
 			}
+			seen[row.McpServerID] = len(servers)
+			servers = append(servers, reachedServer{id: row.McpServerID, projectID: row.ProjectID, allowed: row.Match == "match", direct: row.Direct})
 		}
 	}
 	return servers, nil
@@ -220,6 +234,10 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 		default:
 			continue
 		}
+		reachedDirectly := map[uuid.UUID]bool{}
+		for _, server := range servers {
+			reachedDirectly[server.id] = server.direct
+		}
 		// Disagreeing bindings decide nothing new, but a client already
 		// recorded for one of them keeps serving with its links until they
 		// agree again.
@@ -243,6 +261,11 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 			target := emaTarget{clientID: existing.ID, recorded: true, servers: linked}
 			for _, serverID := range linked {
 				plan.served[serverID] = true
+				// A linked server the bindings reach only through the gateways
+				// stays gateway-only; one they no longer reach keeps being
+				// treated as served directly until its link retires.
+				direct, reached := reachedDirectly[serverID]
+				plan.direct[serverID] = plan.direct[serverID] || !reached || direct
 			}
 			plan.targets = append(plan.targets, target)
 		}
@@ -354,6 +377,7 @@ func decideEMA(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, key ema
 	for _, server := range servers {
 		target.servers = append(target.servers, server.id)
 		plan.served[server.id] = true
+		plan.direct[server.id] = plan.direct[server.id] || server.direct
 	}
 	plan.targets = append(plan.targets, target)
 

@@ -54,7 +54,7 @@ func newHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixtu
 	})
 	require.NoError(t, err)
 	tx := testenv.BeginTx(t, ctx, db)
-	_, err = hostedmcp.Sync(ctx, tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), hosted, nil)
+	_, err = hostedmcp.BackfillSync(ctx, tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), hosted)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
@@ -91,7 +91,7 @@ func newHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixtu
 func syncCanonicalWrapper(t *testing.T, db *pgxpool.Pool, toolset toolsetsrepo.Toolset) {
 	t.Helper()
 	tx := testenv.BeginTx(t, t.Context(), db)
-	_, err := hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), toolset, nil)
+	_, err := hostedmcp.BackfillSync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), toolset)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 }
@@ -142,7 +142,7 @@ func (f hostedAttachmentFixture) setToolsetMCPEnabled(t *testing.T, enabled bool
 	t.Helper()
 	ts := f.setToolsetMCPEnabledNoSync(t, enabled)
 	tx := testenv.BeginTx(t, t.Context(), f.db)
-	_, err := hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), ts, nil)
+	_, err := hostedmcp.BackfillSync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), ts)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 }
@@ -452,7 +452,7 @@ func TestHostedAttachmentOnDisabledWrapper(t *testing.T) {
 	})
 	require.NoError(t, err)
 	tx := testenv.BeginTx(t, t.Context(), f.db)
-	_, err = hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), off, nil)
+	_, err = hostedmcp.BackfillSync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), off)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 	f.addServerRow(t, off.ID, uuid.NullUUID{})
@@ -471,7 +471,7 @@ func TestHostedAttachmentUndialableToolsetUsesWrapper(t *testing.T) {
 	require.NoError(t, err)
 	noSlug := f.toolset(t)
 	tx := testenv.BeginTx(t, t.Context(), f.db)
-	_, err = hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), noSlug, nil)
+	_, err = hostedmcp.BackfillSync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), noSlug)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 	require.Equal(t, f.hosted.ID, f.wrapper(t).ID, "the wrapper outlives the slug")

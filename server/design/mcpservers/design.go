@@ -420,7 +420,7 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.")
+	Description("Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value, and set clear_user_session_issuer to detach the issuer; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
@@ -447,6 +447,7 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 	Attribute("user_session_issuer_id", String, "The ID of an existing project- or organization-owned user session issuer to attach. Omit to preserve the current issuer.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("clear_user_session_issuer", Boolean, "Detach the current user session issuer, so the server no longer requires user sessions. Must not be true when user_session_issuer_id is set.")
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 
@@ -467,6 +468,7 @@ var McpServer = Type("McpServer", func() {
 	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("slug", String, "A URL-safe, project-unique slug derived server-side from the name and ID")
 	Attribute("platform_endpoint_slug", String, "The slug of this server's primary platform endpoint, the oldest one. Absent when no platform endpoint exists; never a custom-domain slug.")
+	Attribute("legacy_platform_slug", String, "The slug of an older Speakeasy-hosted address of this hosted server: its legacy custom-domain address, which the Speakeasy domain also answers under the same access rules. Absent when a platform endpoint or another alias holds that slug.")
 	Attribute("environment_id", String, "The ID of the environment associated with the server", func() {
 		Format(FormatUUID)
 	})

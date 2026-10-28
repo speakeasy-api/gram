@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -144,7 +145,9 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 		// is not MCP-enabled is reported as needing no index.
 		target, err := toolsetsrepo.New(conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: indexedToolset, ProjectID: indexedProject})
 		require.NoError(t, err)
-		if !target.McpEnabled {
+		hosting, _, err := hostedmcp.LoadServerState(ctx, conn, target)
+		require.NoError(t, err)
+		if !hosting.Enabled {
 			return toolsets.ErrToolsetIndexNotRequired
 		}
 		return nil

@@ -150,7 +150,7 @@ type kitGKEAuthorityHandle struct {
 // top-level metadata so ordinary metadata updates cannot recursively nest it.
 func kitGKEAuthorityMetadata(state kitGKEAuthority) (kitGKEBackendMetadata, error) {
 	m := state.Metadata
-	state.Metadata = kitGKEBackendMetadata{Workload: nil, ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: nil, Provisioning: false, CheckpointMarker: "", ProxyImageDigest: "", ImageDigest: "", ContainerID: "", AuthorityUID: "", RuntimeID: uuid.Nil, AssistantID: uuid.Nil, ProjectID: uuid.Nil, Version: 0, Namespace: "", Fingerprint: "", ClaimUID: "", TemplateUID: "", SecretUID: "", SecretName: "", PodName: "", PodUID: ""}
+	state.Metadata = kitGKEBackendMetadata{TemplateName: "", Workload: nil, ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: nil, Provisioning: false, CheckpointMarker: "", ProxyImageDigest: "", ImageDigest: "", ContainerID: "", AuthorityUID: "", RuntimeID: uuid.Nil, AssistantID: uuid.Nil, ProjectID: uuid.Nil, Version: 0, Namespace: "", Fingerprint: "", ClaimUID: "", TemplateUID: "", SecretUID: "", SecretName: "", PodName: "", PodUID: ""}
 	raw, err := json.Marshal(state)
 	if err != nil {
 		return m, fmt.Errorf("marshal Kit GKE authority state: %w", err)
@@ -476,7 +476,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 		}
 		return empty, fmt.Errorf("kit GKE restore requires source claim deletion")
 	}
-	_, err = k.get(ctx, r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)
+	_, err = k.get(ctx, r, kitTemplateGVR, state.Metadata.templateName(r), state.Metadata.TemplateUID)
 	if err != nil {
 		return empty, err
 	}
@@ -602,7 +602,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	}
 	// SandboxTemplate's spec is immutable. Replace it only after its exact UID
 	// has been deleted; the restoring fence prevents concurrent admission.
-	if err = k.deleteOwned(ctx, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID); err != nil {
+	if err = k.deleteOwned(ctx, kitTemplateGVR, state.Metadata.templateName(r), state.Metadata.TemplateUID); err != nil {
 		return empty, err
 	}
 	template := objects.Template
@@ -622,6 +622,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 		return empty, fmt.Errorf("fresh restore template lacks UID")
 	}
 	state.Metadata.TemplateUID = template.GetUID()
+	state.Metadata.TemplateName = template.GetName()
 	obj, err = k.saveAuthority(ctx, obj, state)
 	if err != nil {
 		return empty, err
@@ -631,7 +632,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	claimLabels["gram.ai/project-id"] = r.ProjectID.String()
 	claim.SetLabels(claimLabels)
 	claim.SetAnnotations(map[string]string{"speakeasy.com/kit-spec": k.fingerprint})
-	claim.Object["spec"] = map[string]any{"sandboxTemplateRef": map[string]any{"name": kitGKEName(r)}, "lifecycle": map[string]any{"shutdownPolicy": "Delete"}}
+	claim.Object["spec"] = map[string]any{"sandboxTemplateRef": map[string]any{"name": template.GetName()}, "lifecycle": map[string]any{"shutdownPolicy": "Delete"}}
 	claim, err = k.config.GKE.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Create(ctx, claim, metav1.CreateOptions{})
 	if err != nil {
 		return empty, fmt.Errorf("kit GKE restore: %w", err)

@@ -105,6 +105,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "custom_domain_id": payload.custom_domain_id,
+    "mcp_server_id": payload.mcp_server_id,
     "slug": payload.slug,
   });
 

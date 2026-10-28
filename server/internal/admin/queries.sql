@@ -508,6 +508,13 @@ SELECT EXISTS (
     WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE
 );
 
+-- name: AdminAuditProjectBelongsToOrganization :one
+-- Audit history remains readable after a project is soft-deleted.
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = @project_id AND organization_id = @organization_id
+);
+
 -- name: AdminListProjectMcpServerRows :many
 -- One row per live endpoint, and one with no endpoint columns for a server that
 -- has none. custom_domain is null for an endpoint whose domain cannot serve it;
@@ -639,6 +646,7 @@ SELECT
     t.converted_at AS trial_converted_at,
     t.demoted_at AS trial_demoted_at,
     om.creation_source,
+    om.adoption_dashboard_url,
     om.created_at,
     om.updated_at,
     (
@@ -654,6 +662,15 @@ WHERE om.id = sqlc.arg('id')::text
    OR (sqlc.arg('allow_slug')::boolean AND om.slug = sqlc.arg('id')::text)
 ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;
+
+-- name: AdminSetOrganizationAdoptionDashboardURL :one
+-- NULL clears the link. Keyed on id alone, like every other admin write.
+UPDATE organization_metadata
+SET
+    adoption_dashboard_url = sqlc.narg('adoption_dashboard_url')::text,
+    updated_at = clock_timestamp()
+WHERE id = sqlc.arg('id')::text
+RETURNING id;
 
 -- name: AdminAcquireStripeSubscriptionLock :exec
 -- Serializes assignments of the same Stripe subscription across organizations.

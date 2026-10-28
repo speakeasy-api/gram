@@ -1,5 +1,5 @@
 // Package hostedmcpbackfill gives legacy hosted toolsets their canonical
-// mcp_servers wrapper and endpoint through hostedmcp.Sync; see
+// mcp_servers wrapper and endpoint through hostedmcp.BackfillSync; see
 // HOSTED_MCP_WRAPPERS_MIGRATION.md.
 package hostedmcpbackfill
 
@@ -41,11 +41,8 @@ type Outcome string
 const (
 	OutcomeWouldCreate              Outcome = "would_create"
 	OutcomeCreated                  Outcome = "created"
-	OutcomeWouldReconcile           Outcome = "would_reconcile"
-	OutcomeReconciled               Outcome = "reconciled"
 	OutcomeAlreadyComplete          Outcome = "already_complete"
 	OutcomeDeadCustomDomain         Outcome = "dead_custom_domain"
-	OutcomeBlockedMultipleEndpoints Outcome = "blocked_multiple_endpoints"
 	OutcomeBlockedSlugCollision     Outcome = "blocked_slug_collision"
 	OutcomeBlockedCanonicalConflict Outcome = "blocked_canonical_conflict"
 	OutcomeBlockedSyncRejected      Outcome = "blocked_sync_rejected"
@@ -144,7 +141,7 @@ func (r *Runner) Run(ctx context.Context) (Report, error) {
 		Phase:                 phaseWrappers,
 		Scanned:               0,
 		Toolsets:              0,
-		Outcomes:              map[Outcome]int{},
+		Outcomes:              make(map[Outcome]int),
 		Writes:                0,
 		FreshIDServersPresent: 0,
 		LastCursor:            r.options.Cursor,
@@ -226,7 +223,7 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return row, fmt.Errorf("advisory lock: %w", err)
 	}
 
-	// Toolset row first, as every hostedmcp.Sync caller holds it before Sync locks domains, endpoints, then the server.
+	// Toolset row first, as hostedmcp.BackfillSync expects before it locks domains, endpoints, then the server.
 	toolsets := toolsetsrepo.New(tx)
 	current, err := toolsets.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: candidate.ID, ProjectID: candidate.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -270,6 +267,15 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return blocked(row, OutcomeBlockedCanonicalConflict, "canonical id belongs to another backend"), nil
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return row, fmt.Errorf("load canonical identity: %w", err)
+	case err == nil:
+		// An existing canonical wrapper owns its hosting state; the frozen toolset columns never overwrite it.
+		existing, err := loadCanonical(ctx, tx, toolset)
+		if err != nil {
+			return row, err
+		}
+		row.LiveEndpoints = len(existing.endpoints)
+		row.Outcome = OutcomeAlreadyComplete
+		return row, nil
 	}
 
 	dead := false
@@ -286,9 +292,6 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return row, err
 	}
 	row.LiveEndpoints = len(before.endpoints)
-	if before.server != nil && len(before.endpoints) > 1 {
-		return blocked(row, OutcomeBlockedMultipleEndpoints, "canonical wrapper has multiple live endpoints"), nil
-	}
 	if !dead {
 		held, err := q.EndpointAddressHeldElsewhere(ctx, EndpointAddressHeldElsewhereParams{Slug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID, McpServerID: toolset.ID})
 		if err != nil {
@@ -308,7 +311,7 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		}
 	}
 
-	domains, err := hostedmcp.Sync(ctx, tx, r.audit, hostedmcp.SystemActor(ActorComponent), toolset, nil)
+	domains, err := hostedmcp.BackfillSync(ctx, tx, r.audit, hostedmcp.SystemActor(ActorComponent), toolset)
 	if err != nil {
 		outcome, ok := classifySyncError(err)
 		if !ok {
@@ -332,8 +335,6 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		row.Outcome = OutcomeDeadCustomDomain
 	case before.server == nil:
 		row.Outcome = conv.Ternary(r.options.Apply, OutcomeCreated, OutcomeWouldCreate)
-	case row.Wrote:
-		row.Outcome = conv.Ternary(r.options.Apply, OutcomeReconciled, OutcomeWouldReconcile)
 	default:
 		row.Outcome = OutcomeAlreadyComplete
 	}

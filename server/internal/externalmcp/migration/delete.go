@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -48,9 +49,12 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 	// Only an MCP-enabled toolset is in a generated package, so only its
 	// deletion can change one. Membership is read before the hosted server
 	// goes, since that detaches server-backed plugin entries.
+	hosting, _, err := hostedmcp.LoadServerState(ctx, tx, toolset)
+	if err != nil {
+		return fmt.Errorf("load hosted MCP server: %w", err)
+	}
 	carried := false
-	if toolset.McpEnabled {
-		var err error
+	if hosting.Enabled {
 		carried, err = pluginsrepo.New(tx).HasPluginMembershipForToolset(ctx, pluginsrepo.HasPluginMembershipForToolsetParams{ProjectID: toolset.ProjectID, ToolsetID: toolset.ID})
 		if err != nil {
 			return fmt.Errorf("check toolset plugin membership: %w", err)
@@ -85,8 +89,8 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 	if len(hosted.DeletedRiskPolicies) > 0 {
 		return fail("risk policies are bound to its server; delete it from the dashboard instead")
 	}
-	if ownServer && toolset.McpSlug.Valid && toolset.McpSlug.String != "" {
-		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Delete the server at /mcp/%s with its addresses and plugin entries", toolset.McpSlug.String))
+	if alias := hostingstate.LegacyAlias(toolset).Slug; ownServer && alias.Valid && alias.String != "" {
+		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Delete the server at /mcp/%s with its addresses and plugin entries", alias.String))
 	}
 
 	// A server whose id is not the toolset's still points at it; deleting the

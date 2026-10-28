@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -18,49 +18,27 @@ func IsCanonical(server *mcpserversrepo.McpServer, toolsetID uuid.UUID) bool {
 	return server != nil && server.ID == toolsetID && server.ToolsetID.Valid && server.ToolsetID.UUID == toolsetID
 }
 
-// WithServerState returns toolset with its hosting state (enabled, public, session issuer) read from its
-// canonical wrapper, which owns that state; without a canonical wrapper the toolset columns stand.
-// A disabled wrapper keeps the toolset's public flag, which is all that records it.
-func WithServerState(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) toolsetsrepo.Toolset {
+// ServerHosting is toolset's hosting state (enabled, public, session issuer) read from its canonical
+// wrapper, which owns that state; without a canonical wrapper the toolset columns stand.
+func ServerHosting(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) hostingstate.Hosting {
 	if !IsCanonical(wrapper, toolset.ID) {
-		return toolset
+		return hostingstate.ToolsetColumns(toolset).Hosting
 	}
-	switch wrapper.Visibility {
-	case visibility.Public:
-		toolset.McpEnabled, toolset.McpIsPublic = true, true
-	case visibility.Private:
-		toolset.McpEnabled, toolset.McpIsPublic = true, false
-	default:
-		toolset.McpEnabled = false
-	}
-	toolset.UserSessionIssuerID = wrapper.UserSessionIssuerID
-	return toolset
+	return hostingstate.FromServer(toolset.ExternalOauthServerID, wrapper.Visibility, wrapper.UserSessionIssuerID)
 }
 
-// InSync reports whether a canonical wrapper still matches its toolset's hosting columns.
-// Serving denies drifted pairs until the wrapper becomes the only writer.
-func InSync(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) bool {
-	return IsCanonical(wrapper, toolset.ID) && wrapper.Visibility == Visibility(toolset) && wrapper.UserSessionIssuerID == toolset.UserSessionIssuerID
-}
-
-// LoadServerState loads toolset's canonical wrapper and applies WithServerState; wrapper is nil when there is none.
-// A server that kept the toolset's id but no longer serves it leaves the toolset disabled, and a drifted pair
-// (see InSync) reads as disabled and private, as serving denies it.
-func LoadServerState(ctx context.Context, db mcpserversrepo.DBTX, toolset toolsetsrepo.Toolset) (toolsetsrepo.Toolset, *mcpserversrepo.McpServer, error) {
+// LoadServerState loads toolset's canonical wrapper and returns its ServerHosting hosting; wrapper is nil when
+// there is none. A server that kept the toolset's id but no longer serves it leaves the toolset disabled.
+func LoadServerState(ctx context.Context, db toolsetsrepo.DBTX, toolset toolsetsrepo.Toolset) (hostingstate.Hosting, *mcpserversrepo.McpServer, error) {
 	wrapper, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return toolset, nil, nil
+		return ServerHosting(toolset, nil), nil, nil
 	case err != nil:
-		return toolset, nil, fmt.Errorf("load canonical hosted MCP server: %w", err)
+		return hostingstate.NotHosted(), nil, fmt.Errorf("load canonical hosted MCP server: %w", err)
 	}
 	if !IsCanonical(&wrapper, toolset.ID) {
-		toolset.McpEnabled = false
-		return toolset, nil, nil
+		return hostingstate.Kept(hostingstate.ToolsetColumns(toolset).UserSessionIssuerID), nil, nil
 	}
-	if !InSync(toolset, &wrapper) {
-		toolset.McpEnabled, toolset.McpIsPublic = false, false
-		return toolset, &wrapper, nil
-	}
-	return WithServerState(toolset, &wrapper), &wrapper, nil
+	return ServerHosting(toolset, &wrapper), &wrapper, nil
 }

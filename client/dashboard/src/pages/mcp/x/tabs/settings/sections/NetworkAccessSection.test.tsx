@@ -283,6 +283,18 @@ const hostedToolset = {
   networkAccessMode: "public_only",
 } as Toolset;
 
+const hostedEndpoints: McpEndpoint[] = [
+  {
+    id: "endpoint-1",
+    projectId: "project-1",
+    slug: "hosted-toolset",
+    mcpServerId: "toolset-1",
+    isDomainRoot: false,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+];
+
 const hostedServer: McpServer = {
   id: "toolset-1",
   projectId: "project-1",
@@ -424,7 +436,11 @@ describe("NetworkAccessSection", () => {
 
   it("updates a hosted server through mcpServers.update and invalidates all affected caches", async () => {
     render(
-      <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
     );
 
     fireEvent.click(
@@ -475,7 +491,11 @@ describe("NetworkAccessSection", () => {
       visibility: "private",
     });
     render(
-      <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
     );
 
     fireEvent.click(
@@ -499,7 +519,11 @@ describe("NetworkAccessSection", () => {
   it("shows an error toast when the latest hosted server cannot be loaded", async () => {
     testState.getServer.mockRejectedValue(new Error("Server lookup failed"));
     render(
-      <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
     );
 
     fireEvent.click(
@@ -516,7 +540,11 @@ describe("NetworkAccessSection", () => {
 
   it("shows an error toast when a hosted server update fails", async () => {
     render(
-      <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
     );
 
     fireEvent.click(
@@ -534,7 +562,11 @@ describe("NetworkAccessSection", () => {
 
   it("requires confirmation before making a hosted server private only", async () => {
     render(
-      <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
     );
 
     fireEvent.click(
@@ -564,6 +596,7 @@ describe("NetworkAccessSection", () => {
     render(
       <NetworkAccessSection
         mcpServer={{ ...hostedServer, networkAccessMode: "dual" }}
+        endpoints={hostedEndpoints}
         toolset={{ ...hostedToolset, networkAccessMode: "dual" }}
       />,
     );
@@ -573,7 +606,11 @@ describe("NetworkAccessSection", () => {
 
   it("hides the traffic graph while a hosted toolset is public only", () => {
     render(
-      <NetworkAccessSection mcpServer={hostedServer} toolset={hostedToolset} />,
+      <NetworkAccessSection
+        mcpServer={hostedServer}
+        endpoints={hostedEndpoints}
+        toolset={hostedToolset}
+      />,
     );
     expect(screen.queryByTestId("network-traffic-panel")).toBeNull();
   });

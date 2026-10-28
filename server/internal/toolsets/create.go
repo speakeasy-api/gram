@@ -20,6 +20,8 @@ import (
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -126,6 +128,7 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}
 	mcpSlug := input.OrganizationSlug + "-" + slugSuffix
 
+	// Hosting state lives on the canonical wrapper, so the toolset hosting columns stay unset.
 	params := repo.CreateToolsetParams{
 		OrganizationID:         input.OrganizationID,
 		ProjectID:              input.ProjectID,
@@ -133,7 +136,7 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		Slug:                   slug,
 		Description:            conv.PtrToPGText(input.Description),
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
-		McpSlug:                conv.ToPGText(mcpSlug),
+		McpSlug:                conv.PtrToPGText(nil),
 		McpEnabled:             false,
 	}
 	// The first toolset in an organization is enabled as an MCP server and
@@ -144,7 +147,7 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	if err != nil {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "error getting enabled server count").LogError(ctx, logger)
 	}
-	params.McpEnabled = enabled == 0
+	mcpEnabled := enabled == 0
 
 	environments := environmentsRepo.New(tx)
 	if input.DefaultEnvironmentSlug != nil {
@@ -168,10 +171,9 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		}
 	}
 
-	if mcpSlug, err = ensureGeneratedMcpSlug(ctx, tx, logger, input.OrganizationSlug, input.OrganizationID, mcpSlug); err != nil {
+	if mcpSlug, err = ensureGeneratedMcpSlug(ctx, tx, logger, input.OrganizationSlug, input.OrganizationID, input.ProjectID, mcpSlug); err != nil {
 		return ToolsetCreateResult{}, err
 	}
-	params.McpSlug = conv.ToPGText(mcpSlug)
 
 	tr := repo.New(tx)
 	created, err := tr.CreateToolset(ctx, params)
@@ -209,12 +211,22 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}); err != nil {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
 	}
-	if _, err := hostedmcp.Sync(ctx, tx, auditLogger, hostedmcp.Actor{UserID: input.ActorUserID, Email: input.ActorEmail, System: ""}, created, nil); err != nil {
+	visibility := mcpservers.VisibilityDisabled
+	if mcpEnabled {
+		visibility = mcpservers.VisibilityPrivate
+	}
+	if _, err := hostedmcp.CreateCanonical(ctx, tx, auditLogger, hostedmcp.Actor{UserID: input.ActorUserID, Email: input.ActorEmail, System: ""}, hostedmcp.CreateCanonicalInput{
+		Toolset: created, Slug: mcpSlug, Visibility: visibility,
+	}); err != nil {
 		return ToolsetCreateResult{}, err //nolint:wrapcheck // oops errors pass through.
 	}
+	created, err = repo.New(tx).GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: created.ID, ProjectID: created.ProjectID})
+	if err != nil {
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "reload created toolset").LogError(ctx, logger)
+	}
 
-	result := ToolsetCreateResult{Toolset: created, McpEnabled: params.McpEnabled, AddedToDefaultPlugin: false, PluginCreated: false}
-	if params.McpEnabled {
+	result := ToolsetCreateResult{Toolset: created, McpEnabled: mcpEnabled, AddedToDefaultPlugin: false, PluginCreated: false}
+	if mcpEnabled {
 		projectID := input.ProjectID
 		actor := &contextvalues.AuthContext{ActiveOrganizationID: input.OrganizationID, UserID: input.ActorUserID, Email: input.ActorEmail, ProjectID: &projectID}
 		outcome, err := attachToDefaultPluginWithOutcome(ctx, tx, logger, auditLogger, actor, created.ID, created.Name)
@@ -226,9 +238,9 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	return result, nil
 }
 
-// ensureGeneratedMcpSlug guards a generated platform mcp_slug against the
-// unified namespace, regenerating on the rare collision with a live endpoint.
-func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, orgSlug, orgID, slug string) (string, error) {
+// ensureGeneratedMcpSlug guards a generated platform slug against the unified
+// namespace and the project's server slugs, regenerating on the rare collision.
+func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, orgSlug, orgID string, projectID uuid.UUID, slug string) (string, error) {
 	for attempt := 0; ; attempt++ {
 		if err := mcpendpoints.LockSlugScope(ctx, dbtx, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, slug); err != nil {
 			return "", oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
@@ -245,7 +257,13 @@ func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logge
 			return "", oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
 		}
 		if available {
-			return slug, nil
+			_, err := mcpserversrepo.New(dbtx).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(slug), ProjectID: projectID})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return slug, nil
+			case err != nil:
+				return "", oops.E(oops.CodeUnexpected, err, "check mcp server slug").LogError(ctx, logger)
+			}
 		}
 		if attempt == 2 {
 			return "", oops.E(oops.CodeConflict, nil, "could not generate a unique mcp slug").LogError(ctx, logger)

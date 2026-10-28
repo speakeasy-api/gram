@@ -121,7 +121,19 @@ LIMIT 1;
 -- name: ResolveToolsetsForWrite :many
 -- Also locks the toolsets behind canonical wrappers named by slug, so server
 -- attachments take the toolset lock before the server lock, as deletion does.
-SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
+SELECT t.id, t.slug, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+    AND (
+      t.mcp_slug IS NOT NULL
+      OR EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
+    )
+)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -327,20 +339,6 @@ WHERE t.project_id = @project_id
   AND so.reconcile_error_code IS NULL
 ORDER BY so.seen_at DESC, so.id DESC
 LIMIT 1;
-
--- name: EnableMCPForToolsets :many
--- Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
--- attached toolsets are enabled so users don't have to do it separately; the
--- caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
-UPDATE toolsets
-SET mcp_enabled = TRUE,
-    updated_at = clock_timestamp()
-WHERE id = ANY(@toolset_ids::UUID[])
-  AND project_id = @project_id
-  AND mcp_enabled IS FALSE
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-RETURNING id;
 
 -- name: LoadAssistantMcpServers :many
 -- Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug and

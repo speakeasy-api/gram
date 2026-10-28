@@ -251,7 +251,11 @@ func (s *Service) serveResolvedMCPEndpoint(
 	case mcpServer.RemoteMcpServerID.Valid, mcpServer.TunneledMcpServerID.Valid:
 		var upstreamToken remotesessions.UpstreamToken
 		if pendingIssuerGate != nil {
+			pendingIssuerGate.directWorkloadHandoff = true
 			upstreamToken, err = s.resolveDirectUpstreamToken(ctx, w, logger, pendingIssuerGate, upstreamResource, mcpServer.TunneledMcpServerID.Valid, mcpServer.RemoteSessionIssuerID)
+			if errors.Is(err, errWorkloadReconnectRequired) {
+				return s.serveWorkloadReconnect(w, r, pendingIssuerGate, sessionToolSelection)
+			}
 			if err != nil {
 				return err
 			}
@@ -279,8 +283,20 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
-		if mcpServer.ID == mcpServer.ToolsetID.UUID && !toolset.McpEnabled {
-			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+		// Re-read after issuer auth: a hosted server disabled meanwhile stops serving, and one whose access changed
+		// meanwhile is refused rather than served under the access it had when the request resolved.
+		if mcpServer.ID == mcpServer.ToolsetID.UUID {
+			fresh, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServer.ID, ProjectID: mcpEndpoint.ProjectID})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return oops.E(oops.CodeNotFound, err, "mcp server not found")
+			case err != nil:
+				return oops.E(oops.CodeUnexpected, err, "reload hosted MCP server").LogError(ctx, logger)
+			case fresh.Visibility == mcpservers.VisibilityDisabled:
+				return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+			case fresh.Visibility != mcpServer.Visibility || fresh.UserSessionIssuerID != mcpServer.UserSessionIssuerID:
+				return oops.E(oops.CodeConflict, nil, "mcp server access changed during the request; retry")
+			}
 		}
 		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpEndpoint.ID, mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
@@ -314,6 +330,7 @@ func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.Mc
 		toolVariationsGroupID: groupID,
 		mcpServerID:           &serverID,
 		mcpEndpointID:         &endpointID,
+		toolsetHosting:        nil,
 	}
 }
 
@@ -804,6 +821,18 @@ func (s *Service) remoteBackendProxyBuilder(
 	}, nil
 }
 
+// StartDrain starts the shutdown drain for relayed remote and tunneled MCP
+// traffic: streams that only carry server-initiated messages end now, so
+// their clients reconnect to a replica that is still serving, and requests
+// still waiting on a remote MCP server after interruptAfter are answered with
+// a JSON-RPC error. Call it when the server starts shutting down, before
+// waiting for in-flight requests.
+func (s *Service) StartDrain(interruptAfter time.Duration) {
+	if s.remoteProxyManager != nil {
+		s.remoteProxyManager.StartDrain(interruptAfter)
+	}
+}
+
 func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) error {
 	switch r.Method {
 	case http.MethodDelete:
@@ -1028,7 +1057,7 @@ func (s *Service) authorizeProxyBackendAccess(
 	if authorized != nil {
 		shadowCtx = authorized
 	}
-	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequire(shadowCtx, surface, err, connect)
+	s.newMandatoryShadow(shadowCtx, organizationID).shadowRequireServer(shadowCtx, surface, err, mandatoryVisibility(mcpServer.Visibility == mcpservers.VisibilityPublic), connect)
 	if err != nil {
 		return nil, err
 	}

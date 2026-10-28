@@ -373,7 +373,7 @@ func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCreden
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRevokeTimeout)
 	defer cancel()
 
-	r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens())
+	r.revoke(revokeCtx, cred.RemoteSessionClientID, nil, cred.tokens())
 }
 
 // RevokeUnstoredDetached is RevokeDetached for a pair Speakeasy exchanged upstream
@@ -390,7 +390,7 @@ func (r *UpstreamRevoker) RevokeUnstoredDetached(ctx context.Context, clientID u
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRevokeTimeout)
 	defer cancel()
 
-	r.revoke(revokeCtx, clientID, revocationTokens{access: accessToken, refresh: refreshToken, encrypted: false})
+	r.revoke(revokeCtx, clientID, nil, revocationTokens{access: accessToken, refresh: refreshToken, encrypted: false})
 }
 
 // RevokeAllDetached runs upstream revocations for a batch of sessions that have
@@ -414,6 +414,38 @@ func (r *UpstreamRevoker) RevokeUnstoredDetached(ctx context.Context, clientID u
 // local revoke is complete either way, but an operator reading "revoked" should
 // not have to guess whether the upstream heard about it.
 func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []RevokedCredentials) {
+	r.revokeAll(ctx, creds, nil)
+}
+
+// IssuingClientAuth is how a client authenticated before an edit replaced it.
+// Revocation has to authenticate as the client the tokens were issued to, and
+// by the time it runs post-commit the row already holds the new values.
+type IssuingClientAuth struct {
+	ClientID                        string
+	ClientSecretEncrypted           pgtype.Text
+	TokenEndpointAuthMethod         pgtype.Text
+	TokenEndpointAuthAudienceFormat pgtype.Text
+	JsonWebKeySetID                 uuid.NullUUID
+}
+
+func issuingClientAuth(client repo.RemoteSessionClient) IssuingClientAuth {
+	return IssuingClientAuth{
+		ClientID:                        client.ClientID,
+		ClientSecretEncrypted:           client.ClientSecretEncrypted,
+		TokenEndpointAuthMethod:         client.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: client.TokenEndpointAuthAudienceFormat,
+		JsonWebKeySetID:                 client.JsonWebKeySetID,
+	}
+}
+
+// RevokeAllIssuedToDetached is RevokeAllDetached for sessions whose client was
+// edited in the same transaction that tombstoned them: it authenticates with
+// the client's configuration from before the edit.
+func (r *UpstreamRevoker) RevokeAllIssuedToDetached(ctx context.Context, creds []RevokedCredentials, issuedTo IssuingClientAuth) {
+	r.revokeAll(ctx, creds, &issuedTo)
+}
+
+func (r *UpstreamRevoker) revokeAll(ctx context.Context, creds []RevokedCredentials, issuedTo *IssuingClientAuth) {
 	if len(creds) == 0 {
 		return
 	}
@@ -447,7 +479,7 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 			revokeCtx, cancelOne := context.WithTimeout(batchCtx, upstreamRevokeTimeout)
 			defer cancelOne()
 
-			r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens())
+			r.revoke(revokeCtx, cred.RemoteSessionClientID, issuedTo, cred.tokens())
 			return nil
 		})
 	}
@@ -472,11 +504,11 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 // revoke performs the whole sequence for one session and reports exactly one
 // outcome, on both a span and the metric. Split from RevokeDetached so the bulk
 // path can drive it directly under the batch's own budget and concurrency limit.
-func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, tokens revocationTokens) {
+func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, issuedTo *IssuingClientAuth, tokens revocationTokens) {
 	ctx, span := r.tracer.Start(ctx, "remote_session.upstream_revoke")
 	defer span.End()
 
-	issuerURL, outcome := r.revokeOnce(ctx, clientID, tokens)
+	issuerURL, outcome := r.revokeOnce(ctx, clientID, issuedTo, tokens)
 
 	// Reported in one place so the span and the metric can never disagree about
 	// how a revocation ended. Without a span the revocation is only visible in a
@@ -489,7 +521,7 @@ func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, tokens
 // revokeOnce runs the sequence and reports where it stopped. The returned
 // issuer URL attributes the outcome, and is empty when the revocation failed
 // before any issuer could be identified.
-func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, tokens revocationTokens) (issuerURL string, outcome remotesessionmetrics.RevokeOutcome) {
+func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, issuedTo *IssuingClientAuth, tokens revocationTokens) (issuerURL string, outcome remotesessionmetrics.RevokeOutcome) {
 	logger := r.logger.With(
 		attr.SlogRemoteSessionClientID(clientID.String()),
 	)
@@ -504,6 +536,14 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		}
 		logger.WarnContext(ctx, "upstream revoke: could not load client", attr.SlogError(err))
 		return "", remotesessionmetrics.RevokeOutcomeInternal
+	}
+
+	if issuedTo != nil {
+		client.ExternalClientID = issuedTo.ClientID
+		client.ClientSecretEncrypted = issuedTo.ClientSecretEncrypted
+		client.TokenEndpointAuthMethod = issuedTo.TokenEndpointAuthMethod
+		client.TokenEndpointAuthAudienceFormat = issuedTo.TokenEndpointAuthAudienceFormat
+		client.JsonWebKeySetID = issuedTo.JsonWebKeySetID
 	}
 
 	logger = logger.With(

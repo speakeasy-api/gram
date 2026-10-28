@@ -95,6 +95,7 @@ export default function GatewayDetails(): JSX.Element {
         return (
           <RequireScope scope="project:read" level="page">
             <ClientsAndSessionsTab
+              gateway={{ id: metaMcpServer.id }}
               issuerId={metaMcpServer.userSessionIssuerId}
             />
           </RequireScope>

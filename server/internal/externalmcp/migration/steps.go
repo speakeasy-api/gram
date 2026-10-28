@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -82,16 +83,16 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	}
 	outcome.Action = candidate.Action
 	if candidate.Action == ActionDelete {
-		outcome.McpSlug = toolset.McpSlug.String
+		outcome.McpSlug = hostingstate.LegacyAlias(toolset).Slug.String
 		err := m.deleteInTx(ctx, tx, actor, toolset, &outcome)
 		return outcome, err
 	}
-	outcome.McpSlug = toolset.McpSlug.String
+	outcome.McpSlug = hostingstate.LegacyAlias(toolset).Slug.String
 	outcome.Warnings = append(outcome.Warnings, candidate.Warnings...)
 
 	// Lock order matches hostedmcp: custom domains, then the server's
 	// endpoints, then the server row, which the switch locks as it updates it.
-	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, toolset.CustomDomainID); err != nil {
+	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, hostingstate.LegacyAlias(toolset).CustomDomainID); err != nil {
 		return outcome, fmt.Errorf("lock custom domain: %w", err)
 	}
 	serverID, err := queries.GetToolsetServerID(ctx, repo.GetToolsetServerIDParams{ToolsetID: conv.ToNullUUID(toolset.ID), ProjectID: projectID})
@@ -105,6 +106,10 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		return outcome, fmt.Errorf("lock server endpoints: %w", err)
 	}
 	outcome.McpServerID = serverID
+	server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
+	if err != nil {
+		return outcome, fmt.Errorf("read toolset server: %w", err)
+	}
 
 	url := candidate.ReplacementURL
 	if _, err := proxy.ValidateRemoteMCPURL(ctx, m.policy, url); err != nil {
@@ -174,7 +179,7 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		OrganizationID: organizationID, ProjectID: projectID,
 		Actor: principal, ActorDisplayName: actor.Email, ActorSlug: nil,
 		ToolsetURN: urn.NewToolset(toolset.ID), ToolsetName: toolset.Name, ToolsetSlug: toolset.Slug,
-		McpSlug: toolset.McpSlug.String, McpServerURN: urn.NewMcpServer(serverID), RemoteMcpServerURN: urn.NewRemoteMcpServer(remote.ID),
+		McpSlug: server.Slug.String, McpServerURN: urn.NewMcpServer(serverID), RemoteMcpServerURN: urn.NewRemoteMcpServer(remote.ID),
 		PreviousRemoteURL: candidate.RemoteURL, RemoteURL: remote.Url,
 	}); err != nil {
 		return outcome, fmt.Errorf("audit migration: %w", err)

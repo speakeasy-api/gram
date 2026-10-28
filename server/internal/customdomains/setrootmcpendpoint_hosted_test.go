@@ -104,7 +104,8 @@ func TestSetRootMcpEndpoint_ByServerHostedOnDomainReusesItsEndpoint(t *testing.T
 	// A later hosted reconcile must still see one endpoint and keep the root marker.
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: SetHostedNetworkAccessInTransaction needs a caller-owned transaction
 	require.NoError(t, err)
-	require.NoError(t, toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), authCtx, serverID, networkaccess.ModePublicOnly))
+	_, err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), authCtx, serverID, networkaccess.ModePublicOnly)
+	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
 	endpoints, err = mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{

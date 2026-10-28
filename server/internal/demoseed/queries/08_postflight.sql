@@ -407,26 +407,29 @@ JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_d
 WHERE s.project_id = @project_id::uuid AND s.builtin_backend = 'approvals'
   AND s.deleted IS FALSE;
 
--- name: PostflightCountUnwrappedToolsets :one
+-- Hosted toolsets keep their hosting state on the canonical wrapper only:
+-- the toolset hosting columns stay unset, the wrapper mirrors the toolset's
+-- name and tool variations group, and it serves from at least one endpoint.
+-- name: PostflightCountHostedToolsetDrift :one
 SELECT count(*)
 FROM toolsets t
 LEFT JOIN mcp_servers s
-  ON s.id = t.id AND s.toolset_id = t.id AND s.deleted IS FALSE
- AND s.slug = t.mcp_slug AND s.name = t.name
- AND s.user_session_issuer_id IS NOT DISTINCT FROM t.user_session_issuer_id
- AND s.tool_variations_group_id IS NOT DISTINCT FROM t.tool_variations_group_id
- AND s.visibility = CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-                         WHEN t.mcp_is_public THEN 'public'
-                         ELSE 'private' END
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
-  AND (s.id IS NULL
-    OR 1 <> (SELECT count(*) FROM mcp_endpoints e
-             WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE)
-    OR NOT EXISTS (
-      SELECT 1 FROM mcp_endpoints e
-      WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE
-        AND e.slug = t.mcp_slug
-        AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id));
+  ON s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
+WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE
+  AND (t.mcp_slug IS NOT NULL OR t.mcp_enabled OR t.mcp_is_public
+       OR t.custom_domain_id IS NOT NULL OR t.user_session_issuer_id IS NOT NULL
+       OR (s.id IS NOT NULL AND (
+             s.name IS DISTINCT FROM t.name
+             OR s.tool_variations_group_id IS DISTINCT FROM t.tool_variations_group_id
+             OR NOT EXISTS (
+               SELECT 1 FROM mcp_endpoints e
+               WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE))));
+
+-- name: PostflightCountCanonicalWrappers :one
+SELECT count(*)
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
 -- name: PostflightCountGatewayEndpoints :one
 SELECT count(*)

@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { queryOptions, useMutation } from "@tanstack/react-query";
 import { renderWithApp } from "@/test/harness";
@@ -504,3 +510,84 @@ it("retains reviewed fields and confirmation on an unknown validation failure wi
     api.promote.mock.calls[0]?.[0].request,
   );
 });
+
+it("shows CIMD discovery and hides it when the reviewed endpoint changes", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: { ...metadata, authMode: "oauth" },
+    authDiscovery: {
+      supportsDcr: false,
+      supportsCimd: true,
+      authSetup: "cimd",
+      status: "complete",
+    },
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByText(
+    "Automatic OAuth setup is available through client ID metadata.",
+  );
+  const section = screen.getByRole("region", { name: "Sign-in setup" });
+  expect(within(section).getByText("Available")).toBeTruthy();
+  expect(within(section).getByText("Not available")).toBeTruthy();
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Public MCP endpoint" }),
+    { target: { value: "https://different.example.com/mcp" } },
+  );
+  expect(
+    screen.queryByText(
+      "Automatic OAuth setup is available through client ID metadata.",
+    ),
+  ).toBeNull();
+  expect(
+    screen.getByText(
+      /Sign-in options will be checked for the reviewed endpoint/,
+    ),
+  ).toBeTruthy();
+});
+
+it.each([
+  {
+    label: "known auth mode",
+    authMode: "oauth" as const,
+    publicUrl: metadata.publicUrl,
+  },
+  {
+    label: "omitted auth mode",
+    authMode: undefined,
+    publicUrl: metadata.publicUrl,
+  },
+  {
+    label: "omitted endpoint and auth mode",
+    authMode: undefined,
+    publicUrl: undefined,
+  },
+])(
+  "lets staff retry inconclusive discovery without promotion: $label",
+  async ({ authMode, publicUrl }) => {
+    api.candidate.mockResolvedValue({
+      ...candidate,
+      suggestedMetadata: { ...metadata, authMode, publicUrl },
+      authDiscovery: {
+        supportsDcr: false,
+        supportsCimd: false,
+        authSetup: "unknown",
+        status: "unavailable",
+      },
+    });
+    await renderWithApp(
+      <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Recheck sign-in options" }),
+    );
+    await waitFor(() => expect(api.candidate).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByText(
+        "Sign-in setup could not be confirmed. This does not mean automatic setup is unsupported.",
+      ),
+    ).toBeDefined();
+    expect(api.promote).not.toHaveBeenCalled();
+  },
+);
