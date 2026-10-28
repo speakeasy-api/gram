@@ -148,6 +148,7 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasAllScopes: (scopes: string[]) => scopes.every(hasScope),
     hasAnyScope: (scopes: string[]) => scopes.some(hasScope),
+    hasScope,
     isLoading: false,
   }),
 }));
@@ -2157,6 +2158,118 @@ describe("Editing an agent that already exists", () => {
         expect(mocks.withdrawSubject).toHaveBeenCalledTimes(2),
       );
       expect(mocks.admitSubject).toHaveBeenCalledOnce();
+    });
+  });
+  describe("its Claude Tag or custom issuer", () => {
+    const base = {
+      agentId: "agent_one",
+      agentName: "Release Bot",
+      name: "",
+      organizationId: "org_example",
+      projectId: "",
+      tags: [],
+      wildcardActive: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    function trust(id: string, issuer: string) {
+      mocks.workloadIssuers.mockReturnValue([
+        {
+          id,
+          name: "Trusted platform",
+          issuer,
+          jwksUri: `${issuer}/jwks`,
+          organizationId: "org_example",
+          projectId: "",
+        },
+      ]);
+    }
+
+    it("replaces a Claude Tag rule when the organization changes", async () => {
+      mocks.platforms.mockReturnValue([platform]);
+      trust("issuer_tag", "https://issuer.example");
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          ...base,
+          id: "admission_tag",
+          issuer: "https://issuer.example",
+          issuerName: "Claude Tag",
+          matchKind: "wildcard",
+          subject: "spiffe://example/org/org-123/agent/*",
+          workloadIssuerId: "issuer_tag",
+        },
+      ]);
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Anthropic organization" });
+      const field = screen.getByLabelText(
+        "Anthropic organization ID",
+      ) as HTMLInputElement;
+      expect(field.value).toBe("org-123");
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+
+      fireEvent.change(field, { target: { value: "org-456" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      expect(
+        mocks.admitSubject.mock.calls[0]?.[0]?.request
+          ?.admitWorkloadSubjectForm,
+      ).toMatchObject({
+        issuer: "https://issuer.example",
+        subject: "spiffe://example/org/org-456/agent/*",
+        matchKind: "wildcard",
+        agentId: "agent_one",
+      });
+      expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
+        request: { id: "admission_tag" },
+      });
+    });
+
+    it("fills in a custom issuer's rule and replaces it when changed", async () => {
+      trust("issuer_custom", "https://idp.example");
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          ...base,
+          id: "admission_custom",
+          issuer: "https://idp.example",
+          issuerName: "Trusted platform",
+          matchKind: "wildcard",
+          subject: "workloads/billing/*",
+          workloadIssuerId: "issuer_custom",
+        },
+      ]);
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Identity provider" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Which workloads" });
+      const field = screen.getByLabelText("Subject") as HTMLInputElement;
+      // The stem as typed: the `*` belongs to the match kind.
+      expect(field.value).toBe("workloads/billing/");
+      // Unchanged, so the step is read and passed, not saved.
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+
+      fireEvent.change(field, { target: { value: "workloads/review/" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toMatchObject({
+        gramProject: "project-one",
+        admitWorkloadSubjectForm: {
+          projectScoped: false,
+          issuer: "https://idp.example",
+          subject: "workloads/review/*",
+          matchKind: "wildcard",
+          agentId: "agent_one",
+        },
+      });
+      expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
+        request: { id: "admission_custom" },
+      });
     });
   });
 });

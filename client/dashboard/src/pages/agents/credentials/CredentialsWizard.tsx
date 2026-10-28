@@ -942,12 +942,23 @@ export function CredentialsWizard({
     // What the rule already says, so editing shows it rather than an empty
     // field that would write a second rule.
     initialValues:
-      admitted !== undefined && admittedEntry !== undefined
-        ? {
-            ...valuesFromIssuer(admittedEntry, admitted.issuer),
-            ...valuesFromSubject(admittedEntry, admitted.subject),
-          }
-        : undefined,
+      admitted === undefined
+        ? undefined
+        : admittedEntry !== undefined
+          ? {
+              ...valuesFromIssuer(admittedEntry, admitted.issuer),
+              ...valuesFromSubject(admittedEntry, admitted.subject),
+            }
+          : // A custom issuer: the issuer picked from the trusted list, and
+            // the subject as typed, without the `*` the match kind adds.
+            {
+              issuer_id: admitted.workloadIssuerId,
+              subject:
+                admitted.matchKind === "wildcard"
+                  ? admitted.subject.replace(/\*$/, "")
+                  : admitted.subject,
+              match_kind: admitted.matchKind,
+            },
     onValueChange: (key) =>
       setHighlight(
         key === "org_id"
