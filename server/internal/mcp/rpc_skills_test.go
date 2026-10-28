@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -477,6 +478,28 @@ func TestServePublic_Skills_APIKeyCallerIsServedNothing(t *testing.T) {
 
 	// The same skill is served to the user whose session the key was made
 	// from, so the exclusion is about the credential, not the fixture.
+	w, err = servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
+	require.NoError(t, err)
+	var skills []wireSkill
+	require.NoError(t, json.Unmarshal(requireRPCResult(t, w)["skills"], &skills))
+	require.Len(t, skills, 1)
+}
+
+// An assistant token's user claim attributes the assistant's work; it is not
+// that member signing in, so the assistant is not served the member's skills.
+func TestServePublic_Skills_AssistantCallerIsServedNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newSkillsFixture(t, ctx, ti)
+	servedSkill(t, ctx, ti, f, "assistant-out")
+
+	assistant := mcpidentity.NewValidatorBoundary().StampAssistant(ctx)
+	w, err := servePublicHTTP(t, assistant, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), "an assistant is not served its user's skills")
+
+	// The same session without the assistant credential is served.
 	w, err = servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
 	require.NoError(t, err)
 	var skills []wireSkill
