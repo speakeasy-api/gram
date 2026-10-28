@@ -1,7 +1,12 @@
 import { Page } from "@/components/page-layout";
 import { IdentityRail } from "@/components/identity-rail";
 import { identityRailItems } from "@/components/identity-rail-items";
-import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
+import {
+  removeResourceVisits,
+  useRecentLabelOverride,
+  useRecentsUserId,
+} from "@/components/command-palette/recentlyVisited";
+import { useSlugs } from "@/contexts/Sdk";
 import { RequireScope } from "@/components/require-scope";
 import {
   RouteNotFoundState,
@@ -28,6 +33,7 @@ import {
 import { useIdentitySubject } from "./useIdentitySubject";
 import {
   useCallback,
+  useEffect,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -108,6 +114,15 @@ function IdentityDetailContent(): JSX.Element {
   // access must hide it (for example, after transferring ownership).
   const agentUnavailable =
     urn.startsWith("agent:") && (statusCode === 403 || statusCode === 404);
+  const recentsUserId = useRecentsUserId(agentUnavailable);
+  const { orgSlug, projectSlug } = useSlugs();
+  const resourceHref = encodedUrn
+    ? routes.identities.href(encodedUrn)
+    : undefined;
+  useEffect(() => {
+    if (!agentUnavailable || !recentsUserId || !resourceHref) return;
+    removeResourceVisits(recentsUserId, orgSlug, projectSlug, resourceHref);
+  }, [agentUnavailable, recentsUserId, orgSlug, projectSlug, resourceHref]);
   // How far down the rail has to stick to clear the header above it. The
   // header's height is not a constant — a long name wraps, and so does a row
   // of directory groups — so a fixed offset parks the rail under the header's

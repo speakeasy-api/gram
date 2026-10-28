@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { cleanup, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  getRecentLabelOverride,
+  useRecentLabelOverride,
+  removeResourceVisits,
   pageLabel,
   recordVisit,
   removeVisitsMatching,
@@ -9,6 +13,7 @@ import {
 const BASE = "/acme/projects/default";
 
 beforeEach(() => localStorage.clear());
+afterEach(cleanup);
 
 describe("pageLabel", () => {
   it("uses the route title for the section itself", () => {
@@ -77,4 +82,52 @@ describe("pageLabel", () => {
       ),
     ).toBe("Assistants");
   });
+});
+
+it("forgets resource overrides and scoped visits without matching sibling resources", () => {
+  const resource = `${BASE}/identities/agent%3Aprivate`;
+  const overview = `${resource}/overview`;
+  const permissions = `${resource}/permissions`;
+  const other = `${resource}-other/overview`;
+  renderHook(() => {
+    useRecentLabelOverride(overview, "Private name");
+    useRecentLabelOverride(permissions, "Private name");
+    useRecentLabelOverride(other, "Other name");
+  });
+  for (const href of [resource, overview, permissions, other]) {
+    recordVisit("user", "acme", "default", {
+      href,
+      label: href === other ? "Other name" : "Private name",
+    });
+  }
+  recordVisit("other-user", "acme", "default", {
+    href: overview,
+    label: "Other user visit",
+  });
+  recordVisit("user", "acme", "other-project", {
+    href: overview,
+    label: "Other project visit",
+  });
+  recordVisit("user", "other-org", "default", {
+    href: overview,
+    label: "Other org visit",
+  });
+  removeResourceVisits("user", "acme", "default", resource);
+  expect(getRecentLabelOverride(overview)).toBeUndefined();
+  expect(getRecentLabelOverride(permissions)).toBeUndefined();
+  expect(getRecentLabelOverride(other)).toBe("Other name");
+  const stored = Array.from({ length: localStorage.length }, (_, i) =>
+    localStorage.getItem(localStorage.key(i)!),
+  ).join("");
+  expect(stored).not.toContain("Private name");
+  expect(stored).toContain("Other name");
+  expect(stored).toContain("Other user visit");
+  expect(stored).toContain("Other project visit");
+  expect(stored).toContain("Other org visit");
+  // A subsequent App recorder pass cannot restore the private label.
+  recordVisit("user", "acme", "default", {
+    href: overview,
+    label: getRecentLabelOverride(overview) ?? "Agents",
+  });
+  expect(getRecentLabelOverride(overview)).toBeUndefined();
 });

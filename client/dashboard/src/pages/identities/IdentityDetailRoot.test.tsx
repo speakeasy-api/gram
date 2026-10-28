@@ -2,6 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  getRecentLabelOverride,
+  recordVisit,
+} from "@/components/command-palette/recentlyVisited";
 import IdentityDetailRoot from "./IdentityDetailRoot";
 
 const mocks = vi.hoisted(() => ({
@@ -57,6 +61,7 @@ vi.mock("@/components/require-scope", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "default" }),
   useProjectSlugForRequests: () => "example",
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
@@ -81,8 +86,8 @@ vi.mock("./useIdentityQueries", () => ({
   useCanReadRisk: () => false,
   useIdentityIsKnown: () => ({ isPending: false, known: true }),
 }));
-vi.mock("@/components/command-palette/recentlyVisited", () => ({
-  useRecentLabelOverride: () => undefined,
+vi.mock("@gram/client/react-query/sessionInfo.js", () => ({
+  useSessionInfo: () => ({ data: { result: { userId: "user_example" } } }),
 }));
 vi.mock("@/components/identity-rail", () => ({
   IdentityRail: () => <nav>Identity navigation</nav>,
@@ -127,6 +132,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 beforeEach(() => {
+  localStorage.clear();
   mocks.orgRead = false;
   mocks.subject.mockReturnValue({ isPending: true, data: undefined });
   vi.stubGlobal(
@@ -223,3 +229,40 @@ it("renders a successful retained-access result with updated permissions", () =>
     screen.getByText("Agent profile: write=false, transfer=false"),
   ).toBeTruthy();
 });
+
+it.each([403, 404])(
+  "forgets a previously readable agent in recents after %s",
+  (statusCode) => {
+    const href = "/identities/agent%3Aagent_example/overview";
+    mocks.subject.mockReturnValue({
+      data: cachedAgent,
+      error: null,
+      isPending: false,
+    });
+    setup("agent:agent_example");
+    expect(getRecentLabelOverride(href)).toBe(cachedAgent.displayName);
+    recordVisit("user_example", "example", "default", {
+      href,
+      label: cachedAgent.displayName,
+    });
+    recordVisit("user_example", "example", "default", {
+      href: "/identities/agent%3Aother/overview",
+      label: "Other agent",
+    });
+    cleanup();
+
+    mocks.subject.mockReturnValue({
+      data: cachedAgent,
+      error: { statusCode },
+      isPending: false,
+    });
+    setup("agent:agent_example");
+    expect(getRecentLabelOverride(href)).toBeUndefined();
+    const stored = Array.from({ length: localStorage.length }, (_, i) =>
+      localStorage.getItem(localStorage.key(i)!),
+    ).join("");
+    expect(stored).not.toContain(cachedAgent.displayName);
+    expect(stored).not.toContain(href);
+    expect(stored).toContain("Other agent");
+  },
+);
