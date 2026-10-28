@@ -819,7 +819,9 @@ SELECT
     t.id
   , t.name
   , t.slug
-  , COALESCE(addr.slug, CASE WHEN cw.id IS NOT NULL THEN t.mcp_slug END, '')::text AS mcp_slug
+  , COALESCE(addr.slug, '')::text AS mcp_slug
+  -- legacyalias: a hosted toolset without a servable endpoint takes its legacy alias as its address; drop with AIM-670.
+  , (cw.id IS NOT NULL)::BOOLEAN AS hosted
   , (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::BOOLEAN AS mcp_enabled
   , (t.external_oauth_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
   , ARRAY(
