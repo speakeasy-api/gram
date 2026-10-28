@@ -1101,6 +1101,7 @@ function CatalogServiceAccount({
 
   return (
     <ServiceAccountPanel
+      compact
       format={format}
       onFormatChange={onFormatChange}
       agentDraft={credential}
