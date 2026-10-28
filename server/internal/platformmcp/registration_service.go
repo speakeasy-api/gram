@@ -699,8 +699,10 @@ func defaultDirectRemoteDisplayName(inspection DirectRemoteInspection) string {
 	if name := directRemoteServerName(inspection.ServerName); name != "" {
 		return name
 	}
-	if parsed, err := url.Parse(inspection.CanonicalURL); err == nil && parsed.Hostname() != "" {
-		return parsed.Hostname()
+	if parsed, err := url.Parse(inspection.CanonicalURL); err == nil {
+		if host := directRemoteServerName(parsed.Hostname()); host != "" {
+			return host
+		}
 	}
 	return inspection.CanonicalURL
 }

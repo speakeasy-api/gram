@@ -816,6 +816,9 @@ func platformMCPEndpointSlug(organizationSlug, suffix string) string {
 // that row. A busy address counts as taken.
 func claimReadableRegistrationSlug(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, organizationID, organizationSlug, displayName string) (string, bool, error) {
 	prefix := organizationSlug + "-"
+	// The database allows 128 characters, but the dashboard's endpoint editor
+	// holds a platform address to 40, so a longer one could not be edited
+	// there without being shortened first.
 	bare := gatewayAddressSlug(displayName, len(prefix))
 	// A suffixed candidate cuts the name shorter so it still fits the address limit.
 	base := gatewayAddressSlug(displayName, len(prefix)+len("-")+readableSlugSuffixLength)
