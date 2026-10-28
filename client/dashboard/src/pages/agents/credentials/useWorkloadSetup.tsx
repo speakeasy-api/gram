@@ -80,6 +80,7 @@ export function useWorkloadSetup({
   onValueChange,
   initialValues,
   replacing,
+  readOnly = false,
   setupOverride,
   targetProjectId,
   servers = [],
@@ -110,6 +111,11 @@ export function useWorkloadSetup({
    * replacement.
    */
   replacing?: WorkloadAdmission;
+  /**
+   * The reader may look at the setup but not change it, such as someone
+   * editing an agent without permission to manage workload identities.
+   */
+  readOnly?: boolean;
   /** A value was typed, so the rail can mark what just changed. */
   onValueChange?: (key: string) => void;
 }): WorkloadSetup {
@@ -149,13 +155,14 @@ export function useWorkloadSetup({
   // custom platform's issuer can still be edited afterwards, and registering
   // the new one is exactly what the retry then has to do.
   const [trustedIssuer, setTrustedIssuer] = useState<string | null>(null);
-  // The rule this flow saved, which the refetched list then holds; it is not
-  // a duplicate of itself. Keyed on issuer and match kind as well as the
-  // subject: the same subject under another cluster is another rule.
-  const [admittedRule, setAdmittedRule] = useState<string | null>(null);
-  // The replaced rule once it is gone, so a retry after the new rule saved
-  // but the old one failed to withdraw only withdraws.
-  const [withdrawnID, setWithdrawnID] = useState<string | null>(null);
+  // The rule this flow saved. Once there is one it, not the prop, is what
+  // the agent holds: the refetched list may name any of the agent's rules
+  // first while a superseded one is still waiting to be withdrawn.
+  const [saved, setSaved] = useState<HeldRule | null>(null);
+  // Rules this flow superseded but has not withdrawn yet, so a retry after a
+  // failed withdrawal finishes the job, and a further change does not lose
+  // track of the rule it replaces.
+  const [stale, setStale] = useState<string[]>([]);
 
   const registerIssuer = useRegisterWorkloadIssuerMutation();
   const admitSubject = useAdmitWorkloadSubjectMutation();
@@ -207,34 +214,31 @@ export function useWorkloadSetup({
     connection !== null &&
     (connection.issuer === trustedIssuer ||
       connectedIssuer(connection.issuer, issuers) !== undefined);
-  // The values on screen are still the rule the agent being edited holds.
-  // Read from the prop rather than from state seeded with it: the admission
-  // arrives a render or two after the first one.
-  const unchanged =
-    replacing !== undefined &&
-    connection !== null &&
-    connection.issuer === replacing.issuer &&
-    connection.subject === replacing.subject &&
-    connection.matchKind === replacing.matchKind;
-  // The rule this flow has already written, or the one being edited: neither
-  // is a clash with itself.
-  const connectionRule =
-    connection === null
-      ? null
-      : `${connection.issuer} ${connection.matchKind} ${connection.subject}`;
+  // The rule the agent holds as far as this flow knows: the one it saved,
+  // or else the one being edited. The prop is read rather than seeded into
+  // state because the admission arrives a render or two after the first.
+  const current: HeldRule | null = saved ?? replacing ?? null;
+  // The rule this flow already holds is not a clash with itself.
   const ours =
-    unchanged || (connectionRule !== null && connectionRule === admittedRule);
+    connection !== null && current !== null && sameRule(connection, current);
+  // Nothing to write: the values on screen are the rule the agent holds, and
+  // nothing it replaced is still waiting to be withdrawn.
+  const unchanged = ours && stale.length === 0;
   // A replacement keeps the replaced rule's tier: a rule admitted for one
-  // project stays with that project rather than widening to the organization.
-  const replacingProjectSlug = replacing?.projectId
-    ? organization.projects.find((p) => p.id === replacing.projectId)?.slug
+  // project stays with that project rather than widening to the
+  // organization, whatever tier its issuer was registered at.
+  const keptProjectSlug = current?.projectId
+    ? organization.projects.find((p) => p.id === current.projectId)?.slug
     : undefined;
   const tier = customFlow
-    ? { gramProject: project.slug, projectScoped: !!selectedIssuer?.projectId }
-    : replacing === undefined
+    ? {
+        gramProject: keptProjectSlug ?? project.slug,
+        projectScoped: !!selectedIssuer?.projectId || !!current?.projectId,
+      }
+    : current === null
       ? undefined
-      : replacingProjectSlug !== undefined
-        ? { gramProject: replacingProjectSlug, projectScoped: true }
+      : keptProjectSlug !== undefined
+        ? { gramProject: keptProjectSlug, projectScoped: true }
         : { projectScoped: false };
   const conflicting =
     connection === null || ours
@@ -258,9 +262,9 @@ export function useWorkloadSetup({
    * the agent is never left without one.
    */
   const connect = async (): Promise<boolean> => {
-    if (connection === null || connecting) return false;
+    if (connection === null || connecting || readOnly) return false;
     if (unchanged) return true;
-    if (replacing?.projectId && replacingProjectSlug === undefined) {
+    if (current?.projectId && keptProjectSlug === undefined) {
       setError(
         "This access rule belongs to a project you cannot open. Ask an organization admin to change it.",
       );
@@ -278,7 +282,8 @@ export function useWorkloadSetup({
     // Registering the issuer conflicts on a duplicate name, admitting the rule
     // on a duplicate rule; only the second means the values are taken.
     let admitting = false;
-    let replacingOld = false;
+    let withdrawing = false;
+    let pending = stale;
     try {
       const agentID = await ensureAgent();
       if (!isTrusted) {
@@ -296,9 +301,9 @@ export function useWorkloadSetup({
         });
         setTrustedIssuer(connection.issuer);
       }
-      if (connectionRule !== admittedRule) {
+      if (!ours) {
         admitting = true;
-        await admitSubject.mutateAsync({
+        const policy = await admitSubject.mutateAsync({
           request: {
             ...(tier?.gramProject ? { gramProject: tier.gramProject } : {}),
             admitWorkloadSubjectForm: {
@@ -308,24 +313,43 @@ export function useWorkloadSetup({
               matchKind: connection.matchKind,
               agentId: agentID,
               // A replacement keeps the label and tags the old rule carried.
-              ...(replacing?.name ? { name: replacing.name } : {}),
-              tags: replacing?.tags ?? [],
+              ...(current?.name ? { name: current.name } : {}),
+              tags: current?.tags ?? [],
             },
           },
         });
         admitting = false;
-        setAdmittedRule(connectionRule);
+        // The rule the new one supersedes, withdrawn below. Its id comes from
+        // the prop or from the policy the last save returned.
+        if (current?.id) pending = [...pending, current.id];
+        setStale(pending);
+        const created = policy?.admissions?.find(
+          (admission) =>
+            admission.agentId === agentID && sameRule(connection, admission),
+        );
+        setSaved(
+          created ?? {
+            id: "",
+            issuer: connection.issuer,
+            subject: connection.subject,
+            matchKind: connection.matchKind,
+            name: current?.name ?? "",
+            tags: current?.tags ?? [],
+            projectId: tier?.projectScoped ? (current?.projectId ?? "") : "",
+          },
+        );
       }
-      if (replacing !== undefined && withdrawnID !== replacing.id) {
-        replacingOld = true;
-        await withdrawSubject.mutateAsync({ request: { id: replacing.id } });
-        setWithdrawnID(replacing.id);
+      for (const id of pending) {
+        withdrawing = true;
+        await withdrawSubject.mutateAsync({ request: { id } });
+        pending = pending.filter((other) => other !== id);
+        setStale(pending);
       }
       onConnected(agentID);
       return true;
     } catch (failure) {
       setError(
-        replacingOld
+        withdrawing
           ? "The new access rule was saved, but the old one could not be removed. Try again."
           : connectFailureMessage(entry, platformName, failure, admitting),
       );
@@ -372,47 +396,55 @@ export function useWorkloadSetup({
     exchange: setupValues,
     steps: setup?.steps ?? [],
     requirements: setup?.requirements ?? null,
-    render: (step) =>
-      customFlow && step.id === "issuer" ? (
-        <WorkloadIssuerSelector
-          key={`${organization.id}:${project.id}`}
-          issuers={issuers}
-          selectedId={selectedIssuer?.id ?? ""}
-          loading={identities.isPending}
-          failed={identities.isError}
-          onRetry={() => {
-            void identities.refetch();
-          }}
-          onSelect={selectIssuer}
-          issuerStep={step}
-          onCreated={(policy, issuer) => {
-            queryClient.setQueryData(
-              queryKeyWorkloadIdentities(identityRequest),
-              policy,
-            );
-            selectIssuer(issuer);
-            // An organization-tier create response may omit project-tier rows.
-            if (!issuer.projectId) {
-              void queryClient.invalidateQueries({
-                queryKey: queryKeyWorkloadIdentities(identityRequest),
-              });
-            }
-          }}
-        />
-      ) : (
-        <div className="space-y-4">
-          {step.body(context)}
-          {step.phase === "create" && !isTrusted && (
-            <AssertionReuseField
-              checked={connection !== null && reuseIssuer === connection.issuer}
-              disabled={connecting || connection === null}
-              onChange={(checked) =>
-                setReuseIssuer(checked ? (connection?.issuer ?? null) : null)
+    // A disabled fieldset disables every control inside it, the catalog's
+    // fields and the issuer picker alike, so a read-only reader cannot type
+    // a change that Continue would then drop.
+    render: (step) => (
+      <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
+        {customFlow && step.id === "issuer" ? (
+          <WorkloadIssuerSelector
+            key={`${organization.id}:${project.id}`}
+            issuers={issuers}
+            selectedId={selectedIssuer?.id ?? ""}
+            loading={identities.isPending}
+            failed={identities.isError}
+            onRetry={() => {
+              void identities.refetch();
+            }}
+            onSelect={selectIssuer}
+            issuerStep={step}
+            onCreated={(policy, issuer) => {
+              queryClient.setQueryData(
+                queryKeyWorkloadIdentities(identityRequest),
+                policy,
+              );
+              selectIssuer(issuer);
+              // An organization-tier create response may omit project-tier rows.
+              if (!issuer.projectId) {
+                void queryClient.invalidateQueries({
+                  queryKey: queryKeyWorkloadIdentities(identityRequest),
+                });
               }
-            />
-          )}
-        </div>
-      ),
+            }}
+          />
+        ) : (
+          <div className="space-y-4">
+            {step.body(context)}
+            {step.phase === "create" && !isTrusted && (
+              <AssertionReuseField
+                checked={
+                  connection !== null && reuseIssuer === connection.issuer
+                }
+                disabled={connecting || connection === null}
+                onChange={(checked) =>
+                  setReuseIssuer(checked ? (connection?.issuer ?? null) : null)
+                }
+              />
+            )}
+          </div>
+        )}
+      </fieldset>
+    ),
     complete: (step) =>
       customFlow && step.id === "issuer"
         ? !!selectedIssuer && !identities.isPending && !identities.isError
@@ -420,11 +452,7 @@ export function useWorkloadSetup({
     connect,
     connecting,
     canConnect: connection !== null,
-    connected:
-      unchanged ||
-      (connectionRule !== null &&
-        connectionRule === admittedRule &&
-        (replacing === undefined || withdrawnID === replacing.id)),
+    connected: unchanged,
     error,
     values,
   };
@@ -447,4 +475,22 @@ function connectFailureMessage(
   return error instanceof Error
     ? error.message
     : `Failed to set up ${platformName}`;
+}
+
+/** The parts of an access rule this flow compares and carries over. */
+type HeldRule = Pick<
+  WorkloadAdmission,
+  "id" | "issuer" | "subject" | "name" | "tags" | "projectId"
+> & { matchKind: string };
+
+/** Whether two rules admit the same subject under the same issuer. */
+function sameRule(
+  a: { issuer: string; subject: string; matchKind: string },
+  b: { issuer: string; subject: string; matchKind: string },
+): boolean {
+  return (
+    a.issuer === b.issuer &&
+    a.subject === b.subject &&
+    a.matchKind === b.matchKind
+  );
 }

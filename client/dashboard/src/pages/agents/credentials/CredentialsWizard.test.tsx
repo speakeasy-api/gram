@@ -2137,10 +2137,13 @@ describe("Editing an agent that already exists", () => {
       });
       fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-      await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledOnce());
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
       expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toMatchObject({
         gramProject: "project-two",
         admitWorkloadSubjectForm: { projectScoped: true },
+      });
+      expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
+        request: { id: "admission_one" },
       });
     });
 
@@ -2186,6 +2189,69 @@ describe("Editing an agent that already exists", () => {
         mocks.admitSubject.mock.calls[0]?.[0]?.request
           ?.admitWorkloadSubjectForm,
       ).toMatchObject({ name: "Billing pods", tags: ["prod"] });
+    });
+
+    it("withdraws every superseded rule after a failed withdrawal and another change", async () => {
+      mocks.admitSubject.mockImplementation(
+        async ({
+          request,
+        }: {
+          request: { admitWorkloadSubjectForm: Record<string, string> };
+        }) => {
+          const form = request.admitWorkloadSubjectForm;
+          return {
+            issuers: [],
+            admissions: [
+              {
+                ...admission,
+                id: `admission_${form["subject"]?.split(":").pop()}`,
+                issuer: form["issuer"],
+                subject: form["subject"],
+                matchKind: form["matchKind"],
+              },
+            ],
+          };
+        },
+      );
+      mocks.withdrawSubject.mockRejectedValueOnce(new Error("boom"));
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "first-try" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await screen.findByText(/the old one could not be removed/);
+
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() =>
+        expect(mocks.withdrawSubject).toHaveBeenCalledTimes(3),
+      );
+      expect(mocks.admitSubject).toHaveBeenCalledTimes(2);
+      // The original rule, retried, and the first replacement the second
+      // change superseded: only the latest rule is left.
+      expect(
+        mocks.withdrawSubject.mock.calls.slice(1).map((call) => call[0]),
+      ).toEqual([
+        { request: { id: "admission_one" } },
+        { request: { id: "admission_first-try" } },
+      ]);
+    });
+
+    it("lets someone without workload permission read the rule but not change it", async () => {
+      mocks.canFederate = false;
+      await reachWorkloadStep();
+      // Disabled through the fieldset around it. Browsers disable every
+      // control inside; jsdom does not reflect that on the input itself.
+      expect(
+        screen.getByLabelText("Service account").closest("fieldset")?.disabled,
+      ).toBe(true);
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      expect(mocks.admitSubject).not.toHaveBeenCalled();
+      expect(mocks.withdrawSubject).not.toHaveBeenCalled();
     });
 
     it("retries only the withdrawal when that alone failed", async () => {
@@ -2269,6 +2335,41 @@ describe("Editing an agent that already exists", () => {
       });
       expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
         request: { id: "admission_tag" },
+      });
+    });
+
+    it("keeps a custom rule with its project under an organization issuer", async () => {
+      trust("issuer_custom", "https://idp.example");
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          ...base,
+          id: "admission_custom",
+          issuer: "https://idp.example",
+          issuerName: "Trusted platform",
+          matchKind: "exact",
+          subject: "workload-a",
+          projectId: "project_two",
+          workloadIssuerId: "issuer_custom",
+        },
+      ]);
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Identity provider" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Which workloads" });
+      fireEvent.change(screen.getByLabelText("Subject"), {
+        target: { value: "workload-b" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toMatchObject({
+        gramProject: "project-two",
+        admitWorkloadSubjectForm: {
+          projectScoped: true,
+          subject: "workload-b",
+        },
       });
     });
 

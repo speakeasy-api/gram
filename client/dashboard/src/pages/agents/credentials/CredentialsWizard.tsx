@@ -939,6 +939,9 @@ export function CredentialsWizard({
     onConnected: setAgentID,
     // The rule this agent already holds. Editing its values replaces it.
     replacing: editing ? admitted : undefined,
+    // Editing without permission to manage workload identities shows the
+    // rule without letting it be changed.
+    readOnly: editing && !canFederate,
     // What the rule already says, so editing shows it rather than an empty
     // field that would write a second rule.
     initialValues:
