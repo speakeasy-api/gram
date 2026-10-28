@@ -64,7 +64,7 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 	addTool(reg, &mcp.Tool{
 		Name:        "search_mcp_catalog",
 		Title:       "Search Reviewed MCP Servers",
-		Description: "Search the reviewed catalogue — the MCP servers Speakeasy has vetted and made available to add. Searching only lists options: nothing is added to a project and nobody receives anything.",
+		Description: "Search the reviewed catalogue — the MCP servers Speakeasy has vetted and made available to add. Searching only lists options: nothing is added to a project and nobody receives anything. Each result says how the server signs users in; tell the user that when presenting it.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
