@@ -1,0 +1,15 @@
+# Generator versions are pinned in mise.toml to match buf.gen.yaml.
+version: v2
+plugins:
+  - local: protoc-gen-go
+    strategy: all
+    out: infra/gen
+    opt: paths=source_relative
+  - protoc_builtin: python
+    strategy: all
+    out: infra/gen_py
+  - protoc_builtin: pyi
+    strategy: all
+    out: infra/gen_py
+inputs:
+  - directory: infra/proto
