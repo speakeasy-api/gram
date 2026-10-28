@@ -35,7 +35,7 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 			return nil, oops.E(oops.CodeBadRequest, nil, "principal_id and user_session_issuer_id must be supplied together")
 		}
 		var err error
-		op, err = s.beginBindingOperation(ctx, *payload.PrincipalID, *payload.UserSessionIssuerID)
+		op, err = s.beginBindingOperation(ctx, *payload.PrincipalID, *payload.UserSessionIssuerID, false)
 		if err != nil {
 			return nil, err
 		}

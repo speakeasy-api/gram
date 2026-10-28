@@ -129,6 +129,11 @@ type CreateMcpServerResponseBody struct {
 	// The slug of this server's primary platform endpoint, the oldest one. Absent
 	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -188,6 +193,11 @@ type GetMcpServerResponseBody struct {
 	// The slug of this server's primary platform endpoint, the oldest one. Absent
 	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -259,6 +269,11 @@ type UpdateMcpServerResponseBody struct {
 	// The slug of this server's primary platform endpoint, the oldest one. Absent
 	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -2892,6 +2907,11 @@ type McpServerResponseBody struct {
 	// The slug of this server's primary platform endpoint, the oldest one. Absent
 	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -3109,6 +3129,7 @@ func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.Mcp
 		Name:                  body.Name,
 		Slug:                  body.Slug,
 		PlatformEndpointSlug:  body.PlatformEndpointSlug,
+		LegacyPlatformSlug:    body.LegacyPlatformSlug,
 		EnvironmentID:         body.EnvironmentID,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
@@ -3306,6 +3327,7 @@ func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer
 		Name:                  body.Name,
 		Slug:                  body.Slug,
 		PlatformEndpointSlug:  body.PlatformEndpointSlug,
+		LegacyPlatformSlug:    body.LegacyPlatformSlug,
 		EnvironmentID:         body.EnvironmentID,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
@@ -3865,6 +3887,7 @@ func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.Mcp
 		Name:                  body.Name,
 		Slug:                  body.Slug,
 		PlatformEndpointSlug:  body.PlatformEndpointSlug,
+		LegacyPlatformSlug:    body.LegacyPlatformSlug,
 		EnvironmentID:         body.EnvironmentID,
 		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
