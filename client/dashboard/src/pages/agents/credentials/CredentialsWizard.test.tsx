@@ -248,7 +248,7 @@ function setup(initialPlatformKey?: string, initialEntry = "/") {
 }
 
 async function continueFromAuthentication() {
-  await screen.findByRole("heading", { name: "MCP authentication" });
+  await screen.findByRole("heading", { name: "MCP Authentication" });
   const next = screen.getByRole("button", { name: "Continue" });
   await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
   fireEvent.click(next);
@@ -373,7 +373,7 @@ describe("Provisioning a new agent", () => {
     setup(platform.key, "/?step=3");
 
     expect(
-      await screen.findByRole("heading", { name: "MCP selection" }),
+      await screen.findByRole("heading", { name: "MCP Selection" }),
     ).toBeTruthy();
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
@@ -391,7 +391,7 @@ describe("Provisioning a new agent", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
-    await screen.findByRole("heading", { name: "MCP selection" });
+    await screen.findByRole("heading", { name: "MCP Selection" });
     expect(
       (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
         .disabled,
@@ -1502,7 +1502,7 @@ describe("Editing an agent that already exists", () => {
   }
 
   async function authenticationSave() {
-    if (screen.queryByRole("heading", { name: "MCP selection" })) {
+    if (screen.queryByRole("heading", { name: "MCP Selection" })) {
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     }
     return screen.findByRole("button", { name: "Save changes and exit" });
@@ -1658,11 +1658,10 @@ describe("Editing an agent that already exists", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
     await authenticationSave();
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: /GitHub.*Requires connection/,
-      }),
-    );
+    // The first row starts expanded.
+    await screen.findByRole("button", {
+      name: /GitHub.*Requires connection/,
+    });
     expect(
       await screen.findByRole("button", {
         name: "Disconnect unavailable account",
@@ -2058,7 +2057,7 @@ describe("Servers that sign in as a person", () => {
       target: { value: "Release Bot" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP selection" });
+    await screen.findByRole("heading", { name: "MCP Selection" });
     await screen.findByRole("checkbox", { name: "Linear" });
   }
 
@@ -2087,10 +2086,11 @@ describe("Servers that sign in as a person", () => {
     expect(screen.queryByText(/owner@upstream.test/)).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP authentication" });
+    await screen.findByRole("heading", { name: "MCP Authentication" });
     expect(
-      await screen.findByText(/Your connection|Uses your connection/),
-    ).toBeTruthy();
+      (await screen.findAllByText(/Your connection|Uses your connection/))
+        .length,
+    ).toBeGreaterThan(0);
     // Read as the creator, before the agent exists.
     expect(mocks.sessions).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2229,7 +2229,7 @@ describe("Servers that sign in as a person", () => {
       await waitFor(() => expect(server.hasAttribute("disabled")).toBe(false));
       fireEvent.click(server);
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-      await screen.findByRole("heading", { name: "MCP authentication" });
+      await screen.findByRole("heading", { name: "MCP Authentication" });
       const next = screen.getByRole("button", { name: "Continue" });
       await waitFor(() => expect(next.hasAttribute("disabled")).toBe(true));
       fireEvent.click(next);
@@ -2244,11 +2244,10 @@ describe("Servers that sign in as a person", () => {
       const open = vi
         .spyOn(window, "open")
         .mockReturnValue(popup as unknown as Window);
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: /Linear.*(?:Expired|Requires connection)/,
-        }),
-      );
+      // The first row starts expanded.
+      screen.getByRole("button", {
+        name: /Linear.*(?:Expired|Requires connection)/,
+      });
       fireEvent.click(
         await screen.findByRole("button", {
           name: state === "expired" ? "Reauthenticate" : "Connect account",
@@ -2285,10 +2284,10 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP authentication" });
+    await screen.findByRole("heading", { name: "MCP Authentication" });
     fireEvent.click(screen.getByRole("button", { name: "Remove Linear" }));
     expect(
-      screen.getByRole("heading", { name: "MCP authentication" }),
+      screen.getByRole("heading", { name: "MCP Authentication" }),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove Linear" })).toBeNull();
     expect(
@@ -2301,7 +2300,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP authentication" });
+    await screen.findByRole("heading", { name: "MCP Authentication" });
     expect(
       (await screen.findByText(/No usable connection available for/))
         .textContent,

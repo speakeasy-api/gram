@@ -89,8 +89,8 @@ import {
 /** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
   { label: "Name", short: "Name" },
-  { label: "MCP selection", short: "MCPs" },
-  { label: "MCP authentication", short: "Authentication" },
+  { label: "MCP Selection", short: "MCPs" },
+  { label: "MCP Authentication", short: "Authentication" },
   { label: "Credential", short: "Credential" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },

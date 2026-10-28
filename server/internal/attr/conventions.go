@@ -491,6 +491,14 @@ const (
 	// different pinned version when one MCP surface resolved a skill linked
 	// several times.
 	McpSkillPinConflictCountKey = attribute.Key("gram.mcp.skill.pin_conflict_count")
+	// McpSkillIDKey is the managed skill a skill:// resources/read served.
+	McpSkillIDKey = attribute.Key("gram.mcp.skill.id")
+	// McpSkillVersionIDKey is the skill version whose content a skill://
+	// resources/read served.
+	McpSkillVersionIDKey = attribute.Key("gram.mcp.skill.version_id")
+	// McpSkillDigestKey is the SEP-2640 digest ("sha256:<hex>") of the
+	// content a skill:// resources/read served.
+	McpSkillDigestKey = attribute.Key("gram.mcp.skill.digest")
 	// McpSkillTargetKindKey is the kind of MCP surface a skill resolution
 	// served: "mcp_server", "meta_mcp_server" or "organization_gateway".
 	McpSkillTargetKindKey = attribute.Key("gram.mcp.skill.target_kind")
@@ -3384,6 +3392,17 @@ func McpSkillPinConflictCount(v int) attribute.KeyValue { return McpSkillPinConf
 func SlogMcpSkillPinConflictCount(v int) slog.Attr {
 	return slog.Int(string(McpSkillPinConflictCountKey), v)
 }
+
+func McpSkillID(v string) attribute.KeyValue { return McpSkillIDKey.String(v) }
+func SlogMcpSkillID(v string) slog.Attr      { return slog.String(string(McpSkillIDKey), v) }
+
+func McpSkillVersionID(v string) attribute.KeyValue { return McpSkillVersionIDKey.String(v) }
+func SlogMcpSkillVersionID(v string) slog.Attr {
+	return slog.String(string(McpSkillVersionIDKey), v)
+}
+
+func McpSkillDigest(v string) attribute.KeyValue { return McpSkillDigestKey.String(v) }
+func SlogMcpSkillDigest(v string) slog.Attr      { return slog.String(string(McpSkillDigestKey), v) }
 
 func McpSkillTargetKind[V ~string](v V) attribute.KeyValue {
 	return McpSkillTargetKindKey.String(string(v))

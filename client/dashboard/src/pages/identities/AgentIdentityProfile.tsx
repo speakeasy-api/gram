@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
+import { AgentOwnership } from "@/pages/agents/AgentOwnership";
 import {
   AgentIdentityFacts,
   AgentLifecycle,
@@ -22,37 +23,38 @@ import { AgentIdentityUsage } from "./AgentIdentityUsage";
 import { IdentityPanel } from "./IdentityPanel";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { IdentitySection } from "./IdentitySection";
+import { IdentityToolLogsPanel } from "./IdentityToolLogs";
 
 /**
- * Edit and rename, for the page header: they act on the agent itself, not on
- * any one section, so they sit with its name rather than under a tab.
+ * Edit, for the page header's top right: it acts on the agent itself, not on
+ * any one section, so it sits in the header rather than under a tab.
  */
 export function AgentHeaderActions({
+  agent,
+}: {
+  agent: ManagedAgent;
+}): JSX.Element | null {
+  const routes = useRoutes();
+  // Changing what the agent reaches is the same set of questions it was
+  // registered with, so it is the same flow. Same gate as rename: saving the
+  // edit flow needs write access.
+  if (!agent.permissions.write) return null;
+  return (
+    <Button asChild variant="primary" size="sm">
+      <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
+    </Button>
+  );
+}
+
+/** Rename, as a pencil beside the agent's name that shows on hover. */
+export function AgentRenameAction({
   agent,
   refresh,
 }: {
   agent: ManagedAgent;
   refresh: () => void;
-}): JSX.Element {
-  const routes = useRoutes();
-  return (
-    <div className="flex items-center gap-2">
-      {/* Changing what the agent reaches is the same set of questions it
-          was registered with, so it is the same flow. */}
-      {/* Same gate as rename: saving the edit flow needs write access. */}
-      {agent.permissions.write && (
-        <Button asChild variant="primary" size="sm">
-          <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
-        </Button>
-      )}
-      <RenameAgentButton
-        agent={agent}
-        refresh={refresh}
-        variant="tertiary"
-        size="xs"
-      />
-    </div>
-  );
+}): JSX.Element | null {
+  return <RenameAgentButton agent={agent} refresh={refresh} iconOnly />;
 }
 
 /** Agent data is keyed by its principal, never by its human owner's identifiers. */
@@ -102,6 +104,7 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Permissions"
+          timeRange
           meta="What this agent's keys may be narrowed to"
         >
           <AgentIdentityPermissions agent={agent} />
@@ -110,7 +113,7 @@ export function AgentIdentityProfile({
       );
     case "activity":
       return (
-        <IdentitySection title="Activity">
+        <IdentitySection title="Activity" timeRange>
           <AgentIdentityAudit agent={agent} subject />
           <AgentIdentityAudit agent={agent} />
         </IdentitySection>
@@ -121,6 +124,7 @@ export function AgentIdentityProfile({
           title="Controls & Safety"
           meta="Stop this agent acting, for a while or for good"
         >
+          <AgentOwnership agent={agent} />
           <AgentLifecycle
             agent={agent}
             refresh={refresh}
@@ -132,6 +136,7 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Sessions"
+          timeRange
           meta="What this agent did, and the clients signed in as it"
         >
           <AgentChatSessionsPanel agent={agent} limit={10} />
@@ -230,6 +235,7 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Overview"
+          timeRange
           meta="What this agent has been doing, and who answers for it"
         >
           {/* Who answers for it and whether it may act, as one line. The
@@ -260,6 +266,8 @@ export function AgentIdentityProfile({
             <ManagedAgentSessions agent={agent} variant="panel" limit={3} />
           </IdentityPanel>
           <AgentIdentityAudit agent={agent} subject />
+          {/* Every call it made, under the usage summary's numbers. */}
+          <IdentityToolLogsPanel agentId={agent.id} />
         </IdentitySection>
       );
   }
