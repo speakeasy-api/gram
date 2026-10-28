@@ -34,7 +34,7 @@ func TestBuildConnectionView_ChecklistVerification(t *testing.T) {
 		{name: "stored users read", status: StatusDegraded, lastError: ReasonReadFailedUsers, granted: RequiredOktaScopes, dpop: true, token: new(true), access: new(false), scopes: new(true)},
 		{name: "stored groups read", status: StatusDegraded, lastError: ReasonReadFailedGroup, granted: RequiredOktaScopes, dpop: true, token: new(true), access: new(false), scopes: new(true)},
 		{name: "missing scope", status: StatusDegraded, lastError: ReasonMissingScope, granted: nil, dpop: true, token: new(true), scopes: new(false)},
-		{name: "missing scope and failed read", status: StatusDegraded, lastError: ReasonMissingScope + "," + ReasonReadFailedApps, granted: nil, dpop: true, token: new(true), access: new(false), scopes: new(false)},
+		{name: "stored missing scope and failed read", status: StatusDegraded, lastError: ReasonMissingScope + "," + ReasonReadFailedApps, granted: RequiredOktaScopes, dpop: true, token: new(true), access: new(false), scopes: new(true)},
 		{name: "no token", status: StatusDegraded, lastError: ReasonMissingScope + "," + ReasonDPoPNotBound, scopes: new(false)},
 		{name: "pending rejected", status: StatusPending, lastError: LastErrorCredentialRejected + "," + ReasonKeyNotFetched},
 		{name: "reverification rejected", status: StatusDegraded, lastError: LastErrorCredentialRejected + "," + ReasonKeyNotFetched, granted: RequiredOktaScopes, dpop: true},
@@ -103,7 +103,7 @@ func TestAccessDescription_ReplacesTheInstructionOnceObserved(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, accessInstruction, accessDescription(nil))
 	require.Equal(t, accessInstruction, accessDescription(new(false)))
-	require.Equal(t, "Speakeasy can read apps, users, and groups", accessDescription(new(true)))
+	require.Equal(t, "Speakeasy can read your apps", accessDescription(new(true)))
 	require.Contains(t, accessInstruction, "multi-factor authentication")
 	require.Contains(t, RequiredOktaAdminRoles, "Application Administrator (org-wide)")
 	require.Contains(t, RequiredOktaAdminRoles, "Read-only Administrator")

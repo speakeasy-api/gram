@@ -112,8 +112,8 @@ func verifyConnection(ctx context.Context, client okta.Client, method remotesess
 	return outcome, nil
 }
 
-// confirmReads performs one bounded read per granted scope and returns the
-// per-scope reason for each read that failed. A page cap of one still proves
+// confirmReads performs one bounded apps read when okta.apps.read is granted
+// and returns the reasons if it failed. A page cap of one still proves
 // the read was authorized, so hitting it is not a failure.
 // Only a credential rejection is returned as an error.
 func confirmReads(ctx context.Context, client okta.Client, granted []string) ([]string, error) {
