@@ -625,7 +625,9 @@ func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
 	require.Contains(t, script, "window.close();")
 	require.Contains(t, script, "}, 3000);")
 	require.Contains(t, script, `guardActionButtons("button[data-refresh-link]", "Refreshing…")`)
-
+	require.Contains(t, script, `document.querySelectorAll("input[data-agent-select]")`)
+	require.Contains(t, script, `data-consent-self-ready`)
+	require.Contains(t, script, `button.value = authorizingAgent ? "approve_agent" : "approve"`)
 }
 
 // TestConsentTemplateDisabledWithoutIslandWhenConsentDisabled pins the
@@ -731,13 +733,28 @@ func TestConsentTemplateAgentSelectionShowsFixedPolicyAndSetupOnly(t *testing.T)
 	require.NoError(t, err)
 
 	html := page.String()
-	require.Contains(t, html, "Connecting as")
+	require.Contains(t, html, "Authorize as")
+	require.Contains(t, html, "Myself")
 	require.Contains(t, html, "user@example.com")
-	require.Contains(t, html, "Connecting as")
-	require.NotContains(t, html, `name="consent_actor"`)
-	require.NotContains(t, html, `name="agent_id"`)
-	require.NotContains(t, html, "Myself")
-
+	require.Contains(t, html, "Build agent")
+	require.Contains(t, html, `name="agent_id"`)
+	// Mode is UI-only; the form still carries exactly one agent_id (empty for self).
+	require.Contains(t, html, `class="grid grid-cols-2 border"`)
+	require.Regexp(t, `name="consent_actor"\s+value="self"\s+checked`, html)
+	require.Regexp(t, `name="consent_actor"\s+value="agent"\s+disabled\s+data-agent-mode`, html)
+	require.Contains(t, html, `data-agent-picker hidden`)
+	require.Contains(t, html, `data-agent-setup hidden`)
+	require.Contains(t, html, `data-agent-search`)
+	require.Contains(t, html, `max-h-64 overflow-y-auto`)
+	require.Contains(t, html, `No agents match your search.`)
+	require.Regexp(t, `type="hidden" name="agent_id" value="" form="consent-approve-form" data-agent-self`, html)
+	require.Regexp(t, `form="consent-approve-form"\s+disabled\s+data-agent-select`, html)
+	require.Contains(t, html, "mcp:connect")
+	require.Contains(t, html, `href="https://app.example.com/example/agent-management"`)
+	require.Contains(t, html, `data-agent-label="Authorize agent"`)
+	require.Contains(t, html, `data-consent-self-ready="true"`)
+	require.NotContains(t, html, "Create agent here")
+	require.NotContains(t, html, `name="scope"`)
 }
 
 // TestConsentTemplateAgentSelectionWithoutEligibleAgents pins the degenerate
@@ -764,7 +781,7 @@ func TestConsentTemplateAgentSelectionWithoutEligibleAgents(t *testing.T) {
 	html := page.String()
 	require.NotContains(t, html, `name="agent_id"`)
 	require.NotContains(t, html, "Authorize as")
-	require.Contains(t, html, "Connecting as")
+	require.Contains(t, html, `href="https://app.example.com/example/agent-management"`)
 }
 
 func TestConsentTemplateAgentSelectionMarksSelfOnlyReadinessHint(t *testing.T) {
@@ -927,10 +944,10 @@ func TestConsentTemplateAgentConnectionsRemainVisibleAndUseResolvedRoute(t *test
 			html := normalizeWhitespace(page.String())
 			require.Contains(t, html, `data-action-url="/`+routeBase.String()+`/example/connect/remote-session"`)
 			require.Contains(t, html, `data-remote-client="provider"`)
-			require.Contains(t, html, "Connecting as")
+			require.Contains(t, html, "The agent's tool policy is never changed here.")
 			require.Contains(t, html, "data-agent-access")
 			require.NotContains(t, html, "Agent service connections")
-			require.NotContains(t, html, `name="consent_actor"`)
+			require.Contains(t, html, `href="https://dashboard.example.test/org/agent-management"`)
 			require.NotContains(t, html, `data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"> <div class="flex items-baseline`)
 			require.NotContains(t, html, "connections and tool access apply only")
 		})
@@ -1006,11 +1023,11 @@ func TestConsentTemplateOffersAttachmentReconnect(t *testing.T) {
 	require.NotContains(t, html, "data-auto-close")
 }
 
-func TestConsentTemplateDelegationReplacesActorChoice(t *testing.T) {
+func TestConsentTemplateDelegationOnlyInMyselfMode(t *testing.T) {
 	t.Parallel()
 	var page bytes.Buffer
 	require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
-		ClientName: "Example client", SubjectDisplay: "Example person", ConsentEnabled: true,
+		AgentSelectionEnabled: true, AgentOptions: []consentAgentOption{{ID: "actor-agent", Name: "Actor agent"}}, ClientName: "Example client", SubjectDisplay: "Example person", ConsentEnabled: true,
 		Delegation: &postLoginDelegationData{ActionURL: "/connect/remote-session", State: "delegation-state", CSRF: "delegation-csrf", SessionID: "exact-session", Generation: "8", HasPreviousScopes: true, PreviousScopes: []string{"tools:read"}, Scopes: []delegationScope{{Name: "tools:read"}, {Name: "tools:write", Added: true}}, Options: []delegationOption{{ID: "example-agent", Name: "Example agent", BindingID: "existing-binding", Existing: true, Selected: true, Scopes: []delegationScope{{Name: "tools:write", Added: true}}}}},
 	}))
 	html := page.String()
@@ -1018,7 +1035,8 @@ func TestConsentTemplateDelegationReplacesActorChoice(t *testing.T) {
 	require.Contains(t, html, "tools:write")
 	require.Contains(t, html, "· Added")
 	require.Contains(t, html, `data-approve-form`)
-	require.NotContains(t, html, `name="consent_actor"`)
+	require.Contains(t, html, `name="consent_actor"`)
+	require.Contains(t, html, `data-agent-self-only data-delegation-form`)
 	require.Contains(t, html, `data-delegation-form data-integrated-delegation data-action-url="/connect/remote-session"`)
 	require.Contains(t, html, `name="state" value="delegation-state"`)
 	require.Contains(t, html, `name="csrf_token" value="delegation-csrf"`)

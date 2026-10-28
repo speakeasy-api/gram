@@ -686,7 +686,22 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// Gateway capture below decides whether any member can be approved.
 	consentEnabled := gateway != nil || len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
 
-	if challengeState.PendingDelegation == nil && r.URL.Query().Get("consent") != "required" &&
+	agentSelectionEnabled := false
+	agentSetupURL := ""
+	var agentOptions []consentAgentOption
+	if !challengeState.FirstParty && challengeState.AuthorizerUserID != "" {
+		if setupURL, serr := s.agentSetupURL(ctx, logger, endpoint.OrganizationID); serr != nil {
+			logger.WarnContext(ctx, "agent selection unavailable", attr.SlogError(serr))
+		} else if options, aerr := s.eligibleConsentAgents(ctx, challengeState, endpoint); aerr != nil {
+			logger.WarnContext(ctx, "eligible agent selection unavailable", attr.SlogError(aerr))
+		} else {
+			agentSelectionEnabled = true
+			agentSetupURL = setupURL
+			agentOptions = options
+		}
+	}
+
+	if challengeState.PendingDelegation == nil && len(agentOptions) == 0 && r.URL.Query().Get("consent") != "required" &&
 		consentReuseEligible(endpoint, challengeState) && consentBrowserMatches(r, challengeState, time.Now()) &&
 		consentRemoteFingerprint(endpoint, cards) != "" {
 		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
@@ -748,7 +763,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 	autoConnect := gateway == nil || (gateway.Focus != nil && challengeState.FirstParty && challengeState.FocusServer == gateway.Focus.Slug)
-	if autoConnect {
+	if challengeState.PendingDelegation == nil && len(agentOptions) == 0 && autoConnect {
 		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, autoConnectCards, focusServer); err != nil {
 			return err
 		} else if redirected {
@@ -836,6 +851,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if approvalError != nil {
 		showToolsIsland = false
 		consentEnabled = false
+		agentSelectionEnabled = false
 	}
 
 	prefillAttr := ""
@@ -923,9 +939,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentpage.Styles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
-		AgentSelectionEnabled:   false,
-		AgentOptions:            nil,
-		AgentSetupURL:           "",
+		AgentSelectionEnabled:   agentSelectionEnabled,
+		AgentOptions:            agentOptions,
+		AgentSetupURL:           agentSetupURL,
 		Gateway:                 gateway,
 	}
 
@@ -995,7 +1011,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
 	}
 
-	if action != "deny" && challengeState.PendingDelegation != nil {
+	if (action == "approve" || action == "reuse") && challengeState.PendingDelegation != nil {
 		delegation, err := s.loadPostLoginDelegation(r, endpoint, challengeState)
 		if err != nil {
 			return err

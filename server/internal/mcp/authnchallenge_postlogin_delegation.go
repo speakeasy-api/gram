@@ -167,17 +167,10 @@ func (s *Service) servePostLoginDelegation(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, endpoint.consentPath()+"?state="+url.QueryEscape(state.ID), http.StatusSeeOther)
 		return true, nil
 	}
-	if !state.FirstParty && !endpoint.MetaMcpServerID.Valid {
-		clients, err := s.remoteChallengeMgr.ListClients(r.Context(), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
-		if err != nil {
-			return true, fmt.Errorf("load connection delegation clients: %w", err)
-		}
-		// Multi-service flows complete each delegation before another provider
-		// callback can replace the grant being reviewed. A single service uses
-		// the client's final consent page instead.
-		if len(clients) <= 1 {
-			return false, nil
-		}
+	// Third-party clients choose their inbound identity on the consent page.
+	// Renewal belongs to Myself; Agent approval must remain independently available.
+	if !state.FirstParty {
+		return false, nil
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

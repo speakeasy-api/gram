@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -187,7 +188,7 @@ func TestConsentAgentSelectionRequiresDistinctAction(t *testing.T) {
 	require.NoError(t, err, "mismatched rolling-deploy action must not consume the challenge")
 }
 
-func TestConsentAgentEligibilityRetainedWithoutActorPicker(t *testing.T) {
+func TestConsentAgentEligibilityRetainsActorPicker(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -206,8 +207,8 @@ func TestConsentAgentEligibilityRetainedWithoutActorPicker(t *testing.T) {
 	w := serveAgentConsentGet(t, ctx, ti, fx)
 	require.Equal(t, http.StatusOK, w.Code)
 	html := w.Body.String()
-	require.NotContains(t, html, "data-agent-mode")
-	require.NotContains(t, html, eligible.Name)
+	require.Contains(t, html, "data-agent-mode")
+	require.Contains(t, html, eligible.Name)
 	require.Equal(t, []string{eligible.Name}, eligibleConsentAgentNames(t, ctx, ti, fx))
 	require.NotContains(t, html, missingPolicy.Name)
 	require.NotContains(t, html, suspended.Name)
@@ -256,6 +257,11 @@ func TestConsentAgentApprovalCarriesFixedResultWithoutReusableConsent(t *testing
 
 	before, err := accessrepo.New(ti.conn).GetPrincipalGrants(ctx, accessrepo.GetPrincipalGrantsParams{OrganizationID: fx.orgID, PrincipalUrns: []string{urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()}})
 	require.NoError(t, err)
+
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	state.PendingDelegation = &remotesessions.RemoteGrant{Subject: *state.Subject, UserSessionIssuerID: fx.target.UserSessionIssuerID, RemoteSessionID: uuid.New(), RemoteSessionClientID: uuid.New(), GrantGeneration: 2}
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 
 	w, err := serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
 	require.NoError(t, err)

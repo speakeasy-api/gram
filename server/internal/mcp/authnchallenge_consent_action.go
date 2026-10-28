@@ -180,6 +180,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	switch r.PostForm.Get("action") {
 	case "connect":
+		if challengeState.PendingDelegation != nil {
+			return oops.E(oops.CodeConflict, nil, "review or skip the current agent updates before connecting another service").LogWarn(ctx, logger)
+		}
 		client, cerr := resolveClient()
 		if cerr != nil {
 			return cerr

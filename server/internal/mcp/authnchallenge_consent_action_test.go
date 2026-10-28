@@ -662,3 +662,22 @@ func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, foreign[here], "another organization's caller sees no clients")
 }
+
+func TestServeConsentAction_PendingRenewalPreventsAnotherSignIn(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedMultiClientConsentEndpoint(t)
+	state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	state.PendingDelegation = &remotesessions.RemoteGrant{Subject: fx.subject, RemoteSessionID: uuid.New(), RemoteSessionClientID: fx.clientA, GrantGeneration: 2}
+	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"connect"}, "client_id": {fx.clientB.String()}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode())).WithContext(ctx)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	err = fx.ti.service.ServeConsentAction(response, req, fx.endpoint)
+	require.ErrorContains(t, err, "review or skip")
+	require.Empty(t, response.Header().Get("Location"))
+	retained, err := fx.ti.authnChallengeCache.Get(ctx, state.CacheKey())
+	require.NoError(t, err)
+	require.Equal(t, state.PendingDelegation.RemoteSessionID, retained.PendingDelegation.RemoteSessionID)
+}
