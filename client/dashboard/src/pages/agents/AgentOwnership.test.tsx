@@ -15,8 +15,10 @@ const mocks = vi.hoisted(() => ({
   listMembers: vi.fn(),
   transfer: vi.fn(),
   success: vi.fn(),
+  projectSlug: "default",
 }));
 vi.mock("@/contexts/Sdk", () => ({
+  useProjectSlugForRequests: () => mocks.projectSlug,
   useSdkClient: () => ({ access: { listMembers: mocks.listMembers } }),
 }));
 vi.mock("@/contexts/Auth", () => ({
@@ -61,12 +63,12 @@ function setup(canTransfer = true) {
     ownerUserId: owner.id,
     permissions: { transfer: canTransfer },
   } as ManagedAgent;
-  render(
+  const view = render(
     <QueryClientProvider client={client}>
       <AgentOwnership agent={agent} refresh={refresh} />
     </QueryClientProvider>,
   );
-  return { client, refresh };
+  return { client, refresh, agent, ...view };
 }
 async function selectMember() {
   fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
@@ -75,6 +77,7 @@ async function selectMember() {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.projectSlug = "default";
   mocks.listMembers.mockReset().mockResolvedValue({ members: [owner, member] });
   mocks.transfer.mockReset().mockResolvedValue({});
 });
@@ -156,6 +159,60 @@ describe("AgentOwnership", () => {
         },
       },
     });
+  });
+
+  it("does not reuse another project's member roster", async () => {
+    const { client, refresh, agent, rerender } = setup();
+    await selectMember();
+    mocks.projectSlug = "other-project";
+    mocks.listMembers.mockImplementation(() => new Promise(() => {}));
+    rerender(
+      <QueryClientProvider client={client}>
+        <AgentOwnership agent={agent} refresh={refresh} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Loading members…")).toBeTruthy();
+    expect(screen.queryByText("new@example.com")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      client
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.queryKey),
+    ).toContainEqual([
+      "agent-transfer-members",
+      "org-test",
+      "user-test",
+      "other-project",
+    ]);
+  });
+
+  it("shows a failed background member refresh on confirmation and permits retry", async () => {
+    const { client } = setup();
+    await selectMember();
+    mocks.listMembers.mockRejectedValueOnce(new Error("Member listing denied"));
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["agent-transfer-members"] });
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Unable to load organization members",
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Transfer ownership" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("button", { name: "Transfer ownership" })
+          .hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("shows loading then an empty state when only the current owner exists", async () => {

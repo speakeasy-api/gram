@@ -4,7 +4,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useSession } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useTransferAgentMutation } from "@gram/client/react-query/transferAgent.js";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +12,12 @@ import { useState, type JSX } from "react";
 import { toast } from "sonner";
 import { AgentOwner } from "./agent-admin";
 
+/**
+ * Platform MCP intentionally does not expose ownership transfer: the existing
+ * service requires an ordinary human dashboard session and rejects OAuth,
+ * assistant, and acting-surface contexts. This UI preserves that boundary
+ * rather than expanding transfer authorization to automated callers.
+ */
 export function AgentOwnership({
   agent,
   refresh,
@@ -20,6 +26,7 @@ export function AgentOwnership({
   refresh: () => void;
 }): JSX.Element | null {
   const [open, setOpen] = useState(false);
+  const projectSlug = useProjectSlugForRequests();
   if (!agent.permissions.transfer) return null;
 
   return (
@@ -47,7 +54,7 @@ export function AgentOwnership({
       </SettingsSection.Panel>
       {open && (
         <TransferOwnershipDialog
-          key={`${agent.id}:${agent.ownerUserId}`}
+          key={`${agent.id}:${agent.ownerUserId}:${projectSlug}`}
           agent={agent}
           onClose={() => setOpen(false)}
           refresh={refresh}
@@ -67,13 +74,14 @@ function TransferOwnershipDialog({
   refresh: () => void;
 }) {
   const sdk = useSdkClient();
+  const projectSlug = useProjectSlugForRequests();
   const organization = useOrganization();
   const { user } = useSession();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
   const [confirm, setConfirm] = useState(false);
   const members = useQuery({
-    queryKey: ["agent-transfer-members", organization.id, user.id],
+    queryKey: ["agent-transfer-members", organization.id, user.id, projectSlug],
     queryFn: ({ signal }) => sdk.access.listMembers({}, undefined, { signal }),
     // access.listMembers is deliberately unpaginated (Limit: 0 on the server).
     // It returns all active local members, including those without roles or directory profiles.
@@ -84,9 +92,9 @@ function TransferOwnershipDialog({
     (member) => member.id !== agent.ownerUserId,
   );
   const selected = candidates.find((member) => member.id === selectedId);
-  const needle = search.trim().toLocaleLowerCase();
+  const needle = search.trim().toLowerCase();
   const matching = candidates.filter((member) =>
-    `${member.name} ${member.email}`.toLocaleLowerCase().includes(needle),
+    `${member.name} ${member.email}`.toLowerCase().includes(needle),
   );
   const transfer = useTransferAgentMutation({
     onSuccess: () => {
@@ -114,6 +122,21 @@ function TransferOwnershipDialog({
               : "Choose a member of your organization to own this agent."}
           </Dialog.Description>
         </Dialog.Header>
+        {members.isError && (
+          <div role="alert" className="space-y-3">
+            <Text>
+              Unable to load organization members. You may not have permission
+              to view the member list.
+            </Text>
+            <Button
+              variant="secondary"
+              disabled={transfer.isPending || members.isFetching}
+              onClick={() => void members.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
         {confirm && selected ? (
           <>
             <dl className="space-y-4 border p-4">
@@ -163,20 +186,7 @@ function TransferOwnershipDialog({
             />
             {members.isPending ? (
               <Text role="status">Loading members…</Text>
-            ) : members.isError ? (
-              <div role="alert" className="space-y-3">
-                <Text>
-                  Unable to load organization members. You may not have
-                  permission to view the member list.
-                </Text>
-                <Button
-                  variant="secondary"
-                  onClick={() => void members.refetch()}
-                >
-                  Retry
-                </Button>
-              </div>
-            ) : matching.length === 0 ? (
+            ) : members.isError ? null : matching.length === 0 ? (
               <Text muted>
                 {candidates.length === 0
                   ? "No other eligible members in your organization."
