@@ -23,7 +23,7 @@ import (
 // same issuer-bound workload registration as local Kit, never a user's token.
 type KitGKECompositionConfig struct {
 	KitLocalCompositionConfig
-	// IAMProject owns dedicated per-generation Google service accounts.
+	// IAMProject owns per-generation Google service accounts; it may equal WorkloadPoolProject.
 	// WorkloadPoolProject is the GKE cluster workload pool project, which may differ.
 	IAMProject          string
 	WorkloadPoolProject string
@@ -34,8 +34,8 @@ type KitGKECompositionConfig struct {
 	Snapshots KitGKECheckpointDriver
 }
 
-// Deployment's legacy cluster issuer settings identify the pool at the CLI
-// boundary. Metadata assertions always use Google's issuer and public JWKS.
+// Metadata assertions always use Google's issuer and public JWKS, independently
+// of the explicitly configured IAM and cluster workload-pool projects.
 func kitGKEGoogleIssuerConfig(c KitGKECompositionConfig) KitGKECompositionConfig {
 	c.WorkloadIssuerURL = "https://accounts.google.com"
 	c.WorkloadJWKSURL = "https://www.googleapis.com/oauth2/v3/certs"

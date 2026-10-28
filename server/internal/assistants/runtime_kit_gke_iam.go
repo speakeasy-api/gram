@@ -16,7 +16,8 @@ import (
 )
 
 // kitGKEIAM manages dedicated accounts without granting any project roles.
-// Required permissions are serviceAccounts create/get/delete/getIamPolicy/setIamPolicy.
+// Required permissions are serviceAccounts create/get/delete/getIamPolicy/setIamPolicy
+// across the configured IAM project, not just accounts matching the naming prefix.
 type kitGKEIAM struct {
 	project, namespace  string
 	workloadPoolProject string

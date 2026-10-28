@@ -137,25 +137,27 @@ assertion reuse for Google's one-hour ID tokens. An email is not the subject.
 Each bootstrap uses a separate IAM service account with the `kit-wl-` prefix
 and a separate Kubernetes service account (KSA). The IAM account grants only
 `roles/iam.workloadIdentityUser` to that exact namespace/KSA principal; the KSA
-annotation links to its email. It receives no generic Google API roles. A
+annotation links to its email. This implementation grants it no generic Google API roles. A
 retired numeric subject must never be admitted again: rotate identity on cold
 boot/restore and retain failed cleanup evidence for retry.
 
-Use a dedicated identity project (for example `<APPLICATION_PROJECT>-kit-wl`),
-not the application or cluster project. The runtime principal requires `iam.serviceAccounts.create`,
-`iam.serviceAccounts.get`, `iam.serviceAccounts.delete`,
-`iam.serviceAccounts.getIamPolicy`, and `iam.serviceAccounts.setIamPolicy` in
-the dedicated IAM project. Do not assume `setIamPolicy` can be safely restricted
-by service-account name prefix: the project boundary limits this privilege.
+Set `GRAM_ASSISTANT_KIT_GKE_IAM_PROJECT` to the existing application project
+for the environment. It may equal `GRAM_ASSISTANT_KIT_GKE_WORKLOAD_POOL_PROJECT`;
+a separate identity project is not required. The runtime provisioner requires
+`iam.serviceAccounts.create`, `iam.serviceAccounts.get`,
+`iam.serviceAccounts.delete`, `iam.serviceAccounts.getIamPolicy`, and
+`iam.serviceAccounts.setIamPolicy` in the selected IAM project. This custom
+role has project-wide service-account scope; the `kit-wl-` naming prefix and
+application ownership checks do not restrict the principal's IAM permissions
+to generated accounts.
+
 Enable Workload Identity Federation for the assistant cluster. The exact member
-is `serviceAccount:<CLUSTER_PROJECT_ID>.svc.id.goog[<NAMESPACE>/<KSA>]`, **not**
-the identity-project pool. Ensure organization policy permits the required
-cross-project service-account use. Generated workload accounts receive no
-project roles; the server's custom provisioning role is separate. Do not grant
-workload accounts roles through project, folder, organization, or resource
-policies, including broad principal sets. Account-level IAM policy checks do not
-prove the absence of these external grants; enforce and audit this invariant in
-infrastructure for both new and reused accounts.
+is `serviceAccount:<CLUSTER_PROJECT_ID>.svc.id.goog[<NAMESPACE>/<KSA>]`, using the
+cluster workload-pool project whether or not it equals the IAM project. The
+implementation grants no project roles to generated workload accounts. Their
+effective Google API access can nevertheless include grants from project,
+folder, organization, or resource policies, including broad principal sets;
+account-level IAM policy checks do not establish an isolated project boundary.
 
 The managed GKE metadata server uses its documented link-local HTTP endpoint,
 not an external plaintext credential service. NetworkPolicy applies to the whole
@@ -211,7 +213,8 @@ rejection can be cleared, but an uncertain result stays fenced until reconciled.
    `push: true`. It publishes `pr-<NUMBER>`, content-hash and SHA tags.
 2. Wait for that image build (including metadata-script tests) to succeed;
    resolve its registry digest. No image digest is invented in this change.
-3. Provision the dedicated IAM project, role, and ConfigMap/WarmPool RBAC.
+3. Configure the five-permission provisioner role in the existing application
+   project and the ConfigMap/WarmPool RBAC.
    Do not remove the existing issuer/JWKS configuration while old application
    images are still selected.
 4. In **one infrastructure revision**, pin the published metadata-sidecar digest
@@ -222,7 +225,7 @@ rejection can be cleared, but an uncertain result stays fenced until reconciled.
    settings together; do not deploy the configuration cleanup with old application
    images or the new application with old issuer/JWKS settings. Include all
    environments and preview defaults that enable Kit. Missing/invalid metadata
-   image or workload-pool project is a deliberate startup validation error.
+   image, IAM project, or workload-pool project is a deliberate startup validation error.
    Main's release-dispatch job waits for the assistant runtime image build, but
    that alone does not populate infrastructure image pins or configuration.
 5. Validate authorized managed-sandbox startup/rotation/cleanup before enabling

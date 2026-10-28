@@ -110,7 +110,7 @@ func TestKitGKEIAMPendingRecoversUnobservedCreateAndFailedDeletes(t *testing.T) 
 	exists = false
 	require.ErrorContains(t, k.Reap(t.Context(), r), "remains uncertain")
 	exists = true
-	require.Error(t, k.Reap(t.Context(), r)) // IAM delete failed; intent remains.
+	require.ErrorContains(t, k.Reap(t.Context(), r), "delete Kit GKE workload service account") // Intent remains.
 	require.True(t, exists)
 	require.ErrorContains(t, k.ReapStoppedMachine(t.Context(), r), "journal deletion unavailable")
 	require.False(t, exists)
