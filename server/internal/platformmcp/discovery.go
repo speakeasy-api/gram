@@ -217,7 +217,7 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
 	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. This connection lists discovery tools only; every Platform tool is reachable through them. " +
-		"Find tools with search_platform_tools (plain words, such as \"add an MCP server from the catalog\"). Always call describe_platform_tool before using a tool: it returns the input schema and the rules for that tool. Then run it with call_platform_tool. " +
+		"Find tools with search_platform_tools (plain words, such as \"add an MCP server from the catalog\"). Always call describe_platform_tool before using a tool: it returns the input schema and the rules for that tool. Then run it with call_platform_tool. Answer how-to and setup questions with search_speakeasy_docs and cite the pages it returns. " +
 		"Write tools preview first: show the user what will change and wait for explicit confirmation before calling again with confirmed set. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
 	if mode == discoveryCode {
 		instructions += " For multi-step work, execute runs Python that can search, describe and call every tool as platform--<tool name>."

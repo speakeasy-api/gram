@@ -69,7 +69,10 @@ type CheckMcpEndpointSlugAvailabilityPayload struct {
 	// The slug to check
 	Slug types.McpEndpointSlug
 	// Optional custom domain ID. Omit to check platform-domain slug availability.
-	CustomDomainID   *string
+	CustomDomainID *string
+	// Optional MCP server the slug is for. Addresses that server may claim, such
+	// as its own legacy alias, read as available.
+	McpServerID      *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

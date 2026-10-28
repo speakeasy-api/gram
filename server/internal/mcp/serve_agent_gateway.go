@@ -24,9 +24,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -176,4 +178,25 @@ func (s *Service) authenticateAgentGatewayKey(
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
 	return s.identityValidator.StampAgent(keyCtx, agentID), authCtx, nil
+}
+
+// resolveMemberTokens resolves agent attachments against the member's own
+// issuer. Agent gateways have no issuer of their own; using the gateway's
+// empty token map would silently drop every owner-assigned connection.
+func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	if gate.agentID == uuid.Nil {
+		return gate.memberTokens(ctx, member)
+	}
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: member.serverID, ProjectID: member.projectID})
+	if err != nil {
+		return nil, fmt.Errorf("load agent member issuer: %w", err)
+	}
+	if !server.UserSessionIssuerID.Valid {
+		return nil, nil
+	}
+	tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent member attachments: %w", err)
+	}
+	return tokens, nil
 }

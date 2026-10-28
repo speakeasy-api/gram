@@ -322,7 +322,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: schema.sql
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/identityproviderconnections/queries.sql
     engine: postgresql
     gen:
@@ -332,7 +332,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: schema.sql
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/oktaresourceconnections/queries.sql
     engine: postgresql
     gen:
@@ -352,7 +352,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: schema.sql
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/oktaserversuggestions/queries.sql
     engine: postgresql
     gen:
@@ -362,7 +362,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: schema.sql
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/oktaapplications/queries.sql
     engine: postgresql
     gen:
@@ -746,7 +746,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: schema.sql
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/remotesessions/queries.sql
     engine: postgresql
     gen:
