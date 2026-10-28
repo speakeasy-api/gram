@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanaged"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -24,7 +24,7 @@ func requireIssuerWithoutManagedClients(ctx context.Context, logger *slog.Logger
 		return oops.E(oops.CodeUnexpected, err, "check for managed remote session clients").LogError(ctx, logger)
 	}
 	if managed {
-		return managedrows.Error("this identity provider")
+		return idpmanaged.Error("this identity provider")
 	}
 	pinned, err := txRepo.OktaIdentityProviderConnectionReferencesIssuer(ctx, repo.OktaIdentityProviderConnectionReferencesIssuerParams{
 		RemoteSessionIssuerID: issuerID,
@@ -34,7 +34,7 @@ func requireIssuerWithoutManagedClients(ctx context.Context, logger *slog.Logger
 		return oops.E(oops.CodeUnexpected, err, "check for identity provider connections").LogError(ctx, logger)
 	}
 	if pinned {
-		return managedrows.Error("this identity provider")
+		return idpmanaged.Error("this identity provider")
 	}
 
 	return nil

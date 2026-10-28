@@ -127,7 +127,7 @@ github.com/speakeasy-api/gram/server/internal/launcher 1073
 github.com/speakeasy-api/gram/server/internal/litellm 14091
 github.com/speakeasy-api/gram/server/internal/litellm/callcache 1010
 github.com/speakeasy-api/gram/server/internal/localaccounts 1129
-github.com/speakeasy-api/gram/server/internal/managedrows 1018
+github.com/speakeasy-api/gram/server/internal/idpmanaged 1018
 github.com/speakeasy-api/gram/server/internal/marketplace 1110
 github.com/speakeasy-api/gram/server/internal/mcp 178118
 github.com/speakeasy-api/gram/server/internal/mcp/httpheaders 1020

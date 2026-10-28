@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanaged"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -688,7 +688,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeConflict, nil, "remote session client moved to another issuer; reload and retry").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanaged.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return nil, err
 	}
 
@@ -832,7 +832,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanaged.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return nil, err
 	}
 
@@ -937,7 +937,7 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanaged.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return err
 	}
 
