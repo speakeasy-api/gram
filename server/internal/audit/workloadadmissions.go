@@ -21,6 +21,36 @@ const (
 	ActionWorkloadAdmissionWithdraw Action = "workload-admission:withdraw"
 )
 
+// KitRuntimeActorID is the system principal a Kit assistant runtime records
+// when it admits and withdraws its own workload identity.
+const KitRuntimeActorID = "kit-runtime"
+
+// KitRuntimeAdmittedSubjects reports which of the given admissions the Kit
+// runtime admitted for itself, according to the audit trail. Entries about
+// those admissions are operational and recorded as internal.
+func KitRuntimeAdmittedSubjects(ctx context.Context, dbtx repo.DBTX, organizationID string, admissionIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	if len(admissionIDs) == 0 {
+		return map[uuid.UUID]bool{}, nil
+	}
+	ids := make([]string, 0, len(admissionIDs))
+	for _, id := range admissionIDs {
+		ids = append(ids, id.String())
+	}
+	rows, err := repo.New(dbtx).ListKitRuntimeAdmittedSubjects(ctx, repo.ListKitRuntimeAdmittedSubjectsParams{OrganizationID: organizationID, SubjectIds: ids})
+	if err != nil {
+		return nil, fmt.Errorf("list kit runtime admitted subjects: %w", err)
+	}
+	admitted := make(map[uuid.UUID]bool, len(rows))
+	for _, row := range rows {
+		id, err := uuid.Parse(row)
+		if err != nil {
+			return nil, fmt.Errorf("parse kit runtime admitted subject: %w", err)
+		}
+		admitted[id] = true
+	}
+	return admitted, nil
+}
+
 // WorkloadAdmissionSnapshot is the audited state of one admitted subject.
 //
 // MatchKind and Subject together are the breadth of the grant: a wildcard rule

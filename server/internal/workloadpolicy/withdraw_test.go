@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
@@ -111,9 +112,10 @@ func TestWithdrawIssuer_CascadesToItsAdmittedSubjects(t *testing.T) {
 }
 
 // Withdrawing the issuer is the customer-visible change. The cascaded entry
-// for an admission a Kit runtime created for itself is internal, like the
-// runtime's own admit and withdraw entries; other admissions stay customer
-// entries so the log still answers when each subject stopped being admitted.
+// for an admission the Kit runtime admitted for itself is internal, like the
+// runtime's own admit and withdraw entries. The signal is the audit trail, not
+// the admission's tags: a customer can tag an admission "kit-runtime", and that
+// must not hide its withdrawal.
 func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreInternal(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -132,6 +134,21 @@ func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreInternal(t *testing.T) {
 	}
 	require.Len(t, ids, 2)
 
+	// The fleet rule stands in for a runtime-created admission: the Kit runtime
+	// records its own admit entry when it creates one.
+	err = audit.NewLogger().LogWorkloadAdmissionAdmit(ctx, ti.conn, audit.LogWorkloadAdmissionAdmitEvent{
+		OrganizationID:         ti.orgID,
+		ProjectID:              uuid.NullUUID{},
+		Actor:                  urn.NewSystemPrincipal(audit.KitRuntimeActorID),
+		ActorDisplayName:       nil,
+		ActorSlug:              nil,
+		AdmissionURN:           urn.NewWorkloadAdmission(uuid.MustParse(ids[fleetRule])),
+		AdmissionDisplayName:   fleetRule,
+		AdmissionSnapshotAfter: nil,
+		Visibility:             audit.VisibilityInternal,
+	})
+	require.NoError(t, err)
+
 	_, err = ti.service.WithdrawIssuer(ctx, &gen.WithdrawIssuerPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -140,13 +157,13 @@ func TestWithdrawIssuer_CascadedRuntimeAdmissionsAreInternal(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	runtime, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[channelOne])
+	runtime, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[fleetRule])
 	require.NoError(t, err)
 	require.Equal(t, audit.VisibilityInternal, runtime.Visibility)
 
-	fleet, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[fleetRule])
+	tagged, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw, ids[channelOne])
 	require.NoError(t, err)
-	require.Equal(t, audit.VisibilityCustomer, fleet.Visibility)
+	require.Equal(t, audit.VisibilityCustomer, tagged.Visibility, "a customer-set tag must not hide a withdrawal")
 
 	issuer, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadIssuerDelete)
 	require.NoError(t, err)

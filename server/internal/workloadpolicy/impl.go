@@ -17,7 +17,6 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
-	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -458,23 +457,6 @@ func IssuerSnapshot(row repo.WorkloadIssuer) *audit.WorkloadIssuerSnapshot {
 
 // AdmissionSnapshot is the audited state of an admission row, under the issuer
 // it names and the agent its (issuer, match_kind, subject) tuple is assigned.
-// runtimeAdmissionTag marks an admission a Kit assistant runtime created for
-// its own workload identity (see the assistants package). Such admissions are
-// created and withdrawn on every runtime start and teardown, so their audit
-// entries are internal.
-const runtimeAdmissionTag = "kit-runtime"
-
-// cascadedWithdrawVisibility is the visibility of the per-admission entry a
-// cascading issuer withdrawal writes. Withdrawing the issuer is audited for the
-// customer either way; the follow-on entries for runtime-created admissions
-// would repeat it once per runtime generation.
-func cascadedWithdrawVisibility(row repo.WorkloadIdentityAdmission) audit.Visibility {
-	if slices.Contains(row.Tags, runtimeAdmissionTag) {
-		return audit.VisibilityInternal
-	}
-	return audit.VisibilityCustomer
-}
-
 func AdmissionSnapshot(row repo.WorkloadIdentityAdmission, issuer repo.WorkloadIssuer, assignedAgentID string) *audit.WorkloadAdmissionSnapshot {
 	return &audit.WorkloadAdmissionSnapshot{
 		Issuer:          issuer.Issuer,
@@ -811,17 +793,34 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 		agentBySubject[assignment.MatchKind+"\x00"+assignment.Subject] = assignment.AgentID
 	}
 
+	// Admissions a Kit runtime created for itself are created and withdrawn on
+	// every runtime start and teardown, so their cascaded entries are internal.
+	// The issuer withdrawal below stays customer-visible either way.
+	admissionIDs := make([]uuid.UUID, 0, len(admissions))
+	for _, admission := range admissions {
+		admissionIDs = append(admissionIDs, admission.ID)
+	}
+	runtimeAdmitted, err := audit.KitRuntimeAdmittedSubjects(ctx, dbtx, t.organizationID, admissionIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error classifying cascaded workload withdrawals").LogError(ctx, s.logger)
+	}
+
 	// One entry per affected row, cause before effect: a single event on the
 	// issuer would not let the log answer when a given subject stopped being
 	// admitted.
 	for _, admission := range admissions {
+		visibility := audit.VisibilityCustomer
+		if runtimeAdmitted[admission.ID] {
+			visibility = audit.VisibilityInternal
+		}
+
 		assignedAgent := ""
 		if agentID, ok := agentBySubject[admission.MatchKind+"\x00"+admission.Subject]; ok {
 			assignedAgent = agentID.String()
 		}
 
 		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
-			Visibility:              cascadedWithdrawVisibility(admission),
+			Visibility:              visibility,
 			OrganizationID:          t.organizationID,
 			ProjectID:               admission.ProjectID,
 			Actor:                   t.actor,

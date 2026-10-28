@@ -257,29 +257,60 @@ UPDATE audit_logs
 SET created_at = @created_at
 WHERE id = ANY(@ids::uuid[]);
 
+-- name: ListKitRuntimeAdmittedSubjects :many
+-- Returns which of the given workload admissions the Kit runtime admitted for
+-- itself. The audit trail is the signal because no customer can write it: an
+-- admission's tags and name are customer-editable.
+SELECT DISTINCT subject_id
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND subject_type = 'workload_admission'
+  AND action = 'workload-admission:admit'
+  AND actor_type = 'system'
+  AND actor_id = 'kit-runtime'
+  AND subject_id = ANY(@subject_ids::text[]);
+
 -- name: CountCustomerKitRuntimeWorkloadAdmissions :one
 -- Counts the entries MarkKitRuntimeWorkloadAdmissionsInternal would change.
 SELECT COUNT(*)::bigint
-FROM audit_logs
-WHERE actor_type = 'system'
-  AND actor_id = 'kit-runtime'
-  AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
-  AND visibility = 'customer';
+FROM audit_logs a
+WHERE a.subject_type = 'workload_admission'
+  AND a.action IN ('workload-admission:admit', 'workload-admission:withdraw')
+  AND a.visibility = 'customer'
+  AND EXISTS (
+    SELECT 1
+    FROM audit_logs admit
+    WHERE admit.organization_id = a.organization_id
+      AND admit.subject_type = 'workload_admission'
+      AND admit.subject_id = a.subject_id
+      AND admit.action = 'workload-admission:admit'
+      AND admit.actor_type = 'system'
+      AND admit.actor_id = 'kit-runtime'
+  );
 
 -- name: MarkKitRuntimeWorkloadAdmissionsInternal :execrows
--- Marks Kit runtime admission entries that are still customer entries as
--- internal. Each Kit runtime admits and withdraws its own workload identity on
+-- Marks admit and withdraw entries for admissions the Kit runtime admitted for
+-- itself as internal, including withdrawals a person caused by withdrawing the
+-- issuer. Each Kit runtime admits and withdraws its own workload identity on
 -- every start and teardown, which is operational activity rather than a
 -- configuration change. Updates at most batch_size rows; callers repeat until
--- no rows change.
+-- no rows change. Without an index on visibility, each batch scans the table.
 WITH batch AS (
-  SELECT id
-  FROM audit_logs
-  WHERE actor_type = 'system'
-    AND actor_id = 'kit-runtime'
-    AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
-    AND visibility = 'customer'
-  ORDER BY seq
+  SELECT a.id
+  FROM audit_logs a
+  WHERE a.subject_type = 'workload_admission'
+    AND a.action IN ('workload-admission:admit', 'workload-admission:withdraw')
+    AND a.visibility = 'customer'
+    AND EXISTS (
+      SELECT 1
+      FROM audit_logs admit
+      WHERE admit.organization_id = a.organization_id
+        AND admit.subject_type = 'workload_admission'
+        AND admit.subject_id = a.subject_id
+        AND admit.action = 'workload-admission:admit'
+        AND admit.actor_type = 'system'
+        AND admit.actor_id = 'kit-runtime'
+    )
   LIMIT @batch_size
 )
 UPDATE audit_logs

@@ -239,7 +239,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 		if err != nil {
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
-		if err := s.audit.LogWorkloadAdmissionAdmit(ctx, db, audit.LogWorkloadAdmissionAdmitEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal("kit-runtime"), AdmissionURN: urn.NewWorkloadAdmission(admission.ID), AdmissionDisplayName: subject, AdmissionSnapshotAfter: kitWorkloadAdmissionSnapshot(admission, issuer, identity.AgentID.String()), Visibility: audit.VisibilityInternal}); err != nil {
+		if err := s.audit.LogWorkloadAdmissionAdmit(ctx, db, audit.LogWorkloadAdmissionAdmitEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal(audit.KitRuntimeActorID), AdmissionURN: urn.NewWorkloadAdmission(admission.ID), AdmissionDisplayName: subject, AdmissionSnapshotAfter: kitWorkloadAdmissionSnapshot(admission, issuer, identity.AgentID.String()), Visibility: audit.VisibilityInternal}); err != nil {
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
 	}
@@ -338,7 +338,7 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 		if err != nil {
 			return fmt.Errorf("revoke kit workload: %w", err)
 		}
-		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, db, audit.LogWorkloadAdmissionWithdrawEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: b.Identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal("kit-runtime"), AdmissionURN: urn.NewWorkloadAdmission(a.ID), AdmissionDisplayName: a.Subject, AdmissionSnapshotBefore: kitWorkloadAdmissionSnapshot(admission, issuer, b.Identity.AgentID.String()), Visibility: audit.VisibilityInternal}); err != nil {
+		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, db, audit.LogWorkloadAdmissionWithdrawEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: b.Identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal(audit.KitRuntimeActorID), AdmissionURN: urn.NewWorkloadAdmission(a.ID), AdmissionDisplayName: a.Subject, AdmissionSnapshotBefore: kitWorkloadAdmissionSnapshot(admission, issuer, b.Identity.AgentID.String()), Visibility: audit.VisibilityInternal}); err != nil {
 			return fmt.Errorf("revoke kit workload: %w", err)
 		}
 		if _, err := q.SoftDeleteWorkloadAdmission(ctx, workloadrepo.SoftDeleteWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: project, ID: a.ID}); err != nil {

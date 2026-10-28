@@ -59,6 +59,13 @@ func parseAuditKitRuntimeVisibilityFlags(args []string, getenv func(string) stri
 	if err != nil {
 		return auditKitRuntimeVisibilityConfig{}, errors.New("invalid $GRAM_DATABASE_URL")
 	}
+	// A fallback may only retry the same server, so an outage can never
+	// redirect writes away from the confirmed target.
+	for _, fallback := range dbConfig.Fallbacks {
+		if *apply && (fallback.Host != dbConfig.Host || fallback.Port != dbConfig.Port) {
+			return auditKitRuntimeVisibilityConfig{}, errors.New("writes require $GRAM_DATABASE_URL to name a single host; fallbacks to other hosts are not allowed")
+		}
+	}
 	if *apply && !requiresTLS(dbConfig) {
 		return auditKitRuntimeVisibilityConfig{}, errors.New("writes require a TLS connection: set sslmode=require, verify-ca or verify-full in $GRAM_DATABASE_URL")
 	}

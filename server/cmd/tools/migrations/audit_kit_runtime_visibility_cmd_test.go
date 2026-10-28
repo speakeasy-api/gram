@@ -58,3 +58,14 @@ func TestParseAuditKitRuntimeVisibilityFlagsRequiresTLSForWrites(t *testing.T) {
 		require.NoError(t, err, "a dry run writes nothing, so sslmode %q is allowed", mode)
 	}
 }
+
+func TestParseAuditKitRuntimeVisibilityFlagsRejectsOtherFallbackHosts(t *testing.T) {
+	t.Parallel()
+	apply := []string{"-apply", "-environment=staging", "-confirm-environment=staging", "-confirm-target=db.internal:5432/gram", "-confirm-apply=audit-kit-runtime-visibility"}
+	getenv := func(string) string {
+		return "postgres://user@db.internal:5432,other.internal:5432/gram?sslmode=require"
+	}
+
+	_, err := parseAuditKitRuntimeVisibilityFlags(apply, getenv)
+	require.ErrorContains(t, err, "single host")
+}
