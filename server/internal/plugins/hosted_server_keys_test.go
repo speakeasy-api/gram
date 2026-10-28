@@ -46,16 +46,12 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesDomainAndUserHeaders(
 	require.True(t, ok)
 
 	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "hosted-domain")
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
 	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
 		OrganizationID: ac.ActiveOrganizationID, Domain: "hosted-" + uuid.NewString()[:8] + ".example.test", ProvisionerKind: "ingress", IpAllowlist: []string{},
 	})
 	require.NoError(t, err)
 	//nolint:glint // notestingrawsql: an addressable domain without exercising domain provisioning.
 	_, err = ti.conn.Exec(ctx, `UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = $1`, domain.ID)
-	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: hosted toolsets take their domain through the toolset row.
-	_, err = ti.conn.Exec(ctx, `UPDATE toolsets SET custom_domain_id = $1 WHERE id = $2`, domain.ID, toolset.ID)
 	require.NoError(t, err)
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true}, toolset.McpSlug.String)
 
@@ -119,7 +115,6 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryKeepsToolsetAddres
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 
 	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "endpointless")
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Endpointless"})
 	require.NoError(t, err)

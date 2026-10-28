@@ -811,8 +811,6 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		ProjectID:              *authCtx.ProjectID,
 		Description:            originalToolset.Description,
 		DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
-		McpSlug:                conv.PtrToPGText(nil),
-		McpEnabled:             false,
 	}
 
 	// Try to create the cloned toolset, handling name conflicts.

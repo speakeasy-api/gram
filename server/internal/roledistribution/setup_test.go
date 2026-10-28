@@ -24,12 +24,12 @@ func createMCPServerAndEndpointForToolset(t *testing.T, f pipelineFixture, tools
 	t.Helper()
 	ctx := t.Context()
 	_, err := mcpserversrepo.New(f.db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: toolset.ProjectID, Name: pgtype.Text{String: toolset.Name, Valid: true}, Slug: toolset.McpSlug,
+		ID: toolset.ID, ProjectID: toolset.ProjectID, Name: pgtype.Text{String: toolset.Name, Valid: true}, Slug: pgtype.Text{String: toolset.Slug, Valid: true},
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
 	})
 	require.NoError(t, err)
 	_, err = mcpendpointsrepo.New(f.db).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID: toolset.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: toolset.McpSlug.String,
+		ProjectID: toolset.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: toolset.Slug,
 	})
 	require.NoError(t, err)
 }
@@ -42,8 +42,7 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 	f := newPipelineFixture(t)
 	org := f.event.GetOrganizationId()
 	backing, err := toolsetsrepo.New(f.db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID: org, ProjectID: f.project, Name: "Existing server", Slug: "existing-server", McpEnabled: true,
-		McpSlug: pgtype.Text{String: "existing-server", Valid: true},
+		OrganizationID: org, ProjectID: f.project, Name: "Existing server", Slug: "existing-server",
 	})
 	require.NoError(t, err)
 	createMCPServerAndEndpointForToolset(t, f, backing)
@@ -106,7 +105,7 @@ func TestRoleDistributionSetup_PopulatesOtherProject(t *testing.T) {
 	projectID := uuid.New()
 	_, err := testrepo.New(f.db).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: projectID, OrganizationID: org, Name: "Other project", Slug: "other-project"})
 	require.NoError(t, err)
-	backing, err := toolsetsrepo.New(f.db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: org, ProjectID: projectID, Name: "Other server", Slug: "other-server", McpEnabled: true, McpSlug: pgtype.Text{String: "other-server", Valid: true}})
+	backing, err := toolsetsrepo.New(f.db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: org, ProjectID: projectID, Name: "Other server", Slug: "other-server"})
 	require.NoError(t, err)
 	createMCPServerAndEndpointForToolset(t, f, backing)
 	principal, err := urn.ParsePrincipal(f.roleURN)
