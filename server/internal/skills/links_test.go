@@ -51,7 +51,7 @@ func createLinkServer(t *testing.T, ctx context.Context, ti *testInstance, proje
 
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: ti.authContext.ActiveOrganizationID, ProjectID: projectID, Name: slug + "-toolset", Slug: slug + "-toolset",
-		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: conv.ToPGText(slug + "-toolset"), McpEnabled: true,
+		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
 	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
