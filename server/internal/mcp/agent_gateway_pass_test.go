@@ -19,12 +19,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -193,6 +195,30 @@ func (g workloadGatewayFixture) callTool(t *testing.T, token, tool string, argum
 	return decodeRPCResponse(t, w)
 }
 
+// seedToolsetMember attaches a private member server fronting toolsetID and
+// returns its slug.
+func (g workloadGatewayFixture) seedToolsetMember(t *testing.T, toolsetID uuid.UUID) string {
+	t.Helper()
+
+	serverID, err := uuid.NewV7()
+	require.NoError(t, err)
+	slug := "toolset-member-" + uuid.NewString()[:8]
+	_, err = mcpserversrepo.New(g.ti.conn).CreateMCPServer(g.fixtureContext(t), mcpserversrepo.CreateMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           g.fx.target.ProjectID,
+		Name:                conv.ToPGText("toolset member"),
+		Slug:                conv.ToPGText(slug),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:           uuid.NullUUID{UUID: toolsetID, Valid: true},
+		Visibility:          mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	g.attachMember(t, serverID)
+	return slug
+}
+
 // endpoint is the gateway as the MCP side resolves it.
 func (g workloadGatewayFixture) endpoint() *mcp.ResolvedMcpEndpoint {
 	return &mcp.ResolvedMcpEndpoint{
@@ -350,19 +376,40 @@ func TestWorkloadGateway_TokenTargetResolvesTheGateway(t *testing.T) {
 	require.Equal(t, []string{g.granted}, g.listServers(t, decodeSharedTokenResponse(t, w).AccessToken))
 }
 
-// A gateway session's audience is the gateway: it is refused at the member
-// servers it reaches through the gateway, and at the fixture's own server.
+// A gateway session's audience is the gateway: it reaches the fixture's own
+// server as a member through the gateway, and is refused with invalid_token
+// at that server's own endpoint.
 func TestWorkloadGateway_ResourceGrantSessionIsBoundToTheGateway(t *testing.T) {
 	t.Parallel()
 
 	g := newWorkloadGatewayFixture(t)
+	member := g.seedToolsetMember(t, g.fx.toolset.ID)
 
 	w := g.exchangeAtGateway(t)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	token := decodeSharedTokenResponse(t, w).AccessToken
+	require.ElementsMatch(t, []string{g.granted, member}, g.listServers(t, token))
 
-	_, err := g.applyIssuerGate(t, token, workloadSessionEndpoint(g.fx))
-	require.Error(t, err, "a gateway session must not admit at another server of its issuer")
+	refused, err := g.applyIssuerGate(t, token, workloadSessionEndpoint(g.fx))
+	requireShareableCode(t, err, oops.CodeUnauthorized)
+	require.Contains(t, refused.Header().Get("WWW-Authenticate"), `error="invalid_token"`, "a gateway session must not admit at a member's own server")
+}
+
+// A gateway session is refused at another gateway on the same issuer and in
+// the same project, even one serving the same member.
+func TestWorkloadGateway_SessionIsRefusedAtAnotherGateway(t *testing.T) {
+	t.Parallel()
+
+	g := newWorkloadGatewayFixture(t)
+	other := g.anotherGateway(t)
+	other.attachMember(t, g.grantedServerID)
+
+	w := g.exchangeAtGateway(t)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	token := decodeSharedTokenResponse(t, w).AccessToken
+	require.Equal(t, []string{g.granted}, g.listServers(t, token))
+
+	other.requireInvalidToken(t, token)
 }
 
 // A workload whose agent reaches no member of the gateway is refused at the
@@ -643,4 +690,75 @@ func TestWorkloadGateway_SessionIsRefusedAtARecreatedGateway(t *testing.T) {
 	w = recreated.exchangeAtGateway(t)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, []string{g.granted}, recreated.listServers(t, decodeSharedTokenResponse(t, w).AccessToken))
+}
+
+// An organization-wide agent key enters a stored gateway in another project of
+// its organization only within its own ceiling: a ceiling naming the
+// fixture's project reaches none of that gateway's members, and one spanning
+// the organization reaches the member its agent is granted.
+func TestWorkloadGateway_OrganizationWideAgentKeyAtAnotherProjectsGateway(t *testing.T) {
+	t.Parallel()
+
+	g := newWorkloadGatewayFixture(t)
+	ctx := g.fixtureContext(t)
+	project := createSiblingProject(t, ctx, g.ti.conn, g.fx.orgID)
+	other := g
+	other.slug = "agent-gateway-" + uuid.NewString()[:8]
+	other.metaID = createMetaMcpEndpoint(t, ctx, g.ti.conn, project, g.fx.orgID, other.slug, createUserSessionIssuer(t, ctx, g.ti.conn, project)).ID
+	member := "other-project-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, g.ti.conn, project, other.metaID, "other project member", member, 0, mcpservers.VisibilityPrivate)
+	g.grantAgent(t, mcpServerBySlug(t, ctx, g.ti, project, member))
+
+	projectScoped := g.agentKey(t, g.projectConnectGrant())
+	organizationWide := g.agentKey(t, authz.Grant{
+		PrincipalUrn: "",
+		Scope:        authz.ScopeMCPConnect,
+		Selector:     authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: authz.WildcardResource},
+		Inferred:     false,
+	})
+
+	require.Empty(t, other.listServers(t, projectScoped), "the key's ceiling bounds it in every project")
+	require.Equal(t, []string{member}, other.listServers(t, organizationWide))
+}
+
+// A workload calls a member that signs in upstream with its agent owner's own
+// connection, the credential it would use at that member's own server, and
+// never calls a member its agent is not granted, though the owner holds a
+// connection for that one too.
+func TestWorkloadGateway_OAuthMemberUsesTheOwnersConnection(t *testing.T) {
+	t.Parallel()
+
+	g := newWorkloadGatewayFixture(t).anotherGateway(t)
+	ctx := g.fixtureContext(t)
+	project, issuer := g.fx.target.ProjectID, g.fx.target.UserSessionIssuerID
+	suffix := uuid.NewString()[:8]
+	grantedUpstream := newRecordingUpstream(t, "ping")
+	deniedUpstream := newRecordingUpstream(t, "ping")
+	granted, denied := "granted-upstream-"+suffix, "denied-upstream-"+suffix
+	g.grantAgent(t, seedMetaMemberWithUpstream(t, ctx, g.ti.conn, project, g.metaID, "Granted upstream", granted, 0, grantedUpstream.url))
+	seedMetaMemberWithUpstream(t, ctx, g.ti.conn, project, g.metaID, "Denied upstream", denied, 1, deniedUpstream.url)
+
+	// The owner's own connections to both upstreams, through clients of the
+	// gateway's issuer. A workload's owner credential needs project read.
+	owner := urn.NewUserSubject(g.fx.userID)
+	seedPrincipalGrant(t, ctx, g.ti, g.fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, g.fx.userID), authz.ScopeProjectRead, project.String())
+	grantedClient := createConsentRemoteClient(t, ctx, g.ti.conn, project, g.fx.orgID, "owner-granted-"+suffix, "", []uuid.UUID{issuer})
+	deniedClient := createConsentRemoteClient(t, ctx, g.ti.conn, project, g.fx.orgID, "owner-denied-"+suffix, "", []uuid.UUID{issuer})
+	insertQualifiedRemoteSessionToken(t, ctx, g.ti, issuer, grantedClient, owner, "owner-token-granted", grantedUpstream.url)
+	insertQualifiedRemoteSessionToken(t, ctx, g.ti, issuer, deniedClient, owner, "owner-token-denied", deniedUpstream.url)
+
+	w := g.exchangeAtGateway(t)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	token := decodeSharedTokenResponse(t, w).AccessToken
+	require.Equal(t, []string{granted}, g.listServers(t, token))
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, g.ti, g.slug, token, granted+"--ping"))
+	require.False(t, isError, text)
+	require.Contains(t, text, "pong from ping")
+	grantedUpstream.requireToolCallAuth(t, "Bearer owner-token-granted", "the granted member is called with the owner's own connection")
+
+	envelope := executeMetaTool(t, g.ti, g.slug, token, denied+"--ping")
+	require.Contains(t, string(envelope["error"]), "unknown server")
+	require.Zero(t, deniedUpstream.requestCount(), "a member the agent is not granted is never called")
+	grantedUpstream.requireNeverCarried(t, "Bearer owner-token-denied")
 }
