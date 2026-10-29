@@ -148,12 +148,13 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	}
 
 	// An entry the security log already holds, written after deploy.
+	nativeSubject := uuid.New()
 	native, err := q.InsertSecurityAuditLog(ctx, repo.InsertSecurityAuditLogParams{
 		OrganizationID: orgID,
 		ActorID:        uuid.NewString(),
 		ActorType:      "agent",
 		Action:         string(audit.ActionWorkloadAdmissionAdmit),
-		SubjectID:      uuid.NewString(),
+		SubjectID:      nativeSubject.String(),
 		SubjectType:    "workload_admission",
 	})
 	require.NoError(t, err)
@@ -185,10 +186,10 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 		seqByID[row.ID] = row.Seq
 	}
 
-	admitted, err := securityevent.RuntimeAdmittedSubjects(ctx, conn, orgID, []uuid.UUID{uuid.MustParse(runtimeSubjects[2]), uuid.MustParse(human)})
+	admitted, err := securityevent.RuntimeAdmittedSubjects(ctx, conn, orgID, []uuid.UUID{uuid.MustParse(runtimeSubjects[2]), nativeSubject, uuid.MustParse(human)})
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]bool{uuid.MustParse(runtimeSubjects[2]): true}, admitted,
-		"runtime admissions are recognized before the backfill moves them")
+	require.Equal(t, map[uuid.UUID]bool{uuid.MustParse(runtimeSubjects[2]): true, nativeSubject: true}, admitted,
+		"runtime admissions are recognized in either log before the backfill moves them")
 
 	pending, err := q.CountKitRuntimeAuditLogs(ctx)
 	require.NoError(t, err)
@@ -204,9 +205,9 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 0, n, "a finished backfill moves nothing on rerun")
 
-	admitted, err = securityevent.RuntimeAdmittedSubjects(ctx, conn, orgID, []uuid.UUID{uuid.MustParse(runtimeSubjects[2])})
+	admitted, err = securityevent.RuntimeAdmittedSubjects(ctx, conn, orgID, []uuid.UUID{uuid.MustParse(runtimeSubjects[2]), nativeSubject, uuid.MustParse(human)})
 	require.NoError(t, err)
-	require.True(t, admitted[uuid.MustParse(runtimeSubjects[2])], "and after")
+	require.Equal(t, map[uuid.UUID]bool{uuid.MustParse(runtimeSubjects[2]): true, nativeSubject: true}, admitted, "and after")
 
 	// Moved entries keep their seq, below every entry written to the security
 	// log directly, so the feed lists them after it, newest first.
