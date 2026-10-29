@@ -288,16 +288,29 @@ describe("SidebarUserMenu", () => {
   });
 
   it("still leaves the page when logout rejects", async () => {
-    logout.mockRejectedValueOnce(new Error("network"));
-    const replace = stubLocationReplace();
+    const error = new Error("network");
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    try {
+      logout.mockRejectedValueOnce(error);
+      const replace = stubLocationReplace();
 
-    render(<SidebarUserMenu />);
-    fireEvent.click(screen.getByTestId("user-menu-trigger"));
-    fireEvent.click(screen.getByText("Log out"));
+      render(<SidebarUserMenu />);
+      fireEvent.click(screen.getByTestId("user-menu-trigger"));
+      fireEvent.click(screen.getByText("Log out"));
 
-    await vi.waitFor(() => {
-      expect(replace).toHaveBeenCalledWith("/login");
-    });
+      await vi.waitFor(() => {
+        expect(replace).toHaveBeenCalledExactlyOnceWith("/login");
+      });
+      expect(logout).toHaveBeenCalledOnce();
+      expect(consoleError).toHaveBeenCalledExactlyOnceWith(
+        "logoutToLogin: logout did not complete",
+        error,
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("hides Explore demo org while already in the demo org", () => {

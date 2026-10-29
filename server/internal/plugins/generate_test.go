@@ -2213,6 +2213,24 @@ func TestHooksBootstrapEmbedsPinnedReleaseMetadata(t *testing.T) {
 	require.NotContains(t, string(renderHooksPowerShellBootstrap(cfg)), "github.com")
 }
 
+func TestHooksConfigHashTracksAgentKeyIdentity(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Example"}
+	shared := hooksConfigSnapshot(cfg)
+	sharedJSON, err := marshalHooksConfig(shared)
+	require.NoError(t, err)
+	require.NotContains(t, string(sharedJSON), "hooks_key_is_agent", "preserve snapshots from before the flag existed")
+
+	cfg.HooksKeyIsAgent = true
+	agent := hooksConfigSnapshot(cfg)
+	require.True(t, agent.HooksKeyIsAgent)
+	require.NotEqual(t, hooksConfigHash(shared), hooksConfigHash(agent))
+	agentJSON, err := marshalHooksConfig(agent)
+	require.NoError(t, err)
+	require.Contains(t, string(agentJSON), `"hooks_key_is_agent":true`)
+	require.Equal(t, hooksConfigHash(agent), storedHooksConfigHash(agentJSON))
+}
+
 func TestHooksConfigHashTracksBinaryReleaseMetadata(t *testing.T) {
 	t.Parallel()
 	current := hooksConfigSnapshot(GenerateConfig{OrgName: "Acme"})
@@ -2357,12 +2375,15 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	var manifest struct {
 		ID         string `json:"id"`
 		Activation struct {
-			OnStartup bool `json:"onStartup"`
+			OnStartup      bool     `json:"onStartup"`
+			OnCapabilities []string `json:"onCapabilities"`
 		} `json:"activation"`
 	}
 	require.NoError(t, json.Unmarshal(files["openclaw.plugin.json"], &manifest))
 	require.Equal(t, "speakeasy-observability", manifest.ID)
 	require.True(t, manifest.Activation.OnStartup)
+	// OpenClaw 2026.9.3 and later may not start a hook-only plugin without it.
+	require.Contains(t, manifest.Activation.OnCapabilities, "hook")
 
 	var pkg struct {
 		OpenClaw struct {
@@ -2426,6 +2447,26 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 		out, err := exec.Command(nodePath, "--check", path).CombinedOutput()
 		require.NoError(t, err, "index.js failed node --check: %s", out)
 	}
+}
+
+// The hooks binary prefers an agent's key to a cached personal sign-in only
+// when speakeasy.json says the baked key is the agent's.
+func TestGenerateObservabilityPluginMarksAgentKey(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgID:           "org_123",
+		ServerURL:       "https://app.getgram.ai",
+		HooksAPIKey:     "gram_local_agent_key",
+		HooksKeyIsAgent: true,
+		ProjectSlug:     "agents",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "openclaw")
+	require.NoError(t, err)
+
+	var config relay.FileConfig
+	require.NoError(t, json.Unmarshal(files["speakeasy.json"], &config))
+	require.Equal(t, "gram_local_agent_key", config.HooksAPIKey)
+	require.True(t, config.AgentKey)
 }
 
 type codexOTLPHTTPExporter struct {
@@ -3196,6 +3237,8 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 		"install.sh":                 []byte("#!/usr/bin/env bash\necho hi\n"),
 		".claude-plugin/plugin.json": []byte("{}"),
 		"README.md":                  []byte("# readme\n"),
+		"speakeasy.json":             []byte(`{"hooks_api_key":"k"}`),
+		"plugin/speakeasy.json":      []byte(`{"hooks_api_key":"k"}`),
 	}
 
 	var buf bytes.Buffer
@@ -3210,9 +3253,11 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	}
 
 	require.Equal(t, uint32(0o755), modes["hooks/bootstrap.sh"], "bootstrap.sh must be executable after unzip")
-	require.Equal(t, uint32(0o755), modes["install.sh"], "install.sh must be executable after unzip")
+	require.Equal(t, uint32(0o700), modes["install.sh"], "install.sh embeds the hooks key, so it must be owner-only and executable")
 	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
 	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
+	require.Equal(t, uint32(0o600), modes["speakeasy.json"], "speakeasy.json carries the hooks key and must stay owner-only")
+	require.Equal(t, uint32(0o600), modes["plugin/speakeasy.json"], "speakeasy.json carries the hooks key and must stay owner-only")
 }
 
 // Each publish must stamp a fresh manifest version into every plugin.json.

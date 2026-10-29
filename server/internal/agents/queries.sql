@@ -447,3 +447,35 @@ SELECT EXISTS (
       'connection_owner', r.owner_user_id
     )
 );
+
+-- name: ListAgentsNeedingConnectionRefresh :many
+-- One tenant-scoped read for the visible page, without exposing source credentials.
+SELECT DISTINCT a.id
+FROM agents a
+JOIN principal_remote_session_bindings b ON b.principal_id = a.id AND b.organization_id = a.organization_id AND b.revoked_at IS NULL
+JOIN projects p ON p.id = b.project_id AND p.organization_id = a.organization_id AND NOT p.deleted
+LEFT JOIN remote_sessions s ON s.id = b.remote_session_id
+WHERE a.organization_id = @organization_id
+  AND a.id = ANY(@agent_ids::uuid[])
+  AND NOT a.deleted
+  AND (
+    s.id IS NULL OR s.deleted
+    OR NOT EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
+    OR b.attached_by_subject_id <> s.subject_urn
+    OR NOT EXISTS (
+      SELECT 1
+      FROM remote_session_clients c
+      JOIN remote_session_issuers issuer ON issuer.id = c.remote_session_issuer_id AND NOT issuer.deleted
+      JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id AND NOT usi.deleted
+      JOIN user_session_issuers provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
+      JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
+      WHERE c.id = b.remote_session_client_id AND c.id = s.remote_session_client_id AND NOT c.deleted
+        AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+        AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+        AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+        AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = p.organization_id))
+    )
+    OR (s.authorization_expires_at IS NOT NULL AND s.authorization_expires_at <= now())
+    OR (s.access_expires_at IS NOT NULL AND s.access_expires_at <= now()
+      AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= now()))
+  );

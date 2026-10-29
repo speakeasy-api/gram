@@ -406,7 +406,11 @@ func (s *Service) view(ctx context.Context, db repo.DBTX, human HumanContext, ag
 	if err != nil {
 		return nil, err
 	}
-	return managedAgentView(agent, permissions, ownerProfile), nil
+	view := managedAgentView(agent, permissions, ownerProfile)
+	if err := s.addConnectionHealth(ctx, db, agent.OrganizationID, []*gen.ManagedAgent{view}); err != nil {
+		return nil, err
+	}
+	return view, nil
 }
 
 func (s *Service) ownerProfile(ctx context.Context, db repo.DBTX, organizationID, ownerUserID string) (*gen.AgentOwnerProfile, error) {
@@ -427,6 +431,7 @@ func (s *Service) ownerProfile(ctx context.Context, db repo.DBTX, organizationID
 func managedAgentView(agent repo.Agent, permissions AgentPermissions, ownerProfile *gen.AgentOwnerProfile) *gen.ManagedAgent {
 	result := &gen.ManagedAgent{
 		OwnerProfile:                ownerProfile,
+		ConnectionNeedsRefresh:      nil,
 		ID:                          agent.ID.String(),
 		OwnerUserID:                 agent.OwnerUserID,
 		OwnerReassignmentRequiredAt: nil,
@@ -521,4 +526,28 @@ func (s *Service) serviceError(ctx context.Context, err error, operation string)
 func contextAuth(ctx context.Context) (*contextvalues.AuthContext, bool) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	return authCtx, ok && authCtx != nil
+}
+
+// addConnectionHealth batches only already-authorized agents, including the single-agent view.
+func (s *Service) addConnectionHealth(ctx context.Context, db repo.DBTX, organizationID string, items []*gen.ManagedAgent) error {
+	ids := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, uuid.MustParse(item.ID))
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := repo.New(db).ListAgentsNeedingConnectionRefresh(ctx, repo.ListAgentsNeedingConnectionRefreshParams{OrganizationID: organizationID, AgentIds: ids})
+	if err != nil {
+		return fmt.Errorf("load agent connection health: %w", err)
+	}
+	needsRefresh := make(map[string]bool, len(rows))
+	for _, id := range rows {
+		needsRefresh[id.String()] = true
+	}
+	for _, item := range items {
+		value := needsRefresh[item.ID]
+		item.ConnectionNeedsRefresh = &value
+	}
+	return nil
 }

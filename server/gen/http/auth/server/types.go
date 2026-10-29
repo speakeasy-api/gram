@@ -3351,9 +3351,10 @@ func NewTransferInGatewayErrorResponseBody(res *goa.ServiceError) *TransferInGat
 }
 
 // NewCallbackPayload builds a auth service callback endpoint payload.
-func NewCallbackPayload(code string, state *string) *auth.CallbackPayload {
+func NewCallbackPayload(code *string, error_ *string, state *string) *auth.CallbackPayload {
 	v := &auth.CallbackPayload{}
 	v.Code = code
+	v.Error = error_
 	v.State = state
 
 	return v

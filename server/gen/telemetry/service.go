@@ -596,6 +596,34 @@ type GetToolUsageFilterOptionsPayload struct {
 	To string
 	// Filter option types to include. Empty means all option types.
 	OptionTypes []ToolUsageFilterOptionType
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not
+	// applied to the server options.
+	HostedToolsetSlugs []string
+	// MCP server ids to narrow by. Not applied to the server options.
+	McpServerIds []string
+	// Shadow MCP server names to narrow by. Not applied to the server options.
+	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to narrow by. Not applied to the server
+	// options.
+	MetaMcpServerIds []string
+	// Typed user identities to narrow by. Not applied to the email user options.
+	UserFilters []*ToolUsageUserFilter
+	// Agent identities to narrow by. Not applied to the agent user options.
+	AgentIds []string
+	// Hook plugin sources to narrow by.
+	HookSources []string
+	// MCP client keys to narrow by. Not applied to the client options.
+	ClientKeys []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+	// Trace outcomes to narrow by. Empty means all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageFilterOptionsResult is the result type of the telemetry service

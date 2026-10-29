@@ -1,9 +1,22 @@
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render as rtlRender,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { MemoryRouter, useSearchParams } from "react-router";
 import type { ReactNode } from "react";
 
+function render(ui: ReactNode, entry = "/") {
+  return rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <MemoryRouter initialEntries={[entry]}>{children}</MemoryRouter>
+    ),
+  });
+}
 const state = vi.hoisted(() => ({
   setOn: vi.fn(),
   error: false,
@@ -12,6 +25,16 @@ const state = vi.hoisted(() => ({
   gatewayLoading: false,
   available: true,
   on: false as boolean | undefined,
+}));
+vi.mock("@/components/sessions/ClientsAndSessionsTab", () => ({
+  ClientsAndSessionsTab: () => {
+    const [params] = useSearchParams();
+    return (
+      <div>
+        Shared gateway connections<output>{params.toString()}</output>
+      </div>
+    );
+  },
 }));
 vi.mock("@/components/page-templates", () => ({
   SettingsPage: ({
@@ -262,3 +285,24 @@ it.each([true, false])(
     ).toBeTruthy();
   },
 );
+
+it("offers shared connection history to non-admins while the gateway is off", async () => {
+  state.on = false;
+  state.admin = false;
+  render(<OrganizationGateway />);
+  await userEvent.click(screen.getByRole("tab", { name: "Connections" }));
+  expect(screen.getByText("Shared gateway connections")).toBeTruthy();
+});
+
+it("restores a shared Connections URL while the gateway is disabled", () => {
+  render(<OrganizationGateway />, "/?tab=connections&q=example&sort=expiry");
+  expect(screen.getByRole("status").textContent).toBe(
+    "tab=connections&q=example&sort=expiry",
+  );
+  expect(screen.getByText("Shared gateway connections")).toBeTruthy();
+  expect(
+    screen
+      .getByRole("tab", { name: "Connections" })
+      .getAttribute("aria-selected"),
+  ).toBe("true");
+});

@@ -33,6 +33,10 @@ export type AdminUpstreamOAuthMigrationAuthClients = {
    */
   associations: number;
   /**
+   * Agent attachments whose grants a run does not write while the organization's upstream selector writes are not allowed. While any wait, complete is false.
+   */
+  attachmentsWaiting?: number | undefined;
+  /**
    * Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
    */
   complete: boolean;
@@ -115,6 +119,7 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
   z.ZodMiniType<AdminUpstreamOAuthMigrationAuthClients, unknown> = z.pipe(
     z.object({
       associations: z.int(),
+      attachments_waiting: z.optional(z.int()),
       complete: z.boolean(),
       failed_phases: z.array(z.string()),
       in_progress: z.boolean(),
@@ -144,6 +149,7 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
     }),
     z.transform((v) => {
       return remap$(v, {
+        "attachments_waiting": "attachmentsWaiting",
         "failed_phases": "failedPhases",
         "in_progress": "inProgress",
         "pending_clients": "pendingClients",

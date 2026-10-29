@@ -1,3 +1,4 @@
+import { PromotionAuthDiscovery } from "./PromotionAuthDiscovery";
 import { useRef, useState, type JSX } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -271,6 +272,19 @@ export function RegistryPromotionSheet({
                 </p>
               )}
             </div>
+          )}
+          {candidate && candidate.status === "candidate" && (
+            <PromotionAuthDiscovery
+              discovery={candidate.authDiscovery}
+              matchesSource={
+                form.publicUrl ===
+                  (candidate.suggestedMetadata?.publicUrl ?? "") &&
+                authMode === (candidate.suggestedMetadata?.authMode ?? "")
+              }
+              pending={query.isFetching}
+              disabled={mutation.isPending}
+              onRetry={() => void query.refetch()}
+            />
           )}
           {(candidate?.status === "rejected" ||
             candidate?.status === "archived") && (
