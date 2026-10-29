@@ -431,11 +431,14 @@ it("fails closed on unverified return status and retries through the API", async
     error: new Error("unavailable"),
   });
   vi.useFakeTimers();
-  render(<Harness path={returnedPath} />);
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(8_000);
-  });
-  vi.useRealTimers();
+  try {
+    render(<Harness path={returnedPath} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8_000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
   expect(screen.getByText(/Could not verify/)).toBeTruthy();
   expect(mocks.fetchCheckoutStatus).toHaveBeenCalledTimes(4);
   expect(mocks.createCheckout).not.toHaveBeenCalled();

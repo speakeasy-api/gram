@@ -679,6 +679,13 @@ func newStripeClient(
 		return nil, errors.New("invalid Stripe publishable key format")
 	}
 	apiKey := c.String("stripe-api-key")
+	apiKeyParts := strings.SplitN(apiKey, "_", 3)
+	if stripeclient.IsConfigured(publishableKey) && len(apiKeyParts) == 3 &&
+		(apiKeyParts[0] == "sk" || apiKeyParts[0] == "rk") &&
+		(apiKeyParts[1] == "test" || apiKeyParts[1] == "live") &&
+		!strings.HasPrefix(publishableKey, "pk_"+apiKeyParts[1]+"_") {
+		return nil, errors.New("Stripe API and publishable key modes must match")
+	}
 	if !stripeclient.IsConfigured(apiKey) {
 		if c.String("environment") == "local" {
 			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
