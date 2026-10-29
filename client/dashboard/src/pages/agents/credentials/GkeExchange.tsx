@@ -47,16 +47,19 @@ function exchangeScript(tokenEndpoint?: string, mcpUrl?: string) {
 
 /**
  * The exchange step's values: where to exchange the pod's token, and a server
- * to call with the access token. One access token reaches all of the agent's
- * servers, so the reader picks which one the example calls.
+ * to call with the access token. One access token reaches every server that
+ * accepts the selected issuer, so the reader picks which one the example
+ * calls. Servers that refuse it are left out of `servers` and only counted.
  */
 export function ExchangeValues({
   tokenEndpoint,
   servers,
+  serversLeftOut = 0,
   issuerPicker,
 }: {
   tokenEndpoint?: string;
   servers: SetupServer[];
+  serversLeftOut?: number;
   issuerPicker: ReactNode;
 }): JSX.Element {
   const [chosenId, setChosenId] = useState("");
@@ -72,9 +75,12 @@ export function ExchangeValues({
     <>
       <p className="text-sm">
         Before calling MCP servers, the workload exchanges its token for a
-        Speakeasy access token. One access token works at every server this
-        agent may reach.
+        Speakeasy access token.{" "}
+        {serversLeftOut > 0
+          ? "One access token works at every server that signs in through the selected user session issuer."
+          : "One access token works at every server this agent may reach."}
       </p>
+      {serversLeftOut > 0 && tokenEndpoint && issuerPicker}
       {reachable.length > 1 && server !== undefined && (
         <Stack gap={2}>
           <Label htmlFor="gke-exchange-server">MCP server</Label>
@@ -120,7 +126,9 @@ export function ExchangeValues({
               ? undefined
               : servers.length > 0
                 ? "This agent's servers are only served over plaintext HTTP, so their URLs are withheld: the access token would cross the network unencrypted. Serve them over HTTPS and reload."
-                : "This agent can't reach any MCP servers yet. Go back to MCP Selection and choose at least one."
+                : serversLeftOut > 0
+                  ? "None of this agent's servers accept a token from the selected user session issuer. The user session issuer section on this step names what each one needs."
+                  : "This agent can't reach any MCP servers yet. Go back to MCP Selection and choose at least one."
           }
         />
       </ol>

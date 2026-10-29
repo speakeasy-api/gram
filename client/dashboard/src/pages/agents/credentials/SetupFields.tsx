@@ -1,4 +1,5 @@
 import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -12,11 +13,14 @@ import {
 } from "@/components/ui/Select";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { mcpServerRouteParam } from "@/lib/sources";
+import { useRoutes } from "@/routes";
 import { ExternalLink } from "lucide-react";
 import type { JSX, ReactNode } from "react";
+import { Link } from "react-router";
 import { ConsoleRow, type ConsoleField } from "./ConsoleRow";
 import { variableProblem, type CatalogVariable } from "./workloadCatalog";
-import type { SetupValues } from "./workloadTokenEndpoints";
+import type { SetupValues, UncoveredServer } from "./workloadTokenEndpoints";
 
 /** One value a platform's policy asks the operator for. */
 export function VariableField({
@@ -114,11 +118,20 @@ export function ComputedStatus({
 }: {
   setupValues: SetupValues;
 }): JSX.Element {
+  const leftOut = setupValues.uncoveredServers;
   if (setupValues.unavailableReason !== null) {
     return (
-      <Alert variant="info">
-        <div className="text-sm">{setupValues.unavailableReason}</div>
-      </Alert>
+      <Stack gap={3}>
+        <Alert variant={leftOut.length > 0 ? "warning" : "info"}>
+          <div className="text-sm">{setupValues.unavailableReason}</div>
+        </Alert>
+        {leftOut.length > 0 && (
+          <LeftOutServers
+            servers={leftOut}
+            onSelect={setupValues.onEndpointChange}
+          />
+        )}
+      </Stack>
     );
   }
   return (
@@ -147,7 +160,91 @@ export function ComputedStatus({
       <Text muted small>
         Tokens are issued for the organization or project that owns this issuer.
       </Text>
+      {leftOut.length > 0 && (
+        <Alert
+          variant="warning"
+          title={`This token won't work for ${
+            leftOut.length === 1
+              ? "1 of this agent's servers"
+              : `${leftOut.length} of this agent's servers`
+          }`}
+        >
+          <LeftOutServers
+            servers={leftOut}
+            onSelect={setupValues.onEndpointChange}
+          />
+        </Alert>
+      )}
     </Stack>
+  );
+}
+
+/**
+ * The agent's servers that refuse the selected issuer's token, each with the
+ * one thing that fixes it: selecting the shared issuer it signs in through, or
+ * moving it to one in its own sign-in settings.
+ */
+function LeftOutServers({
+  servers,
+  onSelect,
+}: {
+  servers: UncoveredServer[];
+  onSelect: (issuerId: string) => void;
+}): JSX.Element {
+  return (
+    <ul className="divide-border w-full divide-y">
+      {servers.map(({ server, reason }) => (
+        <li
+          key={server.id}
+          className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 first:pt-0 last:pb-0"
+        >
+          <div className="min-w-0 flex-1">
+            <Text small className="block truncate">
+              {server.name}
+            </Text>
+            <Text muted small className="block">
+              {reason === "another_issuer"
+                ? "Signs in through another user session issuer. A workload needs a separate token from that issuer for it."
+                : "Its user session issuer has no shared authorization server, so a workload can't get a token for it. Move the server to an issuer that has one."}
+            </Text>
+          </div>
+          {reason === "another_issuer" ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => onSelect(server.issuerId!)}
+            >
+              <Button.Text>Use its issuer</Button.Text>
+            </Button>
+          ) : (
+            <ServerSignInSettingsLink server={server} />
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ServerSignInSettingsLink({
+  server,
+}: {
+  server: UncoveredServer["server"];
+}): JSX.Element | null {
+  const routes = useRoutes({ projectSlug: server.projectSlug });
+  if (!server.projectSlug) return null;
+  return (
+    <Button variant="secondary" size="sm" asChild>
+      <Link
+        to={`${routes.mcp.details.settings.href(
+          mcpServerRouteParam({ id: server.id, slug: server.slug }),
+        )}#authentication`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Open sign-in settings
+        <ExternalLink className="size-3.5" aria-hidden="true" />
+      </Link>
+    </Button>
   );
 }
 

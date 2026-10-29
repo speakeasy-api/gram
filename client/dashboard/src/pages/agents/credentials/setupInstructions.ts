@@ -31,8 +31,13 @@ export type SetupContext = {
   agentName: string;
   /** Values only the server can supply: token endpoint, issuer URL, host. */
   computed: Partial<Record<ComputedValueKey, string>>;
-  /** The servers the agent may call, with the URL a runtime calls each at. */
+  /**
+   * The servers the agent may call that accept a token from the selected
+   * issuer, with the URL a runtime calls each at.
+   */
   servers: SetupServer[];
+  /** How many of the agent's servers refuse the selected issuer's token. */
+  serversLeftOut?: number;
   /** The issuer picker, folded away unless it has something to explain. */
   issuerPicker: ReactNode;
   /** Set when the rule being saved already exists against another agent. */
@@ -40,7 +45,19 @@ export type SetupContext = {
 };
 
 /** One MCP server the agent being set up may call. */
-export type SetupServer = { id: string; name: string; mcpUrl: string };
+export type SetupServer = {
+  id: string;
+  name: string;
+  mcpUrl: string;
+  /**
+   * The user session issuer the server signs people in through. Only a token
+   * from that issuer's shared authorization server is accepted by it.
+   */
+  issuerId?: string;
+  /** Where the server's settings live, to link to them. */
+  projectSlug?: string;
+  slug?: string;
+};
 
 export type SetupStep = {
   id: string;

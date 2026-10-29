@@ -56,13 +56,14 @@ it("keeps projects that share a name apart", () => {
 });
 
 const endpointQuery = vi.hoisted(() => ({
+  pending: false,
   items:
     [] as import("@gram/client/models/components/workloadtokenendpoint.js").WorkloadTokenEndpoint[],
 }));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
   useWorkloadTokenEndpoints: () => ({
-    data: { items: endpointQuery.items },
-    isPending: false,
+    data: endpointQuery.pending ? undefined : { items: endpointQuery.items },
+    isPending: endpointQuery.pending,
     isError: false,
     refetch: async () => ({ data: { items: endpointQuery.items } }),
   }),
@@ -127,4 +128,113 @@ it("refuses to select a newly discovered issuer belonging to another project", a
     "exchange endpoint is not available",
   );
   expect(result.current.selectedEndpointId).toBe("org");
+});
+
+function server(id: string, issuerId?: string) {
+  return {
+    id,
+    name: `Server ${id}`,
+    mcpUrl: `https://gram.example.com/mcp/${id}`,
+    issuerId,
+  };
+}
+
+it("preselects the issuer the agent's servers sign in through, not the organization's first", () => {
+  endpointQuery.items = [
+    endpoint("org", "organization"),
+    endpoint("github", "github-issuer", "proj-a", "Alpha"),
+    endpoint("unrelated", "unrelated", "proj-a", "Alpha"),
+  ];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("gh", "github")]),
+  );
+  expect(result.current.selectedEndpointId).toBe("github");
+  expect(
+    result.current.endpointGroups.flatMap((group) =>
+      group.options.map((option) => option.id),
+    ),
+  ).toEqual(["github"]);
+  expect(result.current.values?.token_endpoint).toBe(
+    "https://gram.example.com/oauth/usi/github/token",
+  );
+  expect(result.current.uncoveredServers).toEqual([]);
+});
+
+it("preselects the issuer serving most of the agent's servers and reports the rest", () => {
+  endpointQuery.items = [endpoint("one", "one"), endpoint("two", "two")];
+  const servers = [
+    server("a", "one"),
+    server("b", "two"),
+    server("c", "two"),
+    server("d", "private"),
+    server("e"),
+  ];
+  const { result } = renderHook(() => useSetupValues(undefined, servers));
+  expect(result.current.selectedEndpointId).toBe("two");
+  expect(result.current.coveredServers.map((s) => s.id)).toEqual([
+    "b",
+    "c",
+    "e",
+  ]);
+  expect(
+    result.current.uncoveredServers.map(({ server, reason }) => [
+      server.id,
+      reason,
+    ]),
+  ).toEqual([
+    ["a", "another_issuer"],
+    ["d", "not_shared"],
+  ]);
+});
+
+it("moves coverage with the selected issuer", () => {
+  endpointQuery.items = [endpoint("one", "one"), endpoint("two", "two")];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("a", "one"), server("b", "two")]),
+  );
+  act(() => {
+    result.current.onEndpointChange("two");
+  });
+  expect(result.current.coveredServers.map((s) => s.id)).toEqual(["b"]);
+  expect(result.current.uncoveredServers[0]?.server.id).toBe("a");
+});
+
+it("explains when none of the agent's servers has a shared issuer instead of offering an unrelated one", () => {
+  endpointQuery.items = [endpoint("org", "organization")];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("gh", "private")]),
+  );
+  expect(result.current.values).toBeUndefined();
+  expect(result.current.endpointGroups).toEqual([]);
+  expect(result.current.unavailableReason).toMatch(
+    /None of the servers below signs in through a user session issuer with a shared authorization server/,
+  );
+  expect(result.current.uncoveredServers).toEqual([
+    { server: server("gh", "private"), reason: "not_shared" },
+  ]);
+});
+
+it("offers every shared issuer when none of the agent's servers signs anyone in", () => {
+  endpointQuery.items = [endpoint("org", "organization"), endpoint("p", "p")];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("hosted")]),
+  );
+  expect(result.current.selectedEndpointId).toBe("org");
+  expect(result.current.coveredServers.map((s) => s.id)).toEqual(["hosted"]);
+  expect(result.current.uncoveredServers).toEqual([]);
+});
+
+it("leaves no server out while the issuers are still loading", () => {
+  endpointQuery.items = [];
+  endpointQuery.pending = true;
+  try {
+    const { result } = renderHook(() =>
+      useSetupValues(undefined, [server("gh", "github")]),
+    );
+    expect(result.current.unavailableReason).toBe("Loading token endpoints…");
+    expect(result.current.uncoveredServers).toEqual([]);
+    expect(result.current.coveredServers.map((s) => s.id)).toEqual(["gh"]);
+  } finally {
+    endpointQuery.pending = false;
+  }
 });

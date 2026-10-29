@@ -245,11 +245,12 @@ export function gkeSetupInstructions(entry: CatalogEntry): PlatformSetup {
         short: "Exchange",
         title: "Exchange the token and call the server",
         phase: "connect",
-        body: ({ computed, servers, issuerPicker }) => (
+        body: ({ computed, servers, serversLeftOut, issuerPicker }) => (
           <>
             <ExchangeValues
               tokenEndpoint={computed.token_endpoint}
               servers={servers}
+              serversLeftOut={serversLeftOut ?? 0}
               issuerPicker={issuerPicker}
             />
             <p className="text-muted-foreground text-sm">

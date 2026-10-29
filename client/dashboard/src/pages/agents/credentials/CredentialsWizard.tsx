@@ -969,7 +969,16 @@ export function CredentialsWizard({
     agentName: name.trim(),
     servers: connectionReach().flatMap((server) =>
       server.mcpUrl
-        ? [{ id: server.id, name: server.name, mcpUrl: server.mcpUrl }]
+        ? [
+            {
+              id: server.id,
+              name: server.name,
+              mcpUrl: server.mcpUrl,
+              issuerId: server.issuerId,
+              projectSlug: server.projectSlug,
+              slug: server.slug,
+            },
+          ]
         : [],
     ),
     ensureAgent: async () => {

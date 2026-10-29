@@ -1,6 +1,7 @@
 import type { WorkloadTokenEndpoint } from "@gram/client/models/components/workloadtokenendpoint.js";
 import { useWorkloadTokenEndpoints } from "@gram/client/react-query/workloadTokenEndpoints.js";
 import { useState } from "react";
+import type { SetupServer } from "./setupInstructions";
 import type { ComputedValueKey } from "./workloadCatalog";
 
 /** The issuers that serve a token endpoint, under one owner. */
@@ -8,6 +9,18 @@ export interface TokenEndpointGroup {
   /** "Organization", or the owning project's name. */
   label: string;
   options: { id: string; label: string }[];
+}
+
+/**
+ * Why a token from the selected issuer is refused by a server: it signs in
+ * through another shared issuer, which the reader can select instead, or
+ * through one that serves no shared authorization server at all.
+ */
+export type UncoveredReason = "another_issuer" | "not_shared";
+
+export interface UncoveredServer {
+  server: SetupServer;
+  reason: UncoveredReason;
 }
 
 export interface SetupValues {
@@ -21,6 +34,13 @@ export interface SetupValues {
   selectedEndpointId: string;
   onEndpointChange: (id: string) => void;
   refreshAndSelect: (id: string) => Promise<void>;
+  /**
+   * The agent's servers a token from the selected issuer works at. Servers
+   * that sign no one in are kept, since no issuer decides for them.
+   */
+  coveredServers: SetupServer[];
+  /** The agent's servers that refuse a token from the selected issuer. */
+  uncoveredServers: UncoveredServer[];
 }
 
 const ORGANIZATION_GROUP = "Organization";
@@ -66,26 +86,73 @@ export function groupTokenEndpoints(
  * user session issuer the operator selects, at the organization level or in a
  * project. Only issuers in shared mode serve one, at /oauth/usi/{id}.
  *
+ * A token from a shared issuer is accepted only by the MCP servers that sign
+ * in through that issuer. So when the agent's servers are known, only their
+ * issuers are offered, the one serving most of them is preselected, and the
+ * servers the selection leaves out are reported with why.
+ *
  * These come from the server's own derivation, the one its authorization
  * server metadata publishes, and are never assembled here: a second derivation
  * would drift from what a client discovers and show values that fail.
  */
-export function useSetupValues(targetProjectId?: string): SetupValues {
+export function useSetupValues(
+  targetProjectId?: string,
+  servers: SetupServer[] = [],
+): SetupValues {
   const query = useWorkloadTokenEndpoints(undefined, undefined, {
     throwOnError: false,
   });
   const [chosenId, setChosenId] = useState("");
 
-  const endpoints = (query.data?.items ?? []).filter(
+  const inScope = (query.data?.items ?? []).filter(
     (endpoint) =>
       targetProjectId === undefined ||
       endpoint.projectId === "" ||
       endpoint.projectId === targetProjectId,
   );
+  // Until the issuers load, no server can be said to be left out.
+  const signingIn =
+    query.isPending || query.isError
+      ? []
+      : servers.filter((server) => server.issuerId);
+  const servedBy = (endpoint: WorkloadTokenEndpoint): number =>
+    signingIn.filter(
+      (server) => server.issuerId === endpoint.userSessionIssuerId,
+    ).length;
+  const endpoints =
+    signingIn.length === 0
+      ? inScope
+      : inScope.filter((endpoint) => servedBy(endpoint) > 0);
   const selected =
-    endpoints.find((e) => e.userSessionIssuerId === chosenId) ?? endpoints[0];
+    endpoints.find((e) => e.userSessionIssuerId === chosenId) ??
+    endpoints.reduce<WorkloadTokenEndpoint | undefined>(
+      (best, endpoint) =>
+        best === undefined || servedBy(endpoint) > servedBy(best)
+          ? endpoint
+          : best,
+      undefined,
+    );
+
+  const sharedIssuers = new Set(
+    endpoints.map((endpoint) => endpoint.userSessionIssuerId),
+  );
+  const coveredServers = servers.filter(
+    (server) =>
+      !signingIn.includes(server) ||
+      server.issuerId === selected?.userSessionIssuerId,
+  );
+  const uncoveredServers = signingIn
+    .filter((server) => server.issuerId !== selected?.userSessionIssuerId)
+    .map((server) => ({
+      server,
+      reason: sharedIssuers.has(server.issuerId!)
+        ? ("another_issuer" as const)
+        : ("not_shared" as const),
+    }));
 
   return {
+    coveredServers,
+    uncoveredServers,
     values:
       selected === undefined
         ? undefined
@@ -99,6 +166,7 @@ export function useSetupValues(targetProjectId?: string): SetupValues {
       query.isError,
       endpoints.length,
       targetProjectId,
+      signingIn.length > 0,
     ),
     endpointGroups: groupTokenEndpoints(endpoints),
     selectedEndpointId: selected?.userSessionIssuerId ?? "",
@@ -126,9 +194,13 @@ function unavailableReason(
   isError: boolean,
   count: number,
   targetProjectId?: string,
+  serversSignIn = false,
 ): string | null {
   if (isPending) return "Loading token endpoints…";
   if (isError) return "Speakeasy couldn't load its token endpoints. Try again.";
+  if (count === 0 && serversSignIn) {
+    return "None of the servers below signs in through a user session issuer with a shared authorization server, so there is no token endpoint a workload can use for them.";
+  }
   if (count === 0 && targetProjectId !== undefined) {
     return "No shared Speakeasy authorization server is available for this project or organization.";
   }

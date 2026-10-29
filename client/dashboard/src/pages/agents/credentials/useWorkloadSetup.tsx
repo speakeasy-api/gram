@@ -148,7 +148,7 @@ export function useWorkloadSetup({
   const [connecting, setConnecting] = useState(false);
   const [reuseIssuer, setReuseIssuer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const setupValues = useSetupValues(targetProjectId);
+  const setupValues = useSetupValues(targetProjectId, servers);
 
   // The issuer this flow has already trusted, so a retry after a later failure
   // does not try to trust it a second time. The URL rather than a flag: a
@@ -372,12 +372,17 @@ export function useWorkloadSetup({
     },
     agentName,
     computed: setupValues.values ?? {},
-    servers,
+    // Only the servers that accept the selected issuer's token, so a step
+    // never shows a call that is bound to be refused.
+    servers: setupValues.coveredServers,
+    serversLeftOut: setupValues.uncoveredServers.length,
     // Folded away when it has nothing to say, which is almost always. When it
-    // does, the values above it are blank and this is the reason, so it is
-    // shown where that can be read rather than behind a disclosure.
+    // does, the values above it are blank or leave servers out, and this says
+    // why, so it is shown where that can be read rather than behind a
+    // disclosure.
     issuerPicker:
-      setupValues.unavailableReason !== null ? (
+      setupValues.unavailableReason !== null ||
+      setupValues.uncoveredServers.length > 0 ? (
         <ComputedStatus setupValues={setupValues} />
       ) : (
         <details className="pt-2">
