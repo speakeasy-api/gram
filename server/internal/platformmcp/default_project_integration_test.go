@@ -199,7 +199,7 @@ func TestSetupToolsActOnTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 		card, ok := result.Meta[cardMetaKey].(string)
 		require.True(t, ok)
 		require.Contains(t, card, `href="`+attached.AuthorizationURL+`"`)
-		require.Contains(t, card, "Sign in to https://remote.example.test/mcp")
+		require.Contains(t, card, "<h1>Sign in to remote.example.test</h1>")
 		require.Contains(t, card, `>Sign in <span aria-hidden="true">&rarr;</span></a>`)
 	}
 
