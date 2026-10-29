@@ -1,0 +1,27 @@
+server/internal/k8s/network_ingress_orphans.go
+  h_9630b74bdac540 78-80,82-83
+server/internal/k8s/network_ingress_orphans_test.go
+  h_9630b74bdac540 166-167,185-199
+  s_e657f231d41678::t_f41e2aa55b8d1f 200-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fc61cecd094b40e52ada8d369473d0ef54832fbe",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_e657f231d41678": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9efff961-b5ae-40dd-a027-dd5ec9a1c8c1",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
