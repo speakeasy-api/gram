@@ -274,10 +274,10 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 	return PluginMetadataResult{Plugin: plugin, Before: nil, DeliveredToEveryone: isDefaultProject, Publication: outcome}, nil
 }
 
-// UpdateInTransaction rewrites a plugin's name, slug, and description. It never
-// touches the plugin's members, assignments, or published packages directly;
-// the publication request it writes regenerates packages from the new
-// metadata.
+// UpdateInTransaction rewrites a plugin's name, slug, description, and auto
+// sync setting, keeping the ones the mutation leaves out. It never touches the
+// plugin's members, assignments, or published packages directly; the
+// publication request it writes regenerates packages from the new metadata.
 func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx, mutation UpdatePluginMutation) (PluginMetadataResult, error) {
 	if mutation.Name != nil && *mutation.Name == "" {
 		return PluginMetadataResult{}, ErrPluginNameEmpty

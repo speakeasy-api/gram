@@ -19,9 +19,9 @@ import (
 // confirmed administrator actions, and a plugin created in the organization's
 // default project reaches every member as soon as anything is put in it.
 func registerPluginMetadataTools(reg *Registrar, plugins *PluginsService) {
-	createPlugin := unavailablePluginMetadataHandler[CreatePluginInput]()
-	renamePlugin := unavailablePluginMetadataHandler[RenamePluginInput]()
-	setPluginAutoSync := unavailablePluginMetadataHandler[SetPluginAutoSyncInput]()
+	createPlugin := unavailablePluginMetadataHandler[CreatePluginInput](pluginMetadataUnavailableMessage)
+	renamePlugin := unavailablePluginMetadataHandler[RenamePluginInput](pluginMetadataUnavailableMessage)
+	setPluginAutoSync := unavailablePluginMetadataHandler[SetPluginAutoSyncInput](pluginAutoSyncUnavailableMessage)
 	if plugins.autoSyncMutationValid() {
 		setPluginAutoSync = func(ctx context.Context, _ *mcp.CallToolRequest, input SetPluginAutoSyncInput) (*mcp.CallToolResult, PluginMetadataMutationOutput, error) {
 			return principalToolCall(ctx, pluginMetadataToolResult, func(principal Principal) (PluginMetadataMutationOutput, error) {
@@ -75,9 +75,9 @@ func registerPluginMetadataTools(reg *Registrar, plugins *PluginsService) {
 	}, meta, setPluginAutoSync)
 }
 
-func unavailablePluginMetadataHandler[In any]() mcp.ToolHandlerFor[In, PluginMetadataMutationOutput] {
+func unavailablePluginMetadataHandler[In any](message string) mcp.ToolHandlerFor[In, PluginMetadataMutationOutput] {
 	return func(_ context.Context, _ *mcp.CallToolRequest, _ In) (*mcp.CallToolResult, PluginMetadataMutationOutput, error) {
-		payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: pluginMetadataFeature, Message: "Creating and changing plugins is not available on this server."})
+		payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: pluginMetadataFeature, Message: message})
 		if err != nil {
 			return nil, PluginMetadataMutationOutput{}, fmt.Errorf("encode unavailable plugin metadata result: %w", err)
 		}

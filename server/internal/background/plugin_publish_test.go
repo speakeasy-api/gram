@@ -240,8 +240,8 @@ func TestPluginPublishWorkflowDebounced_SyncSurvivesCoalescingWithOrdinarySignal
 	t.Parallel()
 
 	for name, messages := range map[string][]string{
-		"sync last":  {"enqueue", pluginPublishSyncSignal},
-		"sync first": {pluginPublishSyncSignal, "enqueue", pluginPublishForceSignal},
+		"sync last":  {pluginPublishEnqueueSignal, pluginPublishSyncSignal},
+		"sync first": {pluginPublishSyncSignal, pluginPublishEnqueueSignal, pluginPublishForceSignal},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -284,8 +284,8 @@ func TestPluginPublishWorkflowDebounced_SyncAppliesToTheRunItReaches(t *testing.
 		nextSync    bool
 	}{
 		"sync arriving mid-run upgrades the follow-up":     {startAsSync: false, midRun: pluginPublishSyncSignal, failRun: false, nextSync: true},
-		"completed sync does not carry into the next run":  {startAsSync: true, midRun: "enqueue", failRun: false, nextSync: false},
-		"failed sync carries into the run that follows it": {startAsSync: true, midRun: "enqueue", failRun: true, nextSync: true},
+		"completed sync does not carry into the next run":  {startAsSync: true, midRun: pluginPublishEnqueueSignal, failRun: false, nextSync: false},
+		"failed sync carries into the run that follows it": {startAsSync: true, midRun: pluginPublishEnqueueSignal, failRun: true, nextSync: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -326,7 +326,7 @@ func TestPluginPublishSignalMessage(t *testing.T) {
 	t.Parallel()
 
 	ordinary := PluginPublishParams{ProjectID: uuid.New(), CreatedByUserID: "", CommitMessage: "", SkipIfUnchanged: true}
-	require.Equal(t, "enqueue", pluginPublishSignalMessage(ordinary))
+	require.Equal(t, pluginPublishEnqueueSignal, pluginPublishSignalMessage(ordinary))
 
 	forced := ordinary
 	forced.SkipIfUnchanged = false

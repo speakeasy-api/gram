@@ -34,6 +34,10 @@ const pluginPublishForceSignal = "force"
 // plugin after the sync was asked for keep waiting.
 const pluginPublishSyncSignal = "sync"
 
+// pluginPublishEnqueueSignal is the signal payload of an ordinary change
+// trigger. It leaves a pending run's parameters as they are.
+const pluginPublishEnqueueSignal = "enqueue"
+
 // pluginPublishEnqueueTimeout bounds the signal-with-start RPC. Enqueuing runs
 // inline on a request that has already committed, so it must fail fast rather
 // than hold the response open through a Temporal outage.
@@ -53,8 +57,9 @@ type PluginPublishParams struct {
 	// only worth doing if the generated output actually moved); a project's
 	// first publish clears it.
 	SkipIfUnchanged bool
-	// IncludePausedPlugins makes the run a manual sync. See
-	// pluginPublishSyncSignal.
+	// IncludePausedPlugins makes the run a manual sync, which also publishes
+	// the pending changes of plugins whose auto sync is off. It applies to one
+	// successful run only.
 	IncludePausedPlugins bool
 }
 
@@ -123,7 +128,7 @@ func pluginPublishSignalMessage(params PluginPublishParams) string {
 	case !params.SkipIfUnchanged:
 		return pluginPublishForceSignal
 	default:
-		return "enqueue"
+		return pluginPublishEnqueueSignal
 	}
 }
 
@@ -191,9 +196,10 @@ func PluginPublishWorkflow(ctx workflow.Context, params PluginPublishParams) (*p
 	return &result, nil
 }
 
-// TemporalPluginPublisher implements plugins.PluginPublishSignaler (and the
-// identical skills.PluginPublishSignaler — skills cannot import plugins) by
-// signal-with-starting the debounced per-project publish workflow.
+// TemporalPluginPublisher implements plugins.PluginSyncSignaler (and
+// skills.PluginPublishSignaler, identical to plugins.PluginPublishSignaler —
+// skills cannot import plugins) by signal-with-starting the debounced
+// per-project publish workflow.
 type TemporalPluginPublisher struct {
 	TemporalEnv *tenv.Environment
 }

@@ -140,7 +140,8 @@ func TestSetPluginAutoSyncTurnsItOffAndOn(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_set_plugin_auto_sync")
 	guard := &stubAutoSyncGuard{}
-	fixture.service.WithAutoSyncGuard(guard)
+	signaler := &recordingPluginPublishSignaler{}
+	fixture.service.WithAutoSyncGuard(guard).WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())
 	plugin, err := pluginsrepo.New(fixture.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
 		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID,
 		Name: "Support Tools", Slug: "support-tools", Description: pgtype.Text{String: "Kept as is", Valid: true},
@@ -154,7 +155,7 @@ func TestSetPluginAutoSyncTurnsItOffAndOn(t *testing.T) {
 	off := SetPluginAutoSyncInput{ProjectID: fixture.project.ID.String(), Plugin: "Support Tools", AutoSyncEnabled: false, IdempotencyKey: "auto-sync-off", Confirmed: true}
 	turnedOff, err := fixture.service.SetPluginAutoSync(ctx, fixture.principal, off)
 	require.NoError(t, err)
-	require.Equal(t, "auto_sync_turned_off", turnedOff.ResultCategory)
+	require.Equal(t, pluginMetadataAutoSyncTurnedOff, turnedOff.ResultCategory)
 	require.Equal(t, new(false), turnedOff.Plugin.AutoSyncEnabled)
 	require.Equal(t, []uuid.UUID{plugin.ID}, guard.checks(), "turning auto sync off runs the dashboard's check")
 
@@ -192,9 +193,17 @@ func TestSetPluginAutoSyncTurnsItOffAndOn(t *testing.T) {
 		ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String(), AutoSyncEnabled: true, IdempotencyKey: "auto-sync-on", Confirmed: true,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "auto_sync_turned_on", turnedOn.ResultCategory)
+	require.Equal(t, pluginMetadataAutoSyncTurnedOn, turnedOn.ResultCategory)
 	require.Equal(t, new(true), turnedOn.Plugin.AutoSyncEnabled)
 	require.Len(t, guard.checks(), 1)
+	// Like the dashboard's switch, each change requests an automatic publish,
+	// which once auto sync is back on sends the changes it held.
+	require.Equal(t, string(plugindelivery.ProjectPublicationEmissionDisabled), turnedOn.PublicationRequest)
+	require.Equal(t, "best_effort_requested", turnedOn.PublishSignal)
+	require.Equal(t, []pluginPublishSignal{
+		{projectID: fixture.project.ID, userID: fixture.principal.UserID},
+		{projectID: fixture.project.ID, userID: fixture.principal.UserID},
+	}, signaler.recorded(), "an ordinary publish for the change off and the change on; the replay signals nothing")
 	again, err := fixture.service.GetPlugin(ctx, fixture.principal, GetPluginInput{ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
 	require.Equal(t, before.Plugin, again.Plugin)
@@ -259,6 +268,30 @@ func TestSetPluginAutoSyncUsesThePluginsServiceCheck(t *testing.T) {
 	got, err := fixture.service.GetPlugin(ctx, fixture.principal, GetPluginInput{ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)
 	require.Equal(t, new(false), got.Plugin.AutoSyncEnabled)
+}
+
+// The listed input schemas carry auto sync: optional on create_plugin, where
+// leaving it out keeps it on, and required on set_plugin_auto_sync.
+func TestPluginAutoSyncInputSchemas(t *testing.T) {
+	t.Parallel()
+	_, fixture := seedPluginMetadataFixture(t, "platform_mcp_plugin_auto_sync_schemas")
+	schema := func(name string) (properties map[string]json.RawMessage, required []string) {
+		t.Helper()
+		var decoded struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		require.NoError(t, json.Unmarshal(fixture.descriptor(t, name).InputSchema, &decoded))
+		return decoded.Properties, decoded.Required
+	}
+
+	properties, required := schema(operationCreatePlugin)
+	require.Contains(t, properties, "auto_sync_enabled")
+	require.NotContains(t, required, "auto_sync_enabled")
+
+	properties, required = schema(operationSetPluginAutoSync)
+	require.ElementsMatch(t, []string{"project_id", "plugin", "auto_sync_enabled", "idempotency_key", "confirmed"}, required)
+	require.Len(t, properties, len(required))
 }
 
 func TestSetPluginAutoSyncRequiresConfirmationAndPluginWrite(t *testing.T) {

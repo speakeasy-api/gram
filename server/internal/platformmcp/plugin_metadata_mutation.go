@@ -58,6 +58,14 @@ const (
 	pluginMetadataCodeUnsyncedChanges = "unsynced_changes"
 )
 
+// Plugin metadata result categories.
+const (
+	pluginMetadataCreated           = "created"
+	pluginMetadataRenamed           = "renamed"
+	pluginMetadataAutoSyncTurnedOn  = "auto_sync_turned_on"
+	pluginMetadataAutoSyncTurnedOff = "auto_sync_turned_off"
+)
+
 var (
 	ErrPluginMetadataMutationUnavailable = errors.New("platform mcp plugin metadata mutations unavailable")
 	ErrPluginMetadataMutationInvalid     = errors.New("invalid platform mcp plugin metadata mutation")
@@ -319,7 +327,7 @@ func (s *PluginsService) createPlugin(ctx context.Context, principal Principal, 
 		if err != nil {
 			return PluginMetadataReceiptResult{}, pluginMetadataCoreError(err)
 		}
-		return s.pluginMetadataReceiptResult(ctx, tx, principal, project, created, "created")
+		return s.pluginMetadataReceiptResult(ctx, tx, principal, project, created, pluginMetadataCreated)
 	})
 }
 
@@ -368,7 +376,7 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 		if err != nil {
 			return PluginMetadataReceiptResult{}, pluginMetadataCoreError(err)
 		}
-		result, err := s.pluginMetadataReceiptResult(ctx, tx, principal, project, renamed, "renamed")
+		result, err := s.pluginMetadataReceiptResult(ctx, tx, principal, project, renamed, pluginMetadataRenamed)
 		if err != nil {
 			return PluginMetadataReceiptResult{}, err
 		}
@@ -384,7 +392,7 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 // and turning it on lets the publish this requests send what was held.
 func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Principal, input SetPluginAutoSyncInput) (PluginMetadataMutationOutput, error) {
 	if !s.autoSyncMutationValid() {
-		return PluginMetadataMutationOutput{}, pluginMetadataMutationUnavailable(nil)
+		return PluginMetadataMutationOutput{}, &PluginMetadataMutationError{Code: unavailableCode, Message: pluginAutoSyncUnavailableMessage, Slug: "", Cause: ErrPluginMetadataMutationUnavailable}
 	}
 	if !input.Confirmed {
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("confirmation_required", "Ask the user to confirm the exact plugin and whether its auto sync turns on or off, then retry with confirmed: true.")
@@ -405,9 +413,9 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 		Operation: operationSetPluginAutoSync, ProjectID: project.ID.String(), Plugin: target,
 		Name: "", Slug: "", Description: "", AutoSyncEnabled: &input.AutoSyncEnabled,
 	}
-	category := "auto_sync_turned_off"
+	category := pluginMetadataAutoSyncTurnedOff
 	if input.AutoSyncEnabled {
-		category = "auto_sync_turned_on"
+		category = pluginMetadataAutoSyncTurnedOn
 	}
 	// The target is resolved and checked after the replay lookup, so a retry
 	// of a change that committed replays it rather than being refused over
@@ -647,7 +655,7 @@ func validPluginMetadataReceiptResult(result PluginMetadataReceiptResult) bool {
 		return false
 	}
 	switch result.ResultCategory {
-	case "created", "renamed", "auto_sync_turned_on", "auto_sync_turned_off":
+	case pluginMetadataCreated, pluginMetadataRenamed, pluginMetadataAutoSyncTurnedOn, pluginMetadataAutoSyncTurnedOff:
 	default:
 		return false
 	}
@@ -681,9 +689,17 @@ func pluginMetadataMutationInvalid(code, message string) error {
 	return &PluginMetadataMutationError{Code: code, Message: message, Slug: "", Cause: ErrPluginMetadataMutationInvalid}
 }
 
+// pluginMetadataUnavailableMessage refuses a plugin metadata write the server
+// was composed without.
+const pluginMetadataUnavailableMessage = "Creating and renaming plugins is not available on this server."
+
+// pluginAutoSyncUnavailableMessage refuses set_plugin_auto_sync on a server
+// composed without the turn-off check, even where creating and renaming work.
+const pluginAutoSyncUnavailableMessage = "Turning a plugin's auto sync on or off is not available on this server."
+
 func pluginMetadataMutationUnavailable(cause error) error {
 	if cause == nil {
-		return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and changing plugins is not available on this server.", Slug: "", Cause: ErrPluginMetadataMutationUnavailable}
+		return &PluginMetadataMutationError{Code: unavailableCode, Message: pluginMetadataUnavailableMessage, Slug: "", Cause: ErrPluginMetadataMutationUnavailable}
 	}
 	return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and changing plugins is temporarily unavailable.", Slug: "", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationUnavailable, cause)}
 }

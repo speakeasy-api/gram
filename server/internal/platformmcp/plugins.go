@@ -482,8 +482,9 @@ type PluginsService struct {
 	distributionAdmissionRead distributionAdmissionReader
 
 	// publication and publisher request a plugin publish. republish_plugin
-	// uses both to request a manual sync; create_plugin and rename_plugin
-	// signal through publisher after their own publication request commits.
+	// uses both to request a manual sync; create_plugin, rename_plugin, and
+	// set_plugin_auto_sync signal through publisher after their own
+	// publication request commits.
 	publication     plugindelivery.PublicationRequests
 	publisher       plugindelivery.PluginSyncSignaler
 	republishBudget OperationBudget
@@ -491,7 +492,9 @@ type PluginsService struct {
 	metadataLogger *slog.Logger
 	metadataCore   *plugindelivery.PluginMetadataCore
 	metadataBudget OperationBudget
-	autoSyncGuard  pluginAutoSyncGuard
+	// autoSyncGuard refuses turning auto sync off while a plugin has changes
+	// that haven't been synced. set_plugin_auto_sync is unavailable without it.
+	autoSyncGuard pluginAutoSyncGuard
 
 	// orgHosts resolves the platform host stored as an organization's default
 	// host. Nil links follow the request's platform origin. orgHostsLogger

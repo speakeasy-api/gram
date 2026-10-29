@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
@@ -266,7 +267,10 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 	}
 	// An unreadable setting reads as on, so the evidence never claims changes
 	// are waiting for a sync it could not confirm is needed.
-	paused, _ := pluginsrepo.New(s.db).ListAutoSyncPausedPluginSlugs(ctx, project.ID)
+	paused, err := pluginsrepo.New(s.db).ListAutoSyncPausedPluginSlugs(ctx, project.ID)
+	if err != nil && s.metadataLogger != nil {
+		s.metadataLogger.WarnContext(ctx, "list plugins with auto sync off after republish", attr.SlogError(err))
+	}
 	return RepublishPluginOutput{
 		ProjectID:           project.ID.String(),
 		Plugin:              stored.Plugin,
