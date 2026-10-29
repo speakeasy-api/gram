@@ -33,21 +33,22 @@ export function useGitHubAppDraft(
     undefined,
     { enabled, throwOnError: false },
   );
+  const {
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    fetchNextPage,
+  } = query;
   useEffect(() => {
-    if (
-      !enabled ||
-      !query.hasNextPage ||
-      query.isFetchingNextPage ||
-      query.isFetchNextPageError
-    )
+    if (!enabled || !hasNextPage || isFetchingNextPage || isFetchNextPageError)
       return;
-    void query.fetchNextPage().catch(() => undefined);
+    void fetchNextPage().catch(() => undefined);
   }, [
     enabled,
-    query.hasNextPage,
-    query.isFetchingNextPage,
-    query.isFetchNextPageError,
-    query.fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    fetchNextPage,
   ]);
   const incomplete =
     query.hasNextPage || query.isFetchingNextPage || query.isFetchNextPageError;
