@@ -204,14 +204,16 @@ function LeftOutServers({
           {entry.reason === "another_issuer" ? (
             <LeftOutRow
               name={entry.server.name}
-              reason="Signs in through another user session issuer. A workload needs a separate token from that issuer for it."
+              reason={`${entry.server.name} uses a different sign-in. A workload needs a separate token from that sign-in for it.`}
               action={
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={() => onSelect(entry.server.issuerId!)}
                 >
-                  <Button.Text>Use its issuer</Button.Text>
+                  <Button.Text>
+                    Use {entry.server.name}&apos;s sign-in
+                  </Button.Text>
                 </Button>
               }
             />
@@ -220,7 +222,7 @@ function LeftOutServers({
           ) : (
             <LeftOutRow
               name={entry.server.name}
-              reason={`${NOT_SHARED} There is no shared user session issuer it could move to yet.`}
+              reason={`${notShared(entry.server.name)} There is no shared sign-in to assign to it yet.`}
               action={<ServerSignInSettingsLink server={entry.server} />}
             />
           )}
@@ -230,8 +232,8 @@ function LeftOutServers({
   );
 }
 
-const NOT_SHARED =
-  "Its user session issuer has no shared authorization server, so a workload can't get a token for it.";
+const notShared = (name: string) =>
+  `${name} uses its own sign-in, which can't give tokens to agents.`;
 
 /** A server whose issuer is not shared, with a shared one to move it to. */
 function NotSharedRow({
@@ -247,7 +249,7 @@ function NotSharedRow({
       return (
         <LeftOutRow
           name={server.name}
-          reason={NOT_SHARED}
+          reason={notShared(server.name)}
           action={<SwitchServerSignIn server={server} target={target} />}
         />
       );
@@ -255,10 +257,12 @@ function NotSharedRow({
       return (
         <LeftOutRow
           name={server.name}
-          reason={NOT_SHARED}
+          reason={notShared(server.name)}
           action={
             <Button variant="secondary" size="sm" disabled>
-              <Button.Text>Switch to {target.label}</Button.Text>
+              <Button.Text>
+                Assign {target.label} to {server.name}
+              </Button.Text>
             </Button>
           }
         />
@@ -267,7 +271,7 @@ function NotSharedRow({
       return (
         <LeftOutRow
           name={server.name}
-          reason={`${NOT_SHARED} People connect their own accounts through its current sign-in, so move it to ${target.label} from its sign-in settings, where their connections can be set up again.`}
+          reason={`${notShared(server.name)} People connect their own accounts through it, so assign ${target.label} from ${server.name}'s settings, where those connections can be set up again.`}
           action={<ServerSignInSettingsLink server={server} />}
         />
       );
@@ -275,7 +279,7 @@ function NotSharedRow({
       return (
         <LeftOutRow
           name={server.name}
-          reason={`${NOT_SHARED} Speakeasy couldn't check whether people connect their own accounts through its current sign-in, so move it to ${target.label} from its sign-in settings.`}
+          reason={`${notShared(server.name)} Speakeasy couldn't check whether people connect their own accounts through it, so assign ${target.label} from ${server.name}'s settings.`}
           action={<ServerSignInSettingsLink server={server} />}
         />
       );
@@ -283,7 +287,7 @@ function NotSharedRow({
       return (
         <LeftOutRow
           name={server.name}
-          reason={`${NOT_SHARED} Ask someone who can edit ${server.name} to switch it to ${target.label}.`}
+          reason={`${notShared(server.name)} Ask someone who can edit ${server.name} to assign ${target.label} to it.`}
           action={<ServerSignInSettingsLink server={server} />}
         />
       );

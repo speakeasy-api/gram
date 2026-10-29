@@ -130,7 +130,7 @@ it("names each server the selected issuer's token won't work for, with its fix",
   expect(
     screen.getByText("This token won't work for 2 of this agent's servers"),
   ).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Use its issuer" }));
+  fireEvent.click(screen.getByRole("button", { name: "Use Linear's sign-in" }));
   expect(onEndpointChange).toHaveBeenCalledWith("other");
   expect(
     screen
@@ -187,18 +187,18 @@ it("switches a server on a shared credential to the shared issuer after confirmi
   await waitFor(() =>
     expect(
       screen
-        .getByRole("button", { name: "Switch to acme-workforce" })
+        .getByRole("button", { name: "Assign acme-workforce to GitHub" })
         .hasAttribute("disabled"),
     ).toBe(false),
   );
   fireEvent.click(
-    screen.getByRole("button", { name: "Switch to acme-workforce" }),
+    screen.getByRole("button", { name: "Assign acme-workforce to GitHub" }),
   );
   expect(
-    await screen.findByText("Switch GitHub to acme-workforce?"),
+    await screen.findByText("Assign acme-workforce to GitHub?"),
   ).toBeTruthy();
   expect(screen.getByText(/will need to sign in again/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Switch sign-in" }));
+  fireEvent.click(screen.getByRole("button", { name: "Assign" }));
   await waitFor(() =>
     expect(switchMocks.link).toHaveBeenCalledWith(
       expect.anything(),
@@ -228,7 +228,7 @@ it("sends a server people connect their own accounts to to its settings instead"
     screen.getByRole("link", { name: "Open sign-in settings" }),
   ).toBeTruthy();
   expect(
-    screen.queryByRole("button", { name: "Switch to acme-workforce" }),
+    screen.queryByRole("button", { name: "Assign acme-workforce to GitHub" }),
   ).toBeNull();
 });
 
@@ -243,11 +243,11 @@ it("asks someone who can edit the server when the reader cannot", () => {
   );
   expect(
     screen.getByText(
-      /Ask someone who can edit GitHub to switch it to acme-workforce/,
+      /Ask someone who can edit GitHub to assign acme-workforce to it/,
     ),
   ).toBeTruthy();
   expect(
-    screen.queryByRole("button", { name: "Switch to acme-workforce" }),
+    screen.queryByRole("button", { name: "Assign acme-workforce to GitHub" }),
   ).toBeNull();
 });
 
@@ -263,7 +263,7 @@ it("still offers the switch when only the server's own credential is on its sign
   await waitFor(() =>
     expect(
       screen
-        .getByRole("button", { name: "Switch to acme-workforce" })
+        .getByRole("button", { name: "Assign acme-workforce to GitHub" })
         .hasAttribute("disabled"),
     ).toBe(false),
   );

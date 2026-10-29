@@ -48,7 +48,7 @@ export function SwitchServerSignIn({
       ),
     onSuccess: async () => {
       setOpen(false);
-      toast.success(`${server.name} now signs in through ${target.label}`);
+      toast.success(`${target.label} is now assigned to ${server.name}`);
       await Promise.all([
         invalidateAllListMcpServersForOrg(queryClient, { refetchType: "all" }),
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
@@ -59,10 +59,10 @@ export function SwitchServerSignIn({
 
   const issuerUrl = impact.data?.candidateIssuer?.issuerUrl;
   const summary = impact.isError
-    ? "Couldn't check where clients will sign in. You can still switch."
+    ? "Couldn't check where clients will sign in. You can still assign it."
     : issuerUrl
-      ? `Clients will be sent to ${target.label}'s shared authorization server, ${issuerUrl}. Update any identity provider or platform set up with ${server.name}'s current one.`
-      : `Clients will be sent to ${target.label}'s shared authorization server.`;
+      ? `Clients will sign in at ${target.label}, ${issuerUrl}. Update any identity provider or platform set up with ${server.name}'s current sign-in.`
+      : `Clients will sign in at ${target.label}.`;
 
   return (
     <>
@@ -74,15 +74,17 @@ export function SwitchServerSignIn({
           setOpen(true);
         }}
       >
-        <Button.Text>Switch to {target.label}</Button.Text>
+        <Button.Text>
+          Assign {target.label} to {server.name}
+        </Button.Text>
       </Button>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title={`Switch ${server.name} to ${target.label}?`}
-        description={`${server.name} will sign people and workloads in through ${target.label}. Everyone connected to ${server.name} will need to sign in again, because their sessions belong to its current user session issuer.`}
-        confirmLabel="Switch sign-in"
-        pendingLabel="Switching…"
+        title={`Assign ${target.label} to ${server.name}?`}
+        description={`${server.name} will accept sign-ins from ${target.label}, so this agent's token works there too. Everyone connected to ${server.name} will need to sign in again.`}
+        confirmLabel="Assign"
+        pendingLabel="Assigning…"
         confirmVariant="primary"
         onConfirm={() => move.mutate()}
         isPending={move.isPending}
