@@ -19,10 +19,11 @@ func TestCatalogNoAuthRejectsCredentialBearingProposals(t *testing.T) {
 		name                                                   string
 		requires                                               pgtype.Bool
 		headerClient, uncovered, registration, oauth, accepted bool
+		tunneled                                               bool
 	}{
 		{name: "plain no auth", accepted: true},
 
-		{name: "required header credentials", requires: pgtype.Bool{Bool: true, Valid: true}, headerClient: true},
+		{name: "required header credentials", tunneled: true, requires: pgtype.Bool{Bool: true, Valid: true}, headerClient: true},
 		{name: "undecided header credentials", headerClient: true},
 		{name: "uncovered header credentials", requires: pgtype.Bool{Bool: false, Valid: true}, headerClient: true, uncovered: true},
 		{name: "captured registration", requires: pgtype.Bool{Bool: false, Valid: true}, headerClient: true, registration: true},
@@ -31,14 +32,14 @@ func TestCatalogNoAuthRejectsCredentialBearingProposals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			f := newAuthClientFixture(t, pool)
-			if tc.name == "required header credentials" {
+			if tc.tunneled {
 				f.tunneled()
 			}
 			require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: tc.requires, ID: f.serverID}))
 			if tc.headerClient {
 				f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
 			}
-			if tc.name == "required header credentials" {
+			if tc.tunneled {
 				resolved, err := f.service.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, uuid.NullUUID{}, urn.NewUserSubject("user_1"))
 				require.NoError(t, err)
 				require.Equal(t, authClientLegacy, resolved.outcome)
