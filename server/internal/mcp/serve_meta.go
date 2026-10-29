@@ -217,8 +217,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		return err
 	}
 	// A skills request loads the catalog too: a gateway inherits skills only
-	// from the members the connection approved.
-	if gate.catalogRef != nil && (req.Method == mcpversions.MethodToolsCall || (req.Method == mcpversions.MethodToolsList && (gate.discoveryMode == metamcp.DiscoveryModeDirect || gate.discoveryMode == metamcp.DiscoveryModeCode)) || metaSkillMethod(&req)) {
+	// from the members the connection approved. With the extension off it is
+	// rejected in dispatch, so it needs no catalog.
+	if gate.catalogRef != nil && (req.Method == mcpversions.MethodToolsCall || (req.Method == mcpversions.MethodToolsList && (gate.discoveryMode == metamcp.DiscoveryModeDirect || gate.discoveryMode == metamcp.DiscoveryModeCode)) || (metaSkillMethod(&req) && s.metaSkillsEnabled(ctx, gate))) {
 		authentication := gate.authentication
 		catalog, err := s.loadConnectionCatalog(ctx, authentication.endpoint, authentication.subject, gate.catalogRef, time.Now())
 		if errors.Is(err, errConnectionCatalogExpired) {
