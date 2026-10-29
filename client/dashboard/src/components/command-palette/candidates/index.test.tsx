@@ -1838,21 +1838,24 @@ describe("new resource source wiring", () => {
     });
   });
 
-  it("includes devices only with organization read access, from either shell", () => {
-    mocks.scopes = ["org:read"];
-    const { result } = renderCandidates({ inProject: false });
-    expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
-      true,
-    );
-    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
-      enabled: true,
-    });
-    expect(mocks.rbacCalls).toContainEqual({
-      fn: "hasAnyScope",
-      scopes: ["org:read", "org:admin"],
-      resourceId: "org-acme",
-    });
-  });
+  it.each([false, true])(
+    "includes devices with organization read access (in a project: %s)",
+    (inProject) => {
+      mocks.scopes = ["org:read"];
+      const { result } = renderCandidates({ inProject });
+      expect(result.current.some((c) => c.id === "managed-device:test")).toBe(
+        true,
+      );
+      expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
+        enabled: true,
+      });
+      expect(mocks.rbacCalls).toContainEqual({
+        fn: "hasAnyScope",
+        scopes: ["org:read", "org:admin"],
+        resourceId: "org-acme",
+      });
+    },
+  );
 
   it("does not request devices without organization read access", () => {
     const { result } = renderCandidates();
@@ -1883,11 +1886,14 @@ describe("new resource source wiring", () => {
     });
   });
 
-  it("disables both new sources while the palette is closed", () => {
-    mocks.scopes = ["skill:read"];
+  it("disables the new sources while the palette is closed", () => {
+    mocks.scopes = ["skill:read", "org:read"];
     renderCandidates({ enabled: false });
     expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
     expect(useAgentIdentityCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+    expect(useManagedDeviceCandidates).toHaveBeenLastCalledWith({
       enabled: false,
     });
   });

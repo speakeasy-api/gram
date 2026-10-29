@@ -226,7 +226,30 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
     );
   };
 
-  if (isLoading) return <SkeletonTable />;
+  // Rendered in every state, so a Command K link opens its snapshot while
+  // the inventory loads or after it fails.
+  const detailSheet = (
+    <DeviceDetailSheet
+      device={linkedDevice ?? selectedDevice}
+      open={linkedDevice ? true : sheetOpen}
+      onOpenChange={(open) => {
+        // Keep the linked device as the selection so the panel keeps its
+        // content while it slides out.
+        if (!open && linkedDevice) setSelected(linkedDevice);
+        if (!open) clearLinkedDevice();
+        setSheetOpen(open);
+      }}
+    />
+  );
+
+  if (isLoading) {
+    return (
+      <>
+        <SkeletonTable />
+        {detailSheet}
+      </>
+    );
+  }
   if (isError) {
     return (
       <Stack gap={2} align="start">
@@ -236,6 +259,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
             <Button.Text>Retry</Button.Text>
           </Button>
         ) : null}
+        {detailSheet}
       </Stack>
     );
   }
@@ -287,17 +311,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           </Text>
         </Stack>
       ) : null}
-      <DeviceDetailSheet
-        device={linkedDevice ?? selectedDevice}
-        open={linkedDevice ? true : sheetOpen}
-        onOpenChange={(open) => {
-          // Keep the linked device as the selection so the panel keeps its
-          // content while it slides out.
-          if (!open && linkedDevice) setSelected(linkedDevice);
-          if (!open) clearLinkedDevice();
-          setSheetOpen(open);
-        }}
-      />
+      {detailSheet}
     </Stack>
   );
 });

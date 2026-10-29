@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/device_integrations"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
+	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 )
 
 var (
@@ -70,7 +71,7 @@ func (s *DeviceCoverageService) admit(ctx context.Context, principal Principal) 
 }
 
 type GetDeviceCoverageInput struct {
-	Provider string `json:"provider,omitempty" jsonschema:"one MDM provider, e.g. jamf or kandji; omit for every connected inventory"`
+	Provider string `json:"provider,omitempty" jsonschema:"one MDM provider, e.g. jamf or intune; omit for every connected inventory"`
 }
 
 type DeviceCoverageOutput struct {
@@ -81,14 +82,17 @@ type DeviceCoverageOutput struct {
 	// Attestation is device when every active device was matched by its own
 	// hardware serial, or user when some only prove their assigned user runs
 	// the agent somewhere.
-	Attestation      string `json:"attestation"`
-	AgentActive      int64  `json:"agent_active"`
-	AgentStale       int64  `json:"agent_stale"`
-	AgentOtherDevice int64  `json:"agent_other_device"`
-	NoAgent          int64  `json:"no_agent"`
-	NoEmail          int64  `json:"no_email"`
-	UnresolvedEmail  int64  `json:"unresolved_email"`
-	Missing          int64  `json:"missing"`
+	Attestation string `json:"attestation"`
+	AgentActive int64  `json:"agent_active"`
+	// AgentActiveDeviceAttested counts the agent_active devices backed by
+	// their own agent, matched by serial, rather than their user's.
+	AgentActiveDeviceAttested int64 `json:"agent_active_device_attested"`
+	AgentStale                int64 `json:"agent_stale"`
+	AgentOtherDevice          int64 `json:"agent_other_device"`
+	NoAgent                   int64 `json:"no_agent"`
+	NoEmail                   int64 `json:"no_email"`
+	UnresolvedEmail           int64 `json:"unresolved_email"`
+	Missing                   int64 `json:"missing"`
 	// The policy counts split agent_active by whether the device enforces the
 	// policy last served to it.
 	PolicyAttested    int64 `json:"policy_attested"`
@@ -103,26 +107,31 @@ func (s *DeviceCoverageService) GetCoverage(ctx context.Context, principal Princ
 	if err := s.admit(ctx, principal); err != nil {
 		return DeviceCoverageOutput{}, err
 	}
-	coverage, err := s.reader.Coverage(ctx, principal.OrganizationID, strings.TrimSpace(input.Provider))
+	provider, err := knownProvider(input.Provider)
+	if err != nil {
+		return DeviceCoverageOutput{}, err
+	}
+	coverage, err := s.reader.Coverage(ctx, principal.OrganizationID, provider)
 	if err != nil {
 		return DeviceCoverageOutput{}, fmt.Errorf("read device coverage: %w", err)
 	}
 	return DeviceCoverageOutput{
-		TotalDevices:        coverage.TotalDevices,
-		ActiveWindowMinutes: coverage.ActiveWindowMinutes,
-		Attestation:         coverage.Attestation,
-		AgentActive:         coverage.AgentActive,
-		AgentStale:          coverage.AgentStale,
-		AgentOtherDevice:    coverage.AgentOtherDevice,
-		NoAgent:             coverage.NoAgent,
-		NoEmail:             coverage.NoEmail,
-		UnresolvedEmail:     coverage.UnresolvedEmail,
-		Missing:             coverage.Missing,
-		PolicyAttested:      coverage.PolicyAttested,
-		PolicyOutdated:      coverage.PolicyOutdated,
-		PolicyUnreported:    coverage.PolicyUnreported,
-		EnforcementHalted:   coverage.EnforcementHalted,
-		UnmanagedAgentUsers: coverage.UnmanagedAgentUsers,
+		TotalDevices:              coverage.TotalDevices,
+		ActiveWindowMinutes:       coverage.ActiveWindowMinutes,
+		Attestation:               coverage.Attestation,
+		AgentActive:               coverage.AgentActive,
+		AgentActiveDeviceAttested: coverage.AgentActiveDeviceAttested,
+		AgentStale:                coverage.AgentStale,
+		AgentOtherDevice:          coverage.AgentOtherDevice,
+		NoAgent:                   coverage.NoAgent,
+		NoEmail:                   coverage.NoEmail,
+		UnresolvedEmail:           coverage.UnresolvedEmail,
+		Missing:                   coverage.Missing,
+		PolicyAttested:            coverage.PolicyAttested,
+		PolicyOutdated:            coverage.PolicyOutdated,
+		PolicyUnreported:          coverage.PolicyUnreported,
+		EnforcementHalted:         coverage.EnforcementHalted,
+		UnmanagedAgentUsers:       coverage.UnmanagedAgentUsers,
 	}, nil
 }
 
@@ -149,7 +158,11 @@ type ManagedDeviceSummary struct {
 	UserEmail      string `json:"user_email,omitempty"`
 	CoverageBucket string `json:"coverage_bucket"`
 	// PolicyState is set only for agent_active devices.
-	PolicyState       string                     `json:"policy_state,omitempty"`
+	PolicyState string `json:"policy_state,omitempty"`
+	// ReportAttestation is device when this machine's own agent sent the
+	// report behind the fields below, or user when the assigned user's agent
+	// did, possibly from another machine.
+	ReportAttestation string                     `json:"report_attestation,omitempty"`
 	AgentLastSeenAt   string                     `json:"agent_last_seen_at,omitempty"`
 	MDMLastCheckInAt  string                     `json:"mdm_last_check_in_at,omitempty"`
 	MissingSince      string                     `json:"missing_since,omitempty"`
@@ -169,6 +182,10 @@ type ListManagedDevicesOutput struct {
 
 func (s *DeviceCoverageService) ListManagedDevices(ctx context.Context, principal Principal, input ListManagedDevicesInput) (ListManagedDevicesOutput, error) {
 	if err := s.admit(ctx, principal); err != nil {
+		return ListManagedDevicesOutput{}, err
+	}
+	provider, err := knownProvider(input.Provider)
+	if err != nil {
 		return ListManagedDevicesOutput{}, err
 	}
 	bucket := strings.TrimSpace(input.CoverageBucket)
@@ -193,7 +210,7 @@ func (s *DeviceCoverageService) ListManagedDevices(ctx context.Context, principa
 
 	result, err := s.reader.ManagedDevices(ctx, deviceintegrations.ManagedDevicesQuery{
 		OrganizationID: principal.OrganizationID,
-		Provider:       strings.TrimSpace(input.Provider),
+		Provider:       provider,
 		CoverageBucket: bucket,
 		PolicyState:    policyState,
 		UserIDs:        nil,
@@ -218,6 +235,19 @@ func (s *DeviceCoverageService) ListManagedDevices(ctx context.Context, principa
 	return ListManagedDevicesOutput{Devices: devices, NextCursor: dereferenceString(result.NextCursor)}, nil
 }
 
+// knownProvider trims provider and rejects an id no MDM integration has, so a
+// typo reads as a correctable argument rather than an empty fleet.
+func knownProvider(provider string) (string, error) {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return "", nil
+	}
+	if _, ok := providers.Lookup(provider); !ok {
+		return "", ErrDeviceCoverageInvalid
+	}
+	return provider, nil
+}
+
 // managedDeviceSummary keeps what an agent needs to explain a device's state
 // and leaves out row and MDM identifiers, which mean nothing outside the
 // dashboard.
@@ -235,6 +265,7 @@ func managedDeviceSummary(device *gen.ManagedDevice) ManagedDeviceSummary {
 		MDMLastCheckInAt: dereferenceString(device.MdmLastCheckInAt),
 		MissingSince:     dereferenceString(device.MissingSince),
 		// Set below when the agent has reported.
+		ReportAttestation: "",
 		ReportedAt:        "",
 		AppliedAt:         "",
 		AgentVersion:      "",
@@ -247,6 +278,7 @@ func managedDeviceSummary(device *gen.ManagedDevice) ManagedDeviceSummary {
 	if state == nil {
 		return summary
 	}
+	summary.ReportAttestation = state.Attestation
 	summary.ReportedAt = state.ReportedAt
 	summary.AppliedAt = dereferenceString(state.AppliedAt)
 	summary.AgentVersion = dereferenceString(state.SpeakeasydVersion)

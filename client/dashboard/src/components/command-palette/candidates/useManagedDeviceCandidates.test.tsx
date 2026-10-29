@@ -180,4 +180,27 @@ describe("useManagedDeviceCandidates", () => {
     });
     expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
   });
+
+  it("resumes after a failed page when the palette opens again", async () => {
+    mocks.query.data = { pages: [{ result: { devices: [device("a")] } }] };
+    mocks.query.hasNextPage = true;
+    const { rerender } = renderHook(
+      ({ enabled }) => useManagedDeviceCandidates({ enabled }),
+      { initialProps: { enabled: true } },
+    );
+    await waitFor(() =>
+      expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(1),
+    );
+    act(() => {
+      mocks.query.isFetchNextPageError = true;
+      mocks.query.fetchNextPage.mockClear();
+      rerender({ enabled: true });
+    });
+    expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
+
+    act(() => rerender({ enabled: false }));
+    expect(mocks.query.fetchNextPage).not.toHaveBeenCalled();
+    act(() => rerender({ enabled: true }));
+    expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
 });

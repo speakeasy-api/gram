@@ -49,11 +49,16 @@ function Search() {
 function renderTable(
   devices: ManagedDevice[],
   entry: { pathname: string; search?: string; state?: unknown },
+  status: { isLoading?: boolean; isError?: boolean } = {},
 ) {
   return render(
     <MemoryRouter initialEntries={[entry]}>
       <TooltipProvider>
-        <ManagedDeviceTable devices={devices} isLoading={false} />
+        <ManagedDeviceTable
+          devices={devices}
+          isLoading={status.isLoading ?? false}
+          isError={status.isError}
+        />
       </TooltipProvider>
       <Search />
     </MemoryRouter>,
@@ -83,6 +88,25 @@ describe("ManagedDeviceTable linked device", () => {
 
     expect(screen.getByTestId("sheet").dataset.open).toBe("true");
     expect(screen.getByTestId("sheet").textContent).toBe("later-mbp");
+  });
+
+  it.each([
+    ["loading", { isLoading: true }],
+    ["failed", { isError: true }],
+  ])("opens the linked snapshot while the inventory is %s", (_, status) => {
+    const linked = device("linked", "linked-mbp");
+    renderTable(
+      [],
+      {
+        pathname: "/devices",
+        search: "?device=linked",
+        state: { device: linked },
+      },
+      status,
+    );
+
+    expect(screen.getByTestId("sheet").dataset.open).toBe("true");
+    expect(screen.getByTestId("sheet").textContent).toBe("linked-mbp");
   });
 
   it("ignores a snapshot for a different device", () => {

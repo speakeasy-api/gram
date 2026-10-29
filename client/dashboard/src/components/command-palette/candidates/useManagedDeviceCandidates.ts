@@ -11,7 +11,7 @@ import {
   type ManagedDevicesPageParams,
 } from "@gram/client/react-query/managedDevices.js";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
 
@@ -47,10 +47,18 @@ export function useManagedDeviceCandidates({
     throwOnError: false,
   });
 
-  // A device on a later page must still be findable by name.
+  // A device on a later page must still be findable by name. A failed page
+  // stops the drain until the palette next opens, so a broken endpoint is
+  // never retried in a loop but reopening resumes.
+  const opens = useRef(0);
+  const lastFetchOpen = useRef(0);
   useEffect(() => {
-    if (!enabled || !hasNextPage || isFetchingNextPage || isFetchNextPageError)
-      return;
+    if (enabled) opens.current += 1;
+  }, [enabled]);
+  useEffect(() => {
+    if (!enabled || !hasNextPage || isFetchingNextPage) return;
+    if (isFetchNextPageError && lastFetchOpen.current === opens.current) return;
+    lastFetchOpen.current = opens.current;
     void fetchNextPage().catch(() => undefined);
   }, [
     enabled,
