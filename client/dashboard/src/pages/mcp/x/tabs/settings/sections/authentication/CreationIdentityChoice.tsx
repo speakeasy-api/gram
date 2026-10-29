@@ -1,5 +1,6 @@
 import { GitHubAppFields } from "@/lib/remote-identity/components/GitHubAppFields";
 import {
+  isGitHubMcpUrl,
   newGitHubAppDraft,
   type GitHubAppDraft,
 } from "@/lib/remote-identity/model/githubApp";
@@ -28,6 +29,7 @@ export function CreationIdentityChoice({
   onChange,
   credential,
   upstreamName,
+  upstreamUrls = [],
   advertisesOAuth,
   authenticationRequired,
   canCreateIdentity,
@@ -41,6 +43,7 @@ export function CreationIdentityChoice({
   onChange: (mode: CreationIdentityMode) => void;
   credential: AgentCredentialFields;
   upstreamName: string;
+  upstreamUrls?: string[];
   /** The probe saw an OAuth challenge, so User Identity is the default. */
   advertisesOAuth: boolean;
   authenticationRequired: boolean;
@@ -56,6 +59,8 @@ export function CreationIdentityChoice({
    */
   serviceAccountPanel?: ReactNode;
 }): JSX.Element {
+  const showGitHubApp =
+    upstreamUrls.length > 0 && upstreamUrls.every(isGitHubMcpUrl);
   const [explainerOpen, setExplainerOpen] = useState(false);
 
   return (
@@ -114,7 +119,7 @@ export function CreationIdentityChoice({
         ))}
       </RadioCardGroup>
 
-      {value === "agent" && onGitHubAppChange ? (
+      {value === "agent" && showGitHubApp && onGitHubAppChange ? (
         <SegmentedControl
           value={githubApp ? "github-app" : "static"}
           onChange={(next) =>
@@ -137,7 +142,7 @@ export function CreationIdentityChoice({
           ]}
         />
       ) : null}
-      {value === "agent" && githubApp && onGitHubAppChange ? (
+      {value === "agent" && showGitHubApp && githubApp && onGitHubAppChange ? (
         <GitHubAppFields
           value={githubApp}
           onChange={onGitHubAppChange}

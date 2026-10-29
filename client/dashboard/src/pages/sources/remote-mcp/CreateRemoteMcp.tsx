@@ -276,6 +276,7 @@ function CreateRemoteMcpForm() {
                 value={url}
                 onChange={(value) => {
                   setUrl(value);
+                  setGitHubApp(undefined);
                   if (!touched) setTouched(true);
                 }}
                 onBlur={() => setTouched(true)}
@@ -381,6 +382,7 @@ function CreateRemoteMcpForm() {
               credential={agentCredential}
               githubApp={githubApp}
               onGitHubAppChange={setGitHubApp}
+              upstreamUrls={[url]}
               upstreamName={upstreamName}
               advertisesOAuth={
                 verify.result?.outcome === "authentication_required"

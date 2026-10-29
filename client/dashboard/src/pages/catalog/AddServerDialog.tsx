@@ -1045,6 +1045,7 @@ function CatalogServerIdentity({
         onGitHubAppChange={(githubApp) =>
           updateServerConfig(index, { githubApp })
         }
+        upstreamUrls={config.remotes.map((remote) => remote.url)}
         upstreamName={config.name || "this server"}
         advertisesOAuth={supportsAutomaticOAuth(config.server)}
         authenticationRequired={false}
