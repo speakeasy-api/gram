@@ -973,13 +973,21 @@ func TestSetPluginAssignmentsRejectsExpiredAndCrossProjectReferences(t *testing.
 
 func seedPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, name, slug string) pluginsrepo.Plugin {
 	t.Helper()
+	return seedPluginWithAutoSync(t, ctx, conn, organizationID, projectID, name, slug, pgtype.Bool{})
+}
+
+// seedPluginWithAutoSync seeds a plugin with a stored auto sync setting; an
+// invalid one is the default, on.
+func seedPluginWithAutoSync(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, name, slug string, autoSync pgtype.Bool) pluginsrepo.Plugin {
+	t.Helper()
 
 	plugin, err := pluginsrepo.New(conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		Name:           name,
-		Slug:           slug,
-		Description:    pgtype.Text{},
+		OrganizationID:  organizationID,
+		ProjectID:       projectID,
+		Name:            name,
+		Slug:            slug,
+		Description:     pgtype.Text{},
+		AutoSyncEnabled: autoSync,
 	})
 	require.NoError(t, err)
 	return plugin

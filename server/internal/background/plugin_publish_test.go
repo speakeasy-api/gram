@@ -269,99 +269,57 @@ func TestPluginPublishWorkflowDebounced_SyncSurvivesCoalescingWithOrdinarySignal
 	}
 }
 
-// A manual sync arriving while an ordinary publish runs upgrades the follow-up
-// run, the way a forced trigger does.
-func TestPluginPublishWorkflowDebounced_SyncSignalUpgradesPendingRun(t *testing.T) {
+// Which run a manual sync applies to: one arriving while an ordinary publish
+// runs makes the follow-up run a sync, as a forced trigger does. A sync holds
+// for its own run only, so changes made to a plugin whose auto sync is off
+// while it publishes keep waiting; but a sync whose run failed has not
+// happened, so the follow-up run still carries it out.
+func TestPluginPublishWorkflowDebounced_SyncAppliesToTheRunItReaches(t *testing.T) {
 	t.Parallel()
 
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
-	params := PluginPublishParams{ProjectID: uuid.New(), CreatedByUserID: "user_01HZ", CommitMessage: "Update plugin packages", SkipIfUnchanged: true}
+	for name, test := range map[string]struct {
+		startAsSync bool
+		midRun      string
+		failRun     bool
+		nextSync    bool
+	}{
+		"sync arriving mid-run upgrades the follow-up":     {startAsSync: false, midRun: pluginPublishSyncSignal, failRun: false, nextSync: true},
+		"completed sync does not carry into the next run":  {startAsSync: true, midRun: "enqueue", failRun: false, nextSync: false},
+		"failed sync carries into the run that follows it": {startAsSync: true, midRun: "enqueue", failRun: true, nextSync: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	var runs int
-	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
-			runs++
-			if runs == 1 {
-				env.SignalWorkflow(pluginPublishDebounceSignal(params), pluginPublishSyncSignal)
-				env.SignalWorkflow(pluginPublishDebounceSignal(params), "enqueue")
-			}
-			return &plugins.PublishProjectResult{RepoURL: "https://github.com/test-org/repo", Skipped: false}, nil
-		},
-		activity.RegisterOptions{Name: "PublishPluginProject"},
-	)
+			var suite testsuite.WorkflowTestSuite
+			env := suite.NewTestWorkflowEnvironment()
+			params := PluginPublishParams{ProjectID: uuid.New(), CreatedByUserID: "user_01HZ", CommitMessage: "Update plugin packages", SkipIfUnchanged: true, IncludePausedPlugins: test.startAsSync}
 
-	env.ExecuteWorkflow(PluginPublishWorkflowDebounced, params)
+			var inputs []plugins.PublishProjectInput
+			env.RegisterActivityWithOptions(
+				func(_ context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+					inputs = append(inputs, input)
+					if len(inputs) == 1 {
+						env.SignalWorkflow(pluginPublishDebounceSignal(params), test.midRun)
+					}
+					if test.failRun {
+						return nil, errors.New("push failed")
+					}
+					return &plugins.PublishProjectResult{RepoURL: "https://github.com/test-org/repo", Skipped: false}, nil
+				},
+				activity.RegisterOptions{Name: "PublishPluginProject"},
+			)
 
-	var canErr *workflow.ContinueAsNewError
-	require.ErrorAs(t, env.GetWorkflowError(), &canErr)
-	var next PluginPublishParams
-	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(canErr.Input, &next))
-	require.True(t, next.IncludePausedPlugins, "the follow-up run is the manual sync that was asked for")
-	require.True(t, next.SkipIfUnchanged, "a manual sync stays fingerprint-gated")
-}
+			env.ExecuteWorkflow(PluginPublishWorkflowDebounced, params)
 
-// A manual sync holds for its own run only. Changes made to a plugin whose
-// auto sync is off while that run is publishing must keep waiting, so the
-// follow-up run their signals start is automatic again.
-func TestPluginPublishWorkflowDebounced_SyncDoesNotCarryIntoTheNextRun(t *testing.T) {
-	t.Parallel()
-
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
-	params := PluginPublishParams{ProjectID: uuid.New(), CreatedByUserID: "user_01HZ", CommitMessage: "Update plugin packages", SkipIfUnchanged: true, IncludePausedPlugins: true}
-
-	var inputs []plugins.PublishProjectInput
-	env.RegisterActivityWithOptions(
-		func(_ context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
-			inputs = append(inputs, input)
-			if len(inputs) == 1 {
-				env.SignalWorkflow(pluginPublishDebounceSignal(params), "enqueue")
-			}
-			return &plugins.PublishProjectResult{RepoURL: "https://github.com/test-org/repo", Skipped: false}, nil
-		},
-		activity.RegisterOptions{Name: "PublishPluginProject"},
-	)
-
-	env.ExecuteWorkflow(PluginPublishWorkflowDebounced, params)
-
-	require.Len(t, inputs, 1)
-	require.True(t, inputs[0].IncludePausedPlugins, "the sync run publishes paused plugins' pending changes")
-	var canErr *workflow.ContinueAsNewError
-	require.ErrorAs(t, env.GetWorkflowError(), &canErr)
-	var next PluginPublishParams
-	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(canErr.Input, &next))
-	require.False(t, next.IncludePausedPlugins, "a completed sync must not make the next run a sync")
-}
-
-// A sync whose run failed has not happened, so a follow-up run started by
-// signals that arrived meanwhile must still carry it out.
-func TestPluginPublishWorkflowDebounced_FailedSyncCarriesIntoTheNextRun(t *testing.T) {
-	t.Parallel()
-
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
-	params := PluginPublishParams{ProjectID: uuid.New(), CreatedByUserID: "user_01HZ", CommitMessage: "Update plugin packages", SkipIfUnchanged: true, IncludePausedPlugins: true}
-
-	var attempts int
-	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
-			attempts++
-			if attempts == 1 {
-				env.SignalWorkflow(pluginPublishDebounceSignal(params), "enqueue")
-			}
-			return nil, errors.New("push failed")
-		},
-		activity.RegisterOptions{Name: "PublishPluginProject"},
-	)
-
-	env.ExecuteWorkflow(PluginPublishWorkflowDebounced, params)
-
-	var canErr *workflow.ContinueAsNewError
-	require.ErrorAs(t, env.GetWorkflowError(), &canErr)
-	var next PluginPublishParams
-	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(canErr.Input, &next))
-	require.True(t, next.IncludePausedPlugins, "the failed sync is retried by the next run")
+			require.Equal(t, test.startAsSync, inputs[0].IncludePausedPlugins)
+			var canErr *workflow.ContinueAsNewError
+			require.ErrorAs(t, env.GetWorkflowError(), &canErr)
+			var next PluginPublishParams
+			require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(canErr.Input, &next))
+			require.Equal(t, test.nextSync, next.IncludePausedPlugins)
+			require.True(t, next.SkipIfUnchanged, "a manual sync stays fingerprint-gated")
+		})
+	}
 }
 
 func TestPluginPublishSignalMessage(t *testing.T) {

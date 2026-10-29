@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -17,9 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -62,23 +59,9 @@ func (e slugPublicationEvidence) ResolvePublicationEvidence(_ context.Context, _
 	return out, nil
 }
 
-func seedPausedPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, name, slug string) pluginsrepo.Plugin {
+func seedPausedPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, name, slug string) {
 	t.Helper()
-	plugin, err := pluginsrepo.New(conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
-		OrganizationID: organizationID, ProjectID: projectID, Name: name, Slug: slug,
-		AutoSyncEnabled: pgtype.Bool{Bool: false, Valid: true},
-	})
-	require.NoError(t, err)
-	return plugin
-}
-
-func requireNoPluginMetadataReceipt(t *testing.T, ctx context.Context, fixture pluginMetadataFixture, operation, key string) {
-	t.Helper()
-	_, err := platformrepo.New(fixture.conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
-		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID, Operation: operation,
-		IdempotencyKey: key, UserID: conv.ToPGText(fixture.principal.UserID), SubjectUrn: userSubjectURN(fixture.principal.UserID),
-	})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	seedPluginWithAutoSync(t, ctx, conn, organizationID, projectID, name, slug, pgtype.Bool{Bool: false, Valid: true})
 }
 
 // The admin inventory reports each plugin's auto sync, and get_plugin says
@@ -244,7 +227,8 @@ func TestSetPluginAutoSyncRefusesTurningOffWithUnsyncedChanges(t *testing.T) {
 	afterAudit, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionPluginUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeAudit, afterAudit)
-	requireNoPluginMetadataReceipt(t, ctx, fixture, operationSetPluginAutoSync, "refused-off")
+	requireNoOperationReceipt(t, ctx, fixture.conn, fixture.principal, fixture.project, operationSetPluginAutoSync, "refused-off")
+	require.Empty(t, fixture.budget.keys, "a refused change is checked before the allowance is charged")
 }
 
 // The plugins service's own check refuses through the tool: a stored
@@ -264,12 +248,7 @@ func TestSetPluginAutoSyncUsesThePluginsServiceCheck(t *testing.T) {
 		return err
 	}
 
-	_, err := pluginsrepo.New(fixture.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
-		ProjectID: fixture.project.ID, InstallationID: 1, RepoOwner: "example-owner", RepoName: "example-marketplace",
-		MarketplaceToken: pgtype.Text{}, PublishedMcpFingerprints: []byte(`{"checked":"published-before-the-latest-change"}`),
-		PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
-	})
-	require.NoError(t, err)
+	seedMarketplaceConnection(t, ctx, fixture.conn, fixture.project.ID, []byte(`{"checked":"published-before-the-latest-change"}`))
 	var refusal *PluginMetadataMutationError
 	require.ErrorAs(t, off("off-unsynced"), &refusal)
 	require.Equal(t, pluginMetadataCodeUnsyncedChanges, refusal.Code)

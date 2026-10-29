@@ -132,7 +132,7 @@ func pluginPublishSignalMessage(params PluginPublishParams) string {
 // coalesce into exactly one follow-up run rather than being dropped, so the
 // repo always converges on the state that exists after the last change.
 func PluginPublishWorkflowDebounced(ctx workflow.Context, params PluginPublishParams) (*plugins.PublishProjectResult, error) {
-	return DebounceWithSignalCoalescingAndSettle(
+	return DebounceWithSignalCoalescing(
 		PluginPublishWorkflow,
 		PluginPublishWorkflowDebounced,
 		pluginPublishDebounceSignal,
@@ -207,30 +207,24 @@ var (
 // changed plugin state, so the publish is worth attempting, but it does no
 // GitHub work if the generated output turns out to be unchanged.
 func (p *TemporalPluginPublisher) SignalPluginPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
-	if _, err := ExecutePluginPublishWorkflowDebounced(ctx, p.TemporalEnv, PluginPublishParams{
-		ProjectID:            projectID,
-		CreatedByUserID:      createdByUserID,
-		CommitMessage:        "Update plugin packages",
-		SkipIfUnchanged:      true,
-		IncludePausedPlugins: false,
-	}); err != nil {
-		return fmt.Errorf("signal plugin publish: %w", err)
-	}
-	return nil
+	return p.signal(ctx, projectID, createdByUserID, false)
 }
 
-// SignalPluginSync enqueues a manual sync: the same fingerprint-gated
-// republish, which also publishes the pending changes of plugins whose auto
-// sync is off.
+// SignalPluginSync enqueues the same fingerprint-gated republish as a manual
+// sync.
 func (p *TemporalPluginPublisher) SignalPluginSync(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
+	return p.signal(ctx, projectID, createdByUserID, true)
+}
+
+func (p *TemporalPluginPublisher) signal(ctx context.Context, projectID uuid.UUID, createdByUserID string, includePausedPlugins bool) error {
 	if _, err := ExecutePluginPublishWorkflowDebounced(ctx, p.TemporalEnv, PluginPublishParams{
 		ProjectID:            projectID,
 		CreatedByUserID:      createdByUserID,
 		CommitMessage:        "Update plugin packages",
 		SkipIfUnchanged:      true,
-		IncludePausedPlugins: true,
+		IncludePausedPlugins: includePausedPlugins,
 	}); err != nil {
-		return fmt.Errorf("signal plugin sync: %w", err)
+		return fmt.Errorf("signal plugin publish: %w", err)
 	}
 	return nil
 }

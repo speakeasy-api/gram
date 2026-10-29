@@ -591,7 +591,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	}
 
 	if payload.AutoSyncEnabled != nil && !*payload.AutoSyncEnabled {
-		if err := s.requireAutoSyncCanTurnOff(ctx, ac, pluginID, payload); err != nil {
+		if err := s.requireAutoSyncCanTurnOff(ctx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, payload); err != nil {
 			return nil, err
 		}
 	}
@@ -606,8 +606,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		OrganizationID:  ac.ActiveOrganizationID,
 		ProjectID:       *ac.ProjectID,
 		PluginID:        pluginID,
-		Name:            payload.Name,
-		KeepName:        false,
+		Name:            &payload.Name,
 		Slug:            &payload.Slug,
 		Description:     payload.Description,
 		KeepDescription: false,
@@ -651,18 +650,29 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 // off while the plugin has changes that haven't been synced, or while the same
 // update edits the plugin: from then on automatic publishes keep the plugin as
 // it was last published, so anything unsynced would be stranded. Turning it off
-// when it already is off needs no check.
-func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, ac *contextvalues.AuthContext, pluginID uuid.UUID, payload *gen.UpdatePluginPayload) error {
-	current, err := s.pluginWithAutoSyncOn(ctx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID)
-	if err != nil || current == nil {
-		return err
+// when it already is off needs no check. A nil payload is an update that
+// changes nothing but auto sync.
+func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID, payload *gen.UpdatePluginPayload) error {
+	current, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.C(oops.CodeNotFound)
 	}
-	if payload.Name != current.Name ||
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get plugin").LogError(ctx, s.logger)
+	}
+	if !PluginAutoSyncEnabled(current.AutoSyncEnabled) {
+		return nil
+	}
+	if payload != nil && (payload.Name != current.Name ||
 		payload.Slug != current.Slug ||
-		conv.PtrValOr(payload.Description, "") != conv.FromPGTextOrEmpty[string](current.Description) {
+		conv.PtrValOr(payload.Description, "") != conv.FromPGTextOrEmpty[string](current.Description)) {
 		return oops.E(oops.CodeFailedPrecondition, nil, "%s", autoSyncOffWithOtherChangesMessage)
 	}
-	return s.requirePluginSyncedForPause(ctx, *current)
+	return s.requirePluginSyncedForPause(ctx, current)
 }
 
 // RequireAutoSyncCanTurnOff is the check UpdatePlugin makes before turning a
@@ -671,32 +681,7 @@ func (s *Service) requireAutoSyncCanTurnOff(ctx context.Context, ac *contextvalu
 // that haven't been synced matches ErrPluginHasUnsyncedChanges. The caller must
 // already have authorized plugin write for the project.
 func (s *Service) RequireAutoSyncCanTurnOff(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) error {
-	current, err := s.pluginWithAutoSyncOn(ctx, organizationID, projectID, pluginID)
-	if err != nil || current == nil {
-		return err
-	}
-	return s.requirePluginSyncedForPause(ctx, *current)
-}
-
-// pluginWithAutoSyncOn loads the plugin an update would turn auto sync off
-// for. It returns nil when auto sync is already off: turning it off again
-// needs no check.
-func (s *Service) pluginWithAutoSyncOn(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) (*repo.Plugin, error) {
-	current, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
-		ID:             pluginID,
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.C(oops.CodeNotFound)
-	}
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get plugin").LogError(ctx, s.logger)
-	}
-	if !PluginAutoSyncEnabled(current.AutoSyncEnabled) {
-		return nil, nil
-	}
-	return &current, nil
+	return s.requireAutoSyncCanTurnOff(ctx, organizationID, projectID, pluginID, nil)
 }
 
 func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPayload) error {

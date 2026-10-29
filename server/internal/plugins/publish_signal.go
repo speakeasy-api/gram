@@ -44,18 +44,6 @@ func SignalPluginPublishAfterRequest(ctx context.Context, signaler PluginPublish
 	return nil
 }
 
-// SignalPluginSyncAfterRequest is SignalPluginPublishAfterRequest for a manual
-// sync requested with PublicationRequests.SyncProjectWithOutcome.
-func SignalPluginSyncAfterRequest(ctx context.Context, signaler PluginSyncSignaler, outcome ProjectPublicationRequestOutcome, projectID uuid.UUID, createdByUserID string) error {
-	if signaler == nil || outcome == ProjectPublicationEnqueued {
-		return nil
-	}
-	if err := signaler.SignalPluginSync(context.WithoutCancel(ctx), projectID, createdByUserID); err != nil {
-		return fmt.Errorf("signal plugin sync: %w", err)
-	}
-	return nil
-}
-
 // signalPublish enqueues a republish for the project whose plugins just
 // changed. Best-effort: a failed enqueue is logged and never fails the request,
 // since the rollout sweep still picks the project up on its next tick. Must

@@ -414,22 +414,39 @@ type publicationEvidenceReader interface {
 // whether the plugin's auto sync is on. Callers must have checked that a reader
 // is composed.
 func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string, autoSyncEnabled bool) *PluginPublicationEvidence {
-	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, []string{pluginSlug})
-	if err != nil || len(evidence) != 1 || evidence[0].PluginSlug != pluginSlug {
+	evidence, _ := s.readPublicationEvidenceWithOthers(ctx, principal, projectID, pluginSlug, autoSyncEnabled, nil)
+	return evidence
+}
+
+// readPublicationEvidenceWithOthers is readPublicationEvidence that also
+// reports, from the same resolution, whether every plugin in others is fresh.
+// Evidence that cannot be read is unavailable, and others then count as not
+// fresh.
+func (s *PluginsService) readPublicationEvidenceWithOthers(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string, autoSyncEnabled bool, others []string) (*PluginPublicationEvidence, bool) {
+	slugs := append([]string{pluginSlug}, others...)
+	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, slugs)
+	target := slices.IndexFunc(evidence, func(plugin plugindelivery.PublicationEvidence) bool { return plugin.PluginSlug == pluginSlug })
+	if err != nil || len(evidence) != len(slugs) || target < 0 {
 		// Package resolution can fail when a private address is incomplete.
 		// Preserve the admin inventory without claiming a package is current.
-		return &PluginPublicationEvidence{Unavailable: true, Packages: []PluginPublicationPackage{}}
+		return &PluginPublicationEvidence{Unavailable: true, Packages: []PluginPublicationPackage{}}, false
 	}
-	packages := make([]PluginPublicationPackage, 0, len(evidence[0].Packages))
-	for _, pkg := range evidence[0].Packages {
+	othersFresh := true
+	for index, plugin := range evidence {
+		if index != target && (plugin.Fresh == nil || !*plugin.Fresh) {
+			othersFresh = false
+		}
+	}
+	packages := make([]PluginPublicationPackage, 0, len(evidence[target].Packages))
+	for _, pkg := range evidence[target].Packages {
 		packages = append(packages, PluginPublicationPackage{ServerName: pkg.ServerName, MCPURL: pkg.MCPURL})
 	}
 	return &PluginPublicationEvidence{
-		NotConfigured:      evidence[0].NotConfigured,
-		Fresh:              evidence[0].Fresh,
+		NotConfigured:      evidence[target].NotConfigured,
+		Fresh:              evidence[target].Fresh,
 		Packages:           packages,
-		AwaitingManualSync: !autoSyncEnabled && evidence[0].Fresh != nil && !*evidence[0].Fresh,
-	}
+		AwaitingManualSync: !autoSyncEnabled && evidence[target].Fresh != nil && !*evidence[target].Fresh,
+	}, othersFresh
 }
 
 // PluginsService answers what plugins a project has and what is inside one,

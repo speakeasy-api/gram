@@ -15,7 +15,7 @@ import (
 // off never appear on and disappear from the catalogue as a deployment
 // composes or fails to compose the writes behind them.
 //
-// Both stay off the managed assistant like every other plugin write: they are
+// All three stay off the managed assistant like every other plugin write: they are
 // confirmed administrator actions, and a plugin created in the organization's
 // default project reaches every member as soon as anything is put in it.
 func registerPluginMetadataTools(reg *Registrar, plugins *PluginsService) {

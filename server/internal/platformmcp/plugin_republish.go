@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -212,11 +211,15 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 			if err != nil {
 				return pluginRepublishReceipt{}, fmt.Errorf("list plugins with auto sync off: %w", err)
 			}
-			evidence := s.readPublicationEvidence(ctx, principal, project.ID, target.Slug, !slices.Contains(paused, target.Slug))
+			// Only a manual sync publishes the pending changes of plugins whose
+			// auto sync is off, so the republish is not skipped while one of
+			// them is stale, even when the named plugin is current.
+			otherPaused := slices.DeleteFunc(slices.Clone(paused), func(slug string) bool { return slug == target.Slug })
+			evidence, pausedFresh := s.readPublicationEvidenceWithOthers(ctx, principal, project.ID, target.Slug, !slices.Contains(paused, target.Slug), otherPaused)
 			if evidence.NotConfigured {
 				return pluginRepublishReceipt{}, s.pluginRepublishNotConfigured(ctx, principal, project)
 			}
-			if evidence.Fresh != nil && *evidence.Fresh && s.pausedPluginsFresh(ctx, principal, project.ID, paused) {
+			if evidence.Fresh != nil && *evidence.Fresh && pausedFresh {
 				return pluginRepublishReceipt{Plugin: plugin, Outcome: PluginRepublishAlreadyCurrent, Publication: ""}, nil
 			}
 			// Unknown or unavailable evidence still requests a publish: the
@@ -255,8 +258,10 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 		if err := chargeRerun(ctx, receipt, charge); err != nil {
 			skippedRerun(ctx, s.metadataLogger, err)
 			note = pluginRepublishSignalSkippedNote
-		} else if err := plugindelivery.SignalPluginSyncAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
-			return RepublishPluginOutput{}, pluginRepublishUnavailable(err)
+		} else if s.publisher != nil {
+			if err := s.publisher.SignalPluginSync(context.WithoutCancel(ctx), project.ID, principal.UserID); err != nil {
+				return RepublishPluginOutput{}, pluginRepublishUnavailable(fmt.Errorf("signal plugin sync: %w", err))
+			}
 		}
 	}
 	// An unreadable setting reads as on, so the evidence never claims changes
@@ -270,27 +275,6 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 		Note:                note,
 		Receipt:             riskMutationToolReceipt(receipt),
 	}, nil
-}
-
-// pausedPluginsFresh reports whether every plugin in paused, the project's
-// plugins whose auto sync is off, already matches what was last published.
-// Only a manual sync publishes their pending changes, so republishing must not
-// be skipped while one of them has some, even when the named plugin is
-// current. Evidence that cannot be read counts as not fresh.
-func (s *PluginsService) pausedPluginsFresh(ctx context.Context, principal Principal, projectID uuid.UUID, paused []string) bool {
-	if len(paused) == 0 {
-		return true
-	}
-	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, paused)
-	if err != nil || len(evidence) != len(paused) {
-		return false
-	}
-	for _, plugin := range evidence {
-		if plugin.Fresh == nil || !*plugin.Fresh {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *PluginsService) pluginRepublishNotConfigured(ctx context.Context, principal Principal, project ResolvedProject) error {

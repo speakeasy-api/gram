@@ -44,22 +44,13 @@ func Debounce[Params any, Result any](
 }
 
 // DebounceWithSignalCoalescing folds signal messages into the next run's parameters.
+//
+// settle, when set, is for parameters that carry a one-off request: after a run
+// succeeds, it clears what that run carried out before the signals that
+// arrived during it are folded into the next run's parameters. A failed run's
+// parameters carry over unchanged, since what it was asked to do has not
+// happened.
 func DebounceWithSignalCoalescing[Params any, Result any](
-	wrapped func(ctx workflow.Context, params Params) (result Result, err error),
-	continueAsSelf func(ctx workflow.Context, params Params) (result Result, err error),
-	signalIDFunc func(params Params) string,
-	reenqueue func(params Params, result Result) bool,
-	coalesce func(params Params, message string) Params,
-) func(ctx workflow.Context, params Params) (result Result, err error) {
-	return debounce(wrapped, continueAsSelf, signalIDFunc, reenqueue, coalesce, nil)
-}
-
-// DebounceWithSignalCoalescingAndSettle is DebounceWithSignalCoalescing for
-// parameters that carry a one-off request. After a run succeeds, settle clears
-// what that run carried out before the signals that arrived during it are
-// folded into the next run's parameters. A failed run's parameters carry over
-// unchanged, since what it was asked to do has not happened.
-func DebounceWithSignalCoalescingAndSettle[Params any, Result any](
 	wrapped func(ctx workflow.Context, params Params) (result Result, err error),
 	continueAsSelf func(ctx workflow.Context, params Params) (result Result, err error),
 	signalIDFunc func(params Params) string,

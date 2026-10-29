@@ -314,7 +314,7 @@ func (s *PluginsService) createPlugin(ctx context.Context, principal Principal, 
 		AutoSyncEnabled: input.AutoSyncEnabled,
 		Actor:           plugindelivery.PluginMetadataActor{UserID: principal.UserID, DisplayName: nil},
 	}
-	return s.executePluginMetadataMutation(ctx, principal, project, operationCreatePlugin, key, normalized, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
+	return s.executePluginMetadataMutation(ctx, principal, project, operationCreatePlugin, key, normalized, nil, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
 		created, err := s.metadataCore.CreateInTransaction(ctx, tx, mutation)
 		if err != nil {
 			return PluginMetadataReceiptResult{}, pluginMetadataCoreError(err)
@@ -334,12 +334,9 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 	if err := validatePluginMetadataRequest(principal, key, input.Name, ""); err != nil {
 		return PluginMetadataMutationOutput{}, err
 	}
-	target := strings.TrimSpace(input.Plugin)
-	if target == "" {
-		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("invalid_request", "Name the plugin to rename exactly as list_plugins returned it.")
-	}
-	if pluginID, err := uuid.Parse(target); err == nil && pluginID == uuid.Nil {
-		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("invalid_request", "The plugin ID must not be all zeroes.")
+	target, err := validatePluginMetadataTarget(input.Plugin, "Name the plugin to rename exactly as list_plugins returned it.")
+	if err != nil {
+		return PluginMetadataMutationOutput{}, err
 	}
 	project, err := s.authorizePluginMetadataProject(ctx, principal, input.ProjectID)
 	if err != nil {
@@ -349,7 +346,7 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 		Operation: operationRenamePlugin, ProjectID: project.ID.String(), Plugin: target,
 		Name: input.Name, Slug: "", Description: "", AutoSyncEnabled: nil,
 	}
-	return s.executePluginMetadataMutation(ctx, principal, project, operationRenamePlugin, key, normalized, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
+	return s.executePluginMetadataMutation(ctx, principal, project, operationRenamePlugin, key, normalized, nil, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
 		// Resolved inside the receipt transaction, after the replay check, so a
 		// retry of a rename that named the plugin by its old name replays
 		// instead of failing to find it.
@@ -361,8 +358,7 @@ func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, 
 			OrganizationID:  principal.OrganizationID,
 			ProjectID:       project.ID,
 			PluginID:        ref.ID,
-			Name:            input.Name,
-			KeepName:        false,
+			Name:            &input.Name,
 			Slug:            nil,
 			Description:     nil,
 			KeepDescription: true,
@@ -397,12 +393,9 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 	if err := validatePluginMetadataCaller(principal, key); err != nil {
 		return PluginMetadataMutationOutput{}, err
 	}
-	target := strings.TrimSpace(input.Plugin)
-	if target == "" {
-		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("invalid_request", "Name the plugin exactly as list_plugins returned it.")
-	}
-	if pluginID, err := uuid.Parse(target); err == nil && pluginID == uuid.Nil {
-		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("invalid_request", "The plugin ID must not be all zeroes.")
+	target, err := validatePluginMetadataTarget(input.Plugin, "Name the plugin exactly as list_plugins returned it.")
+	if err != nil {
+		return PluginMetadataMutationOutput{}, err
 	}
 	project, err := s.authorizePluginMetadataProject(ctx, principal, input.ProjectID)
 	if err != nil {
@@ -416,33 +409,31 @@ func (s *PluginsService) setPluginAutoSync(ctx context.Context, principal Princi
 	if input.AutoSyncEnabled {
 		category = "auto_sync_turned_on"
 	}
-	return s.executePluginMetadataMutation(ctx, principal, project, operationSetPluginAutoSync, key, normalized, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
-		// Resolved and checked inside the receipt transaction, after the
-		// replay check, so a retry of a change that committed replays it
-		// rather than being refused over changes made since.
-		ref, err := s.resolve(ctx, platformrepo.New(tx), principal, project.ID, target)
+	// The target is resolved and checked after the replay lookup, so a retry
+	// of a change that committed replays it rather than being refused over
+	// changes made since, and before the receipt transaction, as the dashboard
+	// checks before its own, so the check holds no transaction open.
+	var ref PluginRef
+	precheck := func(ctx context.Context) error {
+		resolved, err := s.resolve(ctx, platformrepo.New(s.db), principal, project.ID, target)
 		if err != nil {
-			return PluginMetadataReceiptResult{}, err
+			return err
 		}
-		if !input.AutoSyncEnabled {
-			if err := s.autoSyncGuard.RequireAutoSyncCanTurnOff(ctx, principal.OrganizationID, project.ID, ref.ID); err != nil {
-				if errors.Is(err, plugindelivery.ErrPluginHasUnsyncedChanges) {
-					return PluginMetadataReceiptResult{}, &PluginMetadataMutationError{
-						Code:    pluginMetadataCodeUnsyncedChanges,
-						Message: "Auto sync is still on: this plugin has changes that haven't been synced yet, and turning it off now would hold them back with nothing saying so. Sync them first with republish_plugin, which republishes every plugin in the project once the user confirms. When get_plugin reports publication_evidence.fresh=true, turn auto sync off.",
-						Slug:    "",
-						Cause:   err,
-					}
-				}
-				return PluginMetadataReceiptResult{}, fmt.Errorf("check plugin has no unsynced changes: %w", err)
-			}
+		ref = resolved
+		if input.AutoSyncEnabled {
+			return nil
 		}
+		if err := s.autoSyncGuard.RequireAutoSyncCanTurnOff(ctx, principal.OrganizationID, project.ID, ref.ID); err != nil {
+			return pluginMetadataCoreError(fmt.Errorf("check plugin has no unsynced changes: %w", err))
+		}
+		return nil
+	}
+	return s.executePluginMetadataMutation(ctx, principal, project, operationSetPluginAutoSync, key, normalized, precheck, func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
 		updated, err := s.metadataCore.UpdateInTransaction(ctx, tx, plugindelivery.UpdatePluginMutation{
 			OrganizationID:  principal.OrganizationID,
 			ProjectID:       project.ID,
 			PluginID:        ref.ID,
-			Name:            "",
-			KeepName:        true,
+			Name:            nil,
 			Slug:            nil,
 			Description:     nil,
 			KeepDescription: true,
@@ -473,6 +464,19 @@ func validatePluginMetadataRequest(principal Principal, key, name, description s
 		return pluginMetadataMutationInvalid("invalid_request", fmt.Sprintf("A plugin description can be at most %d bytes. Ask the user for a shorter description.", maxPluginMetadataDescriptionBytes))
 	}
 	return nil
+}
+
+// validatePluginMetadataTarget returns the exact plugin an update names, or
+// refuses it with missing as the message when it names none.
+func validatePluginMetadataTarget(plugin, missing string) (string, error) {
+	target := strings.TrimSpace(plugin)
+	if target == "" {
+		return "", pluginMetadataMutationInvalid("invalid_request", missing)
+	}
+	if pluginID, err := uuid.Parse(target); err == nil && pluginID == uuid.Nil {
+		return "", pluginMetadataMutationInvalid("invalid_request", "The plugin ID must not be all zeroes.")
+	}
+	return target, nil
 }
 
 func validatePluginMetadataCaller(principal Principal, key string) error {
@@ -522,7 +526,10 @@ func (s *PluginsService) chargePluginMetadataMutation(ctx context.Context, princ
 	return nil
 }
 
-func (s *PluginsService) executePluginMetadataMutation(ctx context.Context, principal Principal, project ResolvedProject, operation, key string, normalized normalizedPluginMetadataMutation, mutate func(context.Context, pgx.Tx) (PluginMetadataReceiptResult, error)) (PluginMetadataMutationOutput, error) {
+// executePluginMetadataMutation runs mutate in the receipt transaction.
+// precheck, when set, runs only when no stored receipt answers the request, and
+// before the allowance is charged or the transaction begins.
+func (s *PluginsService) executePluginMetadataMutation(ctx context.Context, principal Principal, project ResolvedProject, operation, key string, normalized normalizedPluginMetadataMutation, precheck func(context.Context) error, mutate func(context.Context, pgx.Tx) (PluginMetadataReceiptResult, error)) (PluginMetadataMutationOutput, error) {
 	payload, err := json.Marshal(normalized)
 	if err != nil {
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("invalid_request", "The plugin request could not be normalized.")
@@ -531,7 +538,15 @@ func (s *PluginsService) executePluginMetadataMutation(ctx context.Context, prin
 	inputHash := hex.EncodeToString(digest[:])
 	// A retry of a change that already committed replays its receipt without
 	// spending the allowance; see executeChargedMutationReceipt.
-	receipt, err := executeChargedMutationReceipt(ctx, func(ctx context.Context) error { return s.chargePluginMetadataMutation(ctx, principal) }, mutationReceiptExecution[PluginMetadataReceiptResult]{
+	charge := func(ctx context.Context) error {
+		if precheck != nil {
+			if err := precheck(ctx); err != nil {
+				return err
+			}
+		}
+		return s.chargePluginMetadataMutation(ctx, principal)
+	}
+	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[PluginMetadataReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: key, InputHash: inputHash, Label: "plugin metadata",
 		Invalid: func(error) error {
@@ -653,6 +668,8 @@ func pluginMetadataCoreError(err error) error {
 		return pluginMetadataMutationInvalid("invalid_request", err.Error()+".")
 	case errors.Is(err, plugindelivery.ErrPluginSlugConflict):
 		return &PluginMetadataMutationError{Code: pluginMetadataCodeSlugTaken, Message: "A plugin with this slug already exists in this project. List the project's plugins again, then either use that plugin or choose a different slug.", Slug: "", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationConflict, err)}
+	case errors.Is(err, plugindelivery.ErrPluginHasUnsyncedChanges):
+		return &PluginMetadataMutationError{Code: pluginMetadataCodeUnsyncedChanges, Message: "Auto sync is still on: this plugin has changes that haven't been synced yet, and turning it off now would hold them back with nothing saying so. Sync them first with republish_plugin, which republishes every plugin in the project once the user confirms. When get_plugin reports publication_evidence.fresh=true, turn auto sync off.", Slug: "", Cause: err}
 	case errors.Is(err, plugindelivery.ErrPluginMetadataTargetNotFound):
 		return ErrPluginNotFound
 	default:

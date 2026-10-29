@@ -71,10 +71,10 @@ func requireRepublishRefusal(t *testing.T, err error, code string) *PluginRepubl
 	return refusal
 }
 
-func requireNoRepublishReceipt(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, key string) {
+func requireNoOperationReceipt(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, operation, key string) {
 	t.Helper()
 	_, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID, ProjectID: project.ID, Operation: operationRepublishPlugin,
+		OrganizationID: principal.OrganizationID, ProjectID: project.ID, Operation: operation,
 		IdempotencyKey: key, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -96,7 +96,7 @@ func TestRepublishPluginRequiresConfirmation(t *testing.T) {
 	refusal := requireRepublishRefusal(t, err, "confirmation_required")
 	require.Contains(t, refusal.Message, "every plugin in the project")
 	require.Empty(t, signaler.recorded())
-	requireNoRepublishReceipt(t, ctx, conn, principal, project, "unconfirmed")
+	requireNoOperationReceipt(t, ctx, conn, principal, project, operationRepublishPlugin, "unconfirmed")
 }
 
 func TestRepublishPluginRefusesWhenPublishingIsNotConfigured(t *testing.T) {
@@ -117,7 +117,7 @@ func TestRepublishPluginRefusesWhenPublishingIsNotConfigured(t *testing.T) {
 	require.ErrorIs(t, err, ErrPluginRepublishNotConfigured)
 	require.Contains(t, refusal.Message, "AICP dashboard")
 	require.Empty(t, signaler.recorded())
-	requireNoRepublishReceipt(t, ctx, conn, principal, project, "not-configured")
+	requireNoOperationReceipt(t, ctx, conn, principal, project, operationRepublishPlugin, "not-configured")
 }
 
 func TestRepublishPluginReportsAlreadyCurrentWithoutRequestingAPublish(t *testing.T) {
@@ -128,7 +128,7 @@ func TestRepublishPluginReportsAlreadyCurrentWithoutRequestingAPublish(t *testin
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Support Tools", "support-tools")
-	seedMarketplaceConnection(t, ctx, conn, project.ID)
+	seedMarketplaceConnection(t, ctx, conn, project.ID, nil)
 	signaler := &recordingPluginPublishSignaler{}
 	service := testPluginTargets(conn).WithPublicationEvidence(staleEvidence("support-tools", new(true))).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: true}, signaler, testOperationBudget())
@@ -197,7 +197,7 @@ func TestRepublishPluginEnqueuesADurableRequestForAConnectedMarketplace(t *testi
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Support Tools", "support-tools")
-	seedMarketplaceConnection(t, ctx, conn, project.ID)
+	seedMarketplaceConnection(t, ctx, conn, project.ID, nil)
 	signaler := &recordingPluginPublishSignaler{}
 	service := testPluginTargets(conn).WithPublicationEvidence(staleEvidence("support-tools", nil)).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: true}, signaler, testOperationBudget())
@@ -303,12 +303,14 @@ func TestPluginReadsWithoutAPublishPathKeepRepublishPluginDeclared(t *testing.T)
 	requireRepublishPluginDeclaration(t, registrar)
 }
 
-func seedMarketplaceConnection(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {
+// seedMarketplaceConnection connects the project's marketplace, recording
+// publishedFingerprints as what was last published.
+func seedMarketplaceConnection(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, publishedFingerprints []byte) {
 	t.Helper()
 
 	_, err := pluginsrepo.New(conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: projectID, InstallationID: 1, RepoOwner: "example-owner", RepoName: "example-marketplace",
-		MarketplaceToken: pgtype.Text{}, PublishedMcpFingerprints: nil, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
+		MarketplaceToken: pgtype.Text{}, PublishedMcpFingerprints: publishedFingerprints, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
 	})
 	require.NoError(t, err)
 }

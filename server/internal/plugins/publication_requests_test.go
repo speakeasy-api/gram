@@ -15,33 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-func TestSignalPluginSyncAfterRequest(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		name       string
-		outcome    plugins.ProjectPublicationRequestOutcome
-		wantSignal bool
-	}{
-		{name: "enqueued", outcome: plugins.ProjectPublicationEnqueued},
-		{name: "emission disabled", outcome: plugins.ProjectPublicationEmissionDisabled, wantSignal: true},
-		{name: "not configured", outcome: plugins.ProjectPublicationNotConfigured, wantSignal: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			signaler := &capturePublishSignaler{}
-			err := plugins.SignalPluginSyncAfterRequest(context.Background(), signaler, test.outcome, uuid.New(), "actor")
-			require.NoError(t, err)
-			if test.wantSignal {
-				require.Len(t, signaler.captured(), 1)
-				require.True(t, signaler.captured()[0].sync)
-			} else {
-				require.Empty(t, signaler.captured())
-			}
-		})
-	}
-}
-
 func TestSignalPluginPublishAfterRequest(t *testing.T) {
 	t.Parallel()
 
