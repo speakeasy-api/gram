@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authz/declarative"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -415,7 +416,7 @@ func (s *Service) requireServerEditUnlocked(ctx context.Context, organizationID 
 		return repo.McpServer{}, err
 	}
 
-	if err := s.authz.RequireMCPServer(ctx, authz.MCPServerEdit, serverRef(organizationID, server)); err != nil {
+	if err := declarative.RequireMCPServer(ctx, s.authz, declarative.MCPServerEdit, serverRef(organizationID, server)); err != nil {
 		return repo.McpServer{}, err //nolint:wrapcheck // authz errors carry their response code.
 	}
 	return server, nil
@@ -437,8 +438,8 @@ func (s *Service) getServerUnlocked(ctx context.Context, serverID uuid.UUID, pro
 
 // serverRef is the trusted identity of a server row loaded within the
 // caller's project and organization.
-func serverRef(organizationID string, server repo.McpServer) authz.MCPServerRef {
-	return authz.MCPServerRef{
+func serverRef(organizationID string, server repo.McpServer) declarative.MCPServerRef {
+	return declarative.MCPServerRef{
 		ID:             grantResourceID(server.ID, server.ToolsetID),
 		ProjectID:      server.ProjectID.String(),
 		OrganizationID: organizationID,
@@ -448,7 +449,7 @@ func serverRef(organizationID string, server repo.McpServer) authz.MCPServerRef 
 // withPermissions reports what the caller may do with server on its view,
 // from the same evaluation the server's operations enforce.
 func (s *Service) withPermissions(ctx context.Context, organizationID string, server repo.McpServer, view *types.McpServer) (*types.McpServer, error) {
-	caps, err := s.authz.MCPServerCapabilities(ctx, serverRef(organizationID, server))
+	caps, err := declarative.MCPServerCapabilities(ctx, s.authz, serverRef(organizationID, server))
 	if err != nil {
 		return nil, err //nolint:wrapcheck // authz errors carry their response code.
 	}
@@ -510,7 +511,7 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.RequireMCPServer(ctx, authz.MCPServerRead, serverRef(authCtx.ActiveOrganizationID, server)); err != nil {
+	if err := declarative.RequireMCPServer(ctx, s.authz, declarative.MCPServerRead, serverRef(authCtx.ActiveOrganizationID, server)); err != nil {
 		return nil, err //nolint:wrapcheck // authz errors carry their response code.
 	}
 
@@ -814,7 +815,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	// Authorization keys on the row as it exists, not the backing the payload
 	// may switch it to.
-	if err := s.authz.RequireMCPServer(ctx, authz.MCPServerEdit, serverRef(authCtx.ActiveOrganizationID, existing)); err != nil {
+	if err := declarative.RequireMCPServer(ctx, s.authz, declarative.MCPServerEdit, serverRef(authCtx.ActiveOrganizationID, existing)); err != nil {
 		return nil, err //nolint:wrapcheck // authz errors carry their response code.
 	}
 
