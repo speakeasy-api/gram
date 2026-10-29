@@ -757,13 +757,18 @@ func (c *IdentityCommit) capabilities() providerCapabilities {
 	}
 }
 
-// Begin opens the commit's transaction. The caller may take its own locks on
-// tx.DB() before Lock; defer tx.Rollback, a no-op after Commit.
+// Begin opens the transaction and locks the complete source/server scope before
+// callers can lock an issuer or mutate OAuth associations. Defer tx.Rollback.
 func (c *IdentityCommit) Begin(ctx context.Context) (*IdentityTx, error) {
 	tx, err := c.committer.db.Begin(ctx)
 	if err != nil {
 		c.recordOrphanedRegistration(ctx)
 		return nil, fmt.Errorf("begin identity transaction: %w", err)
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, c.plan.Scope.OrganizationID, []uuid.UUID{c.plan.Scope.ProjectID}); err != nil {
+		_ = tx.Rollback(context.WithoutCancel(ctx))
+		c.recordOrphanedRegistration(ctx)
+		return nil, fmt.Errorf("lock identity writer scope: %w", err)
 	}
 	return &IdentityTx{commit: c, tx: tx, q: repo.New(tx), committed: false}, nil
 }
@@ -962,14 +967,11 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 		if associated == 0 {
 			return identityRefusal(ErrIdentityConflict, nil, "the MCP server or its client changed while saving; retry")
 		}
-		// This server may put the client on a second source, which makes the
-		// credential headers it copied from the first no longer its to send.
-		// Last in this transaction and copies only, so the only rows it locks
-		// are the copies themselves: the remote session client rows written
-		// above are locked by MCP server deletion before it reaches the same
-		// copies, and taking a source lock here would invert that order.
-		if err := authclientbackfill.SyncServerDerivedCopies(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.MCPServerID); err != nil {
-			return fmt.Errorf("sync mcp server auth client headers: %w", err)
+		// Begin acquired the full writer scope before the binding/association
+		// mutations. Synchronize typed clients and both OAuth and EMA copies
+		// under those locks; taking that scope here would be too late.
+		if err := authclientbackfill.SyncServerAssociations(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.MCPServerID); err != nil {
+			return fmt.Errorf("sync mcp server auth clients: %w", err)
 		}
 	}
 	c.result = IdentityResult{

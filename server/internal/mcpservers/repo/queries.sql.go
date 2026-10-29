@@ -85,6 +85,23 @@ func (q *Queries) AddMCPServerToolMetadata(ctx context.Context, arg AddMCPServer
 	return items, nil
 }
 
+const countEMAClientHeadersFixture = `-- name: CountEMAClientHeadersFixture :one
+SELECT count(*) FROM mcp_auth_client_headers
+WHERE auth_client_id = $1 AND organization_id = $2 AND NOT deleted
+`
+
+type CountEMAClientHeadersFixtureParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountEMAClientHeadersFixture(ctx context.Context, arg CountEMAClientHeadersFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countEMAClientHeadersFixture, arg.AuthClientID, arg.OrganizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createMCPServer = `-- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
     id,
@@ -1935,6 +1952,22 @@ func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg R
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setEMABindingGatewayIssuerFixture = `-- name: SetEMABindingGatewayIssuerFixture :exec
+UPDATE remote_session_ema_bindings SET user_session_issuer_id = $1
+WHERE remote_session_client_id = $2 AND project_id = $3
+`
+
+type SetEMABindingGatewayIssuerFixtureParams struct {
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) SetEMABindingGatewayIssuerFixture(ctx context.Context, arg SetEMABindingGatewayIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setEMABindingGatewayIssuerFixture, arg.UserSessionIssuerID, arg.RemoteSessionClientID, arg.ProjectID)
+	return err
 }
 
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many

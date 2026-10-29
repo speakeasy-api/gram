@@ -5111,9 +5111,8 @@ WHERE id = @id AND project_id = @project_id AND organization_id = @organization_
   AND state = 'in_progress';
 
 -- name: ListEMAChainingBindings :many
--- Ready bindings whose canonical resource names an endpoint's upstream.
--- Endpoint upstreams are recorded without a trailing slash while a binding
--- keeps the exact RFC 9728 identifier, so both compare under the routing trim.
+-- Ready bindings whose exact resource names the resolved authorization resource.
+-- RFC 8707 resource identity preserves trailing slashes; callers must not trim.
 -- Unlinked tombstones and unfinished preparations never select or conflict.
 -- A tunneled upstream passes its own derived issuer: its resource identifier is
 -- operator supplied, so only a binding for that issuer may serve it. A caller
@@ -5122,7 +5121,7 @@ WHERE id = @id AND project_id = @project_id AND organization_id = @organization_
 SELECT * FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
   AND user_session_issuer_id = @user_session_issuer_id
-  AND rtrim(resource, '/') = @upstream_resource::text
+  AND resource = @upstream_resource::text
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
@@ -5137,7 +5136,7 @@ SELECT * FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
   AND user_session_issuer_id = @user_session_issuer_id
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
-  AND rtrim(resource, '/') = @upstream_resource::text
+  AND resource = @upstream_resource::text
   AND state IS DISTINCT FROM 'unlinked'
 ORDER BY id;
 
