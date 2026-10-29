@@ -45,7 +45,7 @@ func (s *Service) authenticateIssuerGateAgentKey(ctx context.Context, token stri
 		(authCtx.ProjectID != nil && *authCtx.ProjectID != endpoint.ProjectID) {
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
-	keyCtx, err = s.requireAgentSessionAuthorization(keyCtx, endpoint)
+	keyCtx, err = s.requireAgentCredentialAuthorization(keyCtx, endpoint)
 	if err != nil {
 		return ctx, nil, err
 	}

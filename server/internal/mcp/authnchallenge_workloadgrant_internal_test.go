@@ -18,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
@@ -148,8 +149,86 @@ func TestRecheckWorkloadGrantInferenceUsesFreshPoliciesWithoutChallengeLogging(t
 			})
 			fresh, err := admitter.AdmitWorkloadSessionInTx(ctx, nil)
 			require.NoError(t, err)
-			err = service.recheckWorkloadGrantAuthorization(fresh, grant)
+			err = service.recheckWorkloadGrantAuthorization(fresh, grant, nil)
 			if revoked == "none" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errCredentialRejected)
+			}
+		})
+	}
+}
+
+// A grant for a stored gateway rechecks the members its preflight admitted
+// against the freshly loaded ceiling, agent, and owner policies: losing any
+// one of them on every private member refuses the session, while one member
+// still reached, or a public member, keeps it.
+func TestRecheckWorkloadGrantGatewayUsesFreshPoliciesPerMember(t *testing.T) {
+	t.Parallel()
+	project := uuid.New()
+	reachable, other := uuid.New(), uuid.New()
+	engine := authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) {
+		t.Error("transactional recheck must not publish challenge logs through the pool")
+		return true, nil
+	}, nil)
+	service := &Service{authz: engine}
+	endpoint := &ResolvedMcpEndpoint{
+		OrganizationID:      "test-org",
+		ProjectID:           project,
+		UserSessionIssuerID: uuid.New(),
+		RouteBase:           mcproute.MCP,
+		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
+	}
+	grant := workloadGrantIssuance{endpoint: endpoint, session: sessionIssuance{ProjectID: project}}
+	privateReach := &gatewayWorkloadReach{public: false, private: []authz.Check{
+		metaMemberConnectCheck(other, uuid.NullUUID{}, project),
+		metaMemberConnectCheck(uuid.New(), uuid.NullUUID{UUID: reachable, Valid: true}, project),
+	}}
+	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{UserID: "owner", ActiveOrganizationID: "test-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, "owner"))
+	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
+	ceiling := []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+		authz.SelectorKeyResourceID:   authz.WildcardResource,
+		authz.SelectorKeyProjectID:    project.String(),
+	})}
+	allow := []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+		authz.SelectorKeyResourceID:   reachable.String(),
+		authz.SelectorKeyProjectID:    project.String(),
+	})}
+
+	cases := []struct {
+		name    string
+		revoked string
+		reach   *gatewayWorkloadReach
+		allowed bool
+	}{
+		{name: "one member still reached", revoked: "none", reach: privateReach, allowed: true},
+		{name: "ceiling revoked", revoked: "ceiling", reach: privateReach, allowed: false},
+		{name: "agent revoked", revoked: "agent", reach: privateReach, allowed: false},
+		{name: "owner revoked", revoked: "owner", reach: privateReach, allowed: false},
+		{name: "public member", revoked: "agent", reach: &gatewayWorkloadReach{public: true, private: nil}, allowed: true},
+		{name: "no preflight", revoked: "none", reach: nil, allowed: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			admission := authz.WorkloadSessionAdmission{AgentPrincipal: urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()).String(), OwnerUserID: "owner", Ceiling: ceiling, Agent: allow, Owner: allow}
+			switch tc.revoked {
+			case "ceiling":
+				admission.Ceiling = nil
+			case "agent":
+				admission.Agent = nil
+			case "owner":
+				admission.Owner = nil
+			}
+			admitter := authz.NewEngine(testenv.NewLogger(t), nil, nil, nil, authz.EngineOpts{
+				AdmitWorkloadSessionInTx: func(context.Context, pgx.Tx) (authz.WorkloadSessionAdmission, error) { return admission, nil },
+			})
+			fresh, err := admitter.AdmitWorkloadSessionInTx(ctx, nil)
+			require.NoError(t, err)
+			err = service.recheckWorkloadGrantAuthorization(fresh, grant, tc.reach)
+			if tc.allowed {
 				require.NoError(t, err)
 			} else {
 				require.ErrorIs(t, err, errCredentialRejected)

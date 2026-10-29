@@ -444,15 +444,6 @@ func (s *Service) admitMetaMembers(
 			backend = metaMemberBackendHosted
 		}
 
-		// mcp:connect grants are keyed on the toolset id for toolset-backed
-		// servers and the mcp_servers id for proxy backends. Checking the
-		// wrong one silently hides the member from every resource-scoped
-		// grant the dashboard writes (see grantResourceIdForMcpServer).
-		connectResourceID := candidate.serverID
-		if candidate.toolsetID.Valid {
-			connectResourceID = candidate.toolsetID.UUID
-		}
-
 		// Visibility gates exposure and fails closed: public members are open,
 		// private members require mcp:connect (as authorizeProxyBackendAccess)
 		// with denied members filtered so unauthorized reads as nonexistent,
@@ -460,7 +451,7 @@ func (s *Service) admitMetaMembers(
 		// This gates on the member server's own visibility only: a hosted
 		// member whose toolset is private still lists here (its endpoint is
 		// public), then reads as nonexistent on drill-down (loadMemberToolset).
-		connect := authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), candidate.projectID.String())
+		connect := metaMemberConnectCheck(candidate.serverID, candidate.toolsetID, candidate.projectID)
 		switch candidate.visibility {
 		case mcpservers.VisibilityPublic:
 			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)

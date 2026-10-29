@@ -372,7 +372,8 @@ func (grant *workloadGrant) assertionKeySource(ctx context.Context, tenancy work
 
 // workloadAssertionGrantAdvertised reports whether the endpoint's metadata
 // lists the grant: the deployment serves it, and the endpoint can carry the
-// agent session policy a workload session is minted with.
+// policy a workload session is minted with, for one MCP server or a stored
+// gateway.
 //
 // Deliberately decided from the resolved endpoint alone. This runs on
 // `/.well-known` metadata, which every MCP client hits during discovery
@@ -381,11 +382,7 @@ func (grant *workloadGrant) assertionKeySource(ctx context.Context, tenancy work
 // which is where a grant is accepted or refused; metadata is advisory, and
 // clients cache it for their whole process lifetime anyway.
 func (s *Service) workloadAssertionGrantAdvertised(endpoint *ResolvedMcpEndpoint) bool {
-	if s.workloadGrant == nil {
-		return false
-	}
-	_, ok := agentAuthorizationTarget(endpoint)
-	return ok
+	return s.workloadGrant != nil && workloadSessionAddressable(endpoint)
 }
 
 // handleWorkloadAssertionGrant exchanges a workload's platform-issued
@@ -439,14 +436,13 @@ func (s *Service) handleWorkloadAssertionGrant(
 	if _, _, err := subject.Workload(); err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("assertion_subject_invalid", err))
 	}
-	target, ok := agentAuthorizationTarget(endpoint)
-	if !ok {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy")))
-	}
 	version := runtimepolicy.IssuedDelegatedPolicyVersion
-	delegatedGrants, err := encodeAgentSessionPolicy(*target, version)
+	delegatedGrants, ok, err := endpointWorkloadSessionPolicy(endpoint, version)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode workload session policy").LogError(ctx, logger)
+	}
+	if !ok {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry a workload session policy")))
 	}
 	// The same check the MCP side applies to the stored row, so a session it
 	// would refuse is never written.
@@ -510,8 +506,9 @@ type workloadGrantIssuance struct {
 	// projectID is the project admission acts in, or nil for none.
 	projectID *uuid.UUID
 
-	// endpoint is the one MCP server a grant naming a resource is minted for;
-	// admission also checks the agent may connect to it. Nil for a session
+	// endpoint is the MCP server or stored gateway a grant naming a resource
+	// is minted for; admission also checks the agent may connect to the
+	// server, or to at least one of the gateway's members. Nil for a session
 	// minted for all of an issuer's MCP servers, each of which checks on use.
 	endpoint *ResolvedMcpEndpoint
 
@@ -679,6 +676,12 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	if err == nil && grant.endpoint != nil {
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
 	}
+	var gatewayReach *gatewayWorkloadReach
+	if err == nil && grant.endpoint != nil && agentGatewayAddressable(grant.endpoint) {
+		var reach gatewayWorkloadReach
+		authorizationCtx, reach, err = s.resolveGatewayWorkloadReach(authorizationCtx, logger, grant.endpoint)
+		gatewayReach = &reach
+	}
 	if err == nil && grant.session.Audience == InferenceResource {
 		err = s.authz.Require(authorizationCtx, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
 	}
@@ -704,7 +707,7 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	// All database work after the lock uses dbtx, never another pool connection.
 	authorizationCtx, err = s.admitWorkloadGrantInTx(authorizationCtx, dbtx, organizationID, subject, grant.credential)
 	if err == nil {
-		err = s.recheckWorkloadGrantAuthorization(authorizationCtx, grant)
+		err = s.recheckWorkloadGrantAuthorization(authorizationCtx, grant, gatewayReach)
 	}
 	if err != nil {
 		if errors.Is(err, errCredentialRejected) || isCredentialDenial(err) {
@@ -775,9 +778,24 @@ func retryAfterSeconds(d time.Duration) string {
 // recheckWorkloadGrantAuthorization evaluates the freshly loaded authority without
 // writing challenge logs through the pool while the issuance transaction holds a
 // connection and issuer lock. The preflight checks record the normal challenge.
-func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance) error {
+//
+// A stored gateway rechecks the members its preflight admitted, gatewayReach,
+// rather than resolving its membership again on another pool connection.
+func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance, gatewayReach *gatewayWorkloadReach) error {
 	var checks []authz.Check
-	if grant.endpoint != nil {
+	switch {
+	case grant.endpoint != nil && agentGatewayAddressable(grant.endpoint):
+		if gatewayReach == nil {
+			return errCredentialRejected
+		}
+		reached, err := gatewayReach.recheck(ctx, s.authz)
+		if err != nil {
+			return err
+		}
+		if !reached {
+			return errCredentialRejected
+		}
+	case grant.endpoint != nil:
 		target, ok := agentAuthorizationTarget(grant.endpoint)
 		if !ok {
 			return errCredentialRejected
