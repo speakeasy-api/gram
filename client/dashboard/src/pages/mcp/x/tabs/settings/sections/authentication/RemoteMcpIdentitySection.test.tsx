@@ -2931,7 +2931,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Service Account/,
+          name: /Shared credential/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);

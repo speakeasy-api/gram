@@ -553,7 +553,7 @@ describe("useRemoteMcpInstallWorkflow", () => {
     });
   }
 
-  it("uses an organization issuer for noninteractive catalog installs", async () => {
+  it("sets up User Identity on an organization issuer for noninteractive catalog installs", async () => {
     stubUserIdentityDiscovery();
     mockUseEffectiveUserSessionIssuers.mockReturnValue({
       issuers: [{ id: "project-issuer" }, { id: "organization-issuer" }],
@@ -578,9 +578,9 @@ describe("useRemoteMcpInstallWorkflow", () => {
       undefined,
       undefined,
     );
-    // Setup must not bind this project's upstream client to the shared
-    // organization issuer, so the identity commit never runs.
-    expect(mockCommitIdentity).not.toHaveBeenCalled();
+    // The server decides whether this caller may bind a client to the shared
+    // organization issuer, so setup still reaches the identity commit.
+    expect(mockCommitIdentity).toHaveBeenCalled();
   });
 
   it("lets auto-config bind a client to the project-specific issuer", async () => {

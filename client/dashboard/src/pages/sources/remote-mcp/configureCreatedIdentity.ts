@@ -32,8 +32,6 @@ type ConfigureCreatedIdentityInput = {
    * Takes precedence over agentAuthorization.
    */
   serviceAccountClient?: ServiceAccountClientSpec;
-  /** The server's issuer is organization-owned, so a project may not set it up. */
-  organizationOwnedUserSessionIssuer?: boolean;
   options?: RequestOptions;
 };
 
@@ -59,7 +57,6 @@ export async function configureCreatedRemoteMcpIdentity({
   identityMode,
   agentAuthorization,
   serviceAccountClient,
-  organizationOwnedUserSessionIssuer = false,
   options,
 }: ConfigureCreatedIdentityInput): Promise<ConfigureCreatedIdentityResult> {
   if (identityMode === "none") {
@@ -150,16 +147,6 @@ export async function configureCreatedRemoteMcpIdentity({
         "The shared credential was configured, but the server could not be enabled. Enable it from Settings.",
       );
     }
-  }
-
-  // Only User Identity touches the session issuer, and an organization-owned
-  // one is not a project's to set up.
-  if (organizationOwnedUserSessionIssuer) {
-    return setupRequired(
-      mcpServer,
-      identityMode,
-      "Organization user session issuers are configured by organization administrators.",
-    );
   }
 
   if (!mcpServer.userSessionIssuerId) {
