@@ -27,10 +27,90 @@ export type DateRangeValue = {
   customLabel: string | null;
 };
 
-/** Preserve the selected final day's boundary when a link crosses timezones. */
-export function calendarDateRangeValue(from: Date, to: Date): DateRangeValue {
-  const calendarEnd = new Date(to);
-  calendarEnd.setDate(calendarEnd.getDate() + 1);
+type ZonedParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+function zonedParts(date: Date, timeZone: string): ZonedParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  const hour = value("hour");
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: hour === 24 ? 0 : hour,
+    minute: value("minute"),
+    second: value("second"),
+  };
+}
+
+/** Wall-clock time in `timeZone` as a UTC instant. */
+function zonedTime(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  timeZone: string,
+): Date {
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute, second);
+  const offsetAt = (instant: number) => {
+    const parts = zonedParts(new Date(instant), timeZone);
+    return (
+      Date.UTC(
+        parts.year,
+        parts.month - 1,
+        parts.day,
+        parts.hour,
+        parts.minute,
+        parts.second,
+      ) - instant
+    );
+  };
+  const instant = utcGuess - offsetAt(utcGuess);
+  const corrected = utcGuess - offsetAt(instant);
+  return new Date(corrected);
+}
+
+/**
+ * Preserve the selected final day's boundary when a link crosses timezones.
+ * The exclusive end is the same wall-clock time one calendar day later in
+ * `timeZone`, which defaults to the viewer's zone — where the calendar was
+ * selected. A DST boundary makes that span 23 or 25 hours.
+ */
+export function calendarDateRangeValue(
+  from: Date,
+  to: Date,
+  timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): DateRangeValue {
+  const parts = zonedParts(to, timeZone);
+  const next = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1));
+  const calendarEnd = zonedTime(
+    next.getUTCFullYear(),
+    next.getUTCMonth() + 1,
+    next.getUTCDate(),
+    parts.hour,
+    parts.minute,
+    parts.second,
+    timeZone,
+  );
   return {
     preset: null,
     customRange: { from, to },

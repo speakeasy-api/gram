@@ -1,24 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { getGateCopy } from "./upgrade-gate-copy";
 
-// The status line formats in local time, so a noon-UTC end date renders as the
-// next day from UTC+12 onwards. Pin the zone or these assertions depend on
-// where the machine running them happens to be.
-const originalTZ = process.env.TZ;
-beforeAll(() => {
-  process.env.TZ = "UTC";
-});
-afterAll(() => {
-  // Assigning undefined would leave the literal string "undefined" behind for
-  // whatever else shares this worker.
-  if (originalTZ === undefined) {
-    delete process.env.TZ;
-  } else {
-    process.env.TZ = originalTZ;
-  }
-});
-
 const NOW = new Date("2026-08-10T12:00:00.000Z");
+const UTC = "UTC";
 
 const trial = (startedAt: string, endsAt: string) => ({
   startedAt: new Date(startedAt),
@@ -30,6 +14,7 @@ describe("getGateCopy", () => {
     const copy = getGateCopy(
       trial("2026-07-26T12:00:00.000Z", "2026-08-09T12:00:00.000Z"),
       NOW,
+      UTC,
     );
 
     expect(copy.status).toBe("Trial ended Aug 9th, 2026");
@@ -45,6 +30,7 @@ describe("getGateCopy", () => {
     const copy = getGateCopy(
       trial("2026-07-27T12:00:00.000Z", NOW.toISOString()),
       NOW,
+      UTC,
     );
 
     expect(copy.status).toBe("Trial ended Aug 10th, 2026");

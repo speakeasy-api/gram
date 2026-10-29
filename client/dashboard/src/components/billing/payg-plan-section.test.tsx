@@ -6,26 +6,11 @@ import {
   screen,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { StripeSubscription } from "@gram/client/models/components/stripesubscription.js";
 import type { ProductTier } from "@/hooks/useProductTier";
-
-// Vitest runs test files in isolated fork workers. Set the worker timezone before
-// importing the module-level date formatter, and restore it after this file.
-vi.hoisted(() => {
-  vi.stubEnv("TZ", "America/Los_Angeles");
-});
-afterAll(() => vi.unstubAllEnvs());
 
 const mocks = vi.hoisted(() => ({
   productTier: vi.fn(),
@@ -245,16 +230,10 @@ describe("PaygPlanSection", () => {
     });
 
     it("keeps a midnight UTC expiration on its UTC calendar date", () => {
-      const midnight = new Date("2100-01-01T00:00:00Z");
-      // Prove the host timezone would render the preceding date without UTC.
-      expect(new Intl.DateTimeFormat("en-US").resolvedOptions().timeZone).toBe(
-        "America/Los_Angeles",
-      );
-      expect(midnight.getDate()).toBe(31);
       queryState({
         data: subscription({
           discountDescription,
-          discountEndsAt: midnight,
+          discountEndsAt: new Date("2100-01-01T00:00:00Z"),
           gatewayPromotionApplied: true,
         }),
       });

@@ -11,7 +11,6 @@ vi.mock("@/elements", () => ({
 }));
 afterEach(() => {
   vi.useRealTimers();
-  vi.unstubAllEnvs();
 });
 
 it("keeps cursor bounds stable across renders and advances them on Refresh", () => {
@@ -54,21 +53,30 @@ it("includes the selected final calendar day but preserves exact timestamp range
 });
 
 it.each([
-  { month: 2, day: 8, expected: "2026-03-09T05:00:00.000Z", hours: 23 },
-  { month: 10, day: 1, expected: "2026-11-02T06:00:00.000Z", hours: 25 },
+  {
+    to: "2026-03-08T06:00:00.000Z",
+    expected: "2026-03-09T05:00:00.000Z",
+    hours: 23,
+  },
+  {
+    to: "2026-11-01T05:00:00.000Z",
+    expected: "2026-11-02T06:00:00.000Z",
+    hours: 25,
+  },
 ])(
   "computes and shares the $hours-hour Chicago calendar day",
-  ({ month, day, expected, hours }) => {
-    vi.stubEnv("TZ", "America/Chicago");
-    const from = new Date(2026, month, day - 1);
-    const to = new Date(2026, month, day);
-    const value = calendarDateRangeValue(from, to);
-    expect(value.calendarEnd?.toISOString()).toBe(expected);
-    expect((value.calendarEnd!.getTime() - to.getTime()) / 3_600_000).toBe(
-      hours,
+  ({ to, expected, hours }) => {
+    const selectedEnd = new Date(to);
+    const value = calendarDateRangeValue(
+      new Date(selectedEnd.getTime() - 86_400_000),
+      selectedEnd,
+      "America/Chicago",
     );
+    expect(value.calendarEnd?.toISOString()).toBe(expected);
+    expect(
+      (value.calendarEnd!.getTime() - selectedEnd.getTime()) / 3_600_000,
+    ).toBe(hours);
     const serializedEnd = value.calendarEnd!.toISOString();
-    vi.stubEnv("TZ", "Asia/Tokyo");
     const { result } = renderHook(() =>
       useSessionDateRange({
         ...value,
