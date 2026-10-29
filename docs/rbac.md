@@ -147,7 +147,7 @@ That is deliberate. Adding a scope changes the product contract: it affects role
 
 For example, prefer `mcp:connect` plus a `tool` selector dimension over a scope like `mcp:call-search-docs`. Prefer `project:write` for project-owned mutations unless customers genuinely need to delegate that mutation separately. In practice, a new scope should exist only when admins need to assign it independently.
 
-Some scopes imply lower-privilege scopes. The expansion rules live in `server/internal/authz/scopes.go`, except for the MCP server permissions (`mcp:read`, `mcp:write`, `mcp:connect`), whose implications, blocks and block precedence are declared once in `server/internal/authz/permissions.go` and merged into the same maps:
+Some scopes imply lower-privilege scopes. The expansion rules also live in `server/internal/authz/scopes.go`. The MCP server permissions (`mcp:read`, `mcp:write`, `mcp:connect`) are also declared in `server/internal/authz/catalog`, whose tests fail if the two disagree:
 
 ```go
 var scopeExpansions = map[Scope][]Scope{
@@ -158,8 +158,9 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeProjectWrite:       nil,
 	ScopeAssistantRead:      {ScopeAssistantWrite},
 	ScopeAssistantWrite:     nil,
-	// mcp:read, mcp:write and mcp:connect come from permissions.go:
-	// mcp:read is implied by mcp:write; nothing implies mcp:connect.
+	ScopeMCPRead:            {ScopeMCPWrite},
+	ScopeMCPWrite:           nil,
+	ScopeMCPConnect:         nil,
 	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
 	ScopeEnvironmentWrite:   nil,
 	ScopeSkillRead:          {ScopeSkillWrite},

@@ -2,6 +2,7 @@ package authz
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -41,10 +42,13 @@ import (
 // dimension it constrains: a disposition-scoped grant does not reach a tool
 // whose annotations yield no disposition.
 //
-// Permissions whose definition sets BlockPrecedenceBlockWins (permissions.go)
-// take no part in any of this: for them a matching block is a prohibition,
-// whichever principal holds the allow. That covers the MCP server family
-// (mcp:read, mcp:write and mcp:connect).
+// The MCP server permissions (mcp:read, mcp:write and mcp:connect) take no
+// part in any of this: for them a matching block is a prohibition, whichever
+// principal holds the allow. authz/catalog declares them and tests that
+// blockWinsScopes matches.
+
+// blockWinsScopes are the permissions whose blocks no allow outranks.
+var blockWinsScopes = []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect}
 
 // IsDirectGrant reports whether grant was made to one user by name rather than
 // reaching them through a role or user:all. Only these grants can outrank an
@@ -87,7 +91,7 @@ func isDirectOverrideGrant(grant Grant) bool {
 // ExclusionYieldsToDirectGrants reports whether a direct concrete grant can
 // outrank the exclusion paired with scope when that exclusion is inherited.
 func ExclusionYieldsToDirectGrants(scope Scope) bool {
-	if def, defined := definitionFor(scope); defined && def.Precedence == BlockPrecedenceBlockWins {
+	if slices.Contains(blockWinsScopes, scope) {
 		return false
 	}
 	exclusion, ok := ExclusionScopeFor(scope)

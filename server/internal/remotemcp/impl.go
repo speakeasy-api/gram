@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authz/catalog"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -51,7 +52,7 @@ type Service struct {
 	db                    *pgxpool.Pool
 	auth                  *auth.Auth
 	authz                 *authz.Engine
-	authzClient           *authz.Client
+	authzClient           *catalog.Client
 	headers               *Headers
 	policy                *guardian.Policy
 	audit                 *audit.Logger
@@ -92,7 +93,7 @@ func NewService(
 		db:                    db,
 		auth:                  auth.New(logger, db, sessions, authzEngine),
 		authz:                 authzEngine,
-		authzClient:           authz.NewEngineClient(authzEngine),
+		authzClient:           catalog.NewEngineClient(authzEngine),
 		headers:               NewHeaders(logger, db, enc),
 		policy:                policy,
 		audit:                 auditLogger,

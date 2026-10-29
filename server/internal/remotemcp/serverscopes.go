@@ -14,7 +14,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authz/catalog"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -38,8 +38,8 @@ type pinnableServer struct {
 }
 
 func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerScopesPayload) (*gen.RemoteMcpServerScopes, error) {
-	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, payload.McpServerID, func(target authz.Target) []authz.Request {
-		return []authz.Request{authz.MCPServerRead(target)}
+	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, payload.McpServerID, func(target catalog.Target) []catalog.Request {
+		return []catalog.Request{catalog.MCPServerRead(target)}
 	})
 	if err != nil {
 		return nil, err
@@ -60,8 +60,8 @@ func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerSco
 }
 
 func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerScopePinPayload) (*gen.RemoteMcpServerScopes, error) {
-	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, payload.McpServerID, func(target authz.Target) []authz.Request {
-		return authz.MCPScopePin(target, nil)
+	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, payload.McpServerID, func(target catalog.Target) []catalog.Request {
+		return catalog.MCPScopePin(target, nil)
 	})
 	if err != nil {
 		return nil, err
@@ -186,7 +186,7 @@ func writeScopePin(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, 
 // authorizeServerScopes requires the requests built for the server: mcp:read
 // to view, mcp:write to pin. The server's project and organization are the
 // session's; loadPinnableServer then confirms the server is in that project.
-func (s *Service) authorizeServerScopes(ctx context.Context, rawID string, requests func(authz.Target) []authz.Request) (*contextvalues.AuthContext, *slog.Logger, uuid.UUID, error) {
+func (s *Service) authorizeServerScopes(ctx context.Context, rawID string, requests func(catalog.Target) []catalog.Request) (*contextvalues.AuthContext, *slog.Logger, uuid.UUID, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, nil, uuid.Nil, oops.C(oops.CodeUnauthorized)
@@ -202,18 +202,18 @@ func (s *Service) authorizeServerScopes(ctx context.Context, rawID string, reque
 	return authCtx, logger, mcpServerID, nil
 }
 
-func serverTarget(authCtx *contextvalues.AuthContext, mcpServerID uuid.UUID) authz.Target {
-	return authz.MCPServerTarget(authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), mcpServerID.String())
+func serverTarget(authCtx *contextvalues.AuthContext, mcpServerID uuid.UUID) catalog.Target {
+	return catalog.MCPServerTarget(authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), mcpServerID.String())
 }
 
 // scopePinRequests asks for mcp:write on the target and every server sharing
 // its upstream URL. Enforcement and the can_pin capability both use it.
-func scopePinRequests(authCtx *contextvalues.AuthContext, target pinnableServer, sharing []uuid.UUID) []authz.Request {
-	others := make([]authz.Target, 0, len(sharing))
+func scopePinRequests(authCtx *contextvalues.AuthContext, target pinnableServer, sharing []uuid.UUID) []catalog.Request {
+	others := make([]catalog.Target, 0, len(sharing))
 	for _, id := range sharing {
 		others = append(others, serverTarget(authCtx, id))
 	}
-	return authz.MCPScopePin(serverTarget(authCtx, target.server.ID), others)
+	return catalog.MCPScopePin(serverTarget(authCtx, target.server.ID), others)
 }
 
 // listSharingServers lists every live server sharing the target's upstream URL, the target included.

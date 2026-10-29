@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authz/catalog"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -1052,7 +1053,7 @@ func (s *Service) authorizeProxyBackendAccess(
 ) (context.Context, error) {
 	// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())
-	target := authz.MCPServerTarget(organizationID, projectID.String(), mcpServer.ID.String())
+	target := catalog.MCPServerTarget(organizationID, projectID.String(), mcpServer.ID.String())
 	authorized, err := s.requireProxyBackendAccess(ctx, logger, target, mcpServer)
 	shadowCtx := ctx
 	if authorized != nil {
@@ -1070,10 +1071,10 @@ func (s *Service) authorizeProxyBackendAccess(
 func (s *Service) requireProxyBackendAccess(
 	ctx context.Context,
 	logger *slog.Logger,
-	target authz.Target,
+	target catalog.Target,
 	mcpServer *mcpserversrepo.McpServer,
 ) (context.Context, error) {
-	requests, err := authz.MCPServerUse(target, authz.MCPServerVisibility(mcpServer.Visibility))
+	requests, err := catalog.MCPServerUse(target, catalog.MCPServerVisibility(mcpServer.Visibility))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
 	}
@@ -1088,7 +1089,7 @@ func (s *Service) requireProxyBackendAccess(
 		}
 		return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 	}
-	decision, err := authz.NewEngineClient(s.authz).Require(ctx, requests...)
+	decision, err := catalog.NewEngineClient(s.authz).Require(ctx, requests...)
 	if err != nil {
 		serverName := ""
 		if mcpServer.Name.Valid {
@@ -1096,7 +1097,7 @@ func (s *Service) requireProxyBackendAccess(
 		}
 		return ctx, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
 	}
-	if decision.Basis == authz.BasisLegacyBroadGrant {
+	if decision.Basis == catalog.BasisLegacyBroadGrant {
 		logger.InfoContext(ctx, "mcp server use allowed by a legacy broad connect grant", attr.SlogMcpServerID(mcpServer.ID.String()))
 	}
 	return ctx, nil
