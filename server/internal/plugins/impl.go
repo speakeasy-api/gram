@@ -445,6 +445,7 @@ func (s *Service) ensureDefaultPlugin(ctx context.Context, ac *contextvalues.Aut
 		PluginID:         ensured.Plugin.ID,
 		PluginName:       ensured.Plugin.Name,
 		PluginSlug:       ensured.Plugin.Slug,
+		SnapshotAfter:    nil,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "audit log default plugin create").LogError(ctx, s.logger)
 	}

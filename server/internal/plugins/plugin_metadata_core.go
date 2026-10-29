@@ -263,6 +263,12 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 		PluginID:         plugin.ID,
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
+		SnapshotAfter: &audit.PluginSnapshot{
+			Name:            plugin.Name,
+			Slug:            plugin.Slug,
+			Description:     conv.FromPGText[string](plugin.Description),
+			AutoSyncEnabled: new(PluginAutoSyncEnabled(plugin.AutoSyncEnabled)),
+		},
 	}); err != nil {
 		return PluginMetadataResult{}, fmt.Errorf("audit log plugin create: %w", err)
 	}

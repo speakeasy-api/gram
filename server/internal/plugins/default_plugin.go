@@ -515,6 +515,7 @@ func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, a
 			PluginID:         attached.PluginID,
 			PluginName:       attached.PluginName,
 			PluginSlug:       attached.PluginSlug,
+			SnapshotAfter:    nil,
 		}); err != nil {
 			return DefaultPluginAttachOutcome{}, fmt.Errorf("audit log default plugin create: %w", err)
 		}

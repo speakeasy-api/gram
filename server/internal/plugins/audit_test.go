@@ -31,6 +31,33 @@ func TestPluginsService_CreatePlugin_RecordsAuditEvent(t *testing.T) {
 	require.Equal(t, "plugin", rec.SubjectType)
 	require.Equal(t, created.Name, rec.SubjectDisplay)
 	require.Equal(t, created.Slug, rec.SubjectSlug)
+
+	afterSnap, err := audittest.DecodeAuditData(rec.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, created.Name, afterSnap["name"])
+	require.Equal(t, created.Slug, afterSnap["slug"])
+	require.Equal(t, true, afterSnap["auto_sync_enabled"])
+}
+
+// A plugin created with auto sync off stays out of the marketplace until
+// someone syncs it, so its creation record must say so.
+func TestPluginsService_CreatePlugin_AuditRecordsAutoSyncOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	off := false
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Audit Create Paused", AutoSyncEnabled: &off})
+	require.NoError(t, err)
+
+	rec, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionPluginCreate, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, created.Slug, rec.SubjectSlug)
+	require.Empty(t, rec.BeforeSnapshot)
+
+	afterSnap, err := audittest.DecodeAuditData(rec.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, false, afterSnap["auto_sync_enabled"])
 }
 
 func TestPluginsService_UpdatePlugin_RecordsAuditEvent(t *testing.T) {
