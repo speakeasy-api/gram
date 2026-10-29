@@ -368,7 +368,7 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 	if challengeState.FirstParty || challengeState.Subject == nil || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid || endpoint.MetaMcpServerID.Valid {
 		return nil, nil
 	}
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	enforced, err := s.consentDirectAuthChoicesEnforced(ctx, endpoint)
 	if err != nil || !enforced {
 		return nil, err
 	}

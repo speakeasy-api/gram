@@ -341,7 +341,7 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 	if selector == nil {
 		choice, handled, err := s.directPrincipalChoice(ctx, w, authentication, mode)
 		if githubRequired && !handled && err == nil {
-			return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+			return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 		}
 		return choice, handled, err
 	}

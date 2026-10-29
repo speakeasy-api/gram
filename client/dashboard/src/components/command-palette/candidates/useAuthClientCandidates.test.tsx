@@ -1,4 +1,5 @@
 import { renderHook } from "@testing-library/react";
+import { prefilter, rank } from "../ranker";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   organization: { id: "org-fixture" },
@@ -120,7 +121,11 @@ describe("service account candidates", () => {
     );
     expect(result.current).toHaveLength(1);
     expect(result.current[0]?.title).toBe("Repository reader");
-    expect(result.current[0]?.fuzzyOnly).toBe(true);
+    expect(
+      rank(prefilter("Repository reader", result.current)).map(
+        (row) => row.candidate.id,
+      ),
+    ).toEqual(["auth-client:client-fixture:server-fixture"]);
     void result.current[0]?.run("open");
     expect(mocks.navigate).toHaveBeenCalledWith(
       "/mcp/github/settings#authentication",

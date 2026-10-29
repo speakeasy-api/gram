@@ -6,13 +6,26 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 )
+
+// consentDirectAuthChoicesEnforced keeps the rollout unchanged for ordinary
+// servers. GitHub App credentials have no legacy transport equivalent, so their
+// preview, approval choice, and inventory binding always use typed selection.
+func (s *Service) consentDirectAuthChoicesEnforced(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil || enforced || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid || endpoint.MetaMcpServerID.Valid {
+		return enforced, err
+	}
+	mode, err := s.githubAppMode(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID, feature.AuthClientResolverOff)
+	return mode == feature.AuthClientResolverEnforced, err
+}
 
 // consentDirectPreviewAuth uses the same offered choices and authorization as
 // approval. A nil result means the legacy path, never an enforcement error.
 func (s *Service) consentDirectPreviewAuth(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, posted string) (*authClientResolution, error) {
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	enforced, err := s.consentDirectAuthChoicesEnforced(ctx, endpoint)
 	if err != nil || !enforced {
 		return nil, err
 	}
@@ -81,7 +94,7 @@ func (s *Service) validateDirectConsentInventory(ctx context.Context, endpoint *
 	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
 		return nil
 	}
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	enforced, err := s.consentDirectAuthChoicesEnforced(ctx, endpoint)
 	if err != nil {
 		return err
 	}

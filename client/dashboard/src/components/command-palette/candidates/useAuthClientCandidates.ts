@@ -7,8 +7,8 @@ import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
 
-// Credential names are private identity metadata. Keep them out of intent
-// service requests and link only to attachments in the current project.
+// Credential names are private identity metadata. Matching stays local to the
+// dashboard, and links only target attachments in the current project.
 export function useAuthClientCandidates({
   enabled,
 }: {
@@ -69,7 +69,6 @@ export function useAuthClientCandidates({
               ...(client.githubApp ? ["GitHub App"] : []),
             ],
             verbs: ["open"],
-            fuzzyOnly: true,
             group: "Service Accounts",
             run: () => {
               void navigate(

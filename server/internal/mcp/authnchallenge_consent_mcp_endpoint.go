@@ -512,6 +512,9 @@ func (s *Service) serveConsentProxiedMCP(
 		var options []remotemcp.BuildOption
 		if auth != nil && (auth.outcome != authClientLegacy || auth.sendsClientHeaders()) {
 			options = append(options, remotemcp.WithAuthClientHeaders(auth.headers))
+			if credential := auth.githubCredential; credential != nil {
+				options = append(options, remotemcp.WithRenewableCredential(credential.Origin, auth.githubRenew))
+			}
 		}
 		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil, options...)
 	} else {
